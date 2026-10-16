@@ -154,7 +154,30 @@ Strongest form: any structure can be represented, relations are first-class, and
 3. **Type changes:** may an item change its type (page → decision, task → bug)? If so, by which rules are fields mapped?
 4. **Granularity of document versions:** at what intervals is the state of the collaboration layer committed as a version (time, inactivity, explicit save)?
 
+## Prototype findings (2026-10-16)
+
+An in-memory prototype in [`internal/item`](../../internal/item) implements the model: types as data with fields and workflows, items with properties, state, block bodies and typed relations, every change as an event and the state as a replayable fold (ADR-0008). Its acceptance test creates a page in one space, a task inside it, a decision in another space, embeds the task and mentions the decision in the page body, and works the task through a board query — one item, no copy.
+
+What the prototype confirmed:
+
+- One `Item` type carries pages, tasks and decisions; history, relations and queries needed no type-specific code (D1, D6).
+- Making `state` a reserved name and changing it only through transitions is simple to enforce and test (D3); transitions with required fields (`start` needs an `assignee`) fit naturally.
+- Derived relations from the body work as a pure function of the body version (D4), and the replay test proves the whole state is reproducible from the log.
+
+What it surfaced — decisions this record did not make explicit:
+
+1. **Moving between spaces moves the subtree.** Because a parent and its children share a space, moving a page to another space moves all its descendants and gives each a new key; old keys keep resolving (D2). The prototype does this; it should be stated as a rule.
+2. **Derived relations need deterministic identities.** A relation computed while applying an event cannot take a random ID, or replay diverges. The prototype derives it from `(from, type, to)`; hand-made relations get an ID frozen into their event.
+3. **History includes relation changes.** A body commit on a page appears in the history of the task it embeds and of the decision it mentions. Useful ("mentioned in …"), but it means an item's history can grow through edits to other items.
+4. **Embedding and containment overlap.** The task is both a child of the page (`parent`) and embedded in its body (`embeds`). If the task moves elsewhere, the embed remains. Whether embedding should imply or require containment is open.
+5. **Schema evolution is now concrete.** Items record the type version they were created with, but validation uses the latest version; a field that becomes required in v2 is not enforced on items from v1 until they are next changed. This sharpens the open question above.
+6. **Deletion is unmodelled.** What happens to embeds, mentions and relations pointing at a deleted item is undecided; the prototype has no delete.
+7. **Title is intrinsic.** Every item has a title outside its properties, and names such as `title`, `state`, `parent` are reserved for fields.
+
+A space as a plain container (not an item), as provisionally decided above, was sufficient for the prototype.
+
 ## Links
 
+- Prototype: [`internal/item`](../../internal/item), acceptance test `TestScenarioPageWithEmbeddedTask`
 - Reference project for working method and ADR discipline: [pblumer/atlas](https://github.com/pblumer/atlas) (in particular ADR-0001, event sourcing)
 - Follow-up ADRs: persistence, document format/CRDT, query language, permission model, import (not yet written)

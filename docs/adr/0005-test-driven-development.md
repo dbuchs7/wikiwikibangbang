@@ -1,7 +1,7 @@
 # ADR-0005: Test-driven development as the default workflow
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators
 
@@ -46,7 +46,9 @@ Stated exceptions, named in the pull request: purely mechanical changes (renames
 
 - **Positive:** behaviour is pinned before it exists; contributors and agents have an unambiguous answer to "when do I write the test?"; regressions in coverage become a visible CI failure.
 - **Negative / trade-offs accepted:** more effort per change up front; a repository-wide number can hide a poorly tested new package behind well-tested old ones, so reviewers still check that new code carries its own tests.
-- **Follow-ups / risks to watch:** add the coverage check to CI with the first product package (then set *Implementation* to `Landed`); watch for coverage theatre in review.
+- **Follow-ups / risks to watch:** watch for coverage theatre in review.
+
+**As built (2026-10-16):** the coverage check runs in CI (`coverage floor (90%)` step of the test job) since the first product package, the item-model prototype in `internal/item`. At introduction the repository stood at about 95%.
 
 ## Pros and cons of the options
 
