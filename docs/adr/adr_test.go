@@ -188,7 +188,9 @@ func TestFrontMatter(t *testing.T) {
 				t.Errorf("%s: Question checked %q: %v", r.file, checked, err)
 				break
 			}
-			if now.Sub(when) > questionMaxAge {
+			if when.After(now) {
+				t.Errorf("%s: Question checked %s lies in the future", r.file, checked)
+			} else if now.Sub(when) > questionMaxAge {
 				t.Errorf("%s: the open question was last checked %s; look at it again and update Question checked", r.file, checked)
 			}
 		}

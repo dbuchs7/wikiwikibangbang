@@ -56,6 +56,8 @@ The ADR tests in `docs/adr` enforce file names, headings, front matter, the stat
 
 When a command is added (linters, end-to-end tests, a `Makefile` target), add it here and to CI in the same pull request.
 
+`main` is protected by the ruleset in [`.github/rulesets/protect-main.json`](.github/rulesets/protect-main.json) ([ADR-0003](docs/adr/0003-repository-governance-settings.md)): every change goes through a pull request with green required checks; direct pushes and force pushes to `main` are rejected. **Never rename a CI job without updating the ruleset in the same pull request** — required checks are matched by job name, and a renamed job blocks every merge. `internal/repoconfig` tests this.
+
 ## Repository layout
 
 ```text
@@ -64,8 +66,10 @@ CLAUDE.md          pointer to this guide for Claude agents
 LICENSE            AGPL-3.0-only (ADR-0002)
 go.mod             module github.com/dbuchs7/wikiwikibangbang
 .github/workflows/ CI: fmt, vet, race tests, DCO check on pull requests
+.github/rulesets/  ruleset protecting main, source of truth for GitHub settings (ADR-0003)
 cmd/dcocheck/      CLI that checks DCO sign-offs over a git range
 internal/dco/      DCO sign-off rules (humans only), with tests
+internal/repoconfig/ tests keeping ruleset and CI workflow consistent
 docs/adr/          architecture decision records, index in README.md, consistency tests
 ```
 

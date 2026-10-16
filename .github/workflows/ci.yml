@@ -33,6 +33,11 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # ADR-0004: the product builds without CGO. The race detector below
+      # needs CGO, so this is a separate step.
+      - name: go build (CGO_ENABLED=0)
+        run: CGO_ENABLED=0 go build ./...
+
       # Includes the ADR consistency tests in docs/adr and the DCO rule tests.
       - name: go test -race
         run: go test -race ./...
