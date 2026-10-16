@@ -12,7 +12,7 @@ wikiwikibangbang is an open-source application written in **Go** that unifies **
 
 The core idea is recorded in [ADR-0001](docs/adr/0001-unified-item-data-model.md): every piece of user-generated content is a typed **item** with properties, an optional document body, an optional workflow and typed relations. Pages and issues are item *types*, not separate systems.
 
-**Current state:** design phase. There is no Go module and no code yet. Commands below marked *(planned)* become binding as soon as the corresponding code exists.
+**Current state:** design phase. The Go module exists, but so far it holds only the project's self-checks (ADR consistency, DCO rule) — no product code yet.
 
 ## Project language: English
 
@@ -38,15 +38,23 @@ These follow from ADR-0001. That ADR is currently **Proposed**, so the invariant
 
 ## Commands
 
-*(planned — binding once the Go module exists)* A change is not done until the whole sequence is green:
+A change is not done until the whole sequence is green. CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs the same commands on every push and pull request:
 
 ```bash
 gofmt -l .                 # must print nothing
 go vet ./...
-go test -race ./...
+go test -race ./...        # includes the ADR checks in docs/adr
 ```
 
-When a command is added (linters, end-to-end tests, a `Makefile` target), add it here in the same pull request.
+On pull requests CI also runs the DCO check over the proposed commits. Run it locally before asking for review:
+
+```bash
+go run ./cmd/dcocheck origin/main HEAD
+```
+
+The ADR tests in `docs/adr` enforce file names, headings, front matter, the status rules (`Landed` requires `Accepted`; an `Open question` needs a `Question checked` month no older than a year) and that the index in `docs/adr/README.md` matches the records. A failing ADR test is fixed in the record or the index, never by loosening the test.
+
+When a command is added (linters, end-to-end tests, a `Makefile` target), add it here and to CI in the same pull request.
 
 ## Repository layout
 
@@ -54,7 +62,11 @@ When a command is added (linters, end-to-end tests, a `Makefile` target), add it
 AGENTS.md          this guide (canonical)
 CLAUDE.md          pointer to this guide for Claude agents
 LICENSE            AGPL-3.0-only (ADR-0002)
-docs/adr/          architecture decision records, index in docs/adr/README.md
+go.mod             module github.com/dbuchs7/wikiwikibangbang
+.github/workflows/ CI: fmt, vet, race tests, DCO check on pull requests
+cmd/dcocheck/      CLI that checks DCO sign-offs over a git range
+internal/dco/      DCO sign-off rules (humans only), with tests
+docs/adr/          architecture decision records, index in README.md, consistency tests
 ```
 
 Update this section whenever a top-level directory is added.
