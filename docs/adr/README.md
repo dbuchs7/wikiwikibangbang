@@ -32,3 +32,5 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0017](0017-internationalisation-via-message-catalogue.md) | The UI is translated through a message catalogue, with English as source | Proposed | Not started |
 | [0018](0018-pull-request-level-dco-sign-off.md) | The DCO sign-off may be given once per pull request | Accepted | Partial |
 | [0019](0019-dco-enforcement-suspended.md) | DCO enforcement is suspended until the maintainer switches it on | Accepted | Landed |
+| [0020](0020-embedding-and-containment-are-independent.md) | Embedding shows an item, containment places it — the two stay independent | Proposed | Not started |
+| [0021](0021-deletion-is-trash-then-purge.md) | Deletion is trash, then purge — an identity is never removed | Proposed | Not started |
