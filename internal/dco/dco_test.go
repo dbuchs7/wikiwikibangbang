@@ -79,3 +79,63 @@ func TestCheck(t *testing.T) {
 		})
 	}
 }
+
+func TestParseSignOffs(t *testing.T) {
+	body := strings.Join([]string{
+		"## Summary",
+		"Some text mentioning Signed-off-by: inline, which does not count.",
+		"",
+		"```bash",
+		"Signed-off-by: Example Only <example@example.org>",
+		"```",
+		"",
+		"  Signed-off-by: Jane Doe <jane@example.org>  ",
+		"signed-off-by: John Roe <john@example.org>",
+	}, "\r\n")
+	got := ParseSignOffs(body)
+	want := []string{"Jane Doe <jane@example.org>", "John Roe <john@example.org>"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("ParseSignOffs = %q, want %q", got, want)
+	}
+}
+
+func TestEvaluate(t *testing.T) {
+	human := "Jane Doe <jane@example.org>"
+	agent := "Claude <noreply@anthropic.com>"
+	unsigned := Commit{ID: "a1", Subject: "agent commit"}
+	signed := Commit{ID: "b2", Subject: "human commit", SignOffs: []string{human}}
+	agentSigned := Commit{ID: "c3", Subject: "agent signed", SignOffs: []string{agent}}
+
+	tests := []struct {
+		name        string
+		commits     []Commit
+		pr          []string
+		wantOK      bool
+		wantCovered int
+	}{
+		{"all commits signed, no PR sign-off", []Commit{signed}, nil, true, 0},
+		{"unsigned commit, no PR sign-off", []Commit{unsigned}, nil, false, 0},
+		{"unsigned commits covered by PR sign-off", []Commit{unsigned, signed}, []string{human}, true, 1},
+		{"agent sign-off in PR description covers nothing", []Commit{unsigned}, []string{agent}, false, 0},
+		{"human and agent in PR description is rejected", []Commit{unsigned}, []string{human, agent}, false, 0},
+		{"agent-signed commit is not cured by PR sign-off", []Commit{agentSigned}, []string{human}, false, 0},
+		{"malformed PR sign-off covers nothing", []Commit{unsigned}, []string{"jane@example.org"}, false, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rep := Evaluate(tt.commits, tt.pr)
+			if rep.OK() != tt.wantOK {
+				t.Fatalf("OK() = %v, want %v; report %+v", rep.OK(), tt.wantOK, rep)
+			}
+			covered := 0
+			for _, v := range rep.Commits {
+				if v.CoveredByPR {
+					covered++
+				}
+			}
+			if covered != tt.wantCovered {
+				t.Fatalf("covered = %d, want %d", covered, tt.wantCovered)
+			}
+		})
+	}
+}

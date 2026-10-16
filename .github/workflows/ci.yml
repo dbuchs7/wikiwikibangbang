@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
     branches: [main]
+    # `edited` re-runs the checks when the description changes, so a
+    # Signed-off-by line added to it is picked up (ADR-0018).
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
@@ -45,7 +48,8 @@ jobs:
   dco:
     name: DCO sign-off (humans only)
     # The rule applies to what is proposed for merge; agent commits on a work
-    # branch are expected to be unsigned until the responsible person signs off.
+    # branch are expected to be unsigned until the responsible person signs
+    # off, on the commits or once in the pull request description (ADR-0018).
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -59,8 +63,13 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # The description is passed through the environment and a file, never
+      # interpolated into the script, so its text cannot run as shell code.
       - name: Check sign-offs
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: go run ./cmd/dcocheck "$BASE_SHA" "$HEAD_SHA"
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.txt"
+          go run ./cmd/dcocheck -pr-body-file "$RUNNER_TEMP/pr-body.txt" "$BASE_SHA" "$HEAD_SHA"

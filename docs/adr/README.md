@@ -30,3 +30,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0015](0015-resource-budgets-and-paged-listings.md) | One place names every resource budget, and a capped listing answers with a page | Proposed | Not started |
 | [0016](0016-metrics-and-backup.md) | Operational metrics behind authentication, and an allowlisted backup | Proposed | Not started |
 | [0017](0017-internationalisation-via-message-catalogue.md) | The UI is translated through a message catalogue, with English as source | Proposed | Not started |
+| [0018](0018-pull-request-level-dco-sign-off.md) | The DCO sign-off may be given once per pull request | Accepted | Partial |
