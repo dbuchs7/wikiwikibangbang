@@ -103,11 +103,17 @@ The project is licensed under **AGPL-3.0-only** ([`LICENSE`](LICENSE), [ADR-0002
 
 The DCO is a statement by a natural person that they have the right to submit the contribution under the project license. An AI agent cannot make that statement. Therefore:
 
-- **Agents never add a `Signed-off-by` line**, neither with their own identity nor on behalf of a person. Do not run `git commit -s` as an agent.
+- **Agents never write a `Signed-off-by` line anywhere** — not in commits, not in pull request descriptions, not in comments — neither with their own identity nor on behalf of a person. Do not run `git commit -s` as an agent. When an agent drafts a pull request description, it leaves the sign-off out; the human adds it.
 - **Agents credit themselves only with a `Co-Authored-By` trailer** (e.g. `Co-Authored-By: Claude <noreply@anthropic.com>`).
-- **The responsible human signs off** — the person who directed the agent and submits the pull request. They review the agent's commits and add their sign-off before merge, for example with `git rebase --signoff <base>` on the pull request branch, or by signing off the squash commit.
-- **By signing off, the human takes responsibility** for the whole commit, including agent-written code: in particular that it does not contain code copied from sources with incompatible or unknown licenses.
-- A pull request whose commits lack a human sign-off is not merged.
+- **The responsible human signs off** — the person who directed the agent and submits the pull request — after reviewing the diff, in one of two ways ([ADR-0018](docs/adr/0018-pull-request-level-dco-sign-off.md)):
+  1. **In the pull request description (default):** edit the description and add a line of its own, outside any code block:
+     `Signed-off-by: Full Name <email>`
+     The DCO check re-runs on the edit and accepts every commit of the pull request that has no sign-off of its own. On squash merge, GitHub copies the description into the commit message, so the sign-off lands in the history of `main`.
+  2. **On the commits:** `git rebase --signoff origin/main` on the pull request branch, then `git push --force-with-lease`.
+- **By signing off, the human takes responsibility** for every commit of the pull request, including agent-written code: in particular that it does not contain code copied from sources with incompatible or unknown licenses.
+- A sign-off that names an AI agent or a bot fails the check wherever it appears, and a human sign-off elsewhere does not cure it.
+- Pull requests are merged by **squash** only, after the checks have finished. A pull request without a human sign-off is not merged.
+- Agents act on GitHub under the maintainer's account, so GitHub cannot tell an agent's edit from the maintainer's. The check enforces the *form* of the rule; that only a human writes the line is enforced by this guide.
 
 Before adding a dependency, check that its license is compatible with AGPL-3.0 and name the license in the pull request. Never copy code from sources whose license is incompatible or unknown.
 

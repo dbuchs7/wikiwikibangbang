@@ -67,4 +67,5 @@ Strongest form: a middle ground — modified files stay open, while the code can
 
 ## Links
 
+- how the DCO sign-off is given: [ADR-0018](0018-pull-request-level-dco-sign-off.md)
 - Reference project license: [pblumer/atlas LICENSE](https://github.com/pblumer/atlas/blob/main/LICENSE)

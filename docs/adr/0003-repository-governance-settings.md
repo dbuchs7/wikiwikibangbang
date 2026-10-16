@@ -102,8 +102,18 @@ Strongest form: full infrastructure as code — the tool applies the settings an
 - Good: complete automation, including general settings.
 - Bad: adds a tool, state and a privileged token to a project that does not yet have product code; disproportionate for a single repository with one maintainer.
 
+## Amendment (2026-10-16): squash merge only
+
+[ADR-0018](0018-pull-request-level-dco-sign-off.md) lets the DCO sign-off be given once in the pull request description. That sign-off reaches the history of `main` only through a squash commit whose message is the pull request description. Therefore:
+
+- *Allow rebase merging* is **off**; squash is the only merge method, and the ruleset's `allowed_merge_methods` is `["squash"]`.
+- *Settings → General → Pull Requests → Allow squash merging → Default commit message* is **"Pull request title and description"**.
+
+Everything else above stands.
+
 ## Links
 
+- amended by [ADR-0018](0018-pull-request-level-dco-sign-off.md)
 - relates to [ADR-0002](0002-license-agpl-3.0-only.md) (license, DCO)
 - [AGENTS.md](../../AGENTS.md), section "DCO sign-off: only humans sign"
 - [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/rulesets/protect-main.json`](../../.github/rulesets/protect-main.json)
