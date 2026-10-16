@@ -12,3 +12,4 @@ New records start from [`template.md`](template.md). An accepted decision is not
 | No. | Title | Status | Implementation |
 |---|---|---|---|
 | [0001](0001-unified-item-data-model.md) | Unified item data model for knowledge and work | Proposed | Not started |
+| [0002](0002-license-agpl-3.0-only.md) | License the project under AGPL-3.0-only | Accepted | Landed |

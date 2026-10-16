@@ -53,6 +53,7 @@ When a command is added (linters, end-to-end tests, a `Makefile` target), add it
 ```text
 AGENTS.md          this guide (canonical)
 CLAUDE.md          pointer to this guide for Claude agents
+LICENSE            AGPL-3.0-only (ADR-0002)
 docs/adr/          architecture decision records, index in docs/adr/README.md
 ```
 
@@ -77,6 +78,12 @@ Update this section whenever a top-level directory is added.
 - Go code follows `gofmt` and the conventions of [Effective Go](https://go.dev/doc/effective_go).
 - Prefer the standard library; every new dependency needs a reason in the pull request (and an ADR if it is architectural, e.g. storage, CRDT library, search engine).
 - Documentation is precise and neutral: no marketing language, no unverified claims. Mark assumptions as assumptions.
+
+## License and dependencies
+
+The project is licensed under **AGPL-3.0-only** ([`LICENSE`](LICENSE), [ADR-0002](docs/adr/0002-license-agpl-3.0-only.md)). Contributions are accepted under the same license; commits are signed off (`git commit -s`) to certify the [Developer Certificate of Origin](https://developercertificate.org/).
+
+Before adding a dependency, check that its license is compatible with AGPL-3.0 and name the license in the pull request. Never copy code from sources whose license is incompatible or unknown.
 
 ## Pointers
 
