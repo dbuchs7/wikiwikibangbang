@@ -1,14 +1,15 @@
 # Architecture Decision Records
 
-Jede tragende Architekturentscheidung wird als ADR festgehalten: Kontext, Entscheidungstreiber, betrachtete Optionen, Entscheidung und Konsequenzen.
+Every load-bearing architectural decision is recorded as an ADR: context, decision drivers, considered options, decision and consequences.
 
-- **Status** sagt, ob die Entscheidung gilt (`Proposed`, `Accepted`, `Superseded by ADR-XXXX`, `Deprecated`).
-- **Implementation** sagt, ob sie umgesetzt ist (`Not started`, `Partial`, `Landed`, `Superseded`). `Landed` setzt `Accepted` voraus.
+- **Status** says whether the decision holds (`Proposed`, `Accepted`, `Superseded by ADR-XXXX`, `Deprecated`).
+- **Implementation** says whether it is built (`Not started`, `Partial`, `Landed`, `Superseded`). `Landed` requires `Accepted`.
 
-Neue Records werden mit [`template.md`](template.md) erstellt. Eine akzeptierte Entscheidung wird nicht überschrieben, sondern durch ein neues ADR abgelöst.
+New records start from [`template.md`](template.md). An accepted decision is not overwritten; it is superseded by a new ADR.
 
 ## Index
 
-| Nr. | Titel | Status | Implementation |
+| No. | Title | Status | Implementation |
 |---|---|---|---|
-| [0001](0001-gemeinsames-item-datenmodell.md) | Gemeinsames Item-Datenmodell für Wissen und Arbeit | Proposed | Not started |
+| [0001](0001-unified-item-data-model.md) | Unified item data model for knowledge and work | Proposed | Not started |
+| [0002](0002-license-agpl-3.0-only.md) | License the project under AGPL-3.0-only | Accepted | Landed |

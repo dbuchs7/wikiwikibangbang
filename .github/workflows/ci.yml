@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: fmt · vet · test (race)
+    runs-on: ubuntu-latest
+    # A hung test must not hold a runner for the six-hour default.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # Includes the ADR consistency tests in docs/adr and the DCO rule tests.
+      - name: go test -race
+        run: go test -race ./...
+
+  dco:
+    name: DCO sign-off (humans only)
+    # The rule applies to what is proposed for merge; agent commits on a work
+    # branch are expected to be unsigned until the responsible person signs off.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The whole history, so the base of the pull request is present.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check sign-offs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: go run ./cmd/dcocheck "$BASE_SHA" "$HEAD_SHA"
