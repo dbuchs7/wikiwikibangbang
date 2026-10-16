@@ -81,7 +81,17 @@ Update this section whenever a top-level directory is added.
 
 ## License and dependencies
 
-The project is licensed under **AGPL-3.0-only** ([`LICENSE`](LICENSE), [ADR-0002](docs/adr/0002-license-agpl-3.0-only.md)). Contributions are accepted under the same license; commits are signed off (`git commit -s`) to certify the [Developer Certificate of Origin](https://developercertificate.org/).
+The project is licensed under **AGPL-3.0-only** ([`LICENSE`](LICENSE), [ADR-0002](docs/adr/0002-license-agpl-3.0-only.md)). Contributions are accepted under the same license; commits are signed off to certify the [Developer Certificate of Origin](https://developercertificate.org/).
+
+### DCO sign-off: only humans sign
+
+The DCO is a statement by a natural person that they have the right to submit the contribution under the project license. An AI agent cannot make that statement. Therefore:
+
+- **Agents never add a `Signed-off-by` line**, neither with their own identity nor on behalf of a person. Do not run `git commit -s` as an agent.
+- **Agents credit themselves only with a `Co-Authored-By` trailer** (e.g. `Co-Authored-By: Claude <noreply@anthropic.com>`).
+- **The responsible human signs off** — the person who directed the agent and submits the pull request. They review the agent's commits and add their sign-off before merge, for example with `git rebase --signoff <base>` on the pull request branch, or by signing off the squash commit.
+- **By signing off, the human takes responsibility** for the whole commit, including agent-written code: in particular that it does not contain code copied from sources with incompatible or unknown licenses.
+- A pull request whose commits lack a human sign-off is not merged.
 
 Before adding a dependency, check that its license is compatible with AGPL-3.0 and name the license in the pull request. Never copy code from sources whose license is incompatible or unknown.
 
