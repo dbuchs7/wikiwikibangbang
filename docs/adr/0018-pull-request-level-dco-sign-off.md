@@ -74,6 +74,7 @@ Strongest form: with a single author the DCO protects against nothing yet — th
 
 ## Links
 
+- enforcement suspended by [ADR-0019](0019-dco-enforcement-suspended.md); the sign-off forms defined here stay valid
 - amends [ADR-0002](0002-license-agpl-3.0-only.md) (how the DCO sign-off is given) and [ADR-0003](0003-repository-governance-settings.md) (merge methods)
 - [AGENTS.md](../../AGENTS.md), "DCO sign-off: only humans sign"
 - [`internal/dco`](../../internal/dco/dco.go), [`cmd/dcocheck`](../../cmd/dcocheck/main.go), [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)

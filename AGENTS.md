@@ -101,6 +101,8 @@ The project is licensed under **AGPL-3.0-only** ([`LICENSE`](LICENSE), [ADR-0002
 
 ### DCO sign-off: only humans sign
 
+> **Current mode: advisory ([ADR-0019](docs/adr/0019-dco-enforcement-suspended.md)).** The DCO check reports missing sign-offs as a warning and does not fail. The rules below still apply — above all, agents never sign. Switching to enforcement is the maintainer's decision; agents do not change `DCO_MODE` on their own.
+
 The DCO is a statement by a natural person that they have the right to submit the contribution under the project license. An AI agent cannot make that statement. Therefore:
 
 - **Agents never write a `Signed-off-by` line anywhere** — not in commits, not in pull request descriptions, not in comments — neither with their own identity nor on behalf of a person. Do not run `git commit -s` as an agent. When an agent drafts a pull request description, it leaves the sign-off out; the human adds it.
@@ -112,7 +114,7 @@ The DCO is a statement by a natural person that they have the right to submit th
   2. **On the commits:** `git rebase --signoff origin/main` on the pull request branch, then `git push --force-with-lease`.
 - **By signing off, the human takes responsibility** for every commit of the pull request, including agent-written code: in particular that it does not contain code copied from sources with incompatible or unknown licenses.
 - A sign-off that names an AI agent or a bot fails the check wherever it appears, and a human sign-off elsewhere does not cure it.
-- Pull requests are merged by **squash** only, after the checks have finished. A pull request without a human sign-off is not merged.
+- Pull requests are merged by **squash** only, after the checks have finished. Once enforcement is on, a pull request without a human sign-off is not merged.
 - Agents act on GitHub under the maintainer's account, so GitHub cannot tell an agent's edit from the maintainer's. The check enforces the *form* of the rule; that only a human writes the line is enforced by this guide.
 
 Before adding a dependency, check that its license is compatible with AGPL-3.0 and name the license in the pull request. Never copy code from sources whose license is incompatible or unknown.
