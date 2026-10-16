@@ -1,45 +1,45 @@
-# ADR-XXXX: Titel
+# ADR-XXXX: Title
 
 - **Status:** Proposed | Accepted | Superseded by ADR-XXXX | Deprecated
 - **Implementation:** Not started | Partial | Landed | Superseded
 - **Date:** YYYY-MM-DD
-- **Deciders:** Namen/Rollen
-- **Open question:** was dieses ADR nicht klären konnte (Zeile entfernen, wenn nichts offen ist)
+- **Deciders:** names/roles
+- **Open question:** what this record could not settle (delete this line and the next when nothing is open)
 - **Question checked:** YYYY-MM
 
-## Kontext und Problemstellung
+## Context and problem statement
 
-Welche Situation erzwingt eine Entscheidung? Welche Frage wird beantwortet? Sachlich und ohne die gewählte Lösung.
+What situation forces a decision? What question is being answered? Keep it factual and free of the chosen solution.
 
-## Entscheidungstreiber
+## Decision drivers
 
-- Treiber 1
-- Treiber 2
+- driver 1
+- driver 2
 
-## Betrachtete Optionen
+## Considered options
 
 1. Option A
 2. Option B
 
-## Entscheidung
+## Decision outcome
 
-Gewählt wird **«…»**, weil …
+Chosen option: **"…"**, because …
 
-### Konsequenzen
+### Consequences
 
-- **Positiv:** …
-- **Negativ / akzeptierte Nachteile:** …
-- **Folgeentscheidungen und Risiken:** …
+- **Positive:** …
+- **Negative / trade-offs accepted:** …
+- **Follow-ups / risks to watch:** …
 
-## Vor- und Nachteile der Optionen
+## Pros and cons of the options
 
 ### Option A
 
-Stärkste Fassung: …
+Strongest form: …
 
-- Gut: …
-- Schlecht: …
+- Good: …
+- Bad: …
 
 ## Links
 
-- bezieht sich auf ADR-…
+- relates to ADR-…
