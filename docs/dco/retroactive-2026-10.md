@@ -1,6 +1,6 @@
 # Retroactive DCO sign-off, October 2026
 
-Pull requests #1 and #2 were merged before their commits were signed off, so the commits below are on `main` without a `Signed-off-by` trailer. History on `main` is not rewritten ([ADR-0003](../adr/0003-repository-governance-settings.md)). Instead, the responsible person certifies them here.
+Pull requests #1, #2 and #3 were merged before their commits were signed off, so the commits below are on `main` without a `Signed-off-by` trailer. History on `main` is not rewritten ([ADR-0003](../adr/0003-repository-governance-settings.md)). Instead, the responsible person certifies them here.
 
 The sign-off for this record is given in the description of the pull request that adds this file, as [ADR-0018](../adr/0018-pull-request-level-dco-sign-off.md) provides, and reaches the history of `main` with the squash commit.
 
@@ -18,6 +18,8 @@ The sign-off for this record is given in the description of the pull request tha
 | `e3f9bbce2325c123c7bd70e618381d60c18b8c9a` | Claude | docs(adr): ADR-0003 repository governance settings for main |
 | `50d0811c2155c0699b680e3dee19bee4a302eceb` | Claude | docs(adr): adopt ADR-0004 to ADR-0017 from pblumer/atlas |
 | `66fe78fa4ce86f14260f7e6ce3863bb1b5bbbd12` | sbucher | Merge pull request #2 |
+| `c817e84fd30270c2666629cc33c25f28af6adc62` | Claude | feat(dco): accept a human sign-off in the pull request description |
+| `5748d61a9c1aa79210abe6a273c90fe29c158a3b` | sbucher | Merge pull request #3 |
 
 ## Statement
 
