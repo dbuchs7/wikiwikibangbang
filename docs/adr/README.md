@@ -11,4 +11,4 @@ Neue Records werden mit [`template.md`](template.md) erstellt. Eine akzeptierte 
 
 | Nr. | Titel | Status | Implementation |
 |---|---|---|---|
-| [0001](0001-gemeinsames-item-datenmodell.md) | Gemeinsames Item-Datenmodell für Wissen und Arbeit | Proposed | Not started |
+| [0001](0001-unified-item-data-model.md) | Unified item data model for knowledge and work | Proposed | Not started |
