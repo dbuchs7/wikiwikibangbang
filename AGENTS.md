@@ -12,7 +12,7 @@ wikiwikibangbang is an open-source application written in **Go** that unifies **
 
 The core idea is recorded in [ADR-0001](docs/adr/0001-unified-item-data-model.md): every piece of user-generated content is a typed **item** with properties, an optional document body, an optional workflow and typed relations. Pages and issues are item *types*, not separate systems.
 
-**Current state:** design phase. The Go module exists, but so far it holds only the project's self-checks (ADR consistency, DCO rule) — no product code yet.
+**Current state:** design phase. Besides the project's self-checks (ADR consistency, DCO rule) the module holds one product package: `internal/item`, an in-memory prototype of the item model of ADR-0001, built to test that ADR before persistence and collaboration are designed on top of it.
 
 ## Project language: English
 
@@ -44,6 +44,7 @@ A change is not done until the whole sequence is green. CI ([`.github/workflows/
 gofmt -l .                 # must print nothing
 go vet ./...
 go test -race ./...        # includes the ADR checks in docs/adr
+go test -coverprofile=cover.out ./... && go tool cover -func=cover.out | tail -1   # floor 90% (ADR-0005)
 ```
 
 On pull requests CI also runs the DCO check over the proposed commits. Run it locally before asking for review:
@@ -69,6 +70,7 @@ go.mod             module github.com/dbuchs7/wikiwikibangbang
 .github/rulesets/  ruleset protecting main, source of truth for GitHub settings (ADR-0003)
 cmd/dcocheck/      CLI that checks DCO sign-offs over a git range
 internal/dco/      DCO sign-off rules (humans only), with tests
+internal/item/     prototype of the unified item model (ADR-0001), in memory, event-sourced
 internal/repoconfig/ tests keeping ruleset and CI workflow consistent
 docs/adr/          architecture decision records, index in README.md, consistency tests
 ```

@@ -45,6 +45,19 @@ jobs:
       - name: go test -race
         run: go test -race ./...
 
+      # ADR-0005: one repository-wide statement-coverage number, floor 90%.
+      # One profile from one run lists each block once, so the number is
+      # reproducible. The floor is an alarm, not a target; it is changed only
+      # by amending ADR-0005.
+      - name: coverage floor (90%)
+        run: |
+          go test -coverprofile="$RUNNER_TEMP/cover.out" ./... > /dev/null
+          total="$(go tool cover -func="$RUNNER_TEMP/cover.out" | awk '/^total:/ { sub("%", "", $3); print $3 }')"
+          awk -v total="$total" -v floor=90 'BEGIN {
+            printf "statement coverage %s%% (floor %s%%)\n", total, floor
+            if (total + 0 < floor) exit 1
+          }'
+
   dco:
     name: DCO sign-off (humans only)
     # The rule applies to what is proposed for merge; agent commits on a work
