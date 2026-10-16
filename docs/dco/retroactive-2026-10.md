@@ -1,8 +1,12 @@
 # Retroactive DCO sign-off, October 2026
 
-Pull requests #1, #2 and #3 were merged before their commits were signed off, so the commits below are on `main` without a `Signed-off-by` trailer. History on `main` is not rewritten ([ADR-0003](../adr/0003-repository-governance-settings.md)). Instead, the responsible person certifies them here.
+Pull requests #1, #2 and #3 were merged before their commits were signed off, so the commits below are on `main` without a `Signed-off-by` trailer. History on `main` is not rewritten ([ADR-0003](../adr/0003-repository-governance-settings.md)). This record was prepared so that the responsible person could certify them; see the status below.
 
 The sign-off for this record is given in the description of the pull request that adds this file, as [ADR-0018](../adr/0018-pull-request-level-dco-sign-off.md) provides, and reaches the history of `main` with the squash commit.
+
+## Status: unsigned
+
+**This record has not been signed.** Pull request #4, which added it, was merged without a sign-off line in its description, so the statement below has not been made by anyone. DCO enforcement has since been suspended ([ADR-0019](../adr/0019-dco-enforcement-suspended.md)). Until a person signs it — by a pull request whose description carries their sign-off and refers to this file — the record only lists commits whose DCO certification is outstanding. The commits of #4 itself (`fa434c9`, `ae225db`, `9d6ed94`, `8428abf`) are in the same position.
 
 ## Commits covered
 

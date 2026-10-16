@@ -65,11 +65,19 @@ jobs:
 
       # The description is passed through the environment and a file, never
       # interpolated into the script, so its text cannot run as shell code.
+      #
+      # DCO_MODE is `advisory` while enforcement is suspended (ADR-0019): the
+      # job reports missing sign-offs as a warning and passes. Switching it to
+      # `enforce` is a decision of the maintainer, recorded by superseding
+      # ADR-0019 — never an agent's own change.
       - name: Check sign-offs
         env:
+          DCO_MODE: advisory
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.txt"
-          go run ./cmd/dcocheck -pr-body-file "$RUNNER_TEMP/pr-body.txt" "$BASE_SHA" "$HEAD_SHA"
+          mode_flag=""
+          if [ "$DCO_MODE" = "advisory" ]; then mode_flag="-advisory"; fi
+          go run ./cmd/dcocheck $mode_flag -pr-body-file "$RUNNER_TEMP/pr-body.txt" "$BASE_SHA" "$HEAD_SHA"

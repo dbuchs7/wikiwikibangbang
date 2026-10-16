@@ -8,6 +8,10 @@
 // Signed-off-by line in that description, which covers every commit of the
 // pull request (ADR-0018). A sign-off from an AI agent or bot fails
 // wherever it appears. See internal/dco for the rules.
+//
+// With -advisory the result is reported but never fails: missing or invalid
+// sign-offs become a warning annotation and the command exits 0. CI runs in
+// this mode while DCO enforcement is suspended (ADR-0019).
 package main
 
 import (
@@ -22,8 +26,9 @@ import (
 
 func main() {
 	prBodyFile := flag.String("pr-body-file", "", "file holding the pull request description; its Signed-off-by lines cover all commits")
+	advisory := flag.Bool("advisory", false, "report problems as a warning and exit 0 (ADR-0019)")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: dcocheck [-pr-body-file FILE] <base> <head>")
+		fmt.Fprintln(os.Stderr, "usage: dcocheck [-advisory] [-pr-body-file FILE] <base> <head>")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -36,9 +41,16 @@ func main() {
 		fmt.Fprintln(os.Stderr, "dcocheck:", err)
 		os.Exit(2)
 	}
-	if !ok {
-		os.Exit(1)
+	if ok {
+		return
 	}
+	if *advisory {
+		// A GitHub Actions workflow command: shown as a warning on the run
+		// and the pull request, without failing the job.
+		fmt.Println("::warning title=DCO sign-off missing (advisory)::Not every commit is covered by a human sign-off. Enforcement is suspended (ADR-0019); the pull request may be merged.")
+		return
+	}
+	os.Exit(1)
 }
 
 func run(base, head, prBodyFile string) (bool, error) {
