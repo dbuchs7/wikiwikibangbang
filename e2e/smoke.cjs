@@ -100,8 +100,10 @@ function check(cond, msg) {
     await page.keyboard.type(" <script>alert('body')</script> see ");
     await page.fill(".pm-target", "PLAT-1");
     await page.click(".pm-toolbar button:has-text('Mention')");
+    await page.waitForSelector(".ProseMirror .pm-mention"); // resolving the key is asynchronous
     await page.fill(".pm-target", "PLAT-1");
     await page.click(".pm-toolbar button:has-text('Embed')");
+    await page.waitForSelector(".ProseMirror .pm-embed");
     await page.click("text=Save body");
     await page.waitForSelector("td:has-text('BodyCommitted')");
 

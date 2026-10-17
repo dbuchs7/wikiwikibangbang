@@ -216,9 +216,13 @@ export function createEditor({ blocks, embeds, editable, resolve }) {
   const status = h("span", { class: "error", role: "status" });
   const withTarget = (fn) => async () => {
     status.textContent = "";
+    const value = target.value;
     try {
-      await fn(target.value.trim());
-      target.value = "";
+      if (!value.trim()) throw new Error("Enter a URL or an item key first.");
+      await fn(value.trim());
+      // Clear only what this action used: the field may have been edited
+      // while the item was being resolved.
+      if (target.value === value) target.value = "";
     } catch (err) {
       status.textContent = err.message;
     }
