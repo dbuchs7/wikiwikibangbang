@@ -1,9 +1,9 @@
 # ADR-0025: The event log is one file of checksummed batch records; state is folded in memory until it outgrows it
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-17
-- **Deciders:** Project initiators (maintainer request 2026-10-17: "build persistence")
+- **Deciders:** Project initiators (maintainer request 2026-10-17: "build persistence"); accepted by the maintainer 2026-10-17
 
 ## Context and problem statement
 
@@ -27,7 +27,7 @@ This record decides the first persistent form: what is written, in which format,
 
 ## Decision outcome
 
-Proposed option: **3.**
+Chosen option: **3.**
 
 - **Journal hook.** `item.Store` takes a `Journal`. A command builds its batch of events, hands the whole batch to the journal, and applies it only if the journal returns success. A failed write is a failed command with unchanged state (`TestAChangeThatIsNotPersistedDoesNotHappen`).
 - **One record per command.** A multi-event command (e.g. creating an embedded item) is one record, so it is durable as a whole or not at all. This makes the batch atomicity of ADR-0020 hold on disk.

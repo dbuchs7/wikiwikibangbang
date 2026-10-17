@@ -95,9 +95,62 @@ func TestMemoryIsBounded(t *testing.T) {
 }
 
 func TestDamagedJournalsAreRefused(t *testing.T) {
-	for _, recs := range [][][]byte{{[]byte("{")}, {[]byte(`{"seq":2}`)}} {
+	for _, recs := range [][][]byte{{[]byte("{")}, {[]byte(`{"seq":0}`)}, {[]byte(`{"seq":2}`), []byte(`{"seq":4}`)}} {
 		if _, err := New(recs, nil, nil, nil); err == nil {
 			t.Errorf("%s loaded", recs)
 		}
+	}
+}
+
+func TestExpiry(t *testing.T) {
+	now := time.Date(2036, 10, 18, 0, 0, 0, 0, time.UTC)
+	cutoff := Cutoff(now)
+	if cutoff != time.Date(2026, 10, 18, 0, 0, 0, 0, time.UTC) {
+		t.Fatalf("cutoff %v, want ten years before", cutoff)
+	}
+	m := &mem{}
+	at := []time.Time{cutoff.Add(-time.Hour), cutoff.Add(-time.Second), cutoff, cutoff.Add(time.Hour)}
+	i := 0
+	tr, _ := New(nil, m.append, nil, func() time.Time { v := at[i]; i++; return v })
+	for range at {
+		tr.Record(Entry{Event: Login})
+	}
+	kept, dropped, err := Unexpired(m.records, cutoff)
+	if err != nil || dropped != 2 || len(kept) != 3 {
+		t.Fatalf("kept %d, dropped %d, %v", len(kept), dropped, err)
+	}
+	// The trail rebuilt from what is kept starts with the marker, which
+	// takes the last removed entry's number and time.
+	again, err := New(kept, m.append, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := again.List(0, 10)
+	if len(got) != 3 || got[2].Event != Expired || got[2].Seq != 2 || got[2].Detail["removed"] != "2" || !got[2].At.Equal(at[1]) || got[1].Seq != 3 {
+		t.Fatalf("after expiry %+v", got)
+	}
+	if k, d, _ := Unexpired(m.records[2:], cutoff); d != 0 || len(k) != 2 {
+		t.Fatal("nothing expired, yet records changed")
+	}
+	if k, d, _ := Unexpired(nil, cutoff); d != 0 || k != nil {
+		t.Fatal("an empty journal changed")
+	}
+	if err := tr.Exclusive(func() ([][]byte, bool, error) { return kept, true, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got := tr.List(0, 10); len(got) != 3 || got[2].Event != Expired {
+		t.Fatalf("memory after expiry %+v", got)
+	}
+	if err := tr.Exclusive(func() ([][]byte, bool, error) { return nil, false, errors.New("no") }); err == nil {
+		t.Fatal("the error of fn was dropped")
+	}
+	if err := tr.Exclusive(func() ([][]byte, bool, error) { return [][]byte{[]byte("{")}, true, nil }); err == nil {
+		t.Fatal("a damaged record was accepted")
+	}
+	if k, dropped, _ := Unexpired(m.records, now.AddDate(1, 0, 0)); dropped != 4 || len(k) != 1 {
+		t.Fatalf("everything expired: dropped %d, kept %d", dropped, len(k))
+	}
+	if _, _, err := Unexpired([][]byte{[]byte("{")}, cutoff); err == nil {
+		t.Fatal("a damaged record was accepted")
 	}
 }

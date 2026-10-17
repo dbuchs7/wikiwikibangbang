@@ -1,9 +1,9 @@
 # ADR-0022: Space roles, narrowing restrictions, and a logged erasure role
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-17
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Should space admins be able to read restricted items (recoverability: nothing can be locked away for good) or must restrictions bind them too (privacy: HR and security content hidden even from space admins)?
 - **Question checked:** 2026-10
 
@@ -31,7 +31,7 @@ Reasoning from how knowledge and work are actually shared: most content is open 
 
 ## Decision outcome
 
-Proposed option: **2.**
+Chosen option: **2.**
 
 **Roles.**
 - Per space: **viewer** (read), **editor** (read, create, change, trash, restore), **space admin** (all of it, plus purge and granting roles). Higher includes lower. Roles can be given to a principal or to a group (`@name`).

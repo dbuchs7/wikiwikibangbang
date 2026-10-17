@@ -1,9 +1,9 @@
 # ADR-0030: Single sign-on through OpenID Connect, with go-oidc and just-in-time accounts without roles
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-17
-- **Deciders:** Project initiators (maintainer request 2026-10-17)
+- **Deciders:** Project initiators (maintainer request 2026-10-17); accepted by the maintainer 2026-10-17
 - **Open question:** Must an existing local account be linkable to a provider identity (for example the first administrator), and by which proof — a logged-in user confirming the link, or an administrator binding issuer and subject — so that linking never relies on a claimed e-mail address?
 - **Question checked:** 2026-10
 
@@ -27,7 +27,7 @@ ADR-0013 requires an OpenID Connect relying party so organisations can use their
 
 ## Decision outcome
 
-Proposed option: **2.**
+Chosen option: **2.**
 
 - **Dependencies:** `github.com/coreos/go-oidc/v3` (Apache-2.0) verifies ID tokens with keys from the provider's JWKS; `golang.org/x/oauth2` (BSD-3-Clause) runs the code exchange; `github.com/go-jose/go-jose/v4` (Apache-2.0) comes with go-oidc. Their notices ship in `THIRD_PARTY_NOTICES.md`, in the release archives and in the image (`/licenses`); a test fails when `go.mod` names a module the file does not.
 - **Flow:** authorization code with PKCE (S256), a random state and nonce per login, kept in memory for 10 minutes and usable once (at most 10 000 open logins). The state is also put in a cookie (`HttpOnly`, `SameSite=Lax` because the provider's redirect is a cross-site navigation, path `/api/oidc/`); the callback must carry the same state as the cookie, so a callback cannot be replayed into another browser. The ID token's signature, issuer, audience and expiry are verified by go-oidc, the nonce here.

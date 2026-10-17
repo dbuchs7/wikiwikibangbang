@@ -1,9 +1,9 @@
 # ADR-0013: Authentication is required by default, behind one principal boundary
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Which identity providers must be supported in the first release (OIDC only, or SAML as well, e.g. for public-sector identity services)?
 - **Question checked:** 2026-10
 
@@ -29,7 +29,7 @@ Adapted from atlas [ADR-0044](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **2.**
+Chosen option: **2.**
 
 - **On by default.** Starting without authentication requires an explicit flag and logs a warning naming what is open. The first start seeds one administrator from environment variables or generates a password and logs it once.
 - **Principal boundary.** Middleware resolves every request to a principal (user ID, roles, scope) in the request context. Users have a stable, never-reused ID independent of username and email, so an external IdP can change either.

@@ -1,9 +1,9 @@
 # ADR-0009: A single binary with an embedded web UI
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Can the rich-text editor (e.g. ProseMirror or Tiptap) be shipped as one vendored, pre-built asset without making npm part of the Go build?
 - **Question checked:** 2026-10
 
@@ -28,7 +28,7 @@ Adapted from atlas [ADR-0011](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **3.**
+Chosen option: **3.**
 
 - The server, the API and the UI ship as **one binary**; web assets are embedded with `go:embed`.
 - The UI shell (routing, navigation, views for pages, issues, boards, search) is **plain HTML, CSS and ES-module JavaScript** without a bundler or framework.

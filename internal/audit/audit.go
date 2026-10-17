@@ -78,13 +78,82 @@ func New(records [][]byte, journal func([]byte) error, log *slog.Logger, now fun
 		if err := json.Unmarshal(r, &e); err != nil {
 			return nil, fmt.Errorf("audit: record %d: %w", i+1, err)
 		}
-		if e.Seq != t.seq+1 {
+		// Expiry removes the oldest entries, so the first may be any number;
+		// after it, numbers have no gaps.
+		if (i == 0 && e.Seq < 1) || (i > 0 && e.Seq != t.seq+1) {
 			return nil, fmt.Errorf("audit: record %d has sequence number %d", i+1, e.Seq)
 		}
 		t.seq = e.Seq
 		t.keep(e)
 	}
 	return t, nil
+}
+
+// Retention is how long an entry is kept (ADR-0029: ten years, the
+// maintainer's decision of 2026-10-17).
+const RetentionYears = 10
+
+// Cutoff is the time before which entries have expired.
+func Cutoff(now time.Time) time.Time { return now.UTC().AddDate(-RetentionYears, 0, 0) }
+
+// Expired marks where expired entries were removed. It takes the sequence
+// number and time of the last removed entry, so numbering stays gapless
+// and the trail stays in time order; it expires in turn like any entry.
+const Expired = "audit.expired"
+
+// Unexpired returns the records to keep and how many were dropped. Entries
+// are in time order, so the expired ones are a prefix; when there are any,
+// the kept records start with an Expired entry in their place.
+func Unexpired(records [][]byte, cutoff time.Time) ([][]byte, int, error) {
+	var last Entry
+	for i, r := range records {
+		var e Entry
+		if err := json.Unmarshal(r, &e); err != nil {
+			return nil, 0, fmt.Errorf("audit: record %d: %w", i+1, err)
+		}
+		if !e.At.Before(cutoff) {
+			if i == 0 {
+				return records, 0, nil
+			}
+			return marked(last, i, cutoff, records[i:])
+		}
+		last = e
+	}
+	if len(records) == 0 {
+		return nil, 0, nil
+	}
+	return marked(last, len(records), cutoff, nil)
+}
+
+func marked(last Entry, n int, cutoff time.Time, rest [][]byte) ([][]byte, int, error) {
+	m, err := json.Marshal(Entry{Seq: last.Seq, At: last.At, Event: Expired,
+		Detail: map[string]string{"removed": fmt.Sprint(n), "before": cutoff.Format(time.RFC3339)}})
+	if err != nil {
+		return nil, 0, err
+	}
+	return append([][]byte{m}, rest...), n, nil
+}
+
+// Exclusive runs fn while no entry is recorded, e.g. to rewrite the
+// journal without expired entries. When fn returns the records now in the
+// journal, the in-memory listing is rebuilt from them, so it shows what a
+// restart would.
+func (t *Trail) Exclusive(fn func() (kept [][]byte, changed bool, err error)) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	kept, changed, err := fn()
+	if err != nil || !changed {
+		return err
+	}
+	t.recent = nil
+	for i, r := range kept {
+		var e Entry
+		if err := json.Unmarshal(r, &e); err != nil {
+			return fmt.Errorf("audit: record %d: %w", i+1, err)
+		}
+		t.keep(e)
+	}
+	return nil
 }
 
 func (t *Trail) keep(e Entry) {

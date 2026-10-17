@@ -37,7 +37,7 @@ English is the project language. This is binding for everything committed to the
 
 ## The invariants (do not break these)
 
-These follow from ADR-0001. That ADR is currently **Proposed**, so the invariants are the agreed design direction rather than settled law: build towards them, and if a task seems to require breaking one, **stop and flag it** — it needs a new or superseding ADR, not a workaround. Once ADR-0001 is accepted they move into `docs/architecture/invariants.md` with checks attached.
+These follow from ADR-0001, accepted on 2026-10-17, and are settled. [`docs/architecture/invariants.md`](docs/architecture/invariants.md) lists them with the checks that hold them. If a task seems to require breaking one, **stop and flag it** — it needs a new or superseding ADR, not a workaround.
 
 1. **D1 – One model for content.** User-generated content is exclusively items. Never introduce a parallel domain object (`Page`, `Issue`, …) for a single content type. System objects (users, groups, spaces, type definitions) are exempt.
 2. **D2 – Stable identity.** Internal references (relations, document references, events) always use the immutable `id`, never the human-readable `key`.
@@ -47,8 +47,8 @@ These follow from ADR-0001. That ADR is currently **Proposed**, so the invariant
 6. **D6 – Type-agnostic cross-cutting capabilities.** No type-specific code in search, permissions, history, comments or notifications.
 7. **D7 – Identities are permanent.** An item's ID is never reused and always resolves — to the item, to the item in the trash, or to its tombstone. Deletion removes content, never identity. ([ADR-0021](docs/adr/0021-deletion-only-when-unreferenced.md))
 8. **D8 – No deletion while referenced.** An item is trashed only when no live item outside its subtree references it; deleting never leaves live content pointing at it. The one exception is redaction by the erasure role, which is logged with a reason. ([ADR-0021](docs/adr/0021-deletion-only-when-unreferenced.md), [ADR-0022](docs/adr/0022-permission-model.md))
-9. **D9 – Access only narrows below the space.** An item is readable (editable) only if the space role allows it and no restriction on it or its ancestors excludes the principal; restrictions never grant. (*Proposed*, [ADR-0022](docs/adr/0022-permission-model.md))
-10. **D10 – Unreadable is non-existent, and only sessions face callers.** Nothing a caller receives — errors, embeds, relations, search results, history — reveals an item the caller may not read. API and MCP code act through `Store.As(principal)` sessions, never through the trusted `Store` commands. (*Proposed*, [ADR-0022](docs/adr/0022-permission-model.md))
+9. **D9 – Access only narrows below the space.** An item is readable (editable) only if the space role allows it and no restriction on it or its ancestors excludes the principal; restrictions never grant. ([ADR-0022](docs/adr/0022-permission-model.md))
+10. **D10 – Unreadable is non-existent, and only sessions face callers.** Nothing a caller receives — errors, embeds, relations, search results, history — reveals an item the caller may not read. API and MCP code act through `Store.As(principal)` sessions, never through the trusted `Store` commands. ([ADR-0022](docs/adr/0022-permission-model.md))
 
 ## Commands
 
@@ -113,6 +113,7 @@ internal/item/     prototype of the unified item model (ADR-0001), event-sourced
 internal/migrate/  prototype of the Jira/Confluence import engine (ADR-0023)
 internal/repoconfig/ tests keeping ruleset, CI workflow and release matrix consistent
 e2e/               browser smoke test of the UI (Playwright; test tool only, not part of the build)
+docs/architecture/ the invariants with their checks
 docs/adr/          architecture decision records, index in README.md, consistency tests
 ```
 

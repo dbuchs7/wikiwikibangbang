@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
@@ -39,6 +40,7 @@ type DB struct {
 	keys     *keyring
 	accounts *wal.Log
 	audit    *wal.Log
+	dir      string
 }
 
 // Read runs fn with the item store while no command runs.
@@ -118,12 +120,24 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 	if db.Accounts, err = auth.New(asc.Records, al.Append, o.Auth...); err != nil {
 		return nil, Recovery{}, err
 	}
+	db.dir = dir
 	tl, tsc, err := wal.OpenFile(dir, AuditFile)
 	if err != nil {
 		return nil, Recovery{}, err
 	}
 	db.audit = tl
-	if db.Audit, err = audit.New(tsc.Records, tl.Append, o.Log, nil); err != nil {
+	// Expired entries leave the journal before the trail is built (ADR-0029).
+	kept, dropped, err := audit.Unexpired(tsc.Records, audit.Cutoff(time.Now()))
+	if err != nil {
+		return nil, Recovery{}, err
+	}
+	if dropped > 0 {
+		if err := db.rewriteAudit(kept); err != nil {
+			return nil, Recovery{}, err
+		}
+	}
+	// The journal is reached through db.audit, which ExpireAudit replaces.
+	if db.Audit, err = audit.New(kept, func(b []byte) error { return db.audit.Append(b) }, o.Log, nil); err != nil {
 		return nil, Recovery{}, err
 	}
 	rec := recovery(sc, log)
@@ -148,6 +162,42 @@ func (db *DB) heal() (int, error) {
 		return 0, nil
 	}
 	return len(ids), db.keys.shred(ids...)
+}
+
+// rewriteAudit replaces the audit journal with records and reopens it.
+func (db *DB) rewriteAudit(records [][]byte) error {
+	if err := db.audit.Close(); err != nil {
+		return err
+	}
+	db.audit = nil
+	rerr := wal.Rewrite(db.dir, AuditFile, records)
+	l, _, err := wal.OpenFile(db.dir, AuditFile)
+	if err != nil {
+		return errors.Join(rerr, err)
+	}
+	db.audit = l
+	return rerr
+}
+
+// ExpireAudit removes audit entries older than the retention period from the
+// journal and the in-memory listing, and reports how many went. The server
+// calls it once a day; Open does it at every start.
+func (db *DB) ExpireAudit(now time.Time) (int, error) {
+	cutoff := audit.Cutoff(now)
+	dropped := 0
+	err := db.Audit.Exclusive(func() ([][]byte, bool, error) {
+		sc, err := wal.Read(filepath.Join(db.dir, AuditFile))
+		if err != nil {
+			return nil, false, err
+		}
+		kept, n, err := audit.Unexpired(sc.Records, cutoff)
+		if err != nil || n == 0 {
+			return nil, false, err
+		}
+		dropped = n
+		return kept, true, db.rewriteAudit(kept)
+	})
+	return dropped, err
 }
 
 // Close closes the data directory.

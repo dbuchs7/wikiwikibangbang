@@ -1,9 +1,9 @@
 # ADR-0027: Local accounts with PBKDF2, in-memory sessions and scoped API tokens
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-17
-- **Deciders:** Project initiators (maintainer request 2026-10-17 to build authentication before the API)
+- **Deciders:** Project initiators (maintainer request 2026-10-17 to build authentication before the API); accepted by the maintainer 2026-10-17
 - **Open question:** Behind a reverse proxy every client has the proxy's address, so the per-address login throttle throttles everyone at once. Should the server trust a forwarding header from a configured proxy address, and how is that configuration kept from becoming a way to forge addresses?
 - **Question checked:** 2026-10
 
@@ -27,7 +27,7 @@ ADR-0013 decides that authentication is on by default, behind one principal boun
 
 ## Decision outcome
 
-Proposed option: **2**, with the rest of the boundary as follows.
+Chosen option: **2**, with the rest of the boundary as follows.
 
 - **Passwords:** PBKDF2-HMAC-SHA256, 600 000 iterations (the OWASP figure for this function), 16-byte random salt, stored as `pbkdf2-sha256$<iterations>$<salt>$<key>` so the cost can be raised later. At least 12 characters. Comparison in constant time. A login for an unknown username checks a dummy hash of the same cost.
 - **Accounts** are event-sourced in `accounts.wal` beside the event log, under the same directory lock. Users have a random, permanent ID; the ID, not the username, is the principal of the item store (ADR-0022), so usernames can change. Administrators are those holding the `admin` system role in the item store.

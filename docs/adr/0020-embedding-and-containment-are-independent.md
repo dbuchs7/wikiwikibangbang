@@ -1,9 +1,9 @@
 # ADR-0020: Embedding shows an item, containment places it — the two stay independent
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Do users understand the difference between "this task lives here" and "this task is shown here" when the page renders both the same way, or does the UI need a visible distinction from the first release?
 - **Question checked:** 2026-10
 
@@ -37,7 +37,7 @@ Reasoning from the two functions: containment answers *who governs this item* (s
 
 ## Decision outcome
 
-Proposed option: **1, independent links.**
+Chosen option: **1, independent links.**
 
 - `parent` is the only link that governs: space, permission inheritance, navigation. An embed governs nothing.
 - An embed is a pure presentation of the target. A viewer without access to the target sees "restricted item" (ADR-0001, decision 5); **an embed never grants access.**

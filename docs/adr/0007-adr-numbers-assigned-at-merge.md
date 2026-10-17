@@ -1,9 +1,9 @@
 # ADR-0007: ADR numbers are assigned at merge, not on a branch
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** How does a numbering step write to `main` when the `protect-main` ruleset (ADR-0003) allows no bypass and no direct pushes?
 - **Question checked:** 2026-10
 
@@ -28,7 +28,7 @@ Adapted from atlas [ADR-0170](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **2 or 3 — drafts carry no number while in flight**; the choice between them depends on the open question.
+Chosen option: **2 or 3 — drafts carry no number while in flight**; the choice between them depends on the open question.
 
 A record in flight:
 

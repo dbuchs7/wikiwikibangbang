@@ -1,9 +1,9 @@
 # ADR-0014: User content is rendered by one closed renderer, never as raw HTML
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 
 ## Context and problem statement
 
@@ -26,7 +26,7 @@ Adapted from atlas [ADR-0250](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **3.**
+Chosen option: **3.**
 
 - The renderer walks the block document of ADR-0001 and **creates every element itself**. Text is always inserted as text; no fragment of user content is ever interpreted as markup. Raw HTML in content renders as visible text.
 - The only place user text reaches an attribute is a link target, guarded by an **allowlist**: `http`, `https`, `mailto` and same-origin paths. Everything else, including `javascript:` and `data:`, loses its link and renders as its label.
