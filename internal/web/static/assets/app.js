@@ -60,8 +60,15 @@ function renderNav() {
     nav.replaceChildren();
     return;
   }
+  const current = location.hash.startsWith("#/search/") ? decodeURIComponent(location.hash.slice(9)) : "";
+  const search = h("form", { class: "search", role: "search", onsubmit: (ev) => {
+    ev.preventDefault();
+    const q = new FormData(ev.target).get("q").trim();
+    if (q) location.hash = "#/search/" + encodeURIComponent(q);
+  } }, h("input", { name: "q", type: "search", placeholder: "Search", "aria-label": "Search", value: current }));
   mount(nav,
     link("#/", "Spaces"),
+    search,
     me.admin ? link("#/admin", "Administration") : null,
     link("#/account", me.user.username),
     h("button", { class: "link", onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }, "Log out"),
@@ -84,6 +91,7 @@ async function route() {
     switch (section) {
       case "space": return await spaceView(arg);
       case "item": return await itemView(arg);
+      case "search": return await searchView(arg || "");
       case "account": return await accountView();
       case "admin": return await adminView();
       default: return await homeView();
@@ -117,6 +125,34 @@ async function loginView() {
       }),
       sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: "Log in with " + sso.name })) : null,
     ));
+}
+
+// --- search (ADR-0033) -------------------------------------------------------
+
+async function searchView(q) {
+  const url = (after) => `/api/search?q=${encodeURIComponent(q)}&limit=50${after ? "&after=" + encodeURIComponent(after) : ""}`;
+  const first = await get(url());
+  const list = h("ol", { class: "list hits" });
+  const more = h("div");
+  const addHits = (page) => {
+    for (const hit of page.hits) {
+      const it = hit.item;
+      list.append(h("li", {},
+        link("#/item/" + encodeURIComponent(it.key), it.key), " ", h("strong", { text: it.title }),
+        " ", h("span", { class: "muted", text: `${it.space} · ${it.type}${it.state ? " · " + it.state : ""}` }),
+        hit.snippet ? h("p", { class: "snippet", text: hit.snippet }) : null,
+      ));
+    }
+    more.replaceChildren();
+    if (page.next) more.append(h("button", { text: "More", onclick: async () => addHits(await get(url(page.next))) }));
+  };
+  addHits(first);
+  mount(app,
+    h("h1", { text: "Search" }),
+    h("p", { class: "muted", text: `${first.total.value} results for “${q}”` }),
+    first.total.value === 0 ? h("p", { text: "Nothing found among the items you may read." }) : list,
+    more,
+  );
 }
 
 // --- spaces ------------------------------------------------------------------

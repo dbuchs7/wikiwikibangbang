@@ -121,6 +121,16 @@ function check(cond, msg) {
     await page.click(".pm-mention");
     await page.waitForSelector("text=mentions (from the body)");
 
+    step("search: the body is found, its markup shows as text");
+    await page.fill("nav input[name=q]", "alert body");
+    await page.press("nav input[name=q]", "Enter");
+    await page.waitForSelector(".hits li");
+    check((await page.textContent(".hits li a")) === "PLAT-2", "the runbook is the hit");
+    check((await page.textContent(".hits .snippet")).includes("<script>alert('body')</script>"), "the snippet shows the script as text");
+    await page.fill("nav input[name=q]", "zzzz-nothing");
+    await page.press("nav input[name=q]", "Enter");
+    await page.waitForSelector("text=Nothing found");
+
     step("account: token");
     await page.click("nav a[href='#/account']");
     await page.fill("#new-token [name=name]", "ci");

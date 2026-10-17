@@ -73,3 +73,8 @@ table.history td { font-size: 0.9rem; }
 .pm-embed.ProseMirror-selectednode { outline: 2px solid var(--accent); }
 .pm-mention { background: var(--card); border-radius: 3px; padding: 0 0.15rem; }
 .ProseMirror-hideselection *::selection { background: transparent; }
+
+/* search (ADR-0033) */
+nav .search input { min-width: 12rem; }
+.hits li { margin-bottom: 0.75rem; }
+.hits .snippet { margin: 0.25rem 0 0; color: var(--muted); white-space: pre-wrap; }
