@@ -228,3 +228,20 @@ func TestServeUsesTheGivenAdministrator(t *testing.T) {
 		t.Errorf("the given password does not log in: %v", err)
 	}
 }
+
+func TestSingleSignOnConfiguration(t *testing.T) {
+	t.Setenv("WWBB_ADMIN_PASSWORD", "a given password!")
+	t.Setenv("WWBB_OIDC_ISSUER", "https://idp.example")
+	code, _, errOut := runCmd(t, context.Background(), "serve", "-addr", freeAddr(t), "-data-dir", t.TempDir())
+	if code != 1 || !strings.Contains(errOut, "single sign-on is misconfigured") {
+		t.Errorf("incomplete configuration: exit %d, stderr %q", code, errOut)
+	}
+	t.Setenv("WWBB_OIDC_CLIENT_ID", "wiki")
+	t.Setenv("WWBB_OIDC_REDIRECT_URL", "https://wiki.example/api/oidc/callback")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	code, _, errOut = runCmd(t, ctx, "serve", "-addr", freeAddr(t), "-data-dir", t.TempDir())
+	if code != 0 || !strings.Contains(errOut, "single sign-on enabled") {
+		t.Errorf("complete configuration: exit %d, stderr %q", code, errOut)
+	}
+}

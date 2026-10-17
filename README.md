@@ -20,6 +20,8 @@ curl -c cookies -H 'Content-Type: application/json' \
 curl -b cookies http://localhost:8080/api/me
 ```
 
+Single sign-on with an OpenID Connect provider ([ADR-0030](docs/adr/0030-openid-connect-single-sign-on.md)) is enabled by `WWBB_OIDC_ISSUER`, `WWBB_OIDC_CLIENT_ID`, `WWBB_OIDC_CLIENT_SECRET`, `WWBB_OIDC_REDIRECT_URL` (`https://<host>/api/oidc/callback`) and optionally `WWBB_OIDC_NAME`. New users get an account without roles; an administrator grants them.
+
 Items, types and spaces are managed through the item API ([ADR-0028](docs/adr/0028-item-api.md)); `GET /api/openapi.json` lists every operation:
 
 ```bash

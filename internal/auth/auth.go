@@ -110,6 +110,7 @@ type Accounts struct {
 	tokens   map[string]*token // by secret hash
 	tokenIDs map[string]*token
 	sessions map[string]*session // by secret hash
+	external map[string]UserID   // issuer + "\x00" + subject -> user (ADR-0030)
 	throttle throttle
 	dummy    string // hash checked for unknown usernames, at the same cost
 }
@@ -148,6 +149,7 @@ func New(records [][]byte, j Journal, opts ...Option) (*Accounts, error) {
 		iter:  DefaultIterations,
 		users: map[UserID]*user{}, byName: map[string]UserID{},
 		tokens: map[string]*token{}, tokenIDs: map[string]*token{}, sessions: map[string]*session{},
+		external: map[string]UserID{},
 	}
 	for _, o := range opts {
 		o(a)
@@ -178,6 +180,8 @@ type event struct {
 	Name     string    `json:"name,omitempty"`
 	Scope    Scope     `json:"scope,omitempty"`
 	Expires  time.Time `json:"expires,omitzero"`
+	Issuer   string    `json:"issuer,omitempty"`
+	Subject  string    `json:"subject,omitempty"`
 }
 
 const (
@@ -185,6 +189,9 @@ const (
 	passwordSet  = "PasswordSet"
 	tokenCreated = "TokenCreated"
 	tokenRevoked = "TokenRevoked"
+	// identityLinked ties an account to an identity at an external
+	// provider (OIDC issuer and subject).
+	identityLinked = "IdentityLinked"
 )
 
 // apply is the only code that changes accounts; it runs live and on load.
@@ -207,6 +214,11 @@ func (a *Accounts) apply(e event) error {
 		t := &token{Token: Token{ID: e.Token, User: e.User, Name: e.Name, Scope: e.Scope, Created: e.At, Expires: e.Expires}, hash: e.Hash}
 		a.tokens[e.Hash] = t
 		a.tokenIDs[e.Token] = t
+	case identityLinked:
+		if _, ok := a.users[e.User]; !ok {
+			return fmt.Errorf("identity for unknown user %s", e.User)
+		}
+		a.external[e.Issuer+"\x00"+e.Subject] = e.User
 	case tokenRevoked:
 		if t, ok := a.tokenIDs[e.Token]; ok {
 			delete(a.tokens, t.hash)
@@ -355,12 +367,14 @@ func (a *Accounts) Login(username, password, addr string) (secret string, p Prin
 	}
 	id, ok := a.byName[fold(username)]
 	hash := a.dummy
-	if ok {
+	if ok && a.users[id].hash != "" {
 		hash = a.users[id].hash
 	}
 	a.mu.Unlock()
 
-	good := checkPassword(hash, password) && ok
+	// An account without a password (external identity) costs the same
+	// derivation and never matches.
+	good := checkPassword(hash, password) && ok && hash != a.dummy
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -369,7 +383,13 @@ func (a *Accounts) Login(username, password, addr string) (secret string, p Prin
 		return "", Principal{}, ErrUnauthorized
 	}
 	a.throttle.reset("user:" + fold(username))
-	secret, err = a.newID(32)
+	return a.openSession(id)
+}
+
+// openSession creates a session; callers hold a.mu.
+func (a *Accounts) openSession(id UserID) (string, Principal, error) {
+	now := a.now()
+	secret, err := a.newID(32)
 	if err != nil {
 		return "", Principal{}, err
 	}
@@ -505,3 +525,63 @@ func hashSecret(secret string) string {
 }
 
 func equalStrings(a, b string) bool { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
+
+// UserByIdentity returns the account linked to an external identity.
+func (a *Accounts) UserByIdentity(issuer, subject string) (User, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	id, ok := a.external[issuer+"\x00"+subject]
+	if !ok {
+		return User{}, false
+	}
+	return a.users[id].User, true
+}
+
+// CreateExternalUser creates an account without a password for an identity
+// at an external provider (just-in-time provisioning, ADR-0030). The
+// username is the preferred one if it is valid and free, otherwise it gets
+// a numeric suffix; usernames are only labels, the ID is the identity.
+func (a *Accounts) CreateExternalUser(preferred, issuer, subject string) (User, error) {
+	if issuer == "" || subject == "" {
+		return User{}, fmt.Errorf("%w: an external identity needs issuer and subject", ErrInvalid)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if _, ok := a.external[issuer+"\x00"+subject]; ok {
+		return User{}, fmt.Errorf("%w: identity already linked", ErrExists)
+	}
+	base := preferred
+	if !validUsername(base) || utf8.RuneCountInString(base) > 56 {
+		base = "user"
+	}
+	name := base
+	for n := 2; ; n++ {
+		if _, taken := a.byName[fold(name)]; !taken {
+			break
+		}
+		name = fmt.Sprintf("%s-%d", base, n)
+	}
+	id, err := a.newID(16)
+	if err != nil {
+		return User{}, err
+	}
+	uid := UserID(id)
+	if err := a.record(event{Kind: userCreated, User: uid, Username: name}); err != nil {
+		return User{}, err
+	}
+	if err := a.record(event{Kind: identityLinked, User: uid, Issuer: issuer, Subject: subject}); err != nil {
+		return User{}, err
+	}
+	return a.users[uid].User, nil
+}
+
+// StartSession opens a session for a user an external provider has
+// authenticated.
+func (a *Accounts) StartSession(id UserID) (string, Principal, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if _, ok := a.users[id]; !ok {
+		return "", Principal{}, ErrNotFound
+	}
+	return a.openSession(id)
+}

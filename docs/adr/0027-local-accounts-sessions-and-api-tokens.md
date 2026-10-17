@@ -40,7 +40,7 @@ Proposed option: **2**, with the rest of the boundary as follows.
 - **Audit:** logins, failures, throttling, token creation and revocation, password changes and account creation are recorded in the audit trail ([ADR-0029](0029-persisted-security-audit-trail.md)).
 - **Store access:** the HTTP layer reaches the item store only through `storage.DB.Read` and `Write`, which serialise access; this is the single writer of ADR-0008 for concurrent requests.
 
-**Implementation is Partial:** no OIDC (ADR-0013); no account deactivation or deletion; no UI login form yet; no `-insecure-no-auth` mode (none is planned).
+**Implementation is Partial:** OIDC is [ADR-0030](0030-openid-connect-single-sign-on.md); no account deactivation or deletion; no UI login form yet; no `-insecure-no-auth` mode (none is planned).
 
 ### Consequences
 

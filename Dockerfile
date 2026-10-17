@@ -43,6 +43,9 @@ RUN mkdir -p /out/data
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
 COPY --from=build /out/wikiwikibangbang /wikiwikibangbang
+# The licenses the binary is distributed under (AGPL-3.0, and the notices of
+# the modules it includes).
+COPY --from=build /src/LICENSE /src/THIRD_PARTY_NOTICES.md /licenses/
 # Owned by the nonroot user, so a volume mounted at /data starts writable.
 COPY --from=build --chown=65532:65532 /out/data /data
 

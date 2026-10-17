@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
 
@@ -53,6 +54,8 @@ type Deps struct {
 	DB *storage.DB
 	// Log receives operational errors; security events go to DB.Audit.
 	Log *slog.Logger
+	// SSO is the OpenID Connect provider, or nil when none is configured.
+	SSO *sso.Provider
 }
 
 // Routes is the product's route table.
@@ -64,6 +67,7 @@ func Routes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/assets/", Summary: "Web UI assets", Access: Public, Handler: noListing(files)},
 	}
 	routes = append(routes, authRoutes(d)...)
+	routes = append(routes, oidcRoutes(d)...)
 	routes = append(routes, itemRoutes(d)...)
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}
 	routes = append(routes, doc)
