@@ -2,6 +2,7 @@ package item
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -350,22 +351,44 @@ func TestPurgeLeavesATombstone(t *testing.T) {
 	}
 }
 
-// TestPurgeLeavesContentInTheLog documents a known gap of ADR-0021: purged
-// content survives in past events until crypto-shredding is designed with
-// ADR-0008. When that lands, this test must be inverted.
-func TestPurgeLeavesContentInTheLog(t *testing.T) {
+// TestPurgeErasesContentFromTheHistory: once purged, an item's content is
+// gone from the history as well, while the events themselves remain, so
+// who changed the item and when stays auditable (ADR-0026). On disk the
+// same holds through crypto-shredding (internal/storage).
+func TestPurgeErasesContentFromTheHistory(t *testing.T) {
 	s, page, _, _, foreign := trashFixture(t)
 	unreference(t, s, foreign)
 	noErr(t, s.Trash("anna", page.ID))
 	noErr(t, s.Purge("anna", page.ID))
-	found := false
+	assertErased(t, s, page.ID, "Runbook")
+}
+
+func TestRedactionErasesContentFromTheHistory(t *testing.T) {
+	s, page, _, _, _ := trashFixture(t)
+	noErr(t, s.GrantSystemRole("admin", "carla", RoleErasure))
+	noErr(t, s.Redact("carla", page.ID, "personal data"))
+	assertErased(t, s, page.ID, "Runbook")
+}
+
+func assertErased(t *testing.T, s *Store, id ID, secret string) {
+	t.Helper()
 	for _, e := range s.Log() {
-		if e.Kind == ItemCreated && e.Item == page.ID && strings.Contains(e.Title, "Runbook") {
-			found = true
+		if strings.Contains(fmt.Sprintf("%+v %+v %+v", e, e.Body, e.Origin), secret) {
+			t.Errorf("event %d (%s) still holds %q", e.Seq, e.Kind, secret)
 		}
 	}
-	if !found {
-		t.Fatal("expected the purged title to still be in the log (known gap)")
+	h := s.History(id)
+	erased := 0
+	for _, e := range h {
+		if e.Erased {
+			erased++
+			if e.Actor == "" || e.At.IsZero() {
+				t.Errorf("erased event %d lost its actor or time", e.Seq)
+			}
+		}
+	}
+	if erased == 0 {
+		t.Error("the history shows no erased events")
 	}
 }
 

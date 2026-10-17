@@ -150,7 +150,7 @@ func TestAnUnstorableValueFailsTheCommand(t *testing.T) {
 	noErr(t, db.Store.CreateSpace("admin", "PLAT", "Platform"))
 	// TypeDefs are validated, so provoke an encoding failure through the
 	// journal directly.
-	if err := (journal{db.log}).Append([]item.Event{{Kind: item.PropertySet, Value: struct{}{}}}); err == nil {
+	if err := (journal{db}).Append([]item.Event{{Kind: item.PropertySet, Value: struct{}{}}}); err == nil {
 		t.Fatal("an unencodable event was journaled")
 	}
 }

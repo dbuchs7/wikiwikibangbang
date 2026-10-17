@@ -283,3 +283,44 @@ func TestAnUndoableFailureBreaksTheLog(t *testing.T) {
 		t.Fatalf("append on a broken log: err = %v, want ErrBroken", err)
 	}
 }
+
+func TestRewriteReplacesTheFileAtomically(t *testing.T) {
+	dir := t.TempDir()
+	lock, err := Lock(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	if _, err := Lock(dir); !errors.Is(err, ErrLocked) {
+		t.Fatalf("second Lock: err = %v, want ErrLocked", err)
+	}
+	l, _, err := OpenFile(dir, "keys.wal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range records(3) {
+		if err := l.Append(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	l.Close()
+	if err := Rewrite(dir, "keys.wal", [][]byte{[]byte("only")}); err != nil {
+		t.Fatal(err)
+	}
+	sc, err := Read(filepath.Join(dir, "keys.wal"))
+	if err != nil || fmt.Sprintf("%s", sc.Records) != "[only]" {
+		t.Fatalf("after rewrite: %s, %v", sc.Records, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "keys.wal.tmp")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("the temporary file was left behind")
+	}
+	if err := Rewrite(filepath.Join(dir, "missing"), "keys.wal", nil); err == nil {
+		t.Fatal("Rewrite into a missing directory succeeded")
+	}
+	if err := Rewrite(dir, "big.wal", [][]byte{make([]byte, MaxRecord+1)}); err == nil {
+		t.Fatal("Rewrite with an oversized record succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "big.wal.tmp")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("a failed rewrite left its temporary file")
+	}
+}

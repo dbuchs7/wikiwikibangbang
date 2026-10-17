@@ -106,6 +106,9 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	if rec.Torn > 0 {
 		log.Warn("dropped an interrupted write", "bytes", rec.Torn)
 	}
+	if rec.Shredded > 0 {
+		log.Info("destroyed leftover item keys", "keys", rec.Shredded)
+	}
 	log.Info("data directory open", "dir", *dataDir, "events", rec.Events)
 
 	ln, err := net.Listen("tcp", *addr)
@@ -138,6 +141,9 @@ func check(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "ok: %d events in %d batches\n", rec.Events, rec.Batches)
+	if rec.Erased > 0 {
+		fmt.Fprintf(stdout, "%d events have erased content (purged or redacted items)\n", rec.Erased)
+	}
 	if rec.Torn > 0 {
 		fmt.Fprintf(stdout, "an interrupted write of %d bytes at the end will be dropped on the next start\n", rec.Torn)
 	}

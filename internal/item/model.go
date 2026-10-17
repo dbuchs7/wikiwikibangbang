@@ -210,6 +210,41 @@ type Event struct {
 	Origin      *Origin      // ItemImported
 	Key         string       // ItemImported: the source key to keep, if free
 	Managed     string       // ItemImported, ItemReleased
+
+	// Erased is set on an event whose content (title, properties, body, raw
+	// source) was removed because its item was purged or redacted. The
+	// event stays in the history, so who changed what and when remains
+	// visible; what the content was does not (ADR-0026).
+	Erased bool
+}
+
+// HasContent reports whether the event carries user content of its item:
+// the fields that purge and redaction must make unrecoverable (ADR-0026).
+func (e Event) HasContent() bool {
+	switch e.Kind {
+	case ItemCreated, TitleSet, PropertySet, BodyCommitted, ItemImported:
+		return true
+	}
+	return false
+}
+
+// erase removes an event's content. Applying an erased event yields an item
+// without content; the purge that follows clears the item anyway, so the
+// final state is the same as with the original event.
+func (e *Event) erase() {
+	if !e.HasContent() {
+		return
+	}
+	e.Title, e.Props, e.Value = "", nil, nil
+	if e.Kind == BodyCommitted {
+		e.Body = &Doc{}
+	}
+	if e.Origin != nil {
+		o := *e.Origin
+		o.Raw = ""
+		e.Origin = &o
+	}
+	e.Erased = true
 }
 
 func (it *Item) clone() Item {

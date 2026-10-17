@@ -110,7 +110,7 @@ Strongest form: deletion is never blocked; whoever deletes does not depend on ow
 
 ## Prototype (2026-10-17)
 
-`internal/item` implements this record: `Trash` refuses with `ErrReferenced` (also an `ErrValidation`) and names the referring items; `Restore`, `Purge`, `Presence`, `Query.IncludeDeleted`. Tested: the gate (outside references block, inside / outgoing / trashed references do not, inline items blocked by their host), subtree trash, exact batch restore, read-only trash, kept vs new references after a referrer is restored, tombstones resolving by ID and key, replay of the whole lifecycle. A test (`TestPurgeLeavesContentInTheLog`) pins the known gap that purged content stays in past events; it must be inverted when crypto-shredding lands. Not implemented: retention periods (purge is an explicit command) and purge permissions.
+`internal/item` implements this record: `Trash` refuses with `ErrReferenced` (also an `ErrValidation`) and names the referring items; `Restore`, `Purge`, `Presence`, `Query.IncludeDeleted`. Tested: the gate (outside references block, inside / outgoing / trashed references do not, inline items blocked by their host), subtree trash, exact batch restore, read-only trash, kept vs new references after a referrer is restored, tombstones resolving by ID and key, replay of the whole lifecycle. Purged content also leaves past events, in memory and on disk, since [ADR-0026](0026-crypto-shredding-of-item-content.md) (`TestPurgeErasesContentFromTheHistory`, `TestErasureDestroysTheKey`). Not implemented: retention periods (purge is an explicit command) and purge permissions.
 
 ## Links
 

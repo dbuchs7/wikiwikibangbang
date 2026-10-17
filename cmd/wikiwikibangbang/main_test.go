@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
 )
@@ -154,7 +155,7 @@ func TestCheck(t *testing.T) {
 	db.Close()
 
 	code, out, _ := runCmd(t, context.Background(), "check", "-data-dir", dir)
-	if code != 0 || !strings.Contains(out, "ok: 1 events in 1 batches") {
+	if code != 0 || !strings.Contains(out, "ok: 1 events in 1 batches") || strings.Contains(out, "erased") {
 		t.Errorf("exit %d, output %q", code, out)
 	}
 
@@ -172,5 +173,28 @@ func TestCheck(t *testing.T) {
 	}
 	if code, _, errOut := runCmd(t, context.Background(), "check", "-data-dir", dir); code != 1 || !strings.Contains(errOut, "corrupt") {
 		t.Errorf("corrupt log: exit %d, stderr %q", code, errOut)
+	}
+}
+
+func TestCheckReportsErasedContent(t *testing.T) {
+	dir := t.TempDir()
+	db, _, err := storage.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := db.Store
+	steps := []error{
+		s.DefineType("admin", item.TypeDef{Name: "page"}),
+		s.CreateSpace("admin", "PLAT", "Platform"),
+	}
+	it, err := s.Create("anna", item.NewItem{Space: "PLAT", Type: "page", Title: "secret"})
+	steps = append(steps, err, s.Trash("anna", it.ID), s.Purge("anna", it.ID), db.Close())
+	for _, err := range steps {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if code, out, _ := runCmd(t, context.Background(), "check", "-data-dir", dir); code != 0 || !strings.Contains(out, "1 events have erased content") {
+		t.Errorf("exit %d, output %q", code, out)
 	}
 }

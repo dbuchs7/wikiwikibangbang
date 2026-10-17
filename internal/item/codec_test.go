@@ -74,7 +74,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":2,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":3,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -104,20 +104,34 @@ func TestEncodeRejectsWhatItCannotStore(t *testing.T) {
 	}
 }
 
+// fakeSealer seals deterministically, so the golden file can pin the sealed
+// layout. Items in shredded have lost their key.
+type fakeSealer struct{ shredded map[ID]bool }
+
+func (f fakeSealer) Seal(id ID, pt, aad []byte) ([]byte, error) {
+	return append([]byte("sealed("+string(id)+")"), pt...), nil
+}
+
+func (f fakeSealer) Open(id ID, ct, aad []byte) ([]byte, error) {
+	if f.shredded[id] {
+		return nil, ErrKeyShredded
+	}
+	prefix := "sealed(" + string(id) + ")"
+	if !strings.HasPrefix(string(ct), prefix) {
+		return nil, errors.New("wrong key")
+	}
+	return ct[len(prefix):], nil
+}
+
 // TestPersistedFormatIsStable pins the format of a log covering every event
-// kind. A failure means old data directories would be read differently:
-// change the format only together with CodecVersion and a migration, then
-// regenerate with `go test ./internal/item -run PersistedFormat -update`.
+// kind, in plaintext and sealed. A failure means old data directories would
+// be read differently: change the format only together with CodecVersion
+// and a decoder for the old version, then regenerate with
+// `go test ./internal/item -run PersistedFormat -update`.
 func TestPersistedFormatIsStable(t *testing.T) {
 	log := everyKindLog(t)
-	var lines []string
 	kinds := map[EventKind]bool{}
 	for _, e := range log {
-		data, err := EncodeBatch([]Event{e})
-		if err != nil {
-			t.Fatal(err)
-		}
-		lines = append(lines, string(data))
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -125,28 +139,51 @@ func TestPersistedFormatIsStable(t *testing.T) {
 			t.Errorf("the golden log has no %s event; extend everyKindLog", k)
 		}
 	}
-	got := strings.Join(lines, "\n") + "\n"
-
-	golden := filepath.Join("testdata", "events.golden.jsonl")
-	if *update {
-		if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
-			t.Fatal(err)
+	for name, sl := range map[string]Sealer{"events.v2.golden.jsonl": nil, "events.v2.sealed.golden.jsonl": fakeSealer{}} {
+		var lines []string
+		for _, e := range log {
+			data, err := EncodeBatchSealed([]Event{e}, sl)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lines = append(lines, string(data))
 		}
-	}
-	want, err := os.ReadFile(golden)
-	if err != nil {
-		t.Fatalf("%v (run with -update to create it)", err)
-	}
-	if got != string(want) {
-		t.Fatalf("the persisted format changed; see the comment on this test\n got: %s\nwant: %s", got, want)
-	}
-
-	// The golden file itself must still decode into the same events.
-	var decoded []Event
-	for _, line := range strings.Split(strings.TrimSpace(string(want)), "\n") {
-		batch, err := DecodeBatch([]byte(line))
+		got := strings.Join(lines, "\n") + "\n"
+		golden := filepath.Join("testdata", name)
+		if *update {
+			if err := os.WriteFile(golden, []byte(got), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		want, err := os.ReadFile(golden)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("%v (run with -update to create it)", err)
+		}
+		if got != string(want) {
+			t.Fatalf("%s: the persisted format changed; see the comment on this test\n got: %s\nwant: %s", name, got, want)
+		}
+		assertRebuilds(t, golden, sl, log)
+	}
+}
+
+// TestVersion1LogsStillReplay: a data directory written by codec version 1
+// (plaintext, nothing erased) still opens and rebuilds the same state and
+// history, including the content erased by the purges it contains.
+func TestVersion1LogsStillReplay(t *testing.T) {
+	assertRebuilds(t, filepath.Join("testdata", "events.v1.golden.jsonl"), nil, everyKindLog(t))
+}
+
+func assertRebuilds(t *testing.T, golden string, sl Sealer, log []Event) {
+	t.Helper()
+	data, err := os.ReadFile(golden)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded []Event
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		batch, err := DecodeBatchSealed([]byte(line), sl)
+		if err != nil {
+			t.Fatalf("%s: %v", golden, err)
 		}
 		decoded = append(decoded, batch...)
 	}
@@ -160,9 +197,51 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	}
 	all := Query{IncludeDeleted: true}
 	if !reflect.DeepEqual(r.Find(all), live.Find(all)) {
-		t.Fatal("the golden log rebuilds a different state")
+		t.Fatalf("%s rebuilds a different state", golden)
+	}
+	if !reflect.DeepEqual(r.Log(), live.Log()) {
+		t.Fatalf("%s rebuilds a different history", golden)
 	}
 }
+
+func TestShreddedContentDecodesAsErased(t *testing.T) {
+	log := everyKindLog(t)
+	var created Event
+	for _, e := range log {
+		if e.Kind == ItemCreated && !e.Erased {
+			created = e
+			break
+		}
+	}
+	data, err := EncodeBatchSealed([]Event{created}, fakeSealer{})
+	noErr(t, err)
+	if strings.Contains(string(data), created.Title) {
+		t.Fatalf("sealed event shows its title: %s", data)
+	}
+	got, err := DecodeBatchSealed(data, fakeSealer{shredded: map[ID]bool{created.Item: true}})
+	noErr(t, err)
+	if !got[0].Erased || got[0].Title != "" || got[0].Props != nil {
+		t.Fatalf("decoded %+v, want an erased event", got[0])
+	}
+	if _, err := DecodeBatch(data); err == nil {
+		t.Fatal("sealed content decoded without keys")
+	}
+	if _, err := DecodeBatchSealed(data, failingSealer{}); err == nil {
+		t.Fatal("a sealer error was ignored")
+	}
+	if _, err := EncodeBatchSealed([]Event{created}, failingSealer{}); err == nil {
+		t.Fatal("a sealer error was ignored on encode")
+	}
+	bad := []byte(strings.Replace(string(data), `"sealed":"`, `"sealed":"QUJD`, 1))
+	if _, err := DecodeBatchSealed(bad, fakeSealer{}); err == nil {
+		t.Fatal("tampered sealed content decoded")
+	}
+}
+
+type failingSealer struct{}
+
+func (failingSealer) Seal(ID, []byte, []byte) ([]byte, error) { return nil, errors.New("no") }
+func (failingSealer) Open(ID, []byte, []byte) ([]byte, error) { return nil, errors.New("no") }
 
 var allEventKinds = []EventKind{
 	TypeDefined, SpaceCreated, ItemCreated, TitleSet, PropertySet, Transitioned, ItemMoved,

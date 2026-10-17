@@ -12,9 +12,11 @@ wikiwikibangbang is an open-source application written in **Go** that unifies **
 
 The core idea is recorded in [ADR-0001](docs/adr/0001-unified-item-data-model.md): every piece of user-generated content is a typed **item** with properties, an optional document body, an optional workflow and typed relations. Pages and issues are item *types*, not separate systems.
 
-**Current state:** design phase. Besides the project's self-checks (ADR consistency, DCO rule) the module holds two prototype packages: `internal/item`, the item model with lifecycle and permissions (ADR-0001, ADR-0020 to ADR-0022), and `internal/migrate`, the import engine (ADR-0023). The item store persists to an event log on disk (`internal/wal`, `internal/storage`; ADR-0008, ADR-0025): every command is fsynced before it takes effect, and startup replays the log. The single binary `cmd/wikiwikibangbang` opens the data directory and serves a placeholder UI and a liveness probe; it is released for every common platform and as a container image (ADR-0024). No API route uses the store yet.
+**Current state:** design phase. Besides the project's self-checks (ADR consistency, DCO rule) the module holds two prototype packages: `internal/item`, the item model with lifecycle and permissions (ADR-0001, ADR-0020 to ADR-0022), and `internal/migrate`, the import engine (ADR-0023). The item store persists to an event log on disk (`internal/wal`, `internal/storage`; ADR-0008, ADR-0025): every command is fsynced before it takes effect, and startup replays the log. Item content is encrypted with a key per item; purge and redaction destroy the key (ADR-0026). The single binary `cmd/wikiwikibangbang` opens the data directory and serves a placeholder UI and a liveness probe; it is released for every common platform and as a container image (ADR-0024). No API route uses the store yet.
 
 **The persisted event format is a contract with every existing data directory** (ADR-0025). Never change what `item.EncodeBatch` writes — a field name, a value encoding, a role name — without raising `item.CodecVersion` and teaching the decoder the old version. `TestPersistedFormatIsStable` fails on any change; regenerating its golden file is the last step of such a change, never the fix for a failing test. `apply` must produce the same state from a decoded event as from the live one: every test in `internal/item` checks that.
+
+**Content never reaches disk in plaintext** (ADR-0026). Anything a user can type into an item is content: if you add such a field to an event, it belongs in `item.Event.erase` and in the sealed part of the codec (`wireContent`), and `internal/storage` must show it does not appear in the event file. `keys.wal` is as precious as `events.wal`: without it all content is lost.
 
 **The product ships as one binary** (ADR-0009, ADR-0024): pure Go, no CGO, web assets embedded with `go:embed`, cross-compiled for every release platform. Never add anything that breaks this — a runtime file the binary needs next to it, a C dependency, a CDN asset, a second executable.
 
@@ -93,7 +95,7 @@ Dockerfile         container image: distroless, nonroot, multi-arch (ADR-0024)
 cmd/wikiwikibangbang/ the product's single binary: serve, check, healthcheck, version (ADR-0024)
 cmd/dcocheck/      CLI that checks DCO sign-offs over a git range
 internal/buildinfo/ version stamped at build time
-internal/storage/  data directory: recovers the item store from the log, journals every command (ADR-0025)
+internal/storage/  data directory: recovers the item store, journals every command, per-item keys (ADR-0025, ADR-0026)
 internal/wal/      append-only log file: checksummed records, fsync, crash recovery, directory lock
 internal/server/   HTTP route table with access classes, security headers, graceful shutdown
 internal/web/      embedded web UI (plain HTML, CSS, ES modules; ADR-0009)
