@@ -36,3 +36,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0021](0021-deletion-only-when-unreferenced.md) | Deletion only when unreferenced, then trash, then purge | Accepted | Partial |
 | [0022](0022-permission-model.md) | Space roles, narrowing restrictions, and a logged erasure role | Proposed | Not started |
 | [0023](0023-import-and-sync-from-jira-and-confluence.md) | Import from Jira and Confluence through one engine — snapshot import and one-way sync, never two masters | Proposed | Not started |
+| [0024](0024-release-targets-and-container-image.md) | One binary for every common platform, and a distroless container image | Accepted | Partial |

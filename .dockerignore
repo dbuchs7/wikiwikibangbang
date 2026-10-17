@@ -1,0 +1,14 @@
+# Keep the build context small: only the Go sources and module files are
+# needed (the web UI is embedded via go:embed).
+.git
+.github
+.claude
+.idea
+.vscode
+/dist/
+/out/
+/wikiwikibangbang
+*.test
+*.out
+Dockerfile
+.dockerignore
