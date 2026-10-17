@@ -3,6 +3,7 @@
 import { api, get, post, put, del, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
 import { createEditor } from "./editor.js";
+import { liveBody } from "./live.js";
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -87,8 +88,15 @@ function screen() {
   return (...children) => { if (n === navigation) mount(app, ...children); };
 }
 
+// leaving holds what the current view must end when another replaces it,
+// such as a live session.
+let leaving = [];
+function onLeave(fn) { leaving.push(fn); }
+
 async function route() {
   const hash = location.hash.replace(/^#/, "") || "/";
+  for (const fn of leaving) fn();
+  leaving = [];
   const show = (navigation++, screen());
   try {
     if (!me) {
@@ -323,25 +331,25 @@ async function itemView(ref) {
     status,
     transitions.length ? h("p", {}, "Transitions: ", transitions) : null,
     type.fields.length ? h("section", {}, h("h2", { text: "Properties" }), props) : null,
-    type.body ? bodyEditor(item, path, embeds.embeds, live, status) : null,
+    type.body ? bodyEditor(item, embeds.embeds, live) : null,
     relationsSection(out.relations, inc.relations, item.id),
     h("p", {}, actions),
     historySection(history.events),
   );
 }
 
-function bodyEditor(item, path, embeds, live, status) {
-  const ed = createEditor({
-    blocks: item.body,
-    embeds,
-    editable: live,
-    resolve: async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item,
-  });
-  return h("section", { id: "body" },
-    h("h2", { text: "Body" }),
-    ed.element,
-    live ? h("p", {}, h("button", { text: "Save body", onclick: () => action(() => put(path + "/body", { blocks: ed.blocks() }), status) })) : null,
-  );
+// bodyEditor edits a live item's body in its live session (ADR-0010):
+// changes reach everyone at once and are saved when one leaves a block.
+// A trashed or erased item's body is only shown.
+function bodyEditor(item, embeds, live) {
+  const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
+  if (!live) {
+    return h("section", { id: "body" }, h("h2", { text: "Body" }),
+      createEditor({ blocks: item.body, embeds, editable: false, resolve }).element);
+  }
+  const session = liveBody({ ref: item.id, embeds, resolve });
+  onLeave(session.close);
+  return h("section", { id: "body" }, h("h2", { text: "Body" }), session.element);
 }
 
 function relationsSection(out, inc, self) {

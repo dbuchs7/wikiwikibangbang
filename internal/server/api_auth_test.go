@@ -70,6 +70,7 @@ func setupAuth(t *testing.T) (http.Handler, Deps) {
 	if _, err := d.DB.EnsureAdmin("admin", adminPassword); err != nil {
 		t.Fatal(err)
 	}
+	d.Collab = NewCollab(d.DB)
 	return Handler(Routes(d), d.DB.Accounts), d
 }
 

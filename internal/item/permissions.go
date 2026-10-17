@@ -248,6 +248,13 @@ func (x *Session) editable(id ID) (*Item, error) {
 	return it, nil
 }
 
+// MayEdit reports whether the principal may edit the item, as every
+// command checks it (ADR-0022).
+func (x *Session) MayEdit(id ID) bool {
+	_, err := x.editable(id)
+	return err == nil
+}
+
 // editableAll checks edit rights on every live item of a subtree.
 func (x *Session) editableAll(root ID) error {
 	if _, err := x.editable(root); err != nil {

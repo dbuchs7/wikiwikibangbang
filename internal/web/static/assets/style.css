@@ -78,3 +78,8 @@ table.history td { font-size: 0.9rem; }
 nav .search input { min-width: 12rem; }
 .hits li { margin-bottom: 0.75rem; }
 .hits .snippet { margin: 0.25rem 0 0; color: var(--muted); white-space: pre-wrap; }
+
+/* live editing (ADR-0010) */
+.pm-locked { background: color-mix(in srgb, var(--muted) 12%, transparent); border-radius: 4px; }
+.pm-holder { font-size: 0.75rem; color: var(--muted); user-select: none; margin-top: 0.5rem; }
+.live-presence, .live-status { margin: 0.25rem 0; font-size: 0.9rem; }

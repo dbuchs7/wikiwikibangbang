@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
+	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
@@ -134,7 +135,13 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	if provider != nil {
 		log.Info("single sign-on enabled", "issuer", provider.Issuer())
 	}
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: provider})
+	live := server.NewCollab(db)
+	liveCtx, stopLive := context.WithCancel(ctx)
+	liveDone := make(chan struct{})
+	go func() { runCollab(liveCtx, live, time.NewTicker(collabTick).C); close(liveDone) }()
+	// Runs before the data directory closes: open drafts are committed.
+	defer func() { stopLive(); <-liveDone }()
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: provider, Collab: live})
 	if err := server.Serve(ctx, ln, server.Handler(routes, db.Accounts), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
@@ -161,6 +168,24 @@ func ensureAdmin(db *storage.DB, log *slog.Logger) error {
 		log.Info("created the first administrator", "username", b.User.Username)
 	}
 	return nil
+}
+
+// collabTick is how often idle locks of live sessions are checked.
+const collabTick = 5 * time.Second
+
+// runCollab lapses idle locks of live sessions (ADR-0010) on every tick.
+// When ctx ends it shuts the sessions down, committing open drafts, so the
+// server's graceful shutdown is not held up by event streams.
+func runCollab(ctx context.Context, hub *collab.Hub, tick <-chan time.Time) {
+	for {
+		select {
+		case <-ctx.Done():
+			hub.Shutdown()
+			return
+		case <-tick:
+			hub.Tick()
+		}
+	}
 }
 
 // expireAudit removes audit entries past their retention (ADR-0029) on

@@ -830,6 +830,11 @@ func (s *Store) subtree(root ID) []ID {
 	return out
 }
 
+// CheckBlock validates one block of the body of item self, as CommitBody
+// does for every block. A live editing session (ADR-0010) uses it to refuse
+// a bad block when it is typed, not only when it is committed.
+func CheckBlock(b Block, self ID) error { return checkBlock(b, self) }
+
 // checkBlock validates one block of a body (ADR-0001, ADR-0032).
 func checkBlock(b Block, self ID) error {
 	switch b.Kind {

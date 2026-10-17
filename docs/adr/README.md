@@ -22,7 +22,7 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0007](0007-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Accepted | Not started |
 | [0008](0008-event-sourced-persistence.md) | Event-sourced persistence in an embedded store, with a single writer | Accepted | Partial |
 | [0009](0009-single-binary-with-embedded-web-ui.md) | A single binary with an embedded web UI | Accepted | Partial |
-| [0010](0010-real-time-collaboration-with-block-locks.md) | Real-time collaboration starts with block-level locks, not a CRDT | Accepted | Not started |
+| [0010](0010-real-time-collaboration-with-block-locks.md) | Real-time collaboration starts with block-level locks, not a CRDT | Accepted | Partial |
 | [0011](0011-http-api-route-table-and-access-classes.md) | The HTTP API is one route table, described by OpenAPI, and every route declares its access class | Accepted | Partial |
 | [0012](0012-mcp-adapter-over-http-api.md) | An MCP server as an adapter over the HTTP API, acting as its caller | Accepted | Not started |
 | [0013](0013-authentication-and-security-boundary.md) | Authentication is required by default, behind one principal boundary | Accepted | Partial |
