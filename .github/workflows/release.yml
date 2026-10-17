@@ -1,0 +1,115 @@
+name: Release
+
+# Cut a release by pushing a semver tag:
+#
+#   git tag -a v0.1.0 -m "wikiwikibangbang v0.1.0" && git push origin v0.1.0
+#
+# This builds the single binary for every supported platform (ADR-0024),
+# stamps the tag into the version string via -ldflags, and publishes a GitHub
+# Release with the archives and a SHA256SUMS file. The binary is pure Go with
+# no CGO and embeds the web UI, so every target cross-compiles from the linux
+# runner.
+#
+# workflow_dispatch builds the artifacts for a dry run but publishes nothing.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          # 32-bit ARM, e.g. Raspberry Pi on a 32-bit OS. GOARM=6 is the lowest
+          # common denominator, so one binary runs on every Pi.
+          - { goos: linux, goarch: arm, goarm: '6' }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build and package
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+          CGO_ENABLED: '0'
+        run: |
+          set -euo pipefail
+          # The version is the tag without the leading "v"; a manual dispatch
+          # (no tag) stamps a dev string so the dry run still carries one.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="0.0.0-dev+${GITHUB_SHA::12}"
+          fi
+          ldflags="-s -w -X github.com/dbuchs7/wikiwikibangbang/internal/buildinfo.Version=${version}"
+
+          bin="wikiwikibangbang"
+          if [ "${GOOS}" = "windows" ]; then bin="wikiwikibangbang.exe"; fi
+          go build -trimpath -ldflags "${ldflags}" -o "${bin}" ./cmd/wikiwikibangbang
+
+          name="wikiwikibangbang_${version}_${GOOS}_${GOARCH}"
+          mkdir -p "dist/${name}" out
+          cp "${bin}" LICENSE README.md "dist/${name}/"
+          if [ "${GOOS}" = "windows" ]; then
+            (cd dist && zip -qr "../out/${name}.zip" "${name}")
+          else
+            tar -czf "out/${name}.tar.gz" -C dist "${name}"
+          fi
+          (cd out && sha256sum * > "${name}.sha256")
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wikiwikibangbang-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: out/*
+          retention-days: 7
+
+  release:
+    name: publish release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Assemble checksums
+        run: |
+          set -euo pipefail
+          cd artifacts
+          cat *.sha256 > SHA256SUMS
+          rm -f *.sha256
+          ls -la
+
+      # Every 0.x tag is a prerelease: nothing before 1.0 is stable.
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --title "wikiwikibangbang ${TAG}" --generate-notes --prerelease \
+            artifacts/*
