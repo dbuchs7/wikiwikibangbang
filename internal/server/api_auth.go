@@ -168,6 +168,10 @@ func (h authHandlers) createToken(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err)
 		return
 	}
+	if req.Scope == auth.ScopeMetrics && !h.isAdmin(p) {
+		writeError(w, http.StatusForbidden, "only administrators create metrics tokens")
+		return
+	}
 	secret, t, err := h.d.DB.Accounts.CreateToken(p.User, req.Name, req.Scope, time.Duration(req.Days)*24*time.Hour)
 	if errors.Is(err, auth.ErrInvalid) {
 		writeError(w, http.StatusBadRequest, err.Error())

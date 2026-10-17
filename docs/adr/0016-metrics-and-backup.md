@@ -1,7 +1,7 @@
 # ADR-0016: Operational metrics behind authentication, and an allowlisted backup
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 
@@ -32,7 +32,7 @@ Chosen option: **2.**
 - **Backup:** an export of the data directory defined by an **allowlist** of stores; a store added later is excluded until it is added deliberately. Secrets (encryption keys, password hashes, token hashes) are excluded or exported only on an explicit, separate request. A backup is a consistent point-in-time read that does not block the writer.
 - **Restore** is tested end to end in CI: back up, restore into an empty directory, compare.
 
-**Implementation so far:** the backup and restore, as [ADR-0034](0034-encrypted-backups-from-log-prefixes.md) details. The secrets are in every backup, which is encrypted with a passphrase given at backup time: without the item keys and the accounts a backup could not be restored to a working instance. Not built: the metrics endpoint and the `metrics` token scope.
+**Implementation so far:** the backup and restore, as [ADR-0034](0034-encrypted-backups-from-log-prefixes.md) details. The secrets are in every backup, which is encrypted with a passphrase given at backup time: without the item keys and the accounts a backup could not be restored to a working instance. The metrics: `GET /metrics` on a registry of its own (`internal/metrics`) with request counts and latencies labelled by route pattern, never by path; search latency (the limit ADR-0033 names); items per presence state; live sessions and clients; bytes per data file; build info; the Go runtime and process metrics. Administrators may read it, and tokens of scope `metrics`, which only administrators create and which the access gate allows nothing but `GET /metrics`. `prometheus/client_golang` is pinned to v1.24.1 (July 2026) and adds eight indirect modules, all Apache-2.0, BSD-3-Clause or MIT, listed in `THIRD_PARTY_NOTICES.md`. The one public probe is `/healthz`; a separate readiness probe is not needed, because the server listens only after the data directory is open and replayed.
 
 ### Consequences
 

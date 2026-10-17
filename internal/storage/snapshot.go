@@ -89,3 +89,18 @@ type limitCloser struct {
 }
 
 func (l limitCloser) Close() error { return l.f.Close() }
+
+// Sizes reports the bytes of each backed-up file, for operational metrics
+// (ADR-0016).
+func (db *DB) Sizes() map[string]int64 {
+	out := map[string]int64{}
+	db.mu.Lock()
+	out[wal.FileName], out[KeysFile] = db.log.Size(), db.keys.log.Size()
+	db.mu.Unlock()
+	for _, name := range []string{AccountsFile, AuditFile} {
+		if st, err := os.Stat(filepath.Join(db.dir, name)); err == nil {
+			out[name] = st.Size()
+		}
+	}
+	return out
+}

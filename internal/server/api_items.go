@@ -336,7 +336,11 @@ func (h itemHandlers) searchItems(w http.ResponseWriter, r *http.Request) {
 	}
 	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state")}
 	h.read(w, r, func(x *item.Session) (any, error) {
+		start := time.Now()
 		all, err := x.Search(q.Get("q"), query)
+		if h.d.Metrics != nil {
+			h.d.Metrics.ObserveSearch(time.Since(start))
+		}
 		if err != nil {
 			return nil, err
 		}

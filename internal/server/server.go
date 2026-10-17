@@ -19,7 +19,10 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/wikiwikibangbang/internal/metrics"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
@@ -61,6 +64,35 @@ type Deps struct {
 	// one over DB when it is nil. NewCollab makes one to share, for a
 	// caller that runs its Tick.
 	Collab *collab.Hub
+	// Metrics is the metric registry (ADR-0016); Routes creates one when
+	// it is nil.
+	Metrics *metrics.Metrics
+}
+
+// MetricsPath serves the operational metrics. It is the only path a token
+// of scope metrics may reach.
+const MetricsPath = "/metrics"
+
+// NewMetrics returns a metric registry that reads the data directory and
+// the live sessions.
+func NewMetrics(db *storage.DB, hub *collab.Hub) *metrics.Metrics {
+	src := metrics.Sources{Build: buildinfo.Get().String()}
+	if db != nil {
+		src.Storage = db.Sizes
+		src.Items = func() map[string]int {
+			out := map[string]int{}
+			db.Read(func(s *item.Store) {
+				for p, n := range s.Counts() {
+					out[string(p)] = n
+				}
+			})
+			return out
+		}
+	}
+	if hub != nil {
+		src.Live = hub.Stats
+	}
+	return metrics.New(src)
 }
 
 // NewCollab returns a live-session hub over the data directory.
@@ -70,6 +102,9 @@ func NewCollab(db *storage.DB) *collab.Hub { return collab.NewHub(storeBackend{d
 func Routes(d Deps) []Route {
 	if d.Collab == nil && d.DB != nil {
 		d.Collab = NewCollab(d.DB)
+	}
+	if d.Metrics == nil {
+		d.Metrics = NewMetrics(d.DB, d.Collab)
 	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
@@ -81,10 +116,36 @@ func Routes(d Deps) []Route {
 	routes = append(routes, authRoutes(d)...)
 	routes = append(routes, oidcRoutes(d)...)
 	routes = append(routes, itemRoutes(d)...)
+	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
+		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}
 	routes = append(routes, doc)
 	routes[len(routes)-1].Handler = openAPI(routes)
+	for i, rt := range routes {
+		// Event streams and downloads run as long as they take; their
+		// durations would only blur the latency of everything else.
+		long := rt.Pattern == "/api/items/{ref}/live" && rt.Method == http.MethodGet || rt.Pattern == "/api/backup"
+		routes[i].Handler = d.Metrics.Instrument(rt.Pattern, long, rt.Handler)
+	}
 	return routes
+}
+
+// metricsHandler serves the metrics to administrators and to tokens of
+// scope metrics; a scraper needs no other right.
+func metricsHandler(d Deps) http.Handler {
+	h := d.Metrics.Handler()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p, _ := PrincipalFrom(r.Context())
+		admin := false
+		if d.DB != nil && p.Scope != auth.ScopeMetrics {
+			d.DB.Read(func(s *item.Store) { admin = s.HasSystemRole(string(p.User), item.RoleAdmin) })
+		}
+		if p.Scope != auth.ScopeMetrics && !admin {
+			writeError(w, http.StatusForbidden, "administrators and metrics tokens only")
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
@@ -133,6 +194,10 @@ func gate(a Access, h http.Handler) http.Handler {
 		}
 		if p.Scope == auth.ScopeRead && r.Method != http.MethodGet && r.Method != http.MethodHead {
 			writeError(w, http.StatusForbidden, "this token may only read")
+			return
+		}
+		if p.Scope == auth.ScopeMetrics && (r.URL.Path != MetricsPath || r.Method != http.MethodGet) {
+			writeError(w, http.StatusForbidden, "this token may only read the metrics")
 			return
 		}
 		h.ServeHTTP(w, r)

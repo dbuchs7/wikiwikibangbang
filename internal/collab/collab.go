@@ -738,3 +738,14 @@ func (h *Hub) Shutdown() {
 		h.close(s, "the server is shutting down")
 	}
 }
+
+// Stats reports the open sessions and their clients, for operational
+// metrics (ADR-0016).
+func (h *Hub) Stats() (sessions, clients int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, s := range h.sessions {
+		clients += len(s.clients)
+	}
+	return len(h.sessions), clients
+}
