@@ -51,8 +51,8 @@ type Route struct {
 type Deps struct {
 	UI fs.FS
 	DB *storage.DB
-	// Audit receives security-relevant events: logins, tokens, accounts.
-	Audit *slog.Logger
+	// Log receives operational errors; security events go to DB.Audit.
+	Log *slog.Logger
 }
 
 // Routes is the product's route table.

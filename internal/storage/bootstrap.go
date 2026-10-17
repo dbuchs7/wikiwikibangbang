@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
@@ -57,6 +58,7 @@ func (db *DB) EnsureAdmin(username, password string) (Bootstrap, error) {
 			return Bootstrap{}, fmt.Errorf("storage: creating the first administrator: %w", err)
 		}
 		b.User, b.Created = u, true
+		db.Audit.Record(audit.Entry{Event: audit.UserCreated, Actor: SystemActor, Subject: string(u.ID), Detail: map[string]string{"username": u.Username}})
 	}
 	err := db.Write(func(s *item.Store) error {
 		return s.GrantSystemRole(SystemActor, string(b.User.ID), item.RoleAdmin)
@@ -64,5 +66,6 @@ func (db *DB) EnsureAdmin(username, password string) (Bootstrap, error) {
 	if err != nil {
 		return Bootstrap{}, fmt.Errorf("storage: granting the administrator role: %w", err)
 	}
+	db.Audit.Record(audit.Entry{Event: audit.SystemRole, Actor: SystemActor, Subject: string(b.User.ID), Detail: map[string]string{"role": item.RoleAdmin}})
 	return b, nil
 }
