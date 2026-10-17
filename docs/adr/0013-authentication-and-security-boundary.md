@@ -1,7 +1,7 @@
 # ADR-0013: Authentication is required by default, behind one principal boundary
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators
 - **Open question:** Which identity providers must be supported in the first release (OIDC only, or SAML as well, e.g. for public-sector identity services)?
@@ -37,6 +37,8 @@ Proposed option: **2.**
 - **API tokens:** only a SHA-256 hash is stored; the secret is shown once; each token has a scope (e.g. full, read-only, metrics) and an expiry chosen at creation; revocation is deletion; a recognisable prefix lets secret scanners find leaked tokens.
 - **Federation:** an OIDC relying party with just-in-time provisioning; roles are not taken from IdP claims in the first step.
 - **Login throttle** per address and per account, charged before the account is looked up so it does not reveal which accounts exist. A **security audit trail** records logins, failures, token creation and revocation, and role changes.
+
+**Implementation so far** ([ADR-0027](0027-local-accounts-sessions-and-api-tokens.md)): local accounts (with PBKDF2 instead of bcrypt, to stay within the standard library), sessions, scoped API tokens, the login throttle, the first administrator and audit log lines. Not built: OIDC, a persisted audit trail.
 
 ### Consequences
 

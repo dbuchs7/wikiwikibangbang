@@ -10,17 +10,43 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sync"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
 )
 
+// AccountsFile holds the accounts and API tokens (ADR-0027).
+const AccountsFile = "accounts.wal"
+
 // DB is an open data directory.
 type DB struct {
-	Store *item.Store
-	lock  io.Closer
-	log   *wal.Log
-	keys  *keyring
+	// Store is the item store. It is not safe for concurrent use: callers
+	// that may run concurrently go through Read and Write.
+	Store    *item.Store
+	Accounts *auth.Accounts
+
+	mu       sync.Mutex
+	lock     io.Closer
+	log      *wal.Log
+	keys     *keyring
+	accounts *wal.Log
+}
+
+// Read runs fn with the item store while no command runs.
+func (db *DB) Read(fn func(*item.Store)) {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	fn(db.Store)
+}
+
+// Write runs fn with the item store as the only writer (ADR-0008): commands
+// are applied one at a time, in the order of the log.
+func (db *DB) Write(fn func(*item.Store) error) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	return fn(db.Store)
 }
 
 // Recovery reports what opening the data directory found.
@@ -35,9 +61,21 @@ type Recovery struct {
 	Shredded int
 }
 
+// Options configure Open.
+type Options struct {
+	Item []item.Option
+	Auth []auth.Option
+}
+
 // Open opens or creates the data directory and returns the recovered store.
 // Only one process can have a data directory open (wal.ErrLocked).
-func Open(dir string, opts ...item.Option) (_ *DB, _ Recovery, err error) {
+func Open(dir string, opts ...item.Option) (*DB, Recovery, error) {
+	return OpenWith(dir, Options{Item: opts})
+}
+
+// OpenWith is Open with options for every part of the data directory.
+func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
+	opts := o.Item
 	db := &DB{}
 	defer func() {
 		if err != nil {
@@ -62,6 +100,14 @@ func Open(dir string, opts ...item.Option) (_ *DB, _ Recovery, err error) {
 	opts = append(opts, item.WithJournal(journal{db}))
 	if db.Store, err = item.Replay(log, opts...); err != nil {
 		return nil, Recovery{}, fmt.Errorf("storage: replaying %s: %w", dir, err)
+	}
+	al, asc, err := wal.OpenFile(dir, AccountsFile)
+	if err != nil {
+		return nil, Recovery{}, err
+	}
+	db.accounts = al
+	if db.Accounts, err = auth.New(asc.Records, al.Append, o.Auth...); err != nil {
+		return nil, Recovery{}, err
 	}
 	rec := recovery(sc, log)
 	if rec.Shredded, err = db.heal(); err != nil {
@@ -97,6 +143,9 @@ func (db *DB) close() error {
 	}
 	if db.keys != nil {
 		errs = append(errs, db.keys.close())
+	}
+	if db.accounts != nil {
+		errs = append(errs, db.accounts.Close())
 	}
 	if db.lock != nil {
 		errs = append(errs, db.lock.Close())

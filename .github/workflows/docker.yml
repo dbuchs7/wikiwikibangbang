@@ -89,13 +89,18 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm wikiwikibangbang:ci version
-          docker run -d --name wwbb -p 8080:8080 wikiwikibangbang:ci
+          docker run -d --name wwbb -p 8080:8080 -e WWBB_ADMIN_PASSWORD=ci-admin-password wikiwikibangbang:ci
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/healthz; then ok=1; break; fi
             sleep 1
           done
           docker exec wwbb /wikiwikibangbang healthcheck
           docker exec wwbb /wikiwikibangbang check -data-dir /data
+          # The API refuses anonymous callers and accepts the administrator.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/me)" = 401
+          curl -fsS -c /tmp/cookies -H 'Content-Type: application/json' \
+            -d '{"username":"admin","password":"ci-admin-password"}' http://127.0.0.1:8080/api/login
+          curl -fsS -b /tmp/cookies http://127.0.0.1:8080/api/me
           docker logs wwbb
           docker rm -f wwbb
           [ "${ok:-0}" = 1 ]

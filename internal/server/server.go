@@ -2,9 +2,10 @@
 // table (ADR-0011), the embedded UI (ADR-0009) and a server with timeouts and
 // graceful shutdown.
 //
-// Authentication (ADR-0013) is not built yet. Until it is, every route that is
-// not declared public is refused, so nothing can be served unprotected by
-// forgetting a declaration.
+// Every request is resolved to a principal, or none, before routing
+// (ADR-0013, ADR-0027). A route that is not declared public refuses requests
+// without a principal, so nothing is served unprotected by forgetting a
+// declaration.
 package server
 
 import (
@@ -16,6 +17,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
 
 // Access is a route's access class (ADR-0011). The zero value is
@@ -43,14 +47,23 @@ type Route struct {
 	Handler http.Handler
 }
 
+// Deps are what the routes serve from.
+type Deps struct {
+	UI fs.FS
+	DB *storage.DB
+	// Audit receives security-relevant events: logins, tokens, accounts.
+	Audit *slog.Logger
+}
+
 // Routes is the product's route table.
-func Routes(ui fs.FS) []Route {
-	files := http.FileServerFS(ui)
-	return []Route{
+func Routes(d Deps) []Route {
+	files := http.FileServerFS(d.UI)
+	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},
-		{Method: http.MethodGet, Pattern: "/{$}", Summary: "Web UI entry point", Access: Public, Handler: index(ui)},
+		{Method: http.MethodGet, Pattern: "/{$}", Summary: "Web UI entry point", Access: Public, Handler: index(d.UI)},
 		{Method: http.MethodGet, Pattern: "/assets/", Summary: "Web UI assets", Access: Public, Handler: noListing(files)},
 	}
+	return append(routes, authRoutes(d)...)
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
@@ -76,23 +89,32 @@ func noListing(h http.Handler) http.Handler {
 	})
 }
 
-// Handler registers the route table on one mux. Every route passes the access
-// gate, and every response carries the security headers.
-func Handler(routes []Route) http.Handler {
+// Handler registers the route table on one mux. Every request is resolved
+// to a principal through accounts (nil: never), every route passes the
+// access gate, and every response carries the security headers.
+func Handler(routes []Route, accounts *auth.Accounts) http.Handler {
 	mux := http.NewServeMux()
 	for _, rt := range routes {
 		mux.Handle(rt.Method+" "+rt.Pattern, gate(rt.Access, rt.Handler))
 	}
-	return securityHeaders(mux)
+	return securityHeaders(principals(accounts, mux))
 }
 
 func gate(a Access, h http.Handler) http.Handler {
 	if a == Public {
 		return h
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// No principal can be resolved before ADR-0013 is built.
-		http.Error(w, "authentication required", http.StatusUnauthorized)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p, ok := PrincipalFrom(r.Context())
+		if !ok {
+			writeError(w, http.StatusUnauthorized, "authentication required")
+			return
+		}
+		if p.Scope == auth.ScopeRead && r.Method != http.MethodGet && r.Method != http.MethodHead {
+			writeError(w, http.StatusForbidden, "this token may only read")
+			return
+		}
+		h.ServeHTTP(w, r)
 	})
 }
 

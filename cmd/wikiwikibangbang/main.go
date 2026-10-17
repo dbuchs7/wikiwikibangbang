@@ -111,16 +111,43 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	log.Info("data directory open", "dir", *dataDir, "events", rec.Events)
 
+	if err := ensureAdmin(db, log); err != nil {
+		log.Error("cannot set up the administrator", "err", err)
+		return 1
+	}
+
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Error("cannot listen", "addr", *addr, "err", err)
 		return 1
 	}
-	if err := server.Serve(ctx, ln, server.Handler(server.Routes(web.FS())), log); err != nil {
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Audit: log})
+	if err := server.Serve(ctx, ln, server.Handler(routes, db.Accounts), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
 	}
 	return 0
+}
+
+// ensureAdmin creates the first administrator on the first start (ADR-0013):
+// WWBB_ADMIN_USERNAME (default "admin") with WWBB_ADMIN_PASSWORD, or with a
+// generated password that is logged this once.
+func ensureAdmin(db *storage.DB, log *slog.Logger) error {
+	username := os.Getenv("WWBB_ADMIN_USERNAME")
+	if username == "" {
+		username = "admin"
+	}
+	b, err := db.EnsureAdmin(username, os.Getenv("WWBB_ADMIN_PASSWORD"))
+	switch {
+	case err != nil:
+		return err
+	case b.Password != "":
+		log.Warn("created the first administrator with a generated password; it is shown only now, change it after the first login",
+			"username", b.User.Username, "password", b.Password)
+	case b.Created:
+		log.Info("created the first administrator", "username", b.User.Username)
+	}
+	return nil
 }
 
 // defaultDataDir is relative to the working directory, so a binary started

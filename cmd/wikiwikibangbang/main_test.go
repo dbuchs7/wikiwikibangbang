@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -73,9 +74,9 @@ func TestServeAndHealthcheck(t *testing.T) {
 	dataDir := t.TempDir()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
+	var errOut bytes.Buffer
 	go func() {
-		code, _, _ := runCmd(t, ctx, "serve", "-addr", addr, "-data-dir", dataDir)
-		done <- code
+		done <- run(ctx, []string{"serve", "-addr", addr, "-data-dir", dataDir}, io.Discard, &errOut)
 	}()
 
 	url := "http://" + addr + "/healthz"
@@ -96,6 +97,9 @@ func TestServeAndHealthcheck(t *testing.T) {
 	case code := <-done:
 		if code != 0 {
 			t.Errorf("serve exited %d after cancellation, want 0", code)
+		}
+		if out := errOut.String(); !strings.Contains(out, "created the first administrator with a generated password") {
+			t.Errorf("no administrator was set up:\n%s", out)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("serve did not stop after cancellation")
@@ -196,5 +200,31 @@ func TestCheckReportsErasedContent(t *testing.T) {
 	}
 	if code, out, _ := runCmd(t, context.Background(), "check", "-data-dir", dir); code != 0 || !strings.Contains(out, "1 events have erased content") {
 		t.Errorf("exit %d, output %q", code, out)
+	}
+}
+
+func TestServeUsesTheGivenAdministrator(t *testing.T) {
+	t.Setenv("WWBB_ADMIN_USERNAME", "root")
+	t.Setenv("WWBB_ADMIN_PASSWORD", "short")
+	code, _, errOut := runCmd(t, context.Background(), "serve", "-addr", freeAddr(t), "-data-dir", t.TempDir())
+	if code != 1 || !strings.Contains(errOut, "cannot set up the administrator") {
+		t.Errorf("a too short password: exit %d, stderr %q", code, errOut)
+	}
+
+	dir := t.TempDir()
+	t.Setenv("WWBB_ADMIN_PASSWORD", "root's own password")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // stop right after start-up
+	code, _, errOut = runCmd(t, ctx, "serve", "-addr", freeAddr(t), "-data-dir", dir)
+	if code != 0 || !strings.Contains(errOut, "created the first administrator\" username=root") {
+		t.Errorf("exit %d, stderr %q", code, errOut)
+	}
+	db, _, err := storage.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, _, err := db.Accounts.Login("root", "root's own password", "x"); err != nil {
+		t.Errorf("the given password does not log in: %v", err)
 	}
 }

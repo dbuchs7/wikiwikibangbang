@@ -137,6 +137,20 @@ func (s *Store) admits(list []string, principal string) bool {
 
 func (s *Store) hasSystemRole(principal, role string) bool { return s.sysRoles[principal][role] }
 
+// HasSystemRole reports whether a principal holds a system role.
+func (s *Store) HasSystemRole(principal, role string) bool { return s.hasSystemRole(principal, role) }
+
+// SystemRoleHeld reports whether any principal holds a system role, e.g.
+// whether an administrator exists.
+func (s *Store) SystemRoleHeld(role string) bool {
+	for _, roles := range s.sysRoles {
+		if roles[role] {
+			return true
+		}
+	}
+	return false
+}
+
 // spaceRole is the highest role a principal holds in a space, directly or
 // through groups; a system admin is SpaceAdmin everywhere.
 func (s *Store) spaceRole(principal, space string) Role {
