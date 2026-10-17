@@ -32,6 +32,15 @@ type Store struct {
 	sysRoles   map[string]map[string]bool // principal -> system roles
 
 	bySource map[string]ID // Origin.key() -> imported item
+
+	journal Journal
+}
+
+// Journal makes batches of events durable. Append returns only after the
+// batch survives a crash; an error means it was not recorded, and the store
+// does not apply it.
+type Journal interface {
+	Append(batch []Event) error
 }
 
 type space struct {
@@ -47,6 +56,9 @@ func WithClock(now func() time.Time) Option { return func(s *Store) { s.now = no
 
 // WithIDs sets the ID generator.
 func WithIDs(gen func() ID) Option { return func(s *Store) { s.newID = gen } }
+
+// WithJournal makes every command durable through j before it takes effect.
+func WithJournal(j Journal) Option { return func(s *Store) { s.journal = j } }
 
 // NewStore returns an empty store.
 func NewStore(opts ...Option) *Store {
@@ -81,9 +93,9 @@ func randomID() ID {
 }
 
 // Replay rebuilds a store from a log. The log must be complete: sequence
-// numbers start at 1 without gaps.
-func Replay(log []Event) (*Store, error) {
-	s := NewStore()
+// numbers start at 1 without gaps. Options configure the returned store, e.g. the journal to continue with.
+func Replay(log []Event, opts ...Option) (*Store, error) {
+	s := NewStore(opts...)
 	for i, e := range log {
 		if e.Seq != i+1 {
 			return nil, fmt.Errorf("event %d has sequence number %d", i+1, e.Seq)
@@ -96,13 +108,17 @@ func Replay(log []Event) (*Store, error) {
 // Log returns a copy of the event log.
 func (s *Store) Log() []Event { return slices.Clone(s.log) }
 
-func (s *Store) record(actor string, e Event) { s.recordBatch(actor, e) }
+func (s *Store) record(actor string, e Event) error { return s.recordBatch(actor, e) }
 
 // recordBatch records the events of one command. Commands validate
-// everything before calling it, so a batch is never applied in part.
-func (s *Store) recordBatch(actor string, events ...Event) {
+// everything before calling it, so a batch is never applied in part. With a
+// journal, the batch is made durable first and applied only if that
+// succeeds: a change is never visible before it is on disk (ADR-0008).
+func (s *Store) recordBatch(actor string, events ...Event) error {
 	first := len(s.log) + 1
-	at := s.now()
+	// UTC without a monotonic reading: the value that survives the journal.
+	at := s.now().UTC()
+	batch := make([]Event, len(events))
 	for i, e := range events {
 		e.Seq = first + i
 		e.At = at
@@ -110,8 +126,18 @@ func (s *Store) recordBatch(actor string, events ...Event) {
 		if len(events) > 1 {
 			e.Batch = first
 		}
+		e.normalize()
+		batch[i] = e
+	}
+	if s.journal != nil {
+		if err := s.journal.Append(batch); err != nil {
+			return fmt.Errorf("item: change not persisted: %w", err)
+		}
+	}
+	for _, e := range batch {
 		s.apply(e)
 	}
+	return nil
 }
 
 // --- commands ---------------------------------------------------------------
@@ -122,8 +148,7 @@ func (s *Store) DefineType(actor string, td TypeDef) error {
 		return err
 	}
 	td.Version = len(s.types[td.Name]) + 1
-	s.record(actor, Event{Kind: TypeDefined, TypeDef: &td})
-	return nil
+	return s.record(actor, Event{Kind: TypeDefined, TypeDef: &td})
 }
 
 var spaceKeyRE = regexp.MustCompile(`^[A-Z][A-Z0-9]*$`)
@@ -136,8 +161,7 @@ func (s *Store) CreateSpace(actor, key, name string) error {
 	if _, ok := s.spaces[key]; ok {
 		return invalid("space %q exists", key)
 	}
-	s.record(actor, Event{Kind: SpaceCreated, Space: key, SpaceName: name})
-	return nil
+	return s.record(actor, Event{Kind: SpaceCreated, Space: key, SpaceName: name})
 }
 
 // NewItem describes an item to create.
@@ -155,7 +179,9 @@ func (s *Store) Create(actor string, n NewItem) (Item, error) {
 	if err != nil {
 		return Item{}, err
 	}
-	s.record(actor, e)
+	if err := s.record(actor, e); err != nil {
+		return Item{}, err
+	}
 	return s.items[e.Item].clone(), nil
 }
 
@@ -218,7 +244,9 @@ func (s *Store) CreateEmbedded(actor string, host ID, n NewItem) (Item, error) {
 	}
 	body := h.Body.clone()
 	body.Blocks = append(body.Blocks, Block{Kind: Embed, Ref: created.Item})
-	s.recordBatch(actor, created, Event{Kind: BodyCommitted, Item: host, Body: &body})
+	if err := s.recordBatch(actor, created, Event{Kind: BodyCommitted, Item: host, Body: &body}); err != nil {
+		return Item{}, err
+	}
 	return s.items[created.Item].clone(), nil
 }
 
@@ -230,8 +258,7 @@ func (s *Store) SetTitle(actor string, id ID, title string) error {
 	if strings.TrimSpace(title) == "" {
 		return invalid("title is empty")
 	}
-	s.record(actor, Event{Kind: TitleSet, Item: id, Title: title})
-	return nil
+	return s.record(actor, Event{Kind: TitleSet, Item: id, Title: title})
 }
 
 // SetProperty sets or (with nil) clears one property.
@@ -244,8 +271,7 @@ func (s *Store) SetProperty(actor string, id ID, field string, value any) error 
 	if err := checkProps(td, Props{field: value}); err != nil {
 		return err
 	}
-	s.record(actor, Event{Kind: PropertySet, Item: id, Field: field, Value: value})
-	return nil
+	return s.record(actor, Event{Kind: PropertySet, Item: id, Field: field, Value: value})
 }
 
 // Transition moves an item along its type's workflow (D3).
@@ -270,8 +296,7 @@ func (s *Store) Transition(actor string, id ID, name string) error {
 			return invalid("transition %q requires field %q", name, req)
 		}
 	}
-	s.record(actor, Event{Kind: Transitioned, Item: id, Transition: name, From: it.State, To: tr.To})
-	return nil
+	return s.record(actor, Event{Kind: Transitioned, Item: id, Transition: name, From: it.State, To: tr.To})
 }
 
 // Move changes an item's space and parent. Moving to another space moves the
@@ -296,8 +321,7 @@ func (s *Store) Move(actor string, id ID, toSpace string, newParent ID) error {
 			return invalid("cannot move an item below itself")
 		}
 	}
-	s.record(actor, Event{Kind: ItemMoved, Item: id, Space: toSpace, Parent: newParent})
-	return nil
+	return s.record(actor, Event{Kind: ItemMoved, Item: id, Space: toSpace, Parent: newParent})
 }
 
 // CommitBody commits a new version of an item's body.
@@ -336,8 +360,7 @@ func (s *Store) CommitBody(actor string, id ID, d Doc) error {
 		}
 	}
 	body := d.clone()
-	s.record(actor, Event{Kind: BodyCommitted, Item: id, Body: &body})
-	return nil
+	return s.record(actor, Event{Kind: BodyCommitted, Item: id, Body: &body})
 }
 
 // AddRelation adds a typed relation by hand.
@@ -360,8 +383,7 @@ func (s *Store) AddRelation(actor, typ string, from, to ID) error {
 			return invalid("relation exists")
 		}
 	}
-	s.record(actor, Event{Kind: RelationAdded, Relation: &Relation{ID: s.newID(), Type: typ, From: from, To: to}})
-	return nil
+	return s.record(actor, Event{Kind: RelationAdded, Relation: &Relation{ID: s.newID(), Type: typ, From: from, To: to}})
 }
 
 // RemoveRelation removes a relation added by hand.
@@ -379,8 +401,7 @@ func (s *Store) RemoveRelation(actor string, id ID) error {
 		}
 	}
 	rc := *r
-	s.record(actor, Event{Kind: RelationRemoved, Relation: &rc})
-	return nil
+	return s.record(actor, Event{Kind: RelationRemoved, Relation: &rc})
 }
 
 // Trash moves an item and its live descendants to the trash, as one event
@@ -415,8 +436,7 @@ func (s *Store) Trash(actor string, id ID) error {
 		return fmt.Errorf("%w: %w: %s is referenced by %s; remove those references first",
 			ErrValidation, ErrReferenced, s.items[id].Key, strings.Join(referrers, ", "))
 	}
-	s.record(actor, Event{Kind: ItemTrashed, Item: id, Members: members})
-	return nil
+	return s.record(actor, Event{Kind: ItemTrashed, Item: id, Members: members})
 }
 
 // Restore brings back exactly the items trashed together with id. It must be
@@ -429,8 +449,7 @@ func (s *Store) Restore(actor string, id ID) error {
 	if p := s.items[id].Parent; p != "" && s.items[p].Presence != Live {
 		return invalid("restore the parent %s first", s.items[p].Key)
 	}
-	s.record(actor, Event{Kind: ItemRestored, Item: id, Members: members})
-	return nil
+	return s.record(actor, Event{Kind: ItemRestored, Item: id, Members: members})
 }
 
 // Purge irreversibly removes the content of the items trashed together with
@@ -440,8 +459,7 @@ func (s *Store) Purge(actor string, id ID) error {
 	if err != nil {
 		return err
 	}
-	s.record(actor, Event{Kind: ItemPurged, Item: id, Members: members})
-	return nil
+	return s.record(actor, Event{Kind: ItemPurged, Item: id, Members: members})
 }
 
 // trashBatch returns the items trashed together with id, which must be the

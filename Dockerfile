@@ -34,14 +34,20 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} GOARM=${TA
       -ldflags="-s -w -X github.com/dbuchs7/wikiwikibangbang/internal/buildinfo.Version=${VERSION}" \
       -o /out/wikiwikibangbang ./cmd/wikiwikibangbang
 
+# The data directory, created here because the runtime image has no shell.
+RUN mkdir -p /out/data
+
 # ---------------------------------------------------------------------------
 
 # The nonroot variant runs as uid/gid 65532.
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
 COPY --from=build /out/wikiwikibangbang /wikiwikibangbang
+# Owned by the nonroot user, so a volume mounted at /data starts writable.
+COPY --from=build --chown=65532:65532 /out/data /data
 
 EXPOSE 8080
+VOLUME ["/data"]
 USER 65532:65532
 
 # The image has no shell or curl; the binary probes itself.
@@ -49,4 +55,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD ["/wikiwikibangbang", "healthcheck"]
 
 ENTRYPOINT ["/wikiwikibangbang"]
-CMD ["serve", "-addr", ":8080"]
+CMD ["serve", "-addr", ":8080", "-data-dir", "/data"]

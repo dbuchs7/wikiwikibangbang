@@ -95,6 +95,7 @@ jobs:
             sleep 1
           done
           docker exec wwbb /wikiwikibangbang healthcheck
+          docker exec wwbb /wikiwikibangbang check -data-dir /data
           docker logs wwbb
           docker rm -f wwbb
           [ "${ok:-0}" = 1 ]

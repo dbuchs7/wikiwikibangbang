@@ -12,7 +12,9 @@ wikiwikibangbang is an open-source application written in **Go** that unifies **
 
 The core idea is recorded in [ADR-0001](docs/adr/0001-unified-item-data-model.md): every piece of user-generated content is a typed **item** with properties, an optional document body, an optional workflow and typed relations. Pages and issues are item *types*, not separate systems.
 
-**Current state:** design phase. Besides the project's self-checks (ADR consistency, DCO rule) the module holds two prototype packages: `internal/item`, the item model with lifecycle and permissions (ADR-0001, ADR-0020 to ADR-0022), and `internal/migrate`, the import engine (ADR-0023). Both are in memory; persistence (ADR-0008) is not built yet. The single binary `cmd/wikiwikibangbang` serves a placeholder UI and a liveness probe; it is released for every common platform and as a container image (ADR-0024), but does not use the prototypes yet.
+**Current state:** design phase. Besides the project's self-checks (ADR consistency, DCO rule) the module holds two prototype packages: `internal/item`, the item model with lifecycle and permissions (ADR-0001, ADR-0020 to ADR-0022), and `internal/migrate`, the import engine (ADR-0023). The item store persists to an event log on disk (`internal/wal`, `internal/storage`; ADR-0008, ADR-0025): every command is fsynced before it takes effect, and startup replays the log. The single binary `cmd/wikiwikibangbang` opens the data directory and serves a placeholder UI and a liveness probe; it is released for every common platform and as a container image (ADR-0024). No API route uses the store yet.
+
+**The persisted event format is a contract with every existing data directory** (ADR-0025). Never change what `item.EncodeBatch` writes — a field name, a value encoding, a role name — without raising `item.CodecVersion` and teaching the decoder the old version. `TestPersistedFormatIsStable` fails on any change; regenerating its golden file is the last step of such a change, never the fix for a failing test. `apply` must produce the same state from a decoded event as from the live one: every test in `internal/item` checks that.
 
 **The product ships as one binary** (ADR-0009, ADR-0024): pure Go, no CGO, web assets embedded with `go:embed`, cross-compiled for every release platform. Never add anything that breaks this — a runtime file the binary needs next to it, a C dependency, a CDN asset, a second executable.
 
@@ -56,7 +58,8 @@ go test -coverprofile=cover.out ./... && go tool cover -func=cover.out | tail -1
 Run and package the binary:
 
 ```bash
-go run ./cmd/wikiwikibangbang serve -addr :8080      # http://localhost:8080
+go run ./cmd/wikiwikibangbang serve -addr :8080      # http://localhost:8080, data in ./data
+go run ./cmd/wikiwikibangbang check -data-dir data   # verify a data directory, read-only
 go run ./cmd/wikiwikibangbang version
 GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/wikiwikibangbang   # any release platform
 docker build -t wikiwikibangbang:dev .               # container image
@@ -87,13 +90,15 @@ go.mod             module github.com/dbuchs7/wikiwikibangbang
 .github/workflows/ CI (fmt, vet, race tests, cross-build, DCO), container image, release
 .github/rulesets/  ruleset protecting main, source of truth for GitHub settings (ADR-0003)
 Dockerfile         container image: distroless, nonroot, multi-arch (ADR-0024)
-cmd/wikiwikibangbang/ the product's single binary: serve, healthcheck, version (ADR-0024)
+cmd/wikiwikibangbang/ the product's single binary: serve, check, healthcheck, version (ADR-0024)
 cmd/dcocheck/      CLI that checks DCO sign-offs over a git range
 internal/buildinfo/ version stamped at build time
+internal/storage/  data directory: recovers the item store from the log, journals every command (ADR-0025)
+internal/wal/      append-only log file: checksummed records, fsync, crash recovery, directory lock
 internal/server/   HTTP route table with access classes, security headers, graceful shutdown
 internal/web/      embedded web UI (plain HTML, CSS, ES modules; ADR-0009)
 internal/dco/      DCO sign-off rules (humans only), with tests
-internal/item/     prototype of the unified item model (ADR-0001), in memory, event-sourced
+internal/item/     prototype of the unified item model (ADR-0001), event-sourced, versioned event codec
 internal/migrate/  prototype of the Jira/Confluence import engine (ADR-0023)
 internal/repoconfig/ tests keeping ruleset, CI workflow and release matrix consistent
 docs/adr/          architecture decision records, index in README.md, consistency tests

@@ -1,0 +1,9 @@
+# Data directory of a binary started from the repository root (ADR-0025).
+/data/
+# Build output
+/wikiwikibangbang
+/wikiwikibangbang.exe
+/dist/
+/out/
+*.test
+cover.out

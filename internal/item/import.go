@@ -113,7 +113,9 @@ func (s *Store) Upsert(actor string, u Upsert) (Item, bool, error) {
 			return it.clone(), false, nil
 		}
 		e.Item = id
-		s.record(actor, e)
+		if err := s.record(actor, e); err != nil {
+			return Item{}, false, err
+		}
 		return s.items[id].clone(), true, nil
 	}
 
@@ -126,7 +128,9 @@ func (s *Store) Upsert(actor string, u Upsert) (Item, bool, error) {
 		e.To = td.Workflow.Initial
 	}
 	e.Item = s.newID()
-	s.record(actor, e)
+	if err := s.record(actor, e); err != nil {
+		return Item{}, false, err
+	}
 	return s.items[e.Item].clone(), true, nil
 }
 
@@ -155,8 +159,7 @@ func (s *Store) Release(actor, managed, space string) error {
 		}
 	}
 	slices.SortFunc(members, func(a, b ID) int { return s.items[a].created - s.items[b].created })
-	s.record(actor, Event{Kind: ItemReleased, Space: space, Managed: managed, Members: members})
-	return nil
+	return s.record(actor, Event{Kind: ItemReleased, Space: space, Managed: managed, Members: members})
 }
 
 func (s *Store) applyImport(e Event, touch func(...ID)) {

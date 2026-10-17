@@ -37,7 +37,7 @@ Chosen option: **3.**
 - **Guard:** CI builds every release platform on every push (`cross-build` job), and `internal/repoconfig` asserts that this list equals the release matrix.
 - **Server defaults:** timeouts on every phase of a request, graceful shutdown on SIGINT/SIGTERM, a content-security policy of `default-src 'self'` on every response. The route table already follows ADR-0011: a route whose access class is not declared is `authenticated`, and because authentication (ADR-0013) is not built, such routes answer 401. Only the liveness probe and the UI's static files are public.
 
-**Implementation is Partial:** the binary, the release workflow, the image and the guards exist. No release has been tagged yet, Windows executables carry no version resource (atlas generates one with go-winres; adding it means a build-time tool dependency), and the image has no data volume because there is no persistence yet (ADR-0008).
+**Implementation is Partial:** the binary, the release workflow, the image and the guards exist. No release has been tagged yet, Windows executables carry no version resource (atlas generates one with go-winres; adding it means a build-time tool dependency). The image has a `/data` volume owned by uid 65532 since persistence was added (ADR-0025).
 
 ### Consequences
 

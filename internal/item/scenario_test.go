@@ -3,6 +3,7 @@ package item
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -13,11 +14,64 @@ func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	n := 0
 	clock := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)
+	j := &roundTripJournal{}
 	s := NewStore(
 		WithClock(func() time.Time { clock = clock.Add(time.Second); return clock }),
 		WithIDs(func() ID { n++; return ID(fmt.Sprintf("id%03d", n)) }),
+		WithJournal(j),
 	)
+	t.Cleanup(func() { j.verify(t, s) })
 	return s
+}
+
+// roundTripJournal passes every batch of every test through the codec, and
+// verify checks at the end of the test that the decoded log rebuilds exactly
+// the live state (ADR-0025). Every scenario in this package is thereby also
+// a persistence test.
+type roundTripJournal struct {
+	log []Event
+	err error
+}
+
+func (j *roundTripJournal) Append(batch []Event) error {
+	data, err := EncodeBatch(batch)
+	if err != nil {
+		j.err = err
+		return err
+	}
+	decoded, err := DecodeBatch(data)
+	if err != nil {
+		j.err = err
+		return err
+	}
+	again, err := EncodeBatch(decoded)
+	if err == nil && string(again) != string(data) {
+		err = fmt.Errorf("encoding is not stable:\n first: %s\nsecond: %s", data, again)
+	}
+	if err != nil {
+		j.err = err
+		return err
+	}
+	j.log = append(j.log, decoded...)
+	return nil
+}
+
+func (j *roundTripJournal) verify(t *testing.T, live *Store) {
+	t.Helper()
+	if j.err != nil {
+		t.Fatalf("journal: %v", j.err)
+	}
+	r, err := Replay(j.log)
+	if err != nil {
+		t.Fatalf("replaying the decoded log: %v", err)
+	}
+	if got, want := snapshot(r), snapshot(live); got != want {
+		t.Fatalf("state rebuilt from the decoded log differs\n got: %s\nwant: %s", got, want)
+	}
+	all := Query{IncludeDeleted: true}
+	if got, want := r.Find(all), live.Find(all); !reflect.DeepEqual(got, want) {
+		t.Fatalf("items rebuilt from the decoded log differ\n got: %#v\nwant: %#v", got, want)
+	}
 }
 
 // builtinTypes are the reference types of the scenario: a page (document
