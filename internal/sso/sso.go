@@ -43,8 +43,9 @@ type Identity struct {
 // FlowLifetime bounds how long a started login may take.
 const FlowLifetime = 10 * time.Minute
 
-// maxPending bounds the memory unfinished logins can use.
-const maxPending = 10_000
+// maxPending bounds the memory unfinished logins can use; a variable only so
+// the test of the bound need not start ten thousand logins.
+var maxPending = 10_000
 
 var (
 	ErrUnknownState = errors.New("sso: unknown or expired login")

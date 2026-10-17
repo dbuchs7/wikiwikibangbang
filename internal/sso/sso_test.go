@@ -118,6 +118,9 @@ func TestConfiguration(t *testing.T) {
 }
 
 func TestPendingLoginsAreBounded(t *testing.T) {
+	old := maxPending
+	maxPending = 50
+	t.Cleanup(func() { maxPending = old })
 	p, _ := newProvider(t)
 	for range maxPending {
 		if _, _, err := p.Begin(context.Background()); err != nil {
