@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -146,6 +148,7 @@ func TestABackupTakenWhileWritingIsConsistent(t *testing.T) {
 	populate(t, src)
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
+	var writes atomic.Int64
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -163,10 +166,20 @@ func TestABackupTakenWhileWritingIsConsistent(t *testing.T) {
 				return err
 			})
 			src.Audit.Record(audit.Entry{Event: audit.Login, Actor: "anna"})
+			writes.Add(1)
 		}
 	}()
+	// Each backup starts after the writer has written again, so every one
+	// is taken while writes are going on.
 	var backups [][]byte
 	for range 5 {
+		seen := writes.Load()
+		for deadline := time.Now().Add(10 * time.Second); writes.Load() == seen; {
+			if time.Now().After(deadline) {
+				t.Fatal("the writer does not write")
+			}
+			runtime.Gosched()
+		}
 		backups = append(backups, backupOf(t, src))
 	}
 	close(stop)
@@ -189,8 +202,8 @@ func TestABackupTakenWhileWritingIsConsistent(t *testing.T) {
 				t.Fatalf("backup %d: body %+v", i, it.Body)
 			}
 		}
-		if i == len(backups)-1 && busy == 0 {
-			t.Fatal("the writer never ran during the backups")
+		if busy == 0 {
+			t.Fatalf("backup %d holds none of the writer's items", i)
 		}
 		db.Close()
 	}
