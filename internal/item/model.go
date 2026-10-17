@@ -43,6 +43,10 @@ const (
 	Heading   BlockKind = "heading"
 	// Embed shows another item inline, e.g. a task inside a page.
 	Embed BlockKind = "embed"
+	// Unsupported keeps content an importer could not convert; Text holds
+	// the original markup, which renders as visible text, never as markup
+	// (ADR-0014, ADR-0023).
+	Unsupported BlockKind = "unsupported"
 )
 
 // Block is one block of a document body. Mentions and Ref point at items by
@@ -90,6 +94,10 @@ type Item struct {
 	// Restriction narrows who may read or edit the item and everything
 	// below it (ADR-0022). It is access data, not content: purge keeps it.
 	Restriction Restriction
+	// Origin is set on imported items (ADR-0023).
+	Origin *Origin
+	// Managed is the tag of the one-way sync that owns the item, or empty.
+	Managed string
 
 	created   int // sequence number of the creating event; orders items
 	trashedBy int // sequence number of the event that trashed it, or 0
@@ -159,6 +167,8 @@ const (
 	RoleGranted       EventKind = "RoleGranted"
 	SystemRoleGranted EventKind = "SystemRoleGranted"
 	RestrictionSet    EventKind = "RestrictionSet"
+	ItemImported      EventKind = "ItemImported"
+	ItemReleased      EventKind = "ItemReleased"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -197,12 +207,19 @@ type Event struct {
 	SystemRole  string       // SystemRoleGranted
 	Restriction *Restriction // RestrictionSet
 	Reason      string       // ItemRedacted
+	Origin      *Origin      // ItemImported
+	Key         string       // ItemImported: the source key to keep, if free
+	Managed     string       // ItemImported, ItemReleased
 }
 
 func (it *Item) clone() Item {
 	c := *it
 	c.Properties = maps.Clone(it.Properties)
 	c.Body = it.Body.clone()
+	if it.Origin != nil {
+		o := *it.Origin
+		c.Origin = &o
+	}
 	return c
 }
 

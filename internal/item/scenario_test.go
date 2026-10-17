@@ -216,8 +216,8 @@ func hasRelation(rs []Relation, typ string, other ID) bool {
 func snapshot(s *Store) string {
 	out := ""
 	for _, it := range s.Find(Query{IncludeDeleted: true}) {
-		out += fmt.Sprintf("%s %s %s %s parent=%s state=%s presence=%s props=%v body=%d restriction=%v v%d\n",
-			it.ID, it.Key, it.Type, it.Title, it.Parent, it.State, it.Presence, it.Properties, len(it.Body.Blocks), it.Restriction, it.Version)
+		out += fmt.Sprintf("%s %s %s %s parent=%s state=%s presence=%s props=%v body=%d restriction=%v origin=%v managed=%q v%d\n",
+			it.ID, it.Key, it.Type, it.Title, it.Parent, it.State, it.Presence, it.Properties, len(it.Body.Blocks), it.Restriction, it.Origin, it.Managed, it.Version)
 		for _, r := range s.Relations(it.ID, Outgoing) {
 			out += fmt.Sprintf("  %s -> %s (%s, derived=%v)\n", r.Type, r.To, r.ID, r.Derived)
 		}

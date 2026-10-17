@@ -372,3 +372,13 @@ func TestRelationsFromOneBodyAreOrderedStably(t *testing.T) {
 		}
 	}
 }
+
+func TestReservedFieldAndHasSpace(t *testing.T) {
+	s := setup(t)
+	if !ReservedField("state") || ReservedField("severity") {
+		t.Fatal("ReservedField")
+	}
+	if !s.HasSpace("PLAT") || s.HasSpace("NOPE") {
+		t.Fatal("HasSpace")
+	}
+}
