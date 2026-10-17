@@ -25,6 +25,7 @@ func authRoutes(d Deps) []Route {
 		{Method: http.MethodDelete, Pattern: "/api/tokens/{id}", Summary: "Revoke one of one's own API tokens", Handler: http.HandlerFunc(h.revokeToken)},
 		{Method: http.MethodGet, Pattern: "/api/users", Summary: "List accounts (administrators)", Handler: http.HandlerFunc(h.listUsers)},
 		{Method: http.MethodPost, Pattern: "/api/users", Summary: "Create an account (administrators)", Handler: http.HandlerFunc(h.createUser)},
+		{Method: http.MethodPost, Pattern: "/api/backup", Summary: "Download an encrypted backup of the data directory (administrators; passphrase in the body)", Handler: http.HandlerFunc(h.backup)},
 	}
 }
 

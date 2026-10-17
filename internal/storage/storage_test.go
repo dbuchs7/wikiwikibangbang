@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -153,4 +154,49 @@ func TestAnUnstorableValueFailsTheCommand(t *testing.T) {
 	if err := (journal{db}).Append([]item.Event{{Kind: item.PropertySet, Value: struct{}{}}}); err == nil {
 		t.Fatal("an unencodable event was journaled")
 	}
+}
+
+// TestEveryFileIsBackedUpOrExcluded keeps the backup allowlist honest
+// (ADR-0016): a new file in the data directory fails this test until it
+// is added to BackupFiles or, with a reason, to NotBackedUp.
+func TestEveryFileIsBackedUpOrExcluded(t *testing.T) {
+	dir := t.TempDir()
+	db, _, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := db.Store
+	steps := []error{
+		s.DefineType("admin", item.TypeDef{Name: "page", Body: true}),
+		s.CreateSpace("admin", "PLAT", "Platform"),
+	}
+	it, err := s.Create("admin", item.NewItem{Space: "PLAT", Type: "page", Title: "t"})
+	steps = append(steps, err, s.Trash("admin", it.ID), s.Purge("admin", it.ID))
+	_, err = db.EnsureAdmin("admin", "a long enough password")
+	steps = append(steps, err)
+	_, err = db.ExpireAudit(time.Now().AddDate(20, 0, 0))
+	steps = append(steps, err)
+	for _, err := range steps {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		_, excluded := NotBackedUp[e.Name()]
+		if !excluded && !slices.Contains(BackupFiles, e.Name()) {
+			t.Errorf("%s is neither backed up nor excluded on purpose", e.Name())
+		}
+	}
+	files, err := db.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		f.R.Close()
+	}
+	db.Close()
 }

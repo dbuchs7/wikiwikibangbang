@@ -34,3 +34,19 @@ export const get = (p) => api("GET", p);
 export const post = (p, b = {}) => api("POST", p, b);
 export const put = (p, b = {}) => api("PUT", p, b);
 export const del = (p) => api("DELETE", p);
+
+// download POSTs body and returns the response as a file: its contents and
+// the name the server suggests.
+export async function download(path, body) {
+  const res = await fetch(path, {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let message = res.statusText;
+    try { message = (await res.json()).error || message; } catch { /* not JSON */ }
+    throw new ApiError(res.status, message);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "")?.[1] || "download";
+  return { blob: await res.blob(), name };
+}

@@ -28,7 +28,7 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0013](0013-authentication-and-security-boundary.md) | Authentication is required by default, behind one principal boundary | Accepted | Partial |
 | [0014](0014-closed-renderer-for-user-content.md) | User content is rendered by one closed renderer, never as raw HTML | Accepted | Partial |
 | [0015](0015-resource-budgets-and-paged-listings.md) | One place names every resource budget, and a capped listing answers with a page | Accepted | Not started |
-| [0016](0016-metrics-and-backup.md) | Operational metrics behind authentication, and an allowlisted backup | Accepted | Not started |
+| [0016](0016-metrics-and-backup.md) | Operational metrics behind authentication, and an allowlisted backup | Accepted | Partial |
 | [0017](0017-internationalisation-via-message-catalogue.md) | The UI is translated through a message catalogue, with English as source | Accepted | Not started |
 | [0018](0018-pull-request-level-dco-sign-off.md) | The DCO sign-off may be given once per pull request | Accepted | Partial |
 | [0019](0019-dco-enforcement-suspended.md) | DCO enforcement is suspended until the maintainer switches it on | Accepted | Landed |
@@ -46,3 +46,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0031](0031-web-ui-shell.md) | The first web UI is a buildless shell over the item API, tested in a real browser | Accepted | Partial |
 | [0032](0032-prosemirror-rich-text-editor.md) | The rich-text editor is ProseMirror, vendored as one pre-built bundle | Accepted | Partial |
 | [0033](0033-full-text-search-by-scanning-the-live-state.md) | Full-text search scans the live state; there is no search index yet | Accepted | Partial |
+| [0034](0034-encrypted-backups-from-log-prefixes.md) | Backups are encrypted with a passphrase and cut from the logs while the server runs | Accepted | Landed |

@@ -1,7 +1,7 @@
 # ADR-0016: Operational metrics behind authentication, and an allowlisted backup
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 
@@ -31,6 +31,8 @@ Chosen option: **2.**
 - **Metrics:** a `/metrics` endpoint in Prometheus exposition format, using `prometheus/client_golang` on a dedicated registry. It is an `authenticated` route (ADR-0011); a token scope `metrics` allows exactly `GET /metrics`, the narrowest credential to hand to a scraper. Liveness and readiness probes stay public and reveal nothing.
 - **Backup:** an export of the data directory defined by an **allowlist** of stores; a store added later is excluded until it is added deliberately. Secrets (encryption keys, password hashes, token hashes) are excluded or exported only on an explicit, separate request. A backup is a consistent point-in-time read that does not block the writer.
 - **Restore** is tested end to end in CI: back up, restore into an empty directory, compare.
+
+**Implementation so far:** the backup and restore, as [ADR-0034](0034-encrypted-backups-from-log-prefixes.md) details. The secrets are in every backup, which is encrypted with a passphrase given at backup time: without the item keys and the accounts a backup could not be restored to a working instance. Not built: the metrics endpoint and the `metrics` token scope.
 
 ### Consequences
 

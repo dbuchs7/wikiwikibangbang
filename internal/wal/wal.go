@@ -19,6 +19,7 @@ package wal
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -75,6 +76,10 @@ func Read(path string) (Scan, error) {
 	}
 	return scan(bufio.NewReader(f), st.Size())
 }
+
+// ReadBytes reads a log held in memory, like Read: a copy taken while an
+// append was in progress ends in a torn tail, which Valid excludes.
+func ReadBytes(data []byte) (Scan, error) { return scan(bytes.NewReader(data), int64(len(data))) }
 
 func scan(r io.Reader, size int64) (Scan, error) {
 	var sc Scan
@@ -269,6 +274,10 @@ func (l *Log) truncate(size int64) error {
 	l.size = size
 	return nil
 }
+
+// Size is the length of the log up to the end of its last durable record:
+// a copy of that many bytes is a complete log (ADR-0016).
+func (l *Log) Size() int64 { return l.size }
 
 // Close closes the log and releases the directory lock if Open took it.
 func (l *Log) Close() error {

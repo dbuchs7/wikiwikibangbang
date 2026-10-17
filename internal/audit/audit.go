@@ -46,6 +46,7 @@ const (
 	GroupMember     = "group.add"
 	ItemPurged      = "item.purge"
 	ItemRedacted    = "item.redact"
+	BackupCreated   = "backup.create"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for
