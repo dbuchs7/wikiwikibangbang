@@ -19,9 +19,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
@@ -42,6 +44,7 @@ const usage = `Usage: wikiwikibangbang <command> [flags]
 Commands:
   serve        run the server
   check        verify a data directory without changing it
+  restore      restore a backup into a new data directory
   healthcheck  exit 0 if a running server answers its liveness probe
   version      print the version
 
@@ -61,6 +64,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return serve(ctx, args, stderr)
 	case "check":
 		return check(args, stdout, stderr)
+	case "restore":
+		return restore(args, stdout, stderr)
 	case "healthcheck":
 		return healthcheck(ctx, args, stderr)
 	case "version":
@@ -249,6 +254,51 @@ func check(args []string, stdout, stderr io.Writer) int {
 	if rec.Torn > 0 {
 		fmt.Fprintf(stdout, "an interrupted write of %d bytes at the end will be dropped on the next start\n", rec.Torn)
 	}
+	return 0
+}
+
+// restore unpacks a backup made through POST /api/backup (ADR-0034) into a
+// new data directory. The passphrase comes from WWBB_BACKUP_PASSPHRASE or a
+// file, never from a flag, which would show in the process list and the
+// shell history.
+func restore(args []string, stdout, stderr io.Writer) int {
+	fs := newFlags("restore", stderr)
+	from := fs.String("from", "", "the backup file")
+	dataDir := fs.String("data-dir", defaultDataDir, "the new data directory; must not exist or be empty")
+	passFile := fs.String("passphrase-file", "", "file whose first line is the passphrase (default: $WWBB_BACKUP_PASSPHRASE)")
+	if err := fs.Parse(args); err != nil {
+		return parseFailed(err)
+	}
+	if *from == "" {
+		fmt.Fprintln(stderr, "restore: -from is required")
+		return 2
+	}
+	pass := os.Getenv("WWBB_BACKUP_PASSPHRASE")
+	if *passFile != "" {
+		data, err := os.ReadFile(*passFile)
+		if err != nil {
+			fmt.Fprintln(stderr, "restore:", err)
+			return 1
+		}
+		line, _, _ := strings.Cut(string(data), "\n")
+		pass = strings.TrimRight(line, "\r")
+	}
+	if pass == "" {
+		fmt.Fprintln(stderr, "restore: set WWBB_BACKUP_PASSPHRASE or -passphrase-file")
+		return 2
+	}
+	f, err := os.Open(*from)
+	if err != nil {
+		fmt.Fprintln(stderr, "restore:", err)
+		return 1
+	}
+	defer f.Close()
+	m, err := backup.Restore(f, pass, *dataDir)
+	if err != nil {
+		fmt.Fprintln(stderr, "restore:", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "restored a backup of %s (%s) into %s\n", m.Created.Format(time.RFC3339), m.Build, *dataDir)
 	return 0
 }
 

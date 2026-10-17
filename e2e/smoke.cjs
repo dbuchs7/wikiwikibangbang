@@ -59,6 +59,15 @@ function check(cond, msg) {
     await page.waitForSelector("#grant >> text=Granted.");
     await page.waitForSelector("td:has-text('role.grant')", { state: "attached" }).catch(() => {});
 
+    step("administration: an encrypted backup downloads");
+    await page.fill("#backup [name=passphrase]", "a long backup passphrase");
+    await page.fill("#backup [name=repeat]", "a long backup passphrase");
+    const [download] = await Promise.all([page.waitForEvent("download"), page.click("#backup button[type=submit]")]);
+    check(/^wikiwikibangbang-.*\.wwbb$/.test(download.suggestedFilename()), "the backup is named " + download.suggestedFilename());
+    const saved = require("fs").readFileSync(await download.path());
+    check(saved.subarray(0, 8).toString() === "WWBBBAK1", "the download is an encrypted backup");
+    if (process.env.BACKUP_OUT) require("fs").writeFileSync(process.env.BACKUP_OUT, saved);
+
     step("create an item with a hostile title");
     await page.click("text=Spaces");
     await page.click("a:has-text('Platform')");

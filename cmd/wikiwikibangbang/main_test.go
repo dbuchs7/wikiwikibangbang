@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
+	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
@@ -365,5 +366,49 @@ func TestShutdownEndsLiveSessions(t *testing.T) {
 	it, err := db.Store.ByKey("PLAT-1")
 	if err != nil || it.Body.Blocks[0].Text != "after" {
 		t.Fatalf("draft not committed: %v %v", it.Body, err)
+	}
+}
+
+func TestRestore(t *testing.T) {
+	backup.Iterations = 1000
+	src := t.TempDir()
+	db, _, err := storage.Open(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Store.CreateSpace("admin", "PLAT", "Platform"); err != nil {
+		t.Fatal(err)
+	}
+	files, err := db.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "b.wwbb")
+	out, _ := os.Create(file)
+	if err := backup.Write(out, "a long passphrase", files, "test", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	out.Close()
+	db.Close()
+
+	target := filepath.Join(t.TempDir(), "restored")
+	if code, _, errOut := runCmd(t, context.Background(), "restore", "-from", file, "-data-dir", target); code != 2 || !strings.Contains(errOut, "WWBB_BACKUP_PASSPHRASE") {
+		t.Errorf("no passphrase: exit %d, %q", code, errOut)
+	}
+	t.Setenv("WWBB_BACKUP_PASSPHRASE", "the wrong one!")
+	if code, _, errOut := runCmd(t, context.Background(), "restore", "-from", file, "-data-dir", target); code != 1 || !strings.Contains(errOut, "passphrase") {
+		t.Errorf("wrong passphrase: exit %d, %q", code, errOut)
+	}
+	passFile := filepath.Join(t.TempDir(), "pass")
+	os.WriteFile(passFile, []byte("a long passphrase\r\nsecond line\n"), 0o600)
+	code, out2, errOut := runCmd(t, context.Background(), "restore", "-from", file, "-data-dir", target, "-passphrase-file", passFile)
+	if code != 0 || !strings.Contains(out2, "restored a backup") {
+		t.Fatalf("exit %d, %q %q", code, out2, errOut)
+	}
+	if code, out, _ := runCmd(t, context.Background(), "check", "-data-dir", target); code != 0 || !strings.Contains(out, "ok: 1 events") {
+		t.Fatalf("restored directory: exit %d, %q", code, out)
+	}
+	if code, _, _ := runCmd(t, context.Background(), "restore", "-data-dir", target); code != 2 {
+		t.Errorf("without -from: exit %d", code)
 	}
 }

@@ -1,6 +1,6 @@
 // The UI shell (ADR-0009, ADR-0031): hash routes, one view per route, all
 // data through the HTTP API. Plain ES modules, no build step.
-import { api, get, post, put, del, ApiError } from "./api.js";
+import { api, get, post, put, del, download, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { liveBody } from "./live.js";
@@ -459,6 +459,22 @@ async function adminView() {
     ], async (d, status) => {
       await put(`/api/spaces/${encodeURIComponent(d.get("space"))}/roles/${encodeURIComponent(d.get("user"))}`, { role: d.get("role") });
       status.replaceChildren(h("p", { class: "notice", text: "Granted." }));
+    }),
+    form({ class: "card", id: "backup" }, [
+      h("h2", { text: "Backup" }),
+      h("p", { class: "muted", text: "An encrypted copy of all data, including the keys to the content and the account hashes. Keep the passphrase apart from the file: without it the backup cannot be restored, with it anyone can read everything in it — also content deleted for good after the backup was made." }),
+      field("Passphrase", h("input", { name: "passphrase", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
+      field("Repeat", h("input", { name: "repeat", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
+      h("button", { type: "submit", text: "Download backup" }),
+    ], async (d, status) => {
+      if (d.get("passphrase") !== d.get("repeat")) throw new Error("The passphrases differ.");
+      const { blob, name } = await download("/api/backup", { passphrase: d.get("passphrase") });
+      const url = URL.createObjectURL(blob);
+      const a = h("a", { download: name, text: name });
+      a.href = url; // a blob made here, not user content; safeHref would refuse the scheme
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      status.replaceChildren(h("p", { class: "notice", text: `Saved ${name}. Restore it with: wikiwikibangbang restore -from ${name}` }));
     }),
     h("section", { class: "card" },
       h("h2", { text: "Audit trail (latest 50)" }),

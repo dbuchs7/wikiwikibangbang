@@ -32,6 +32,26 @@ curl -b cookies http://localhost:8080/api/items/PLAT-1
 ```
  Data is kept in `./data` (change it with `-data-dir`); `wikiwikibangbang check -data-dir data` verifies it without changing it.
 
+Back up a running server from **Administration → Backup**, or with an administrator's API token ([ADR-0034](docs/adr/0034-encrypted-backups-from-log-prefixes.md)):
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"passphrase":"a long passphrase"}' -o backup.wwbb http://localhost:8080/api/backup
+WWBB_BACKUP_PASSPHRASE='a long passphrase' ./wikiwikibangbang restore -from backup.wwbb -data-dir data-restored
+```
+
+The backup is encrypted and holds everything, including the keys to the content: keep the passphrase apart from the file, and delete old backups when content must be gone for good — a backup can still read what was purged after it was made.
+
+Behind a reverse proxy, live editing ([ADR-0010](docs/adr/0010-real-time-collaboration-with-block-locks.md)) needs `/api/items/*/live` passed through unbuffered and without a short read timeout; the server sends a heartbeat every 20 seconds. For nginx:
+
+```nginx
+location ~ ^/api/items/[^/]+/live$ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
+}
+```
+
 As a container:
 
 ```bash
