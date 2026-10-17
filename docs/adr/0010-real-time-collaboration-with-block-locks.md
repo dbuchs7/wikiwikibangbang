@@ -1,9 +1,9 @@
 # ADR-0010: Real-time collaboration starts with block-level locks, not a CRDT
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Do users accept that two people cannot type in the same paragraph at the same time, or is character-level co-editing (CRDT) required for the product to be credible against Confluence?
 - **Question checked:** 2026-10
 
@@ -29,7 +29,7 @@ Adapted from atlas [ADR-0140](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **2 as the first step, designed so that 3 can replace it.**
+Chosen option: **2 as the first step, designed so that 3 can replace it.**
 
 - A **collaboration session** is ephemeral server state attached to an item's body. It is not event-sourced and does not survive a restart; the committed body versions are the durable artifact.
 - Participants acquire a **soft, auto-expiring lock per block** (paragraph, heading, list item, table) before editing it. Locks and changes are broadcast to all participants. Edits to different blocks proceed in parallel; edits to the same block are serialised. A lock lapses on release, on disconnect or after a short TTL.

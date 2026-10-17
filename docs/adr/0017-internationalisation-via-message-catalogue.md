@@ -1,9 +1,9 @@
 # ADR-0017: The UI is translated through a message catalogue, with English as source
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Should user content (page titles, field labels of custom types, workflow state names) be translatable per language, or is translation limited to the product's own UI?
 - **Question checked:** 2026-10
 
@@ -28,7 +28,7 @@ Adapted from atlas [ADR-0267](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **2.**
+Chosen option: **2.**
 
 - Every UI string is a key in a catalogue; English is the source locale and the fallback.
 - A **missing key renders as the key** in development, so a hole is visibly broken; a test reports keys present in the source locale but missing in another, as a list of gaps rather than a build failure.

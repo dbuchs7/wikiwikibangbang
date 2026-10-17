@@ -1,9 +1,9 @@
 # ADR-0026: Item content is encrypted with a key per item; purge and redaction destroy the key
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-17
-- **Deciders:** Project initiators (maintainer request 2026-10-17 to close ADR-0025's open question before the API)
+- **Deciders:** Project initiators (maintainer request 2026-10-17 to close ADR-0025's open question before the API); accepted by the maintainer 2026-10-17
 - **Open question:** Who and what is still identifiable after an erasure — actor names in every event, principals in groups and restrictions, the key and type of a tombstone — and does erasing a *person* (as opposed to an item) need its own mechanism once user accounts exist (ADR-0013)?
 - **Question checked:** 2026-10
 
@@ -29,7 +29,7 @@ An append-only log and a deletion requirement contradict each other. The questio
 
 ## Decision outcome
 
-Proposed option: **3.**
+Chosen option: **3.**
 
 - **What is content.** The fields `Event.erase` removes: title, property values, body, and the raw import source, in the events `ItemCreated`, `TitleSet`, `PropertySet`, `BodyCommitted` and `ItemImported`. Structure stays readable: IDs, keys, types, spaces, parents, states, relations, restrictions, actors, times, and the reason of a redaction.
 - **Encryption.** The storage layer seals the content of each such event with AES-256-GCM under its item's key, a random nonce, and the event's sequence number, kind and item as associated data, so sealed content cannot be moved to another event. The event format is version 2 (`sealed`, `erased`); version 1 logs (plaintext) are still read.

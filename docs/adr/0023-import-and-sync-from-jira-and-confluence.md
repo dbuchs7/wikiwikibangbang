@@ -1,9 +1,9 @@
 # ADR-0023: Import from Jira and Confluence through one engine — snapshot import and one-way sync, never two masters
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-17
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Which sources come first — Atlassian Cloud through its REST APIs, Data Center/Server through its APIs, or offline export files — and how much history (changelogs, page versions) must an import carry to be accepted by users?
 - **Question checked:** 2026-10
 
@@ -44,7 +44,7 @@ The unified model helps here: types are data (ADR-0001), so a Jira project's iss
 
 ## Decision outcome
 
-Proposed option: **3.**
+Chosen option: **3.**
 
 ### One engine, three stages
 

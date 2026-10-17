@@ -1,9 +1,9 @@
 # ADR-0012: An MCP server as an adapter over the HTTP API, acting as its caller
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 
 ## Context and problem statement
 
@@ -26,7 +26,7 @@ Adapted from atlas [ADR-0016](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **3.**
+Chosen option: **3.**
 
 - The MCP adapter holds no state and calls no internal function: every tool is an HTTP call to the API of ADR-0011. Invariants are therefore enforced in exactly one place, whatever bugs the adapter has.
 - The protocol (JSON-RPC 2.0; `initialize`, `tools/list`, `tools/call`, `ping`) is implemented by hand, without a dependency.

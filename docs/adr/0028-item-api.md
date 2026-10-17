@@ -1,9 +1,9 @@
 # ADR-0028: The item API exposes one command per request, through the permission model and one writer
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-17
-- **Deciders:** Project initiators (maintainer request 2026-10-17 for an HTTP API with a single writer)
+- **Deciders:** Project initiators (maintainer request 2026-10-17 for an HTTP API with a single writer); accepted by the maintainer 2026-10-17
 - **Open question:** When the web UI and the MCP adapter (ADR-0012) use this API, do they need batch endpoints (several commands, one record) — for example to create an item and set its body at once — and how is that kept from bypassing the per-command validation?
 - **Question checked:** 2026-10
 
@@ -27,7 +27,7 @@ The item model (`internal/item`) has validated commands, sessions that enforce t
 
 ## Decision outcome
 
-Proposed option: **2.**
+Chosen option: **2.**
 
 - **Routes** (all authenticated, ADR-0011): types and spaces (`GET|POST /api/types`, `GET|POST /api/spaces`), roles (`PUT /api/spaces/{space}/roles/{principal}`, `PUT /api/groups/{group}/members/{principal}`, `PUT /api/system-roles/{role}/{principal}`), items (`GET|POST /api/items`, `GET /api/items/{ref}`, and per command `title`, `properties/{field}`, `transitions`, `body`, `move`, `embedded`, `restriction`, `trash`, `restore`, `purge`, `redact`), reads (`embeds`, `history`, `relations`), relations (`POST /api/relations`, `DELETE /api/relations/{id}`).
 - **Permission model.** Every item handler acts through `Store.As(user ID)`; only defining types, creating spaces, adding group members and granting system roles use trusted commands, after an explicit administrator check. An item the caller may not read answers 404, also for writes.

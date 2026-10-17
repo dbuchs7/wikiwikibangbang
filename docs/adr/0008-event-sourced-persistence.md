@@ -1,9 +1,9 @@
 # ADR-0008: Event-sourced persistence in an embedded store, with a single writer
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Does one writer goroutine sustain the write rate of a large installation (many spaces, many concurrent editors), or does the model need partitioning by space from the start?
 - **Question checked:** 2026-10
 
@@ -29,7 +29,7 @@ Adapted from atlas [ADR-0001](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **3.**
+Chosen option: **3.**
 
 - Every discrete change (property, state transition, relation, comment, permission, committed body version) is an immutable **event** appended to a write-ahead log. The log is the source of truth; current state is a fold of the log.
 - State is materialised in **Pebble** (pure Go, no CGO). Indexes for queries, boards and search are further projections of the log and can be rebuilt.

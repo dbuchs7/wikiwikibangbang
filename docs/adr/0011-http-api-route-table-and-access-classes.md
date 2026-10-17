@@ -1,9 +1,9 @@
 # ADR-0011: The HTTP API is one route table, described by OpenAPI, and every route declares its access class
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 
 ## Context and problem statement
 
@@ -26,7 +26,7 @@ Adapted from atlas [ADR-0043](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **3.**
+Chosen option: **3.**
 
 - Every route is an entry in one table: method, pattern, handler, summary, schemas and **access class**. The server registers handlers by iterating the table; a second function builds an **OpenAPI 3.1** document from the same table at runtime.
 - A test asserts that the set of served routes equals the set of documented routes.

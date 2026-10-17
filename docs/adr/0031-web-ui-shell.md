@@ -1,9 +1,9 @@
 # ADR-0031: The first web UI is a buildless shell over the item API, tested in a real browser
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Partial
 - **Date:** 2026-10-17
-- **Deciders:** Project initiators (maintainer request 2026-10-17)
+- **Deciders:** Project initiators (maintainer request 2026-10-17); accepted by the maintainer 2026-10-17
 - **Open question:** Which rich-text editor replaces the block textareas (ADR-0009's open question), and how do mentions and embeds get created in the UI — by typing (`@`, `/embed`) or by pickers?
 - **Question checked:** 2026-10
 
@@ -26,7 +26,7 @@ ADR-0009 proposes a single binary whose UI is plain HTML, CSS and ES modules wit
 
 ## Decision outcome
 
-Proposed option: **2**, as ADR-0009 proposes.
+Chosen option: **2**, as ADR-0009 proposes.
 
 - **Shape:** `index.html`, `assets/app.js` (hash routes and views), `assets/api.js` (the API client), `assets/dom.js` (the only element factory), `assets/style.css`. Views: login (password and, when configured, single sign-on), spaces, a space's items with paging and an item form, an item (title, properties by field kind, transitions, body blocks, relations, history, trash, restore and delete), account (password, API tokens), administration (spaces, types, users, space roles, audit trail).
 - **Closed rendering (ADR-0014):** `dom.js` creates every element and inserts text only as text; link targets pass an allowlist (`#`, same-origin paths, `http`, `https`, `mailto`). A Go test fails the build if any UI file uses `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval`, `new Function`, inline event attributes or inline scripts. The content-security policy (`default-src 'self'`) is the second line.

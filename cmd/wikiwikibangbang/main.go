@@ -117,6 +117,10 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		return 1
 	}
 
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	go expireAudit(ctx, db, log, ticker.C)
+
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Error("cannot listen", "addr", *addr, "err", err)
@@ -157,6 +161,25 @@ func ensureAdmin(db *storage.DB, log *slog.Logger) error {
 		log.Info("created the first administrator", "username", b.User.Username)
 	}
 	return nil
+}
+
+// expireAudit removes audit entries past their retention (ADR-0029) on
+// every tick until ctx ends; Open already did so at the start.
+func expireAudit(ctx context.Context, db *storage.DB, log *slog.Logger, tick <-chan time.Time) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-tick:
+			n, err := db.ExpireAudit(now)
+			switch {
+			case err != nil:
+				log.Error("audit entries not expired", "err", err)
+			case n > 0:
+				log.Info("expired audit entries", "removed", n)
+			}
+		}
+	}
 }
 
 // ssoFromEnv configures OpenID Connect (ADR-0030) from the environment, or

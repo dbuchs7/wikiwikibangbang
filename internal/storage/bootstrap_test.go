@@ -1,9 +1,12 @@
 package storage
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
@@ -86,5 +89,46 @@ func TestEnsureAdminHealsAMissingRole(t *testing.T) {
 	noErr(t, err)
 	if _, err := other.EnsureAdmin("admin", ""); err == nil || !strings.Contains(err.Error(), "no administrator") {
 		t.Fatalf("no admin and no matching account: %v", err)
+	}
+}
+
+// TestAuditEntriesExpireAfterTenYears covers ADR-0029's retention: at start
+// and when ExpireAudit runs, entries older than ten years leave the journal.
+func TestAuditEntriesExpireAfterTenYears(t *testing.T) {
+	dir := t.TempDir()
+	db := openFast(t, dir)
+	old := time.Now().AddDate(-11, 0, 0).UTC()
+	for i, at := range []time.Time{old, old.Add(time.Hour)} {
+		data, err := json.Marshal(audit.Entry{Seq: i + 1, At: at, Event: audit.Login})
+		noErr(t, err)
+		noErr(t, db.audit.Append(data))
+	}
+	noErr(t, db.Close())
+
+	db = openFast(t, dir)
+	if got := db.Audit.List(0, 10); len(got) != 1 || got[0].Event != audit.Expired || got[0].Detail["removed"] != "2" {
+		t.Fatalf("after the start: %+v", got)
+	}
+	db.Audit.Record(audit.Entry{Event: audit.Logout})
+	if got := db.Audit.List(0, 1); got[0].Seq != 3 {
+		t.Fatalf("numbering restarted at %d, want 3", got[0].Seq)
+	}
+	// Ten years later, the marker and the new entry expire too.
+	n, err := db.ExpireAudit(time.Now().AddDate(10, 0, 1))
+	noErr(t, err)
+	if got := db.Audit.List(0, 10); n != 2 || len(got) != 1 || got[0].Event != audit.Expired || got[0].Seq != 3 {
+		t.Fatalf("ExpireAudit dropped %d, memory %+v", n, got)
+	}
+	n, err = db.ExpireAudit(time.Now())
+	noErr(t, err)
+	if n != 0 {
+		t.Fatalf("nothing to expire, dropped %d", n)
+	}
+	db.Audit.Record(audit.Entry{Event: audit.Login})
+	noErr(t, db.Close())
+	db = openFast(t, dir)
+	defer db.Close()
+	if got := db.Audit.List(0, 10); len(got) != 2 || got[0].Seq != 4 || got[1].Event != audit.Expired {
+		t.Fatalf("after a rewrite and a restart: %+v", got)
 	}
 }

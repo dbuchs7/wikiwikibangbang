@@ -1,9 +1,9 @@
 # ADR-0015: One place names every resource budget, and a capped listing answers with a page
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Implementation:** Not started
 - **Date:** 2026-10-16
-- **Deciders:** Project initiators
+- **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 
 ## Context and problem statement
 
@@ -25,7 +25,7 @@ Adapted from atlas [ADR-0291](https://github.com/pblumer/atlas/blob/main/docs/ad
 
 ## Decision outcome
 
-Proposed option: **2.**
+Chosen option: **2.**
 
 - **Budgets:** one Go struct holds every budget, grouped by what it limits (request body, attachment, document size, result count, …). Environment variable names and the configuration loader are derived from the struct by reflection, so a new budget is configurable the moment it exists. An unset, unparseable or out-of-range value leaves the default in place and is logged at startup — never an error.
 - **Pages:** every capped listing returns an envelope with the items, a continuation cursor, and a total that states where it came from: exact (a maintained counter, or an untruncated page) or a lower bound. The constructor forces the caller to choose; there is no default that flatters.

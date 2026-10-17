@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
@@ -251,5 +253,26 @@ func TestSingleSignOnConfiguration(t *testing.T) {
 	code, _, errOut = runCmd(t, ctx, "serve", "-addr", freeAddr(t), "-data-dir", t.TempDir())
 	if code != 0 || !strings.Contains(errOut, "single sign-on enabled") {
 		t.Errorf("complete configuration: exit %d, stderr %q", code, errOut)
+	}
+}
+
+func TestAuditExpiryRunsOnEveryTick(t *testing.T) {
+	db, _, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.Audit.Record(audit.Entry{Event: audit.Login})
+	var logs bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	tick := make(chan time.Time)
+	done := make(chan struct{})
+	go func() { expireAudit(ctx, db, slog.New(slog.NewTextHandler(&logs, nil)), tick); close(done) }()
+	tick <- time.Now() // nothing to expire
+	tick <- time.Now().AddDate(11, 0, 0)
+	cancel()
+	<-done
+	if !strings.Contains(logs.String(), "expired audit entries") || strings.Count(logs.String(), "removed=") != 1 {
+		t.Fatalf("logs: %s", logs.String())
 	}
 }
