@@ -24,6 +24,7 @@ import (
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
+	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 	"github.com/dbuchs7/wikiwikibangbang/internal/web"
 )
@@ -121,7 +122,15 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		log.Error("cannot listen", "addr", *addr, "err", err)
 		return 1
 	}
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log})
+	provider, err := ssoFromEnv()
+	if err != nil {
+		log.Error("single sign-on is misconfigured", "err", err)
+		return 1
+	}
+	if provider != nil {
+		log.Info("single sign-on enabled", "issuer", provider.Issuer())
+	}
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: provider})
 	if err := server.Serve(ctx, ln, server.Handler(routes, db.Accounts), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
@@ -148,6 +157,24 @@ func ensureAdmin(db *storage.DB, log *slog.Logger) error {
 		log.Info("created the first administrator", "username", b.User.Username)
 	}
 	return nil
+}
+
+// ssoFromEnv configures OpenID Connect (ADR-0030) from the environment, or
+// returns nil when WWBB_OIDC_ISSUER is unset. The client secret is read
+// only from the environment, never from a flag, so it does not show in the
+// process list.
+func ssoFromEnv() (*sso.Provider, error) {
+	issuer := os.Getenv("WWBB_OIDC_ISSUER")
+	if issuer == "" {
+		return nil, nil
+	}
+	return sso.New(sso.Config{
+		Issuer:       issuer,
+		ClientID:     os.Getenv("WWBB_OIDC_CLIENT_ID"),
+		ClientSecret: os.Getenv("WWBB_OIDC_CLIENT_SECRET"),
+		RedirectURL:  os.Getenv("WWBB_OIDC_REDIRECT_URL"),
+		Name:         os.Getenv("WWBB_OIDC_NAME"),
+	}, nil)
 }
 
 // defaultDataDir is relative to the working directory, so a binary started

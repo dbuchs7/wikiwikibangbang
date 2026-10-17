@@ -28,6 +28,14 @@ func authRoutes(d Deps) []Route {
 	}
 }
 
+func setSessionCookie(w http.ResponseWriter, r *http.Request, secret string) {
+	http.SetCookie(w, &http.Cookie{
+		Name: SessionCookie, Value: secret, Path: "/",
+		MaxAge: int(auth.SessionLifetime.Seconds()), HttpOnly: true,
+		SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil,
+	})
+}
+
 type authHandlers struct {
 	d Deps
 }
@@ -85,11 +93,7 @@ func (h authHandlers) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.record(audit.Entry{Event: audit.Login, Actor: string(p.User), Addr: addr})
-	http.SetCookie(w, &http.Cookie{
-		Name: SessionCookie, Value: secret, Path: "/",
-		MaxAge: int(auth.SessionLifetime.Seconds()), HttpOnly: true,
-		SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil,
-	})
+	setSessionCookie(w, r, secret)
 	writeJSON(w, http.StatusOK, map[string]userJSON{"user": {ID: p.User, Username: p.Username}})
 }
 

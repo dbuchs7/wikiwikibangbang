@@ -68,7 +68,7 @@ jobs:
 
           name="wikiwikibangbang_${version}_${GOOS}_${GOARCH}"
           mkdir -p "dist/${name}" out
-          cp "${bin}" LICENSE README.md "dist/${name}/"
+          cp "${bin}" LICENSE README.md THIRD_PARTY_NOTICES.md "dist/${name}/"
           if [ "${GOOS}" = "windows" ]; then
             (cd dist && zip -qr "../out/${name}.zip" "${name}")
           else

@@ -263,3 +263,51 @@ func TestPasswordHashes(t *testing.T) {
 		t.Fatal("hashing without randomness succeeded")
 	}
 }
+
+func TestExternalUsers(t *testing.T) {
+	a, j, _ := newAccounts(t)
+	_, err := a.CreateUser("anna", pw)
+	noErr(t, err)
+	u, err := a.CreateExternalUser("anna", "https://idp", "sub-1")
+	noErr(t, err)
+	if u.Username != "anna-2" {
+		t.Fatalf("username %q, want a suffix when taken", u.Username)
+	}
+	if _, err := a.CreateExternalUser("x", "https://idp", "sub-1"); !errors.Is(err, ErrExists) {
+		t.Fatalf("second link: %v", err)
+	}
+	if _, err := a.CreateExternalUser("x", "", "sub"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("no issuer: %v", err)
+	}
+	odd, err := a.CreateExternalUser("has space", "https://idp", "sub-2")
+	noErr(t, err)
+	if odd.Username != "user" {
+		t.Fatalf("invalid preferred name became %q", odd.Username)
+	}
+	if got, ok := a.UserByIdentity("https://idp", "sub-1"); !ok || got.ID != u.ID {
+		t.Fatal("identity not found")
+	}
+	if _, ok := a.UserByIdentity("https://other", "sub-1"); ok {
+		t.Fatal("the issuer is not part of the match")
+	}
+	// An external account has no password; the password login refuses it.
+	if _, _, err := a.Login("anna-2", "", "x"); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("password login of an external account: %v", err)
+	}
+	secret, p, err := a.StartSession(u.ID)
+	noErr(t, err)
+	if got, ok := a.Session(secret); !ok || got.User != u.ID || p.Via != "session" {
+		t.Fatal("external session does not resolve")
+	}
+	if _, _, err := a.StartSession("ghost"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("session for an unknown user")
+	}
+	b, err := New(j.records, j.append, WithIterations(1000))
+	noErr(t, err)
+	if got, ok := b.UserByIdentity("https://idp", "sub-1"); !ok || got.ID != u.ID {
+		t.Fatal("identity link lost in restart")
+	}
+	if _, err := New([][]byte{[]byte(`{"v":1,"kind":"IdentityLinked","user":"ghost"}`)}, j.append); err == nil {
+		t.Fatal("a link to an unknown user loaded")
+	}
+}

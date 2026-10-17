@@ -42,3 +42,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0027](0027-local-accounts-sessions-and-api-tokens.md) | Local accounts with PBKDF2, in-memory sessions and scoped API tokens | Proposed | Partial |
 | [0028](0028-item-api.md) | The item API exposes one command per request, through the permission model and one writer | Proposed | Partial |
 | [0029](0029-persisted-security-audit-trail.md) | The security audit trail is its own append-only journal | Proposed | Partial |
+| [0030](0030-openid-connect-single-sign-on.md) | Single sign-on through OpenID Connect, with go-oidc and just-in-time accounts without roles | Proposed | Partial |

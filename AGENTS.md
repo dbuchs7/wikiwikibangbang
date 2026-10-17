@@ -12,13 +12,13 @@ wikiwikibangbang is an open-source application written in **Go** that unifies **
 
 The core idea is recorded in [ADR-0001](docs/adr/0001-unified-item-data-model.md): every piece of user-generated content is a typed **item** with properties, an optional document body, an optional workflow and typed relations. Pages and issues are item *types*, not separate systems.
 
-**Current state:** design phase. Besides the project's self-checks (ADR consistency, DCO rule) the module holds two prototype packages: `internal/item`, the item model with lifecycle and permissions (ADR-0001, ADR-0020 to ADR-0022), and `internal/migrate`, the import engine (ADR-0023). The item store persists to an event log on disk (`internal/wal`, `internal/storage`; ADR-0008, ADR-0025): every command is fsynced before it takes effect, and startup replays the log. Item content is encrypted with a key per item; purge and redaction destroy the key (ADR-0026). Authentication exists (`internal/auth`; ADR-0013, ADR-0027): local accounts, sessions and API tokens; the first start creates an administrator; security events go to a persisted audit trail (ADR-0029). The single binary `cmd/wikiwikibangbang` opens the data directory and serves a placeholder UI, a liveness probe, the authentication API and the item API (ADR-0028, described at `/api/openapi.json`); it is released for every common platform and as a container image (ADR-0024). There is no web UI on top of the API yet.
+**Current state:** design phase. Besides the project's self-checks (ADR consistency, DCO rule) the module holds two prototype packages: `internal/item`, the item model with lifecycle and permissions (ADR-0001, ADR-0020 to ADR-0022), and `internal/migrate`, the import engine (ADR-0023). The item store persists to an event log on disk (`internal/wal`, `internal/storage`; ADR-0008, ADR-0025): every command is fsynced before it takes effect, and startup replays the log. Item content is encrypted with a key per item; purge and redaction destroy the key (ADR-0026). Authentication exists (`internal/auth`; ADR-0013, ADR-0027): local accounts, sessions and API tokens; the first start creates an administrator; security events go to a persisted audit trail (ADR-0029); OpenID Connect single sign-on is optional (ADR-0030). The single binary `cmd/wikiwikibangbang` opens the data directory and serves a placeholder UI, a liveness probe, the authentication API and the item API (ADR-0028, described at `/api/openapi.json`); it is released for every common platform and as a container image (ADR-0024). There is no web UI on top of the API yet.
 
 **The persisted event format is a contract with every existing data directory** (ADR-0025). Never change what `item.EncodeBatch` writes — a field name, a value encoding, a role name — without raising `item.CodecVersion` and teaching the decoder the old version. `TestPersistedFormatIsStable` fails on any change; regenerating its golden file is the last step of such a change, never the fix for a failing test. `apply` must produce the same state from a decoded event as from the live one: every test in `internal/item` checks that.
 
 **Content never reaches disk in plaintext** (ADR-0026). Anything a user can type into an item is content: if you add such a field to an event, it belongs in `item.Event.erase` and in the sealed part of the codec (`wireContent`), and `internal/storage` must show it does not appear in the event file. `keys.wal` is as precious as `events.wal`: without it all content is lost.
 
-**Every route is authenticated unless it says otherwise** (ADR-0011, ADR-0027). Declare `Access: Public` only for what an anonymous caller may see, and add the route to the table in `internal/server`, never to a mux directly. Handlers reach the item store only through `storage.DB.Read`/`Write`. Never log or audit a password, session or token secret — the generated first-administrator password is the one deliberate exception. A security-relevant action records an `audit.Entry` after it succeeded.
+**Every route is authenticated unless it says otherwise** (ADR-0011, ADR-0027). Declare `Access: Public` only for what an anonymous caller may see, and add it to `publicAPI` in the server tests, and add the route to the table in `internal/server`, never to a mux directly. Handlers reach the item store only through `storage.DB.Read`/`Write`. Never log or audit a password, session or token secret — the generated first-administrator password is the one deliberate exception. A security-relevant action records an `audit.Entry` after it succeeded.
 
 **The product ships as one binary** (ADR-0009, ADR-0024): pure Go, no CGO, web assets embedded with `go:embed`, cross-compiled for every release platform. Never add anything that breaks this — a runtime file the binary needs next to it, a C dependency, a CDN asset, a second executable.
 
@@ -89,6 +89,7 @@ When a command is added (linters, end-to-end tests, a `Makefile` target), add it
 AGENTS.md          this guide (canonical)
 CLAUDE.md          pointer to this guide for Claude agents
 LICENSE            AGPL-3.0-only (ADR-0002)
+THIRD_PARTY_NOTICES.md licenses of the modules in the binary; shipped with every release
 README.md          what the project is and how to run it
 go.mod             module github.com/dbuchs7/wikiwikibangbang
 .github/workflows/ CI (fmt, vet, race tests, cross-build, DCO), container image, release
@@ -101,6 +102,7 @@ internal/auth/     accounts, password hashing, sessions, API tokens, login throt
 internal/buildinfo/ version stamped at build time
 internal/storage/  data directory: recovers the item store, journals every command, per-item keys (ADR-0025, ADR-0026)
 internal/wal/      append-only log file: checksummed records, fsync, crash recovery, directory lock
+internal/sso/       OpenID Connect relying party (ADR-0030); sso/ssotest is a fake provider for tests
 internal/server/   HTTP route table with access classes, principal resolution, JSON API, graceful shutdown
 internal/web/      embedded web UI (plain HTML, CSS, ES modules; ADR-0009)
 internal/dco/      DCO sign-off rules (humans only), with tests
@@ -154,7 +156,7 @@ The DCO is a statement by a natural person that they have the right to submit th
 - Pull requests are merged by **squash** only, after the checks have finished. Once enforcement is on, a pull request without a human sign-off is not merged.
 - Agents act on GitHub under the maintainer's account, so GitHub cannot tell an agent's edit from the maintainer's. The check enforces the *form* of the rule; that only a human writes the line is enforced by this guide.
 
-Before adding a dependency, check that its license is compatible with AGPL-3.0 and name the license in the pull request. Never copy code from sources whose license is incompatible or unknown.
+Before adding a dependency, check that its license is compatible with AGPL-3.0, name the license in the pull request, and add the module with its version, license and any NOTICE to `THIRD_PARTY_NOTICES.md` (a test in `internal/repoconfig` checks the list against `go.mod`). Current dependencies: go-oidc, go-jose (Apache-2.0) and x/oauth2 (BSD-3-Clause), for OIDC only (ADR-0030). Never copy code from sources whose license is incompatible or unknown.
 
 ## Pointers
 
