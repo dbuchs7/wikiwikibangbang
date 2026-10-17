@@ -1,0 +1,8 @@
+{
+  "name": "wikiwikibangbang-e2e",
+  "private": true,
+  "description": "Browser tests of the embedded UI. Not part of the Go build (ADR-0031).",
+  "license": "AGPL-3.0-only",
+  "scripts": { "test": "node smoke.cjs" },
+  "devDependencies": { "playwright": "1.56.1" }
+}

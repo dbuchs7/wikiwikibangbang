@@ -1,11 +1,55 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+  --muted: #6b7280;
+  --line: #d1d5db;
+  --accent: #2563eb;
+  --danger: #b91c1c;
+  --card: color-mix(in srgb, Canvas 92%, CanvasText 8%);
 }
 
-main {
-  max-width: 40rem;
-  margin: 4rem auto;
-  padding: 0 1rem;
-  line-height: 1.5;
+body { margin: 0; line-height: 1.5; }
+
+.top {
+  display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap;
+  padding: 0.6rem 1.5rem; border-bottom: 1px solid var(--line);
 }
+.brand { font-weight: 700; text-decoration: none; color: inherit; }
+nav { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+
+main { max-width: 64rem; margin: 1.5rem auto; padding: 0 1.5rem; }
+
+a { color: var(--accent); }
+.muted { color: var(--muted); }
+.error { color: var(--danger); }
+.notice { padding: 0.5rem 0.75rem; border-left: 3px solid var(--accent); background: var(--card); }
+code { word-break: break-all; }
+
+.card { background: var(--card); border-radius: 8px; padding: 1rem 1.25rem; margin: 1.25rem 0; }
+.narrow { max-width: 24rem; margin: 3rem auto; }
+
+.field { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.6rem 0; }
+.field span { font-size: 0.9rem; color: var(--muted); }
+input, select, textarea, button { font: inherit; }
+input, select, textarea { padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; background: Canvas; color: CanvasText; }
+textarea { width: 100%; box-sizing: border-box; }
+button, .button {
+  padding: 0.35rem 0.8rem; margin: 0.2rem 0.4rem 0.2rem 0; border: 1px solid var(--accent);
+  border-radius: 4px; background: var(--accent); color: white; cursor: pointer; text-decoration: none; display: inline-block;
+}
+button:disabled { opacity: 0.6; cursor: default; }
+button.link { background: none; border: none; color: var(--accent); padding: 0; text-decoration: underline; }
+button.danger { background: var(--danger); border-color: var(--danger); }
+
+form.inline { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+input.title { font-size: 1.6rem; font-weight: 600; flex: 1; min-width: 12rem; }
+
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.props th { width: 12rem; font-weight: 500; }
+table.history td { font-size: 0.9rem; }
+
+.list { padding-left: 1.2rem; }
+.blocks .block { margin: 0.5rem 0; }
+.blocks .heading textarea { font-weight: 700; font-size: 1.2rem; }
+.blocks .embed { padding: 0.5rem 0.75rem; border: 1px dashed var(--line); border-radius: 6px; }

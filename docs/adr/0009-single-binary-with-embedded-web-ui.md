@@ -1,7 +1,7 @@
 # ADR-0009: A single binary with an embedded web UI
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators
 - **Open question:** Can the rich-text editor (e.g. ProseMirror or Tiptap) be shipped as one vendored, pre-built asset without making npm part of the Go build?
@@ -34,6 +34,8 @@ Proposed option: **3.**
 - The UI shell (routing, navigation, views for pages, issues, boards, search) is **plain HTML, CSS and ES-module JavaScript** without a bundler or framework.
 - The **rich-text editor** is the exception: a pre-built bundle of an established editor is **vendored** into the repository as one asset, with its license, and updated in a dedicated step. npm is a prerequisite only for that step, never for `go build`.
 - Should the UI outgrow the buildless shell, a bundler may be introduced by a new ADR; the output is still embedded, so the single-binary property holds.
+
+**Implementation so far** ([ADR-0024](0024-release-targets-and-container-image.md), [ADR-0031](0031-web-ui-shell.md)): one binary for every platform; a buildless UI shell over the item API. Not built: the vendored rich-text editor (the open question).
 
 ### Consequences
 

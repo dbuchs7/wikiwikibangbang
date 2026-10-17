@@ -12,3 +12,4 @@
 *.out
 Dockerfile
 .dockerignore
+e2e/

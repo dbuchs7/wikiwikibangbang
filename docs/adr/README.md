@@ -21,12 +21,12 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0006](0006-decision-record-states-and-open-questions.md) | A decision record has two states, and its open questions expire | Accepted | Landed |
 | [0007](0007-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Proposed | Not started |
 | [0008](0008-event-sourced-persistence.md) | Event-sourced persistence in an embedded store, with a single writer | Proposed | Partial |
-| [0009](0009-single-binary-with-embedded-web-ui.md) | A single binary with an embedded web UI | Proposed | Not started |
+| [0009](0009-single-binary-with-embedded-web-ui.md) | A single binary with an embedded web UI | Proposed | Partial |
 | [0010](0010-real-time-collaboration-with-block-locks.md) | Real-time collaboration starts with block-level locks, not a CRDT | Proposed | Not started |
 | [0011](0011-http-api-route-table-and-access-classes.md) | The HTTP API is one route table, described by OpenAPI, and every route declares its access class | Proposed | Partial |
 | [0012](0012-mcp-adapter-over-http-api.md) | An MCP server as an adapter over the HTTP API, acting as its caller | Proposed | Not started |
 | [0013](0013-authentication-and-security-boundary.md) | Authentication is required by default, behind one principal boundary | Proposed | Partial |
-| [0014](0014-closed-renderer-for-user-content.md) | User content is rendered by one closed renderer, never as raw HTML | Proposed | Not started |
+| [0014](0014-closed-renderer-for-user-content.md) | User content is rendered by one closed renderer, never as raw HTML | Proposed | Partial |
 | [0015](0015-resource-budgets-and-paged-listings.md) | One place names every resource budget, and a capped listing answers with a page | Proposed | Not started |
 | [0016](0016-metrics-and-backup.md) | Operational metrics behind authentication, and an allowlisted backup | Proposed | Not started |
 | [0017](0017-internationalisation-via-message-catalogue.md) | The UI is translated through a message catalogue, with English as source | Proposed | Not started |
@@ -43,3 +43,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0028](0028-item-api.md) | The item API exposes one command per request, through the permission model and one writer | Proposed | Partial |
 | [0029](0029-persisted-security-audit-trail.md) | The security audit trail is its own append-only journal | Proposed | Partial |
 | [0030](0030-openid-connect-single-sign-on.md) | Single sign-on through OpenID Connect, with go-oidc and just-in-time accounts without roles | Proposed | Partial |
+| [0031](0031-web-ui-shell.md) | The first web UI is a buildless shell over the item API, tested in a real browser | Proposed | Partial |

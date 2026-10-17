@@ -1,7 +1,7 @@
 # ADR-0014: User content is rendered by one closed renderer, never as raw HTML
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators
 
@@ -33,6 +33,8 @@ Proposed option: **3.**
 - **Import and paste** convert foreign formats into the block document on the server; unknown constructs become plain text or a visible "unsupported content" block, never pass-through markup.
 - The same renderer (or its server-side twin for exports and notifications) is used on every surface; its safety properties are tested against a real DOM.
 - A strict content-security policy is the second line of defence, not the first.
+
+**Implementation so far** ([ADR-0031](0031-web-ui-shell.md)): the UI creates every element through `assets/dom.js`, inserts text only as text and allowlists link targets; a test forbids markup-from-string APIs; a browser test saves hostile titles and bodies and fails on any dialog. Not built: a server-side renderer for exports and notifications.
 
 ### Consequences
 
