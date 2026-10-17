@@ -233,6 +233,9 @@ func (x *Session) editable(id ID) (*Item, error) {
 	if !x.s.canEdit(x.who, it) {
 		return nil, forbidden("%s may not edit %s", x.who, it.Key)
 	}
+	if it.Managed != "" {
+		return nil, forbidden("%s is managed by %s; change it in the source until cut-over", it.Key, it.Managed)
+	}
 	return it, nil
 }
 
@@ -242,7 +245,7 @@ func (x *Session) editableAll(root ID) error {
 		return err
 	}
 	for _, id := range x.s.subtree(root) {
-		if it := x.s.items[id]; it.Presence == Live && !x.s.canEdit(x.who, it) {
+		if it := x.s.items[id]; it.Presence == Live && (!x.s.canEdit(x.who, it) || it.Managed != "") {
 			return forbidden("%s may not edit %s below %s", x.who, it.Key, x.s.items[root].Key)
 		}
 	}

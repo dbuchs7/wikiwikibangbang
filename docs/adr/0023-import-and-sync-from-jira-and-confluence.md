@@ -100,6 +100,23 @@ Every run can be a **dry run** that writes nothing and produces a report: counts
   - Assumption to verify: the support horizon of Atlassian's Data Center products changes the urgency of export-file readers. Not verified.
   - Crypto-shredding (ADR-0008) also applies to retained raw source.
 
+## Prototype (2026-10-17)
+
+The data-model requirements are prototyped in `internal/item` (`import.go`: `Origin`, `Upsert`, `FindByOrigin`, key preservation, `Managed` and `Release`; raw source removed by purge and redaction; an `unsupported` block kind). The engine is prototyped in `internal/migrate`: the canonical source model (`Snapshot`), `Derive` for the default mapping, `ConvertStorage` for the Confluence storage format, and `Run` with dry run, two passes, idempotent re-runs, one-way sync marking and a report. Readers for real APIs and export files are **not** built; the `Snapshot` is the seam they plug into (open question).
+
+The acceptance test imports a Jira project (custom fields of five kinds and one unmappable one, a workflow, a sub-task, an issue link) and a Confluence space (page tree, Jira macro, page link, info macro, read restriction) into one space; the Jira macro becomes an embed of the imported issue. Re-running changes nothing; changed source objects are updated; refused objects and everything unmappable are reported. Three mutations of the engine (non-idempotent bodies, widened restrictions, macros not embedded) are caught.
+
+Found while prototyping:
+
+1. **Import sets state directly.** D3 says state changes only through transitions; an imported issue must arrive in its current source status. The prototype sets it directly, validated against the type's states, and AGENTS.md records this as the one exception to D3.
+2. **A shared space shares its key counter.** When a Jira project and a Confluence space map to the same space, pages and native items take keys after the highest imported issue key. During a sync, an issue created later in Jira can find its key already taken. It is then imported under a new key, its source key stays in the origin, and the report says so. Whether to map Jira projects and Confluence spaces to separate spaces during a sync, or to accept renamed keys, needs a decision.
+3. **Confluence links name their target by title.** Page links in storage format carry space and title, not an ID, so resolution is by title within the snapshot; a page renamed between runs breaks links until the next full run.
+4. **Lenient parsing is right for storage format.** Unclosed inline tags are recovered without loss, as in HTML; a body cut off inside a tag keeps the text before it and is reported. `<br>` becomes a line break.
+5. **Issue types without a workflow** import without a state; an existing type with the derived name is used as it is, and mismatches surface per item.
+6. **Removed in the source** is reported, never deleted (D8): a person decides to trash.
+7. **The dry run copies the store by replaying its log.** Correct, but its cost grows with the log; snapshots from ADR-0008 will be needed.
+8. Not yet built: readers, imported history (changelogs, page versions), attachments, comments, labels.
+
 ## Pros and cons of the options
 
 ### 1. Generic CSV import only

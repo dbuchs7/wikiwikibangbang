@@ -65,6 +65,10 @@ var reservedFields = map[string]bool{
 	"title": true, "state": true, "body": true,
 }
 
+// ReservedField reports whether a name is intrinsic to every item and so
+// cannot be used for a field. Importers use it to rename source fields.
+func ReservedField(name string) bool { return reservedFields[name] }
+
 var validKinds = map[FieldKind]bool{
 	KindText: true, KindNumber: true, KindBool: true, KindDate: true, KindUser: true, KindEnum: true,
 }

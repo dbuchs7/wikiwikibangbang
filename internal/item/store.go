@@ -30,6 +30,8 @@ type Store struct {
 	groups     map[string]map[string]bool // group -> members
 	spaceRoles map[string]map[string]Role // space -> principal or "@group" -> role
 	sysRoles   map[string]map[string]bool // principal -> system roles
+
+	bySource map[string]ID // Origin.key() -> imported item
 }
 
 type space struct {
@@ -61,6 +63,8 @@ func NewStore(opts ...Option) *Store {
 		groups:     map[string]map[string]bool{},
 		spaceRoles: map[string]map[string]Role{},
 		sysRoles:   map[string]map[string]bool{},
+
+		bySource: map[string]ID{},
 	}
 	for _, o := range opts {
 		o(s)
@@ -307,7 +311,7 @@ func (s *Store) CommitBody(actor string, id ID, d Doc) error {
 	}
 	for _, b := range d.Blocks {
 		switch b.Kind {
-		case Paragraph, Heading:
+		case Paragraph, Heading, Unsupported:
 		case Embed:
 			if b.Ref == "" || b.Ref == id {
 				return invalid("an embed needs a reference to another item")
@@ -571,6 +575,8 @@ func (s *Store) apply(e Event) {
 		touch(e.Members...)
 	case ItemPurged:
 		touch(s.purgeItems(e.Members...)...)
+	case ItemImported, ItemReleased:
+		s.applyImport(e, touch)
 	default:
 		s.applyAccess(e, touch)
 	}
@@ -588,6 +594,11 @@ func (s *Store) purgeItems(ids ...ID) []ID {
 		it := s.items[id]
 		it.Presence, it.trashedBy = Purged, 0
 		it.Title, it.Properties, it.Body = "", Props{}, Doc{}
+		if it.Origin != nil {
+			o := *it.Origin
+			o.Raw = ""
+			it.Origin = &o
+		}
 		it.Version++
 	}
 	for id, r := range s.rels {
@@ -662,6 +673,9 @@ func (s *Store) ByKey(key string) (Item, error) {
 	}
 	return s.Get(id)
 }
+
+// HasSpace reports whether a space exists.
+func (s *Store) HasSpace(key string) bool { _, ok := s.spaces[key]; return ok }
 
 // Type returns the latest version of a type, or the zero TypeDef.
 func (s *Store) Type(name string) TypeDef {

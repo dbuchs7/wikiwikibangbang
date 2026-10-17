@@ -12,7 +12,7 @@ wikiwikibangbang is an open-source application written in **Go** that unifies **
 
 The core idea is recorded in [ADR-0001](docs/adr/0001-unified-item-data-model.md): every piece of user-generated content is a typed **item** with properties, an optional document body, an optional workflow and typed relations. Pages and issues are item *types*, not separate systems.
 
-**Current state:** design phase. Besides the project's self-checks (ADR consistency, DCO rule) the module holds one product package: `internal/item`, an in-memory prototype of the item model of ADR-0001, built to test that ADR before persistence and collaboration are designed on top of it.
+**Current state:** design phase. Besides the project's self-checks (ADR consistency, DCO rule) the module holds two prototype packages: `internal/item`, the item model with lifecycle and permissions (ADR-0001, ADR-0020 to ADR-0022), and `internal/migrate`, the import engine (ADR-0023). Both are in memory; persistence (ADR-0008) is not built yet.
 
 ## Project language: English
 
@@ -31,7 +31,7 @@ These follow from ADR-0001. That ADR is currently **Proposed**, so the invariant
 
 1. **D1 – One model for content.** User-generated content is exclusively items. Never introduce a parallel domain object (`Page`, `Issue`, …) for a single content type. System objects (users, groups, spaces, type definitions) are exempt.
 2. **D2 – Stable identity.** Internal references (relations, document references, events) always use the immutable `id`, never the human-readable `key`.
-3. **D3 – Validated changes.** Properties are written only through schema-validated change commands; `state` changes only through workflow transitions.
+3. **D3 – Validated changes.** Properties are written only through schema-validated change commands; `state` changes only through workflow transitions. The one exception is an import (ADR-0023), which sets the source's current state directly — still validated against the type's states — because imported history is data, not a replay of transitions.
 4. **D4 – No shadow data in the document.** Anything queryable is a property. Relations derived from a document body are a deterministic function of the document version.
 5. **D5 – One containment parent.** Every item has at most one `parent`. Permission inheritance follows containment only; every other hierarchy is a typed relation.
 6. **D6 – Type-agnostic cross-cutting capabilities.** No type-specific code in search, permissions, history, comments or notifications.
@@ -75,6 +75,7 @@ go.mod             module github.com/dbuchs7/wikiwikibangbang
 cmd/dcocheck/      CLI that checks DCO sign-offs over a git range
 internal/dco/      DCO sign-off rules (humans only), with tests
 internal/item/     prototype of the unified item model (ADR-0001), in memory, event-sourced
+internal/migrate/  prototype of the Jira/Confluence import engine (ADR-0023)
 internal/repoconfig/ tests keeping ruleset and CI workflow consistent
 docs/adr/          architecture decision records, index in README.md, consistency tests
 ```
