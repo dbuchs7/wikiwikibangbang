@@ -5,6 +5,6 @@ This file is for Claude Code and other Anthropic agents.
 **Read [`AGENTS.md`](AGENTS.md) first — it is the canonical operating guide for this repository.** Guidance is not duplicated here so it cannot drift out of sync. The points that must never be missed:
 
 - **English is the project language.** Everything committed — code, comments, docs, ADRs, commit messages, pull requests — is written in English, whatever language the request was made in.
-- **Honour the invariants D1–D8** in `AGENTS.md`. If a task seems to require breaking one, stop and say so rather than working around it.
+- **Honour the invariants D1–D10** in `AGENTS.md`. If a task seems to require breaking one, stop and say so rather than working around it.
 - **Never write a `Signed-off-by` line** — not in commits, pull request descriptions or comments. The DCO sign-off is reserved for the responsible human; agents credit themselves only with `Co-Authored-By`.
 - **When in doubt about *why*, read the relevant [ADR](docs/adr/).**

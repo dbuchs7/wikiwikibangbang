@@ -26,6 +26,10 @@ type Store struct {
 	keys     map[string]ID // current and former keys (D2)
 	rels     map[ID]*Relation
 	touching map[ID][]int // item -> indexes into log, for History
+
+	groups     map[string]map[string]bool // group -> members
+	spaceRoles map[string]map[string]Role // space -> principal or "@group" -> role
+	sysRoles   map[string]map[string]bool // principal -> system roles
 }
 
 type space struct {
@@ -53,6 +57,10 @@ func NewStore(opts ...Option) *Store {
 		keys:     map[string]ID{},
 		rels:     map[ID]*Relation{},
 		touching: map[ID][]int{},
+
+		groups:     map[string]map[string]bool{},
+		spaceRoles: map[string]map[string]Role{},
+		sysRoles:   map[string]map[string]bool{},
 	}
 	for _, o := range opts {
 		o(s)
@@ -562,25 +570,33 @@ func (s *Store) apply(e Event) {
 		}
 		touch(e.Members...)
 	case ItemPurged:
-		purged := map[ID]bool{}
-		for _, id := range e.Members {
-			purged[id] = true
-			it := s.items[id]
-			it.Presence, it.trashedBy = Purged, 0
-			it.Title, it.Properties, it.Body = "", Props{}, Doc{}
-			it.Version++
-		}
-		touch(e.Members...)
-		for id, r := range s.rels {
-			// Hand-made relations touching a purged item go; derived ones go
-			// with the purged body. Derived relations from live bodies stay:
-			// they are a function of those bodies (D4).
-			if (!r.Derived && (purged[r.From] || purged[r.To])) || (r.Derived && purged[r.From]) {
-				touch(r.From, r.To)
-				delete(s.rels, id)
-			}
+		touch(s.purgeItems(e.Members...)...)
+	default:
+		s.applyAccess(e, touch)
+	}
+}
+
+// purgeItems turns items into tombstones and returns every item whose
+// relations changed. Hand-made relations touching a purged item go; derived
+// ones go with the purged body. Derived relations from live bodies stay: they
+// are a function of those bodies (D4).
+func (s *Store) purgeItems(ids ...ID) []ID {
+	purged := map[ID]bool{}
+	touched := slices.Clone(ids)
+	for _, id := range ids {
+		purged[id] = true
+		it := s.items[id]
+		it.Presence, it.trashedBy = Purged, 0
+		it.Title, it.Properties, it.Body = "", Props{}, Doc{}
+		it.Version++
+	}
+	for id, r := range s.rels {
+		if (!r.Derived && (purged[r.From] || purged[r.To])) || (r.Derived && purged[r.From]) {
+			touched = append(touched, r.From, r.To)
+			delete(s.rels, id)
 		}
 	}
+	return touched
 }
 
 func (s *Store) assignKey(it *Item) {

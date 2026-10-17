@@ -34,3 +34,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0019](0019-dco-enforcement-suspended.md) | DCO enforcement is suspended until the maintainer switches it on | Accepted | Landed |
 | [0020](0020-embedding-and-containment-are-independent.md) | Embedding shows an item, containment places it — the two stay independent | Proposed | Not started |
 | [0021](0021-deletion-only-when-unreferenced.md) | Deletion only when unreferenced, then trash, then purge | Accepted | Partial |
+| [0022](0022-permission-model.md) | Space roles, narrowing restrictions, and a logged erasure role | Proposed | Not started |

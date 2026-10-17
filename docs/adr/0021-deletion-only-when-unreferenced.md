@@ -115,4 +115,4 @@ Strongest form: deletion is never blocked; whoever deletes does not depend on ow
 ## Links
 
 - refines [ADR-0001](0001-unified-item-data-model.md) ("Prototype findings", point 6; D2, D4, D5)
-- relates to [ADR-0008](0008-event-sourced-persistence.md) (erasure in an append-only log), [ADR-0020](0020-embedding-and-containment-are-independent.md) (children and embeds)
+- relates to [ADR-0008](0008-event-sourced-persistence.md) (erasure in an append-only log), [ADR-0020](0020-embedding-and-containment-are-independent.md) (children and embeds), [ADR-0022](0022-permission-model.md) (who may trash, restore, purge; redaction as the logged exception to D8)

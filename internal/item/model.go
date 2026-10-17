@@ -22,6 +22,10 @@ var (
 	// ErrReferenced refuses a deletion while live items outside the deleted
 	// subtree still point into it (ADR-0021). It also matches ErrValidation.
 	ErrReferenced = errors.New("still referenced")
+	// ErrForbidden refuses a command the principal may see but not perform.
+	// Where the principal may not even read the item, ErrNotFound is
+	// returned instead, so that existence does not leak (ADR-0022).
+	ErrForbidden = errors.New("forbidden")
 )
 
 // ID is the immutable identity of an item or relation (D2).
@@ -83,6 +87,9 @@ type Item struct {
 	// Version counts the changes to the item itself.
 	Version  int
 	Presence Presence
+	// Restriction narrows who may read or edit the item and everything
+	// below it (ADR-0022). It is access data, not content: purge keeps it.
+	Restriction Restriction
 
 	created   int // sequence number of the creating event; orders items
 	trashedBy int // sequence number of the event that trashed it, or 0
@@ -97,6 +104,9 @@ type EmbedView struct {
 	Title    string
 	Child    bool
 	Presence Presence
+	// Restricted is set when the viewer may not read the target; Ref, Key
+	// and Title are then empty (ADR-0022).
+	Restricted bool
 }
 
 // Relation is a typed, directed edge between two items. Derived relations
@@ -131,19 +141,24 @@ type EventKind string
 
 // The event kinds.
 const (
-	TypeDefined     EventKind = "TypeDefined"
-	SpaceCreated    EventKind = "SpaceCreated"
-	ItemCreated     EventKind = "ItemCreated"
-	TitleSet        EventKind = "TitleSet"
-	PropertySet     EventKind = "PropertySet"
-	Transitioned    EventKind = "Transitioned"
-	ItemMoved       EventKind = "ItemMoved"
-	BodyCommitted   EventKind = "BodyCommitted"
-	RelationAdded   EventKind = "RelationAdded"
-	RelationRemoved EventKind = "RelationRemoved"
-	ItemTrashed     EventKind = "ItemTrashed"
-	ItemRestored    EventKind = "ItemRestored"
-	ItemPurged      EventKind = "ItemPurged"
+	TypeDefined       EventKind = "TypeDefined"
+	SpaceCreated      EventKind = "SpaceCreated"
+	ItemCreated       EventKind = "ItemCreated"
+	TitleSet          EventKind = "TitleSet"
+	PropertySet       EventKind = "PropertySet"
+	Transitioned      EventKind = "Transitioned"
+	ItemMoved         EventKind = "ItemMoved"
+	BodyCommitted     EventKind = "BodyCommitted"
+	RelationAdded     EventKind = "RelationAdded"
+	RelationRemoved   EventKind = "RelationRemoved"
+	ItemTrashed       EventKind = "ItemTrashed"
+	ItemRestored      EventKind = "ItemRestored"
+	ItemPurged        EventKind = "ItemPurged"
+	ItemRedacted      EventKind = "ItemRedacted"
+	GroupMemberAdded  EventKind = "GroupMemberAdded"
+	RoleGranted       EventKind = "RoleGranted"
+	SystemRoleGranted EventKind = "SystemRoleGranted"
+	RestrictionSet    EventKind = "RestrictionSet"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -175,6 +190,13 @@ type Event struct {
 	Body        *Doc     // BodyCommitted
 	Relation    *Relation
 	Members     []ID // ItemTrashed, ItemRestored, ItemPurged: every item affected
+
+	Group       string       // GroupMemberAdded
+	Principal   string       // GroupMemberAdded, RoleGranted, SystemRoleGranted
+	Role        Role         // RoleGranted
+	SystemRole  string       // SystemRoleGranted
+	Restriction *Restriction // RestrictionSet
+	Reason      string       // ItemRedacted
 }
 
 func (it *Item) clone() Item {
