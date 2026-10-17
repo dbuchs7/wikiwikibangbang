@@ -63,6 +63,8 @@ func TestPublicRoutes(t *testing.T) {
 		{"/", "200", "text/html", `<main id="app">`},
 		{"/assets/app.js", "200", "javascript", "/api/me"},
 		{"/assets/style.css", "200", "text/css", "color-scheme"},
+		{"/vendor/prosemirror.js", "200", "javascript", "EditorView"},
+		{"/vendor/prosemirror.LICENSE.txt", "200", "text/plain", "MIT"},
 	}
 	for _, c := range cases {
 		rec := get(t, h, c.path)

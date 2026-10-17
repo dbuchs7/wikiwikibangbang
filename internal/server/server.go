@@ -65,6 +65,7 @@ func Routes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},
 		{Method: http.MethodGet, Pattern: "/{$}", Summary: "Web UI entry point", Access: Public, Handler: index(d.UI)},
 		{Method: http.MethodGet, Pattern: "/assets/", Summary: "Web UI assets", Access: Public, Handler: noListing(files)},
+		{Method: http.MethodGet, Pattern: "/vendor/", Summary: "Vendored UI libraries and their licenses (ADR-0032)", Access: Public, Handler: noListing(files)},
 	}
 	routes = append(routes, authRoutes(d)...)
 	routes = append(routes, oidcRoutes(d)...)

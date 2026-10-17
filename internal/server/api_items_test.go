@@ -3,8 +3,12 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
 
 // world sets up an administrator, a task type, the space PLAT and the users
@@ -12,12 +16,13 @@ import (
 type world struct {
 	admin, bert, vera, carla *client
 	ids                      map[string]string
+	db                       *storage.DB
 }
 
 func newWorld(t *testing.T) world {
 	t.Helper()
-	h, _ := setupAuth(t)
-	w := world{admin: &client{t: t, h: h}, ids: map[string]string{}}
+	h, d := setupAuth(t)
+	w := world{admin: &client{t: t, h: h}, ids: map[string]string{}, db: d.DB}
 	w.admin.login("admin", adminPassword)
 	w.admin.expect("POST", "/api/types", `{"name":"task","body":true,"fields":[
 		{"name":"priority","kind":"enum","required":true,"values":["low","high"]},
@@ -226,7 +231,8 @@ func TestTheAPIRefusesBadInput(t *testing.T) {
 		{"GET", "/api/items/nope", "", http.StatusNotFound},
 		{"PUT", "/api/items/nope/title", `{"title":"x"}`, http.StatusNotFound},
 		{"PUT", "/api/items/nope/title", `{"title":`, http.StatusBadRequest},
-		{"PUT", "/api/items/nope/body", `{"blocks":[{"kind":"unsupported","text":"<script>"}]}`, http.StatusBadRequest},
+		{"PUT", "/api/items/nope/body", `{"blocks":[{"kind":"unsupported","text":"<script>"}]}`, http.StatusNotFound}, // the item first
+		{"PUT", "/api/items/nope/body", `{"blocks":[{"kind":"paragraph","marks":[{"type":"bold","start":"x"}]}]}`, http.StatusBadRequest},
 		{"PUT", "/api/spaces/PLAT/roles/x", `{"role":"owner"}`, http.StatusBadRequest},
 		{"GET", "/api/items/nope/relations?direction=sideways", "", http.StatusBadRequest},
 		{"GET", "/api/items/nope/relations", "", http.StatusNotFound},
@@ -281,4 +287,48 @@ func TestTypesAndOpenAPI(t *testing.T) {
 	if login := field(doc, "paths", "/api/login", "post").(map[string]any); login["security"] != nil {
 		t.Error("the public login route is described as needing a credential")
 	}
+}
+
+func TestRichTextThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	b := w.bert
+	task := field(b.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Patch","properties":{"priority":"low"}}`, http.StatusCreated), "item", "id").(string)
+	page := field(b.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Runbook","properties":{"priority":"low"}}`, http.StatusCreated), "item", "id").(string)
+	body := `{"blocks":[
+		{"kind":"heading","level":2,"text":"Steps"},
+		{"kind":"paragraph","text":"Ask @PLAT-1 or see the guide","marks":[
+			{"type":"bold","start":0,"end":3},
+			{"type":"mention","start":4,"end":11,"ref":"` + task + `"},
+			{"type":"link","start":23,"end":28,"href":"https://example.org/guide"}]},
+		{"kind":"bullet","text":"one"},{"kind":"ordered","text":"two"},
+		{"kind":"quote","text":"q"},{"kind":"code","text":"go test"}]}`
+	got := b.expect("PUT", "/api/items/"+page+"/body", body, http.StatusOK)
+	blocks := field(got, "item", "body").([]any)
+	p := blocks[1].(map[string]any)
+	if len(p["marks"].([]any)) != 3 || p["mentions"].([]any)[0] != task || blocks[0].(map[string]any)["level"] != 2.0 {
+		t.Fatalf("body %v", blocks[:2])
+	}
+	// The mention mark alone relates the page to the task.
+	inc := b.expect("GET", "/api/items/"+task+"/relations?direction=incoming", "", http.StatusOK)
+	if len(inc["relations"].([]any)) != 1 {
+		t.Fatalf("incoming %v", inc)
+	}
+	b.expect("PUT", "/api/items/"+page+"/body", `{"blocks":[{"kind":"paragraph","text":"x","marks":[{"type":"link","start":0,"end":1,"href":"javascript:alert(1)"}]}]}`, http.StatusBadRequest)
+}
+
+// TestImportedUnsupportedBlocksCanBeKeptNotAdded: the editor saves a body
+// with the unsupported blocks it was given (ADR-0023, ADR-0032).
+func TestImportedUnsupportedBlocksCanBeKeptNotAdded(t *testing.T) {
+	w := newWorld(t)
+	id := field(w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"x","properties":{"priority":"low"}}`, http.StatusCreated), "item", "id").(string)
+	raw := "<table><tr><td>a</td></tr></table>"
+	var itemID item.ID = item.ID(id)
+	if err := w.db.Write(func(s *item.Store) error {
+		return s.CommitBody("import", itemID, item.Doc{Blocks: []item.Block{{Kind: item.Unsupported, Text: raw}}})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	keep := `{"blocks":[{"kind":"paragraph","text":"intro"},{"kind":"unsupported","text":` + strconv.Quote(raw) + `}]}`
+	w.bert.expect("PUT", "/api/items/"+id+"/body", keep, http.StatusOK)
+	w.bert.expect("PUT", "/api/items/"+id+"/body", `{"blocks":[{"kind":"unsupported","text":"<b>new</b>"}]}`, http.StatusBadRequest)
 }

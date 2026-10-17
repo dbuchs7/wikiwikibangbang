@@ -1,12 +1,28 @@
 # Third-party notices
 
-wikiwikibangbang is licensed under AGPL-3.0-only (see `LICENSE`). The binary includes the following third-party modules. Their licenses are compatible with AGPL-3.0 (Apache-2.0 and BSD-3-Clause may be combined with GPLv3-family licenses). `internal/repoconfig` checks that this file names every module in `go.mod`.
+wikiwikibangbang is licensed under AGPL-3.0-only (see `LICENSE`). The binary includes the following third-party modules. Their licenses are compatible with AGPL-3.0 (Apache-2.0 and BSD-3-Clause and MIT may be combined with GPLv3-family licenses). `internal/repoconfig` checks that this file names every module in `go.mod`.
 
 | Module | Version | License |
 |---|---|---|
 | github.com/coreos/go-oidc/v3 | v3.21.0 | Apache-2.0 |
 | github.com/go-jose/go-jose/v4 | v4.1.4 | Apache-2.0 |
 | golang.org/x/oauth2 | v0.37.0 | BSD-3-Clause |
+
+The web UI embeds a bundle of these JavaScript packages, built from `internal/web/vendor` (ADR-0032); `internal/web/static/vendor/prosemirror.LICENSE.txt` ships next to it:
+
+| Package | Version | License |
+|---|---|---|
+| orderedmap | 2.1.1 | MIT |
+| prosemirror-commands | 1.7.2 | MIT |
+| prosemirror-history | 1.5.1 | MIT |
+| prosemirror-inputrules | 1.5.1 | MIT |
+| prosemirror-keymap | 1.2.3 | MIT |
+| prosemirror-model | 1.25.12 | MIT |
+| prosemirror-state | 1.4.4 | MIT |
+| prosemirror-transform | 1.12.2 | MIT |
+| prosemirror-view | 1.42.6 | MIT |
+| rope-sequence | 1.3.4 | MIT |
+| w3c-keyname | 2.2.8 | MIT |
 
 The Go standard library and runtime are under the BSD-3-Clause license of the Go project.
 

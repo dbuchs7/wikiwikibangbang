@@ -1,6 +1,7 @@
 package server
 
 import (
+	"slices"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
@@ -71,24 +72,56 @@ type spaceJSON struct {
 	Name string `json:"name"`
 }
 
+type markJSON struct {
+	Type  item.MarkType `json:"type"`
+	Start int           `json:"start"`
+	End   int           `json:"end"`
+	Href  string        `json:"href,omitempty"`
+	Ref   item.ID       `json:"ref,omitempty"`
+}
+
 type blockJSON struct {
 	Kind     item.BlockKind `json:"kind"`
 	Text     string         `json:"text,omitempty"`
+	Level    int            `json:"level,omitempty"`
+	Marks    []markJSON     `json:"marks,omitempty"`
 	Mentions []item.ID      `json:"mentions,omitempty"`
 	Ref      item.ID        `json:"ref,omitempty"`
 }
 
-// toDoc accepts the block kinds a person writes; "unsupported" blocks come
-// only from importers (ADR-0023).
-func toDoc(blocks []blockJSON) (item.Doc, error) {
+func toBlockJSON(b item.Block) blockJSON {
+	j := blockJSON{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref}
+	for _, m := range b.Marks {
+		j.Marks = append(j.Marks, markJSON{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})
+	}
+	return j
+}
+
+// toDoc accepts the block kinds a person writes. "unsupported" blocks come
+// only from importers (ADR-0023): a person may keep one that the current
+// body already has (kept reports it), never add one. A block mentions every
+// item a mention mark points to, so derived relations follow the marks
+// (ADR-0032).
+func toDoc(blocks []blockJSON, kept func(text string) bool) (item.Doc, error) {
 	var d item.Doc
 	for i, b := range blocks {
 		switch b.Kind {
-		case item.Paragraph, item.Heading, item.Embed:
+		case item.Paragraph, item.Heading, item.Embed, item.BulletItem, item.OrderedItem, item.Quote, item.CodeBlock:
+		case item.Unsupported:
+			if kept == nil || !kept(b.Text) {
+				return d, badInput("block %d: unsupported blocks come only from imports", i+1)
+			}
 		default:
-			return d, badInput("block %d: kind must be paragraph, heading or embed", i+1)
+			return d, badInput("block %d: kind must be paragraph, heading, bullet, ordered, quote, code or embed", i+1)
 		}
-		d.Blocks = append(d.Blocks, item.Block{Kind: b.Kind, Text: b.Text, Mentions: b.Mentions, Ref: b.Ref})
+		blk := item.Block{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref}
+		for _, m := range b.Marks {
+			blk.Marks = append(blk.Marks, item.Mark{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})
+			if m.Type == item.MarkMention && m.Ref != "" && !slices.Contains(blk.Mentions, m.Ref) {
+				blk.Mentions = append(blk.Mentions, m.Ref)
+			}
+		}
+		d.Blocks = append(d.Blocks, blk)
 	}
 	return d, nil
 }
@@ -134,7 +167,7 @@ func toItemJSON(it item.Item) itemJSON {
 		j.Properties = map[string]any{}
 	}
 	for _, b := range it.Body.Blocks {
-		j.Body = append(j.Body, blockJSON{Kind: b.Kind, Text: b.Text, Mentions: b.Mentions, Ref: b.Ref})
+		j.Body = append(j.Body, toBlockJSON(b))
 	}
 	if len(it.Restriction.Read)+len(it.Restriction.Edit) > 0 {
 		j.Restriction = &restrictionJSON{Read: it.Restriction.Read, Edit: it.Restriction.Edit}

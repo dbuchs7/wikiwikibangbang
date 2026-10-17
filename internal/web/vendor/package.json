@@ -1,0 +1,17 @@
+{
+  "name": "wikiwikibangbang-vendor",
+  "private": true,
+  "description": "Builds the vendored editor bundle in ../static/vendor (ADR-0032). Needed only to update it; go build never runs it.",
+  "license": "AGPL-3.0-only",
+  "scripts": { "build": "sh build.sh" },
+  "dependencies": {
+    "prosemirror-commands": "1.7.2",
+    "prosemirror-history": "1.5.1",
+    "prosemirror-inputrules": "1.5.1",
+    "prosemirror-keymap": "1.2.3",
+    "prosemirror-model": "1.25.12",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-view": "1.42.6"
+  },
+  "devDependencies": { "esbuild": "0.28.2" }
+}

@@ -70,17 +70,56 @@ function check(cond, msg) {
     check(await page.inputValue("#title [name=title]") === hostile, "the title shows as typed");
     check(page.url().endsWith("#/item/PLAT-1"), "the item is addressed by key");
 
-    step("edit property, transition, body");
+    step("edit property, transition");
     await page.fill("[name='p:estimate']", "2.5");
     await page.click("tr:has-text('estimate') button");
     await page.waitForSelector("text=version 2");
     await page.click("button:has-text('finish')");
     await page.waitForSelector("text=state: done");
-    await page.click("text=Add paragraph");
-    await page.fill("#body textarea", "<script>alert('body')</script> plain text");
+
+    step("rich text: a second item with formatting, a list, a mention and an embed");
+    await page.click("a:has-text('PLAT')");
+    await page.fill("#new-item [name=title]", "Runbook");
+    await page.selectOption("#new-item [name='p:priority']", "low");
+    await page.click("#new-item button[type=submit]");
+    await page.waitForSelector(".ProseMirror");
+    const editor = page.locator(".ProseMirror");
+    await editor.click();
+    await page.keyboard.type("Steps");
+    await page.selectOption(".pm-toolbar select", "heading:2");
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("- first item");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("second item");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter"); // an empty item ends the list
+    await page.keyboard.press("Control+b");
+    await page.keyboard.type("Bold");
+    await page.keyboard.press("Control+b");
+    await page.keyboard.type(" <script>alert('body')</script> see ");
+    await page.fill(".pm-target", "PLAT-1");
+    await page.click(".pm-toolbar button:has-text('Mention')");
+    await page.waitForSelector(".ProseMirror .pm-mention"); // resolving the key is asynchronous
+    await page.fill(".pm-target", "PLAT-1");
+    await page.click(".pm-toolbar button:has-text('Embed')");
+    await page.waitForSelector(".ProseMirror .pm-embed");
     await page.click("text=Save body");
-    await page.waitForSelector("text=BodyCommitted");
-    check((await page.inputValue("#body textarea")).startsWith("<script>"), "the body shows as typed");
+    await page.waitForSelector("td:has-text('BodyCommitted')");
+
+    step("the body survives a reload exactly");
+    await page.reload();
+    await page.waitForSelector(".ProseMirror h3");
+    check((await page.textContent(".ProseMirror h3")) === "Steps", "heading level 2 renders as h3 under the title");
+    check(await page.locator(".pm-bullet").count() === 2, "two bulleted items");
+    check((await page.textContent(".ProseMirror strong")) === "Bold", "bold text");
+    check((await page.textContent(".pm-mention")) === "@PLAT-1", "the mention");
+    check((await page.textContent(".pm-embed")).includes("PLAT-1"), "the embed");
+    check((await editor.textContent()).includes("<script>alert('body')</script>"), "the script shows as text");
+
+    step("the mention relates the items");
+    await page.click(".pm-mention");
+    await page.waitForSelector("text=mentions (from the body)");
 
     step("account: token");
     await page.click("nav a[href='#/account']");

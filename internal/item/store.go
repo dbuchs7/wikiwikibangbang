@@ -5,11 +5,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"maps"
+	"net/url"
 	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Store holds items, relations and the event log in memory. Commands
@@ -333,15 +335,9 @@ func (s *Store) CommitBody(actor string, id ID, d Doc) error {
 	if td, _ := s.latest(it.Type); !td.Body {
 		return invalid("type %q has no body", td.Name)
 	}
-	for _, b := range d.Blocks {
-		switch b.Kind {
-		case Paragraph, Heading, Unsupported:
-		case Embed:
-			if b.Ref == "" || b.Ref == id {
-				return invalid("an embed needs a reference to another item")
-			}
-		default:
-			return invalid("unknown block kind %q", b.Kind)
+	for i, b := range d.Blocks {
+		if err := checkBlock(b, id); err != nil {
+			return wrapf(err, "block %d", i+1)
 		}
 	}
 	// A body may keep references to items that were deleted since its last
@@ -832,4 +828,66 @@ func (s *Store) subtree(root ID) []ID {
 		}
 	}
 	return out
+}
+
+// checkBlock validates one block of a body (ADR-0001, ADR-0032).
+func checkBlock(b Block, self ID) error {
+	switch b.Kind {
+	case Paragraph, Heading, Unsupported, BulletItem, OrderedItem, Quote, CodeBlock:
+	case Embed:
+		if b.Ref == "" || b.Ref == self {
+			return invalid("an embed needs a reference to another item")
+		}
+		if len(b.Marks) > 0 || b.Text != "" {
+			return invalid("an embed has no text")
+		}
+	default:
+		return invalid("unknown block kind %q", b.Kind)
+	}
+	if b.Kind != Heading && b.Level != 0 || b.Level < 0 || b.Level > 3 {
+		return invalid("level %d: only headings have a level, 1 to 3", b.Level)
+	}
+	if len(b.Marks) > 0 && (b.Kind == CodeBlock || b.Kind == Unsupported) {
+		return invalid("a %s block has no formatting", b.Kind)
+	}
+	n := utf8.RuneCountInString(b.Text)
+	for _, m := range b.Marks {
+		if m.Start < 0 || m.End <= m.Start || m.End > n {
+			return invalid("mark %s %d-%d is outside the text of %d characters", m.Type, m.Start, m.End, n)
+		}
+		switch m.Type {
+		case MarkBold, MarkItalic, MarkCode:
+			if m.Href != "" || m.Ref != "" {
+				return invalid("a %s mark has no target", m.Type)
+			}
+		case MarkLink:
+			if !SafeHref(m.Href) || m.Ref != "" {
+				return invalid("link target %q must be an http, https or mailto URL", m.Href)
+			}
+		case MarkMention:
+			if m.Ref == "" || m.Href != "" || !slices.Contains(b.Mentions, m.Ref) {
+				return invalid("a mention mark needs a reference that the block mentions")
+			}
+		default:
+			return invalid("unknown mark %q", m.Type)
+		}
+	}
+	return nil
+}
+
+// SafeHref reports whether a link target is allowed in content: http,
+// https and mailto URLs only (ADR-0014). javascript:, data: and relative
+// targets are refused.
+func SafeHref(href string) bool {
+	u, err := url.Parse(href)
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+		return u.Host != ""
+	case "mailto":
+		return u.Opaque != ""
+	}
+	return false
 }

@@ -47,7 +47,35 @@ const (
 	// the original markup, which renders as visible text, never as markup
 	// (ADR-0014, ADR-0023).
 	Unsupported BlockKind = "unsupported"
+	// Rich-text block kinds (ADR-0032). List items are flat blocks, not
+	// nested lists; consecutive items render as one list.
+	BulletItem  BlockKind = "bullet"
+	OrderedItem BlockKind = "ordered"
+	Quote       BlockKind = "quote"
+	CodeBlock   BlockKind = "code"
 )
+
+// MarkType is an inline format over a range of a block's text (ADR-0032).
+type MarkType string
+
+const (
+	MarkBold    MarkType = "bold"
+	MarkItalic  MarkType = "italic"
+	MarkCode    MarkType = "code"
+	MarkLink    MarkType = "link"    // Href holds the target
+	MarkMention MarkType = "mention" // Ref names the mentioned item
+)
+
+// Mark formats the text between Start and End, counted in Unicode code
+// points of the block's Text. The text itself stays plain, so search and
+// derived relations need no markup (D4).
+type Mark struct {
+	Type  MarkType
+	Start int
+	End   int
+	Href  string `json:",omitempty"`
+	Ref   ID     `json:",omitempty"`
+}
 
 // Block is one block of a document body. Mentions and Ref point at items by
 // ID; the body never holds another item's data (D4).
@@ -56,6 +84,9 @@ type Block struct {
 	Text     string
 	Mentions []ID
 	Ref      ID
+	// Level is a heading's level, 1 to 3; 0 reads as 1 (ADR-0032).
+	Level int    `json:",omitempty"`
+	Marks []Mark `json:",omitempty"`
 }
 
 // Doc is a structured document body (ADR-0001: a block document, not HTML
@@ -262,6 +293,7 @@ func (d Doc) clone() Doc {
 	blocks := make([]Block, len(d.Blocks))
 	for i, b := range d.Blocks {
 		b.Mentions = slices.Clone(b.Mentions)
+		b.Marks = slices.Clone(b.Marks)
 		blocks[i] = b
 	}
 	return Doc{Blocks: blocks}

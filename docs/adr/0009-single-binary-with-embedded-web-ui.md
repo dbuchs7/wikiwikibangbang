@@ -4,8 +4,6 @@
 - **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
-- **Open question:** Can the rich-text editor (e.g. ProseMirror or Tiptap) be shipped as one vendored, pre-built asset without making npm part of the Go build?
-- **Question checked:** 2026-10
 
 ## Context and problem statement
 
@@ -35,13 +33,13 @@ Chosen option: **3.**
 - The **rich-text editor** is the exception: a pre-built bundle of an established editor is **vendored** into the repository as one asset, with its license, and updated in a dedicated step. npm is a prerequisite only for that step, never for `go build`.
 - Should the UI outgrow the buildless shell, a bundler may be introduced by a new ADR; the output is still embedded, so the single-binary property holds.
 
-**Implementation so far** ([ADR-0024](0024-release-targets-and-container-image.md), [ADR-0031](0031-web-ui-shell.md)): one binary for every platform; a buildless UI shell over the item API. Not built: the vendored rich-text editor (the open question).
+**Implementation so far** ([ADR-0024](0024-release-targets-and-container-image.md), [ADR-0031](0031-web-ui-shell.md)): one binary for every platform; a buildless UI shell over the item API; the rich-text editor, ProseMirror, vendored as one pre-built bundle ([ADR-0032](0032-prosemirror-rich-text-editor.md)), which answers this record's former open question.
 
 ### Consequences
 
 - **Positive:** trivial installation and upgrades; no runtime dependencies; the Go build stays self-contained; consistent with atlas.
 - **Negative / trade-offs accepted:** more manual DOM code than with a framework; the vendored editor bundle is an opaque artifact that must be rebuilt and reviewed on updates; content-security policy and asset embedding must be maintained.
-- **Follow-ups / risks to watch:** the open question decides whether option 3 is feasible for a Confluence-class editor; the editor UI is likely the largest front-end component and the strongest pressure towards a bundler.
+- **Follow-ups / risks to watch:** ADR-0032 showed that option 3 is feasible for the editor; the editor UI is likely the largest front-end component and the strongest pressure towards a bundler.
 
 ## Pros and cons of the options
 

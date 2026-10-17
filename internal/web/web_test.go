@@ -8,7 +8,8 @@ import (
 )
 
 func TestEmbeddedUIHasEntryPointAndAssets(t *testing.T) {
-	for _, name := range []string{"index.html", "assets/app.js", "assets/api.js", "assets/dom.js", "assets/style.css"} {
+	for _, name := range []string{"index.html", "assets/app.js", "assets/api.js", "assets/dom.js", "assets/editor.js", "assets/style.css",
+		"vendor/prosemirror.js", "vendor/prosemirror.LICENSE.txt"} {
 		if _, err := fs.Stat(FS(), name); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -24,6 +25,13 @@ func TestNoMarkupFromStrings(t *testing.T) {
 	err := fs.WalkDir(FS(), ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !(strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".html")) {
 			return err
+		}
+		// The vendored ProseMirror bundle parses pasted HTML into a detached
+		// document, where nothing runs, and keeps only what the editor's
+		// schema allows (ADR-0032). It is third-party code, reviewed when it
+		// is updated, not written here.
+		if strings.HasPrefix(path, "vendor/") {
+			return nil
 		}
 		data, err := fs.ReadFile(FS(), path)
 		if err != nil {

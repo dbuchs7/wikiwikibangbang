@@ -17,7 +17,9 @@ import (
 //   - 1: plaintext events.
 //   - 2: content may be sealed with a key per item, and events may be marked
 //     erased (ADR-0026). Version 1 events are still read.
-const CodecVersion = 2
+//   - 3: body blocks may carry a heading level, marks, and the kinds bullet,
+//     ordered, quote and code (ADR-0032). Versions 1 and 2 are still read.
+const CodecVersion = 3
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

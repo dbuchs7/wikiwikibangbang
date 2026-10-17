@@ -55,8 +55,8 @@ type converter struct {
 	blocks   []item.Block
 	problems []string
 
-	cur    *item.Block // block being filled with text, or nil
-	prefix string      // prepended to the next block's text ("• " in lists)
+	cur   *item.Block      // block being filled with text, or nil
+	lists []item.BlockKind // enclosing lists, innermost last (ADR-0032)
 }
 
 func name(n xml.Name) string {
@@ -77,7 +77,7 @@ func attr(se xml.StartElement, space, local string) string {
 
 func (c *converter) open(kind item.BlockKind) {
 	c.flush()
-	c.cur = &item.Block{Kind: kind, Text: c.prefix}
+	c.cur = &item.Block{Kind: kind}
 }
 
 func (c *converter) text(s string) {
@@ -151,20 +151,38 @@ func (c *converter) element(se xml.StartElement, start int) error {
 	switch {
 	case n == "p" || n == "blockquote" || headingTags[n]:
 		kind := item.Paragraph
-		if headingTags[n] {
+		switch {
+		case headingTags[n]:
 			kind = item.Heading
+		case n == "blockquote":
+			kind = item.Quote
+		case n == "p" && len(c.lists) > 0 && c.cur != nil && c.cur.Text == "":
+			// A paragraph directly inside a list item continues the item.
+			return c.children()
 		}
 		c.open(kind)
+		if headingTags[n] {
+			c.cur.Level = min(int(n[1]-'0'), 3) // h4 to h6 become level 3
+		}
 		err := c.children()
 		c.flush()
 		return err
 	case n == "ul" || n == "ol":
 		c.flush()
-		return c.children()
+		kind := item.BulletItem
+		if n == "ol" {
+			kind = item.OrderedItem
+		}
+		c.lists = append(c.lists, kind)
+		err := c.children()
+		c.lists = c.lists[:len(c.lists)-1]
+		return err
 	case n == "li":
-		c.prefix = "• "
-		c.open(item.Paragraph)
-		c.prefix = ""
+		kind := item.BulletItem
+		if len(c.lists) > 0 {
+			kind = c.lists[len(c.lists)-1]
+		}
+		c.open(kind)
 		err := c.children()
 		c.flush()
 		return err

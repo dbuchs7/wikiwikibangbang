@@ -74,7 +74,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":3,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":4,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -139,7 +139,18 @@ func TestPersistedFormatIsStable(t *testing.T) {
 			t.Errorf("the golden log has no %s event; extend everyKindLog", k)
 		}
 	}
-	for name, sl := range map[string]Sealer{"events.v2.golden.jsonl": nil, "events.v2.sealed.golden.jsonl": fakeSealer{}} {
+	rich := richTextLog(t)
+	cases := []struct {
+		name string
+		sl   Sealer
+		log  []Event
+	}{
+		{"events.v3.golden.jsonl", nil, log},
+		{"events.v3.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v3.richtext.golden.jsonl", fakeSealer{}, rich},
+	}
+	for _, c := range cases {
+		name, sl, log := c.name, c.sl, c.log
 		var lines []string
 		for _, e := range log {
 			data, err := EncodeBatchSealed([]Event{e}, sl)
@@ -166,11 +177,86 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	}
 }
 
-// TestVersion1LogsStillReplay: a data directory written by codec version 1
-// (plaintext, nothing erased) still opens and rebuilds the same state and
-// history, including the content erased by the purges it contains.
-func TestVersion1LogsStillReplay(t *testing.T) {
-	assertRebuilds(t, filepath.Join("testdata", "events.v1.golden.jsonl"), nil, everyKindLog(t))
+// TestOlderVersionsStillReplay: data directories written by earlier codec
+// versions — 1 (plaintext, nothing erased), 2 (sealed, erased) — still open
+// and rebuild the same state and history as today's log of the same
+// commands, including the content erased by the purges they contain.
+func TestOlderVersionsStillReplay(t *testing.T) {
+	log := everyKindLog(t)
+	assertRebuilds(t, filepath.Join("testdata", "events.v1.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v2.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v2.sealed.golden.jsonl"), fakeSealer{}, log)
+}
+
+// richTextLog commits bodies with every block kind and mark (ADR-0032).
+func richTextLog(t *testing.T) []Event {
+	s := setup(t)
+	task := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "task", Title: "Patch", Properties: Props{"priority": "low"}}))
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	noErr(t, s.CommitBody("anna", page.ID, richDoc(task.ID)))
+	return s.Log()
+}
+
+func richDoc(mention ID) Doc {
+	return Doc{Blocks: []Block{
+		{Kind: Heading, Level: 2, Text: "Steps"},
+		{Kind: Paragraph, Text: "Read the guide, then @task", Mentions: []ID{mention}, Marks: []Mark{
+			{Type: MarkBold, Start: 0, End: 4},
+			{Type: MarkLink, Start: 9, End: 14, Href: "https://example.org/guide"},
+			{Type: MarkItalic, Start: 16, End: 20},
+			{Type: MarkMention, Start: 21, End: 26, Ref: mention},
+		}},
+		{Kind: BulletItem, Text: "first", Marks: []Mark{{Type: MarkCode, Start: 0, End: 5}}},
+		{Kind: OrderedItem, Text: "second"},
+		{Kind: Quote, Text: "a quote"},
+		{Kind: CodeBlock, Text: "go test ./..."},
+		{Kind: Embed, Ref: mention},
+	}}
+}
+
+func TestRichTextValidation(t *testing.T) {
+	s := setup(t)
+	task := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "task", Title: "Patch", Properties: Props{"priority": "low"}}))
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	noErr(t, s.CommitBody("anna", page.ID, richDoc(task.ID)))
+	got := mustItem(t)(s.Get(page.ID))
+	if len(got.Body.Blocks[1].Marks) != 4 || got.Body.Blocks[0].Level != 2 {
+		t.Fatalf("body %+v", got.Body.Blocks[:2])
+	}
+	if !hasRelation(s.Relations(page.ID, Outgoing), RelMentions, task.ID) {
+		t.Fatal("a mention mark's item is not related")
+	}
+	bad := map[string]Block{
+		"mark past the end":       {Kind: Paragraph, Text: "abc", Marks: []Mark{{Type: MarkBold, Start: 1, End: 4}}},
+		"empty mark":              {Kind: Paragraph, Text: "abc", Marks: []Mark{{Type: MarkBold, Start: 2, End: 2}}},
+		"negative start":          {Kind: Paragraph, Text: "abc", Marks: []Mark{{Type: MarkBold, Start: -1, End: 1}}},
+		"unknown mark":            {Kind: Paragraph, Text: "abc", Marks: []Mark{{Type: "blink", Start: 0, End: 1}}},
+		"javascript link":         {Kind: Paragraph, Text: "abc", Marks: []Mark{{Type: MarkLink, Start: 0, End: 1, Href: "javascript:alert(1)"}}},
+		"relative link":           {Kind: Paragraph, Text: "abc", Marks: []Mark{{Type: MarkLink, Start: 0, End: 1, Href: "/admin"}}},
+		"bold with a target":      {Kind: Paragraph, Text: "abc", Marks: []Mark{{Type: MarkBold, Start: 0, End: 1, Href: "https://x.org"}}},
+		"mention not in mentions": {Kind: Paragraph, Text: "abc", Marks: []Mark{{Type: MarkMention, Start: 0, End: 1, Ref: task.ID}}},
+		"marks in code":           {Kind: CodeBlock, Text: "abc", Marks: []Mark{{Type: MarkBold, Start: 0, End: 1}}},
+		"level on a paragraph":    {Kind: Paragraph, Text: "abc", Level: 2},
+		"level 4":                 {Kind: Heading, Text: "abc", Level: 4},
+		"embed with text":         {Kind: Embed, Ref: task.ID, Text: "x"},
+	}
+	for name, b := range bad {
+		if err := s.CommitBody("anna", page.ID, Doc{Blocks: []Block{b}}); !errors.Is(err, ErrValidation) {
+			t.Errorf("%s: err = %v, want ErrValidation", name, err)
+		}
+	}
+	// Offsets count code points, not bytes: "é" is one character.
+	noErr(t, s.CommitBody("anna", page.ID, Doc{Blocks: []Block{{Kind: Paragraph, Text: "café!", Marks: []Mark{{Type: MarkBold, Start: 3, End: 4}}}}}))
+	for _, href := range []string{"http://x.org", "https://x.org/a?b", "mailto:a@x.org"} {
+		if !SafeHref(href) {
+			t.Errorf("%s refused", href)
+		}
+	}
+	for _, href := range []string{"", "x", "https://", "mailto:", "data:text/html,x", "JAVASCRIPT:alert(1)", "%zz"} {
+		if SafeHref(href) {
+			t.Errorf("%s allowed", href)
+		}
+	}
 }
 
 func assertRebuilds(t *testing.T, golden string, sl Sealer, log []Event) {
