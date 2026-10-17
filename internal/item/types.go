@@ -193,10 +193,10 @@ func checkProps(t TypeDef, props Props) error {
 	return nil
 }
 
-func invalid(format string, args ...any) error {
-	return fmt.Errorf("%w: %s", ErrValidation, fmt.Sprintf(format, args...))
-}
+func invalid(format string, args ...any) error { return wrapf(ErrValidation, format, args...) }
 
-func notFound(format string, args ...any) error {
-	return fmt.Errorf("%w: %s", ErrNotFound, fmt.Sprintf(format, args...))
+func notFound(format string, args ...any) error { return wrapf(ErrNotFound, format, args...) }
+
+func wrapf(sentinel error, format string, args ...any) error {
+	return fmt.Errorf("%w: %s", sentinel, fmt.Sprintf(format, args...))
 }
