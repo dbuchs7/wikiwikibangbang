@@ -282,6 +282,26 @@ func (x *Session) Get(id ID) (Item, error) {
 	return it.clone(), nil
 }
 
+// ByKey resolves a current or former key to a readable item.
+func (x *Session) ByKey(key string) (Item, error) {
+	id, ok := x.s.keys[key]
+	if !ok {
+		return Item{}, notFound("key %q", key)
+	}
+	return x.Get(id)
+}
+
+// Spaces lists the spaces in which the principal holds a role.
+func (x *Session) Spaces() []SpaceInfo {
+	var out []SpaceInfo
+	for _, sp := range x.s.Spaces() {
+		if x.s.spaceRole(x.who, sp.Key) >= Viewer {
+			out = append(out, sp)
+		}
+	}
+	return out
+}
+
 // Find returns the readable items matching q.
 func (x *Session) Find(q Query) []Item {
 	var out []Item

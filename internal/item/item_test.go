@@ -382,3 +382,35 @@ func TestReservedFieldAndHasSpace(t *testing.T) {
 		t.Fatal("HasSpace")
 	}
 }
+
+func TestListingsForTheAPI(t *testing.T) {
+	s := setup(t)
+	if got := s.Spaces(); len(got) != 2 || got[0].Key != "OPS" || got[1].Key != "PLAT" {
+		t.Fatalf("spaces %+v", got)
+	}
+	if got := s.Types(); len(got) != 3 || got[0].Name != "decision" {
+		t.Fatalf("types %+v", got)
+	}
+	if td, ok := s.TypeAt("task", 1); !ok || td.Name != "task" {
+		t.Fatal("TypeAt task 1")
+	}
+	for _, v := range []int{0, 2} {
+		if _, ok := s.TypeAt("task", v); ok {
+			t.Errorf("TypeAt task %d found", v)
+		}
+	}
+	noErr(t, s.GrantRole("admin", "PLAT", "anna", Viewer))
+	if got := s.As("anna").Spaces(); len(got) != 1 || got[0].Key != "PLAT" {
+		t.Fatalf("anna's spaces %+v", got)
+	}
+	page := mustItem(t)(s.Create("admin", NewItem{Space: "PLAT", Type: "page", Title: "p"}))
+	if got, err := s.As("anna").ByKey(page.Key); err != nil || got.ID != page.ID {
+		t.Fatalf("ByKey: %v", err)
+	}
+	if _, err := s.As("nobody").ByKey(page.Key); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("ByKey without access: %v", err)
+	}
+	if _, err := s.As("anna").ByKey("NOPE-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown key: %v", err)
+	}
+}

@@ -63,7 +63,12 @@ func Routes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/{$}", Summary: "Web UI entry point", Access: Public, Handler: index(d.UI)},
 		{Method: http.MethodGet, Pattern: "/assets/", Summary: "Web UI assets", Access: Public, Handler: noListing(files)},
 	}
-	return append(routes, authRoutes(d)...)
+	routes = append(routes, authRoutes(d)...)
+	routes = append(routes, itemRoutes(d)...)
+	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}
+	routes = append(routes, doc)
+	routes[len(routes)-1].Handler = openAPI(routes)
+	return routes
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {

@@ -700,6 +700,42 @@ func (s *Store) ByKey(key string) (Item, error) {
 	return s.Get(id)
 }
 
+// SpaceInfo describes a space.
+type SpaceInfo struct {
+	Key  string
+	Name string
+}
+
+// Spaces lists all spaces, ordered by key.
+func (s *Store) Spaces() []SpaceInfo {
+	out := make([]SpaceInfo, 0, len(s.spaces))
+	for k, sp := range s.spaces {
+		out = append(out, SpaceInfo{Key: k, Name: sp.name})
+	}
+	slices.SortFunc(out, func(a, b SpaceInfo) int { return strings.Compare(a.Key, b.Key) })
+	return out
+}
+
+// Types lists the latest version of every type, ordered by name.
+func (s *Store) Types() []TypeDef {
+	out := make([]TypeDef, 0, len(s.types))
+	for name := range s.types {
+		td, _ := s.latest(name)
+		out = append(out, td)
+	}
+	slices.SortFunc(out, func(a, b TypeDef) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
+
+// TypeAt returns one version of a type.
+func (s *Store) TypeAt(name string, version int) (TypeDef, bool) {
+	v := s.types[name]
+	if version < 1 || version > len(v) {
+		return TypeDef{}, false
+	}
+	return v[version-1], true
+}
+
 // HasSpace reports whether a space exists.
 func (s *Store) HasSpace(key string) bool { _, ok := s.spaces[key]; return ok }
 

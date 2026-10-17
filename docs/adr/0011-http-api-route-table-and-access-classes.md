@@ -1,7 +1,7 @@
 # ADR-0011: The HTTP API is one route table, described by OpenAPI, and every route declares its access class
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators
 
@@ -32,6 +32,8 @@ Proposed option: **3.**
 - A test asserts that the set of served routes equals the set of documented routes.
 - **Access classes:** every route declares `public` or `authenticated`; the zero value is `authenticated`. A request is classified by asking the serving router which pattern matched, so a route registered without a declaration is gated, not open.
 - An interactive explorer is served behind authentication (ADR-0013) and works offline from a vendored asset.
+
+**Implementation so far:** one route table in `internal/server` registers every handler; access classes with an authenticated zero value; `GET /api/openapi.json` generated from the table, with a test that served and described operations are the same ([ADR-0028](0028-item-api.md)). Not built: request and response schemas, the interactive explorer.
 
 ### Consequences
 

@@ -23,7 +23,7 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0008](0008-event-sourced-persistence.md) | Event-sourced persistence in an embedded store, with a single writer | Proposed | Partial |
 | [0009](0009-single-binary-with-embedded-web-ui.md) | A single binary with an embedded web UI | Proposed | Not started |
 | [0010](0010-real-time-collaboration-with-block-locks.md) | Real-time collaboration starts with block-level locks, not a CRDT | Proposed | Not started |
-| [0011](0011-http-api-route-table-and-access-classes.md) | The HTTP API is one route table, described by OpenAPI, and every route declares its access class | Proposed | Not started |
+| [0011](0011-http-api-route-table-and-access-classes.md) | The HTTP API is one route table, described by OpenAPI, and every route declares its access class | Proposed | Partial |
 | [0012](0012-mcp-adapter-over-http-api.md) | An MCP server as an adapter over the HTTP API, acting as its caller | Proposed | Not started |
 | [0013](0013-authentication-and-security-boundary.md) | Authentication is required by default, behind one principal boundary | Proposed | Partial |
 | [0014](0014-closed-renderer-for-user-content.md) | User content is rendered by one closed renderer, never as raw HTML | Proposed | Not started |
@@ -40,3 +40,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0025](0025-event-log-file-and-in-memory-state.md) | The event log is one file of checksummed batch records; state is folded in memory until it outgrows it | Proposed | Partial |
 | [0026](0026-crypto-shredding-of-item-content.md) | Item content is encrypted with a key per item; purge and redaction destroy the key | Proposed | Partial |
 | [0027](0027-local-accounts-sessions-and-api-tokens.md) | Local accounts with PBKDF2, in-memory sessions and scoped API tokens | Proposed | Partial |
+| [0028](0028-item-api.md) | The item API exposes one command per request, through the permission model and one writer | Proposed | Partial |

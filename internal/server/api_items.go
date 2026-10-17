@@ -1,0 +1,644 @@
+package server
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+)
+
+// itemRoutes are the item API (ADR-0028). Every handler acts through
+// item.Store.As(principal), so the permission model (ADR-0022) decides, and
+// through storage.DB.Read/Write, so commands are serialised (ADR-0008).
+func itemRoutes(d Deps) []Route {
+	h := itemHandlers{d: d, log: d.Audit}
+	if h.log == nil {
+		h.log = slog.New(slog.DiscardHandler)
+	}
+	get, post, put, del := http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete
+	return []Route{
+		{Method: get, Pattern: "/api/types", Summary: "List item types", Handler: http.HandlerFunc(h.listTypes)},
+		{Method: post, Pattern: "/api/types", Summary: "Define a type or a new version of it (administrators)", Handler: http.HandlerFunc(h.defineType)},
+		{Method: get, Pattern: "/api/spaces", Summary: "List the spaces one holds a role in", Handler: http.HandlerFunc(h.listSpaces)},
+		{Method: post, Pattern: "/api/spaces", Summary: "Create a space (administrators)", Handler: http.HandlerFunc(h.createSpace)},
+		{Method: put, Pattern: "/api/spaces/{space}/roles/{principal}", Summary: "Grant a space role to a user ID or @group (space administrators)", Handler: http.HandlerFunc(h.grantRole)},
+		{Method: put, Pattern: "/api/groups/{group}/members/{principal}", Summary: "Add a member to a group (administrators)", Handler: http.HandlerFunc(h.addMember)},
+		{Method: put, Pattern: "/api/system-roles/{role}/{principal}", Summary: "Grant a system role, admin or erasure (administrators)", Handler: http.HandlerFunc(h.grantSystemRole)},
+
+		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged", Handler: http.HandlerFunc(h.findItems)},
+		{Method: post, Pattern: "/api/items", Summary: "Create an item", Handler: http.HandlerFunc(h.createItem)},
+		{Method: get, Pattern: "/api/items/{ref}", Summary: "Get an item by ID or key", Handler: http.HandlerFunc(h.getItem)},
+		{Method: put, Pattern: "/api/items/{ref}/title", Summary: "Set the title", Handler: http.HandlerFunc(h.setTitle)},
+		{Method: put, Pattern: "/api/items/{ref}/properties/{field}", Summary: "Set a property; null unsets it", Handler: http.HandlerFunc(h.setProperty)},
+		{Method: post, Pattern: "/api/items/{ref}/transitions", Summary: "Perform a workflow transition", Handler: http.HandlerFunc(h.transition)},
+		{Method: put, Pattern: "/api/items/{ref}/body", Summary: "Commit a new version of the body", Handler: http.HandlerFunc(h.commitBody)},
+		{Method: post, Pattern: "/api/items/{ref}/move", Summary: "Move the item and its subtree", Handler: http.HandlerFunc(h.move)},
+		{Method: post, Pattern: "/api/items/{ref}/embedded", Summary: "Create an item embedded at the end of this item's body", Handler: http.HandlerFunc(h.createEmbedded)},
+		{Method: get, Pattern: "/api/items/{ref}/embeds", Summary: "How the body's embeds render", Handler: http.HandlerFunc(h.embeds)},
+		{Method: get, Pattern: "/api/items/{ref}/history", Summary: "The item's history", Handler: http.HandlerFunc(h.history)},
+		{Method: get, Pattern: "/api/items/{ref}/relations", Summary: "Relations at one end of the item (direction=outgoing|incoming)", Handler: http.HandlerFunc(h.relations)},
+		{Method: put, Pattern: "/api/items/{ref}/restriction", Summary: "Narrow who may read or edit the item and its subtree", Handler: http.HandlerFunc(h.restrict)},
+		{Method: post, Pattern: "/api/items/{ref}/trash", Summary: "Move the item and its subtree to the trash", Handler: http.HandlerFunc(h.trash)},
+		{Method: post, Pattern: "/api/items/{ref}/restore", Summary: "Restore a trashed item and its subtree", Handler: http.HandlerFunc(h.restore)},
+		{Method: post, Pattern: "/api/items/{ref}/purge", Summary: "Delete a trashed item for good; its content becomes unrecoverable", Handler: http.HandlerFunc(h.purge)},
+		{Method: post, Pattern: "/api/items/{ref}/redact", Summary: "Erase an item at once, with a logged reason (erasure role)", Handler: http.HandlerFunc(h.redact)},
+		{Method: post, Pattern: "/api/relations", Summary: "Add a typed relation", Handler: http.HandlerFunc(h.addRelation)},
+		{Method: del, Pattern: "/api/relations/{id}", Summary: "Remove a relation", Handler: http.HandlerFunc(h.removeRelation)},
+	}
+}
+
+type itemHandlers struct {
+	d   Deps
+	log *slog.Logger
+}
+
+// who is the item-store principal of a request: the user's permanent ID.
+func who(r *http.Request) string {
+	p, _ := PrincipalFrom(r.Context())
+	return string(p.User)
+}
+
+// fail answers an item-model error with its HTTP status.
+func (h itemHandlers) fail(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, item.ErrReferenced):
+		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, item.ErrValidation):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, item.ErrNotFound):
+		writeError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, item.ErrForbidden):
+		writeError(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, errBadInput):
+		writeError(w, http.StatusBadRequest, err.Error())
+	default:
+		h.log.Error("request failed", "err", err)
+		writeError(w, http.StatusInternalServerError, "the change was not made")
+	}
+}
+
+var errBadInput = errors.New("bad input")
+
+func badInput(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", errBadInput, fmt.Sprintf(format, args...))
+}
+
+// read runs fn on a read-only view and answers its result.
+func (h itemHandlers) read(w http.ResponseWriter, r *http.Request, fn func(*item.Session) (any, error)) {
+	var out any
+	var err error
+	h.d.DB.Read(func(s *item.Store) { out, err = fn(s.As(who(r))) })
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// write runs fn as the single writer and answers its result; a nil result
+// answers 204.
+func (h itemHandlers) write(w http.ResponseWriter, r *http.Request, status int, fn func(*item.Session, *item.Store) (any, error)) {
+	var out any
+	err := h.d.DB.Write(func(s *item.Store) error {
+		var err error
+		out, err = fn(s.As(who(r)), s)
+		return err
+	})
+	switch {
+	case err != nil:
+		h.fail(w, err)
+	case out == nil:
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		writeJSON(w, status, out)
+	}
+}
+
+// decode reads the request body or answers the error; it reports success.
+func decode(w http.ResponseWriter, r *http.Request, v any) bool {
+	if err := readJSON(w, r, v); err != nil {
+		badRequest(w, err)
+		return false
+	}
+	return true
+}
+
+// resolveItem finds a readable item by ID or by current or former key.
+func resolveItem(x *item.Session, ref string) (item.Item, error) {
+	it, err := x.Get(item.ID(ref))
+	if errors.Is(err, item.ErrNotFound) {
+		return x.ByKey(ref)
+	}
+	return it, err
+}
+
+func (h itemHandlers) isAdmin(s *item.Store, r *http.Request) error {
+	if !s.HasSystemRole(who(r), item.RoleAdmin) {
+		return fmt.Errorf("%w: administrators only", item.ErrForbidden)
+	}
+	return nil
+}
+
+// --- types, spaces, roles ---------------------------------------------------
+
+func (h itemHandlers) listTypes(w http.ResponseWriter, r *http.Request) {
+	var out []typeJSON
+	h.d.DB.Read(func(s *item.Store) {
+		for _, td := range s.Types() {
+			out = append(out, toTypeJSON(td))
+		}
+	})
+	writeJSON(w, http.StatusOK, map[string]any{"types": nonNilSlice(out)})
+}
+
+func (h itemHandlers) defineType(w http.ResponseWriter, r *http.Request) {
+	var req typeJSON
+	if !decode(w, r, &req) {
+		return
+	}
+	h.write(w, r, http.StatusCreated, func(_ *item.Session, s *item.Store) (any, error) {
+		if err := h.isAdmin(s, r); err != nil {
+			return nil, err
+		}
+		if err := s.DefineType(who(r), req.toTypeDef()); err != nil {
+			return nil, err
+		}
+		return map[string]typeJSON{"type": toTypeJSON(s.Type(req.Name))}, nil
+	})
+}
+
+func (h itemHandlers) listSpaces(w http.ResponseWriter, r *http.Request) {
+	h.read(w, r, func(x *item.Session) (any, error) {
+		out := []spaceJSON{}
+		for _, sp := range x.Spaces() {
+			out = append(out, spaceJSON(sp))
+		}
+		return map[string]any{"spaces": out}, nil
+	})
+}
+
+func (h itemHandlers) createSpace(w http.ResponseWriter, r *http.Request) {
+	var req spaceJSON
+	if !decode(w, r, &req) {
+		return
+	}
+	h.write(w, r, http.StatusCreated, func(_ *item.Session, s *item.Store) (any, error) {
+		if err := h.isAdmin(s, r); err != nil {
+			return nil, err
+		}
+		if err := s.CreateSpace(who(r), req.Key, req.Name); err != nil {
+			return nil, err
+		}
+		return map[string]spaceJSON{"space": req}, nil
+	})
+}
+
+var roleByName = map[string]item.Role{"viewer": item.Viewer, "editor": item.Editor, "space-admin": item.SpaceAdmin}
+
+func (h itemHandlers) grantRole(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Role string `json:"role"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	role, ok := roleByName[req.Role]
+	if !ok {
+		writeError(w, http.StatusBadRequest, "role must be viewer, editor or space-admin")
+		return
+	}
+	h.write(w, r, 0, func(x *item.Session, _ *item.Store) (any, error) {
+		return nil, x.Grant(r.PathValue("space"), r.PathValue("principal"), role)
+	})
+}
+
+func (h itemHandlers) addMember(w http.ResponseWriter, r *http.Request) {
+	h.write(w, r, 0, func(_ *item.Session, s *item.Store) (any, error) {
+		if err := h.isAdmin(s, r); err != nil {
+			return nil, err
+		}
+		return nil, s.AddToGroup(who(r), r.PathValue("group"), r.PathValue("principal"))
+	})
+}
+
+func (h itemHandlers) grantSystemRole(w http.ResponseWriter, r *http.Request) {
+	role := r.PathValue("role")
+	if role != item.RoleAdmin && role != item.RoleErasure {
+		writeError(w, http.StatusBadRequest, "role must be admin or erasure")
+		return
+	}
+	h.write(w, r, 0, func(_ *item.Session, s *item.Store) (any, error) {
+		if err := h.isAdmin(s, r); err != nil {
+			return nil, err
+		}
+		if err := s.GrantSystemRole(who(r), r.PathValue("principal"), role); err != nil {
+			return nil, err
+		}
+		h.log.Warn("audit", "event", "system-role.grant", "by", who(r), "principal", r.PathValue("principal"), "role", role)
+		return nil, nil
+	})
+}
+
+// --- items -------------------------------------------------------------------
+
+// MaxPage bounds one page of a listing (ADR-0015).
+const MaxPage = 500
+
+func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit := 100
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > MaxPage {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be 1 to %d", MaxPage))
+			return
+		}
+		limit = n
+	}
+	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")),
+		IncludeDeleted: q.Get("deleted") == "true"}
+	after := item.ID(q.Get("after"))
+	h.read(w, r, func(x *item.Session) (any, error) {
+		all := x.Find(query)
+		start := 0
+		if after != "" {
+			start = -1
+			for i, it := range all {
+				if it.ID == after {
+					start = i + 1
+				}
+			}
+			if start < 0 {
+				return nil, badInput("cursor %q is not in this listing", after)
+			}
+		}
+		page := all[start:min(start+limit, len(all))]
+		out := make([]itemJSON, len(page))
+		for i, it := range page {
+			out[i] = toItemJSON(it)
+		}
+		res := map[string]any{"items": out, "total": map[string]any{"value": len(all), "exact": true}}
+		if start+limit < len(all) {
+			res["next"] = page[len(page)-1].ID
+		}
+		return res, nil
+	})
+}
+
+type newItemJSON struct {
+	Space      string                     `json:"space"`
+	Type       string                     `json:"type"`
+	Parent     item.ID                    `json:"parent"`
+	Title      string                     `json:"title"`
+	Properties map[string]json.RawMessage `json:"properties"`
+}
+
+func (n newItemJSON) toNewItem(s *item.Store) (item.NewItem, error) {
+	props, err := coerceProps(s.Type(n.Type), n.Properties)
+	return item.NewItem{Space: n.Space, Type: n.Type, Parent: n.Parent, Title: n.Title, Properties: props}, err
+}
+
+func (h itemHandlers) createItem(w http.ResponseWriter, r *http.Request) {
+	var req newItemJSON
+	if !decode(w, r, &req) {
+		return
+	}
+	h.write(w, r, http.StatusCreated, func(x *item.Session, s *item.Store) (any, error) {
+		n, err := req.toNewItem(s)
+		if err != nil {
+			return nil, err
+		}
+		it, err := x.Create(n)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]itemJSON{"item": toItemJSON(it)}, nil
+	})
+}
+
+func (h itemHandlers) getItem(w http.ResponseWriter, r *http.Request) {
+	h.read(w, r, func(x *item.Session) (any, error) {
+		it, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]itemJSON{"item": toItemJSON(it)}, nil
+	})
+}
+
+// change runs a command on the item named in the path and answers the
+// item as it is afterwards.
+func (h itemHandlers) change(w http.ResponseWriter, r *http.Request, cmd func(x *item.Session, s *item.Store, it item.Item) error) {
+	h.write(w, r, http.StatusOK, func(x *item.Session, s *item.Store) (any, error) {
+		it, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		if err := cmd(x, s, it); err != nil {
+			return nil, err
+		}
+		after, err := s.Get(it.ID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]itemJSON{"item": toItemJSON(after)}, nil
+	})
+}
+
+func (h itemHandlers) setTitle(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Title string `json:"title"`
+	}
+	if decode(w, r, &req) {
+		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.SetTitle(it.ID, req.Title) })
+	}
+}
+
+func (h itemHandlers) setProperty(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	field := r.PathValue("field")
+	h.change(w, r, func(x *item.Session, s *item.Store, it item.Item) error {
+		td, _ := s.TypeAt(it.Type, it.TypeVersion)
+		v, err := coerceValue(td, field, req.Value)
+		if err != nil {
+			return err
+		}
+		return x.SetProperty(it.ID, field, v)
+	})
+}
+
+func (h itemHandlers) transition(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if decode(w, r, &req) {
+		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.Transition(it.ID, req.Name) })
+	}
+}
+
+func (h itemHandlers) commitBody(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Blocks []blockJSON `json:"blocks"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	doc, err := toDoc(req.Blocks)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.CommitBody(it.ID, doc) })
+}
+
+func (h itemHandlers) move(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Space  string  `json:"space"`
+		Parent item.ID `json:"parent"`
+	}
+	if decode(w, r, &req) {
+		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.Move(it.ID, req.Space, req.Parent) })
+	}
+}
+
+func (h itemHandlers) createEmbedded(w http.ResponseWriter, r *http.Request) {
+	var req newItemJSON
+	if !decode(w, r, &req) {
+		return
+	}
+	h.write(w, r, http.StatusCreated, func(x *item.Session, s *item.Store) (any, error) {
+		host, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		n, err := req.toNewItem(s)
+		if err != nil {
+			return nil, err
+		}
+		it, err := x.CreateEmbedded(host.ID, n)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]itemJSON{"item": toItemJSON(it)}, nil
+	})
+}
+
+func (h itemHandlers) embeds(w http.ResponseWriter, r *http.Request) {
+	h.read(w, r, func(x *item.Session) (any, error) {
+		it, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		views, err := x.Embeds(it.ID)
+		out := []embedJSON{}
+		for _, v := range views {
+			out = append(out, embedJSON{Ref: v.Ref, Key: v.Key, Title: v.Title, Child: v.Child, Presence: string(v.Presence), Restricted: v.Restricted})
+		}
+		return map[string]any{"embeds": out}, err
+	})
+}
+
+func (h itemHandlers) history(w http.ResponseWriter, r *http.Request) {
+	h.read(w, r, func(x *item.Session) (any, error) {
+		it, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		events, err := x.History(it.ID)
+		out := []eventJSON{}
+		for _, e := range events {
+			out = append(out, toEventJSON(e))
+		}
+		return map[string]any{"events": out}, err
+	})
+}
+
+func (h itemHandlers) relations(w http.ResponseWriter, r *http.Request) {
+	dir := item.Outgoing
+	switch r.URL.Query().Get("direction") {
+	case "", "outgoing":
+	case "incoming":
+		dir = item.Incoming
+	default:
+		writeError(w, http.StatusBadRequest, "direction must be outgoing or incoming")
+		return
+	}
+	h.read(w, r, func(x *item.Session) (any, error) {
+		it, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		rels, err := x.Relations(it.ID, dir)
+		out := []relationJSON{}
+		for _, rel := range rels {
+			out = append(out, relationJSON{ID: rel.ID, Type: rel.Type, From: rel.From, To: rel.To, Derived: rel.Derived})
+		}
+		return map[string]any{"relations": out}, err
+	})
+}
+
+func (h itemHandlers) restrict(w http.ResponseWriter, r *http.Request) {
+	var req restrictionJSON
+	if decode(w, r, &req) {
+		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
+			return x.Restrict(it.ID, item.Restriction{Read: req.Read, Edit: req.Edit})
+		})
+	}
+}
+
+func (h itemHandlers) trash(w http.ResponseWriter, r *http.Request) {
+	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.Trash(it.ID) })
+}
+
+func (h itemHandlers) restore(w http.ResponseWriter, r *http.Request) {
+	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.Restore(it.ID) })
+}
+
+func (h itemHandlers) purge(w http.ResponseWriter, r *http.Request) {
+	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
+		if err := x.Purge(it.ID); err != nil {
+			return err
+		}
+		h.log.Info("audit", "event", "item.purge", "user", who(r), "item", it.ID)
+		return nil
+	})
+}
+
+func (h itemHandlers) redact(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	if decode(w, r, &req) {
+		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
+			if err := x.Redact(it.ID, req.Reason); err != nil {
+				return err
+			}
+			h.log.Warn("audit", "event", "item.redact", "user", who(r), "item", it.ID)
+			return nil
+		})
+	}
+}
+
+func (h itemHandlers) addRelation(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Type string  `json:"type"`
+		From item.ID `json:"from"`
+		To   item.ID `json:"to"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	h.write(w, r, http.StatusCreated, func(x *item.Session, _ *item.Store) (any, error) {
+		if err := x.AddRelation(req.Type, req.From, req.To); err != nil {
+			return nil, err
+		}
+		rels, err := x.Relations(req.From, item.Outgoing)
+		if err != nil {
+			return nil, err
+		}
+		// Relations are listed in creation order: the last match is the new one.
+		var rel item.Relation
+		for _, c := range rels {
+			if !c.Derived && c.Type == req.Type && c.To == req.To {
+				rel = c
+			}
+		}
+		return map[string]relationJSON{"relation": {ID: rel.ID, Type: rel.Type, From: rel.From, To: rel.To}}, nil
+	})
+}
+
+func (h itemHandlers) removeRelation(w http.ResponseWriter, r *http.Request) {
+	h.write(w, r, 0, func(x *item.Session, _ *item.Store) (any, error) {
+		return nil, x.RemoveRelation(item.ID(r.PathValue("id")))
+	})
+}
+
+// --- values -----------------------------------------------------------------
+
+func coerceProps(td item.TypeDef, raw map[string]json.RawMessage) (item.Props, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	props := item.Props{}
+	for k, v := range raw {
+		val, err := coerceValue(td, k, v)
+		if err != nil {
+			return nil, err
+		}
+		if val != nil {
+			props[k] = val
+		}
+	}
+	return props, nil
+}
+
+// coerceValue turns a JSON value into the Go value the field's kind takes:
+// whole numbers become int, other numbers float64, dates time.Time. Fields
+// the type does not know keep their JSON value, so the store's validation
+// names them.
+func coerceValue(td item.TypeDef, field string, raw json.RawMessage) (any, error) {
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var kind item.FieldKind
+	for _, f := range td.Fields {
+		if f.Name == field {
+			kind = f.Kind
+		}
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		return nil, badInput("field %q: %v", field, err)
+	}
+	switch kind {
+	case item.KindNumber:
+		n, ok := v.(json.Number)
+		if !ok {
+			return v, nil // the store reports the wrong kind
+		}
+		if !strings.ContainsAny(n.String(), ".eE") {
+			if i, err := strconv.Atoi(n.String()); err == nil {
+				return i, nil
+			}
+		}
+		f, err := n.Float64()
+		if err != nil {
+			return nil, badInput("field %q: %v", field, err)
+		}
+		return f, nil
+	case item.KindDate:
+		s, ok := v.(string)
+		if !ok {
+			return v, nil
+		}
+		for _, layout := range []string{time.RFC3339Nano, time.DateOnly} {
+			if t, err := time.Parse(layout, s); err == nil {
+				return t, nil
+			}
+		}
+		return nil, badInput("field %q: %q is not an RFC 3339 date-time or a YYYY-MM-DD date", field, s)
+	}
+	return v, nil
+}
+
+func nonNilSlice[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
