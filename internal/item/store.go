@@ -84,11 +84,22 @@ func Replay(log []Event) (*Store, error) {
 // Log returns a copy of the event log.
 func (s *Store) Log() []Event { return slices.Clone(s.log) }
 
-func (s *Store) record(actor string, e Event) {
-	e.Seq = len(s.log) + 1
-	e.At = s.now()
-	e.Actor = actor
-	s.apply(e)
+func (s *Store) record(actor string, e Event) { s.recordBatch(actor, e) }
+
+// recordBatch records the events of one command. Commands validate
+// everything before calling it, so a batch is never applied in part.
+func (s *Store) recordBatch(actor string, events ...Event) {
+	first := len(s.log) + 1
+	at := s.now()
+	for i, e := range events {
+		e.Seq = first + i
+		e.At = at
+		e.Actor = actor
+		if len(events) > 1 {
+			e.Batch = first
+		}
+		s.apply(e)
+	}
 }
 
 // --- commands ---------------------------------------------------------------
@@ -128,44 +139,80 @@ type NewItem struct {
 
 // Create creates an item and returns it.
 func (s *Store) Create(actor string, n NewItem) (Item, error) {
+	e, err := s.prepareCreate(n)
+	if err != nil {
+		return Item{}, err
+	}
+	s.record(actor, e)
+	return s.items[e.Item].clone(), nil
+}
+
+func (s *Store) prepareCreate(n NewItem) (Event, error) {
 	if _, ok := s.spaces[n.Space]; !ok {
-		return Item{}, notFound("space %q", n.Space)
+		return Event{}, notFound("space %q", n.Space)
 	}
 	td, ok := s.latest(n.Type)
 	if !ok {
-		return Item{}, notFound("type %q", n.Type)
+		return Event{}, notFound("type %q", n.Type)
 	}
 	if strings.TrimSpace(n.Title) == "" {
-		return Item{}, invalid("title is empty")
+		return Event{}, invalid("title is empty")
 	}
 	if n.Parent != "" {
-		p, ok := s.items[n.Parent]
-		if !ok {
-			return Item{}, notFound("parent %s", n.Parent)
+		p, err := s.live(n.Parent)
+		if err != nil {
+			return Event{}, err
 		}
 		if p.Space != n.Space {
-			return Item{}, invalid("parent %s is in space %s, not %s", p.Key, p.Space, n.Space)
+			return Event{}, invalid("parent %s is in space %s, not %s", p.Key, p.Space, n.Space)
 		}
 	}
 	if err := checkProps(td, n.Properties); err != nil {
-		return Item{}, err
+		return Event{}, err
 	}
 	for _, f := range td.Fields {
 		if f.Required && n.Properties[f.Name] == nil {
-			return Item{}, invalid("field %q is required", f.Name)
+			return Event{}, invalid("field %q is required", f.Name)
 		}
 	}
-	id := s.newID()
-	s.record(actor, Event{
-		Kind: ItemCreated, Item: id, Space: n.Space, TypeName: td.Name, TypeVersion: td.Version,
+	return Event{
+		Kind: ItemCreated, Item: s.newID(), Space: n.Space, TypeName: td.Name, TypeVersion: td.Version,
 		Parent: n.Parent, Title: n.Title, Props: maps.Clone(n.Properties),
-	})
-	return s.items[id].clone(), nil
+	}, nil
+}
+
+// CreateEmbedded creates an item inside a host and appends an embed of it to
+// the host's body, as one batch (ADR-0020: "turn this line into a task").
+// The new item lives in the host: its space and parent are the host's, so
+// n.Space must be empty or the host's space, and n.Parent must be empty.
+func (s *Store) CreateEmbedded(actor string, host ID, n NewItem) (Item, error) {
+	h, err := s.live(host)
+	if err != nil {
+		return Item{}, err
+	}
+	if td, _ := s.latest(h.Type); !td.Body {
+		return Item{}, invalid("type %q has no body", td.Name)
+	}
+	if n.Space != "" && n.Space != h.Space {
+		return Item{}, invalid("an inline item lives in its host's space %s", h.Space)
+	}
+	if n.Parent != "" {
+		return Item{}, invalid("an inline item's parent is its host")
+	}
+	n.Space, n.Parent = h.Space, host
+	created, err := s.prepareCreate(n)
+	if err != nil {
+		return Item{}, err
+	}
+	body := h.Body.clone()
+	body.Blocks = append(body.Blocks, Block{Kind: Embed, Ref: created.Item})
+	s.recordBatch(actor, created, Event{Kind: BodyCommitted, Item: host, Body: &body})
+	return s.items[created.Item].clone(), nil
 }
 
 // SetTitle renames an item.
 func (s *Store) SetTitle(actor string, id ID, title string) error {
-	if _, err := s.item(id); err != nil {
+	if _, err := s.live(id); err != nil {
 		return err
 	}
 	if strings.TrimSpace(title) == "" {
@@ -177,7 +224,7 @@ func (s *Store) SetTitle(actor string, id ID, title string) error {
 
 // SetProperty sets or (with nil) clears one property.
 func (s *Store) SetProperty(actor string, id ID, field string, value any) error {
-	it, err := s.item(id)
+	it, err := s.live(id)
 	if err != nil {
 		return err
 	}
@@ -191,7 +238,7 @@ func (s *Store) SetProperty(actor string, id ID, field string, value any) error 
 
 // Transition moves an item along its type's workflow (D3).
 func (s *Store) Transition(actor string, id ID, name string) error {
-	it, err := s.item(id)
+	it, err := s.live(id)
 	if err != nil {
 		return err
 	}
@@ -219,16 +266,16 @@ func (s *Store) Transition(actor string, id ID, name string) error {
 // whole subtree, because a parent and its children share a space; the moved
 // items get new keys and their old keys keep resolving (D2, D5).
 func (s *Store) Move(actor string, id ID, toSpace string, newParent ID) error {
-	if _, err := s.item(id); err != nil {
+	if _, err := s.live(id); err != nil {
 		return err
 	}
 	if _, ok := s.spaces[toSpace]; !ok {
 		return notFound("space %q", toSpace)
 	}
 	if newParent != "" {
-		p, ok := s.items[newParent]
-		if !ok {
-			return notFound("parent %s", newParent)
+		p, err := s.live(newParent)
+		if err != nil {
+			return err
 		}
 		if p.Space != toSpace {
 			return invalid("parent %s is not in space %s", p.Key, toSpace)
@@ -243,7 +290,7 @@ func (s *Store) Move(actor string, id ID, toSpace string, newParent ID) error {
 
 // CommitBody commits a new version of an item's body.
 func (s *Store) CommitBody(actor string, id ID, d Doc) error {
-	it, err := s.item(id)
+	it, err := s.live(id)
 	if err != nil {
 		return err
 	}
@@ -261,9 +308,19 @@ func (s *Store) CommitBody(actor string, id ID, d Doc) error {
 			return invalid("unknown block kind %q", b.Kind)
 		}
 	}
+	// A body may keep references to items that were deleted since its last
+	// version, so that the page stays editable; it may not add new ones.
+	kept := map[ID]bool{}
+	for _, r := range it.Body.refs() {
+		kept[r.To] = true
+	}
 	for _, r := range d.refs() {
-		if _, ok := s.items[r.To]; !ok {
+		target, ok := s.items[r.To]
+		if !ok {
 			return notFound("referenced item %s", r.To)
+		}
+		if target.Presence != Live && !kept[r.To] {
+			return invalid("item %s is %s and cannot be newly referenced", target.Key, target.Presence)
 		}
 	}
 	body := d.clone()
@@ -282,7 +339,7 @@ func (s *Store) AddRelation(actor, typ string, from, to ID) error {
 		return invalid("an item cannot relate to itself")
 	}
 	for _, id := range []ID{from, to} {
-		if _, err := s.item(id); err != nil {
+		if _, err := s.live(id); err != nil {
 			return err
 		}
 	}
@@ -304,9 +361,78 @@ func (s *Store) RemoveRelation(actor string, id ID) error {
 	if r.Derived {
 		return invalid("relation %s is derived from a body; change the body instead", id)
 	}
+	for _, end := range []ID{r.From, r.To} {
+		if _, err := s.live(end); err != nil {
+			return err
+		}
+	}
 	rc := *r
 	s.record(actor, Event{Kind: RelationRemoved, Relation: &rc})
 	return nil
+}
+
+// Trash moves an item and its live descendants to the trash, as one event
+// (ADR-0021). Descendants trashed earlier on their own stay in their batch.
+func (s *Store) Trash(actor string, id ID) error {
+	if _, err := s.live(id); err != nil {
+		return err
+	}
+	var members []ID
+	for _, m := range s.subtree(id) {
+		if s.items[m].Presence == Live {
+			members = append(members, m)
+		}
+	}
+	s.record(actor, Event{Kind: ItemTrashed, Item: id, Members: members})
+	return nil
+}
+
+// Restore brings back exactly the items trashed together with id. It must be
+// called on the item the trash started from, and its parent must be live.
+func (s *Store) Restore(actor string, id ID) error {
+	members, err := s.trashBatch(id)
+	if err != nil {
+		return err
+	}
+	if p := s.items[id].Parent; p != "" && s.items[p].Presence != Live {
+		return invalid("restore the parent %s first", s.items[p].Key)
+	}
+	s.record(actor, Event{Kind: ItemRestored, Item: id, Members: members})
+	return nil
+}
+
+// Purge irreversibly removes the content of the items trashed together with
+// id and leaves tombstones (ADR-0021, D7).
+func (s *Store) Purge(actor string, id ID) error {
+	members, err := s.trashBatch(id)
+	if err != nil {
+		return err
+	}
+	s.record(actor, Event{Kind: ItemPurged, Item: id, Members: members})
+	return nil
+}
+
+// trashBatch returns the items trashed together with id, which must be the
+// root of that trash event.
+func (s *Store) trashBatch(id ID) ([]ID, error) {
+	it, err := s.item(id)
+	if err != nil {
+		return nil, err
+	}
+	if it.Presence != Trashed {
+		return nil, invalid("item %s is %s, not in the trash", it.Key, it.Presence)
+	}
+	if root := s.log[it.trashedBy-1].Item; root != id {
+		return nil, invalid("item %s was trashed with %s; act on %s", it.Key, s.items[root].Key, s.items[root].Key)
+	}
+	var members []ID
+	for _, other := range s.items {
+		if other.trashedBy == it.trashedBy {
+			members = append(members, other.ID)
+		}
+	}
+	slices.SortFunc(members, func(a, b ID) int { return s.items[a].created - s.items[b].created })
+	return members, nil
 }
 
 // --- apply ------------------------------------------------------------------
@@ -332,7 +458,8 @@ func (s *Store) apply(e Event) {
 	case ItemCreated:
 		it := &Item{
 			ID: e.Item, Type: e.TypeName, TypeVersion: e.TypeVersion, Space: e.Space,
-			Parent: e.Parent, Title: e.Title, Properties: maps.Clone(e.Props), Version: 1, created: e.Seq,
+			Parent: e.Parent, Title: e.Title, Properties: maps.Clone(e.Props), Version: 1,
+			Presence: Live, created: e.Seq,
 		}
 		if it.Properties == nil {
 			it.Properties = Props{}
@@ -400,6 +527,39 @@ func (s *Store) apply(e Event) {
 	case RelationRemoved:
 		delete(s.rels, e.Relation.ID)
 		touch(e.Relation.From, e.Relation.To)
+	case ItemTrashed:
+		for _, id := range e.Members {
+			it := s.items[id]
+			it.Presence, it.trashedBy = Trashed, e.Seq
+			it.Version++
+		}
+		touch(e.Members...)
+	case ItemRestored:
+		for _, id := range e.Members {
+			it := s.items[id]
+			it.Presence, it.trashedBy = Live, 0
+			it.Version++
+		}
+		touch(e.Members...)
+	case ItemPurged:
+		purged := map[ID]bool{}
+		for _, id := range e.Members {
+			purged[id] = true
+			it := s.items[id]
+			it.Presence, it.trashedBy = Purged, 0
+			it.Title, it.Properties, it.Body = "", Props{}, Doc{}
+			it.Version++
+		}
+		touch(e.Members...)
+		for id, r := range s.rels {
+			// Hand-made relations touching a purged item go; derived ones go
+			// with the purged body. Derived relations from live bodies stay:
+			// they are a function of those bodies (D4).
+			if (!r.Derived && (purged[r.From] || purged[r.To])) || (r.Derived && purged[r.From]) {
+				touch(r.From, r.To)
+				delete(s.rels, id)
+			}
+		}
 	}
 }
 
@@ -420,13 +580,16 @@ type Query struct {
 	Parent ID
 	// Where requires each named property to equal the given value.
 	Where Props
+	// IncludeDeleted also returns trashed items and tombstones.
+	IncludeDeleted bool
 }
 
 // Find returns copies of the matching items in creation order.
 func (s *Store) Find(q Query) []Item {
 	var out []Item
 	for _, it := range s.items {
-		if (q.Type != "" && it.Type != q.Type) ||
+		if (!q.IncludeDeleted && it.Presence != Live) ||
+			(q.Type != "" && it.Type != q.Type) ||
 			(q.Space != "" && it.Space != q.Space) ||
 			(q.State != "" && it.State != q.State) ||
 			(q.Parent != "" && it.Parent != q.Parent) {
@@ -471,9 +634,13 @@ func (s *Store) Type(name string) TypeDef {
 }
 
 // Relations returns the relations at one end of an item, in creation order.
+// Relations whose ends are not both live are hidden, not removed (ADR-0021).
 func (s *Store) Relations(id ID, dir Direction) []Relation {
 	var out []Relation
 	for _, r := range s.rels {
+		if s.items[r.From].Presence != Live || s.items[r.To].Presence != Live {
+			continue
+		}
 		if (dir == Outgoing && r.From == id) || (dir == Incoming && r.To == id) {
 			out = append(out, *r)
 		}
@@ -495,6 +662,35 @@ func (s *Store) History(id ID) []Event {
 		out = append(out, s.log[i])
 	}
 	return out
+}
+
+// Embeds returns how the embed blocks of an item's body render (ADR-0020).
+func (s *Store) Embeds(host ID) ([]EmbedView, error) {
+	h, err := s.item(host)
+	if err != nil {
+		return nil, err
+	}
+	var out []EmbedView
+	for _, b := range h.Body.Blocks {
+		if b.Kind != Embed {
+			continue
+		}
+		t := s.items[b.Ref]
+		out = append(out, EmbedView{Ref: t.ID, Key: t.Key, Title: t.Title, Child: t.Parent == host, Presence: t.Presence})
+	}
+	return out, nil
+}
+
+// live returns an item that exists and is neither trashed nor purged.
+func (s *Store) live(id ID) (*Item, error) {
+	it, err := s.item(id)
+	if err != nil {
+		return nil, err
+	}
+	if it.Presence != Live {
+		return nil, invalid("item %s is %s", it.Key, it.Presence)
+	}
+	return it, nil
 }
 
 func (s *Store) item(id ID) (*Item, error) {

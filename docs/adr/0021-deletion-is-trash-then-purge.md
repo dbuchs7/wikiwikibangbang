@@ -54,6 +54,15 @@ Proposed option: **4, trash then purge.**
 
 **The event log.** Past events still contain the purged content. For ordinary deletion that is acceptable (the log is internal and access-controlled). For legal erasure it is not; the proposed path is crypto-shredding — content in events encrypted with a per-item key that is destroyed on purge — to be decided with ADR-0008 (see open question).
 
+### Rules found while prototyping
+
+The prototype (see below) needed four rules this record had not stated. They are part of the proposal:
+
+- **Trashed items are read-only.** Every change to a trashed item is refused — title, properties, transitions, body, moves, relations, new children, inline creation.
+- **Restore and purge act on the trash root.** Both apply to the item the trash started from and to exactly the items trashed with it. An item trashed earlier on its own stays where it is. An item cannot be restored while its parent is not live ("restore the parent first").
+- **A body keeps old references but cannot add new ones.** Editing a page that embeds a deleted item must stay possible, so a new body version may keep references its previous version had; a reference to a trashed or purged item that the previous version did not have is refused.
+- **Hidden, not removed.** Relations with an end that is not live are hidden from relation queries while the item is in the trash; they reappear on restore. History keeps every event.
+
 ### Derived invariant
 
 **D7 – Identities are permanent.** An item's ID is never reused and always resolves: to the item, to the item in the trash, or to its tombstone. Deletion removes content, never identity.
@@ -63,6 +72,10 @@ Proposed option: **4, trash then purge.**
 - **Positive:** no broken links anywhere; mistakes are recoverable; pages owned by others are never altered; one mechanism for all types; a clear path to real erasure.
 - **Negative / trade-offs accepted:** tombstones accumulate forever (small, but unbounded); two-step deletion is more to build and explain; until crypto-shredding exists, purged content survives in the log.
 - **Follow-ups / risks to watch:** retention period and purge rights (open question); the permission model must define who may trash and restore; erasure design together with ADR-0008; the prototype can implement trash, restore and tombstones to test this record before it is accepted.
+
+## Prototype (2026-10-17)
+
+`internal/item` implements trash, restore and purge with tombstones (`Trash`, `Restore`, `Purge`, `Presence`, `Query.IncludeDeleted`). Tested: subtree trash, exact batch restore, read-only trash, kept vs new references, tombstones resolving by ID and key, embeds of trashed and purged items, replay of the whole lifecycle. A test (`TestPurgeLeavesContentInTheLog`) pins the known gap that purged content stays in past events; it must be inverted when crypto-shredding lands. Not implemented: retention periods (purge is an explicit command) and purge permissions.
 
 ## Pros and cons of the options
 

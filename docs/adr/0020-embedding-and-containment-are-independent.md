@@ -52,6 +52,14 @@ Proposed option: **1, independent links.**
 - **Negative / trade-offs accepted:** a page can show items it does not contain and contain items it does not show; the UI must make the two cases distinguishable; deleting a page has to say what happens to children it no longer shows (ADR-0021).
 - **Follow-ups / risks to watch:** atomic multi-event commands in ADR-0008; the children list of an item must be a first-class view, otherwise items whose embed was removed are hard to find.
 
+## Prototype (2026-10-17)
+
+`internal/item` implements this record: `CreateEmbedded` (one batch, space and parent taken from the host), `Embeds` (the derived child/reference rendering) and the guarantees above, with tests. Observations:
+
+- **All-or-nothing needs validation before the first event.** The prototype validates the whole command, then records both events with a shared `Batch` marker. A refused command writes nothing (tested). For ADR-0008 this means a batch must be one framed unit in the log, as atlas does.
+- **"Lives here" as a derived value works.** Moving an inline task elsewhere turns its embed into a reference without any write to the host body (tested).
+- Nothing in the prototype contradicts the decision.
+
 ## Pros and cons of the options
 
 ### 1. Independent links
