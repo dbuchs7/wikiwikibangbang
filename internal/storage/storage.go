@@ -9,9 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"sync"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
@@ -20,18 +22,23 @@ import (
 // AccountsFile holds the accounts and API tokens (ADR-0027).
 const AccountsFile = "accounts.wal"
 
+// AuditFile holds the security audit trail (ADR-0029).
+const AuditFile = "audit.wal"
+
 // DB is an open data directory.
 type DB struct {
 	// Store is the item store. It is not safe for concurrent use: callers
 	// that may run concurrently go through Read and Write.
 	Store    *item.Store
 	Accounts *auth.Accounts
+	Audit    *audit.Trail
 
 	mu       sync.Mutex
 	lock     io.Closer
 	log      *wal.Log
 	keys     *keyring
 	accounts *wal.Log
+	audit    *wal.Log
 }
 
 // Read runs fn with the item store while no command runs.
@@ -65,6 +72,8 @@ type Recovery struct {
 type Options struct {
 	Item []item.Option
 	Auth []auth.Option
+	// Log receives every audit entry as a log line, too.
+	Log *slog.Logger
 }
 
 // Open opens or creates the data directory and returns the recovered store.
@@ -109,6 +118,14 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 	if db.Accounts, err = auth.New(asc.Records, al.Append, o.Auth...); err != nil {
 		return nil, Recovery{}, err
 	}
+	tl, tsc, err := wal.OpenFile(dir, AuditFile)
+	if err != nil {
+		return nil, Recovery{}, err
+	}
+	db.audit = tl
+	if db.Audit, err = audit.New(tsc.Records, tl.Append, o.Log, nil); err != nil {
+		return nil, Recovery{}, err
+	}
 	rec := recovery(sc, log)
 	if rec.Shredded, err = db.heal(); err != nil {
 		return nil, Recovery{}, fmt.Errorf("storage: destroying leftover keys: %w", err)
@@ -146,6 +163,9 @@ func (db *DB) close() error {
 	}
 	if db.accounts != nil {
 		errs = append(errs, db.accounts.Close())
+	}
+	if db.audit != nil {
+		errs = append(errs, db.audit.Close())
 	}
 	if db.lock != nil {
 		errs = append(errs, db.lock.Close())

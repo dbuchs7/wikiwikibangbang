@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
@@ -18,7 +19,7 @@ import (
 // item.Store.As(principal), so the permission model (ADR-0022) decides, and
 // through storage.DB.Read/Write, so commands are serialised (ADR-0008).
 func itemRoutes(d Deps) []Route {
-	h := itemHandlers{d: d, log: d.Audit}
+	h := itemHandlers{d: d, log: d.Log}
 	if h.log == nil {
 		h.log = slog.New(slog.DiscardHandler)
 	}
@@ -31,6 +32,8 @@ func itemRoutes(d Deps) []Route {
 		{Method: put, Pattern: "/api/spaces/{space}/roles/{principal}", Summary: "Grant a space role to a user ID or @group (space administrators)", Handler: http.HandlerFunc(h.grantRole)},
 		{Method: put, Pattern: "/api/groups/{group}/members/{principal}", Summary: "Add a member to a group (administrators)", Handler: http.HandlerFunc(h.addMember)},
 		{Method: put, Pattern: "/api/system-roles/{role}/{principal}", Summary: "Grant a system role, admin or erasure (administrators)", Handler: http.HandlerFunc(h.grantSystemRole)},
+
+		{Method: get, Pattern: "/api/audit", Summary: "The security audit trail, newest first, paged (administrators)", Handler: http.HandlerFunc(h.listAudit)},
 
 		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged", Handler: http.HandlerFunc(h.findItems)},
 		{Method: post, Pattern: "/api/items", Summary: "Create an item", Handler: http.HandlerFunc(h.createItem)},
@@ -215,7 +218,12 @@ func (h itemHandlers) grantRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.write(w, r, 0, func(x *item.Session, _ *item.Store) (any, error) {
-		return nil, x.Grant(r.PathValue("space"), r.PathValue("principal"), role)
+		if err := x.Grant(r.PathValue("space"), r.PathValue("principal"), role); err != nil {
+			return nil, err
+		}
+		h.d.DB.Audit.Record(audit.Entry{Event: audit.RoleGranted, Actor: who(r), Addr: clientAddr(r), Subject: r.PathValue("principal"),
+			Detail: map[string]string{"space": r.PathValue("space"), "role": req.Role}})
+		return nil, nil
 	})
 }
 
@@ -224,7 +232,12 @@ func (h itemHandlers) addMember(w http.ResponseWriter, r *http.Request) {
 		if err := h.isAdmin(s, r); err != nil {
 			return nil, err
 		}
-		return nil, s.AddToGroup(who(r), r.PathValue("group"), r.PathValue("principal"))
+		if err := s.AddToGroup(who(r), r.PathValue("group"), r.PathValue("principal")); err != nil {
+			return nil, err
+		}
+		h.d.DB.Audit.Record(audit.Entry{Event: audit.GroupMember, Actor: who(r), Addr: clientAddr(r), Subject: r.PathValue("principal"),
+			Detail: map[string]string{"group": r.PathValue("group")}})
+		return nil, nil
 	})
 }
 
@@ -241,9 +254,39 @@ func (h itemHandlers) grantSystemRole(w http.ResponseWriter, r *http.Request) {
 		if err := s.GrantSystemRole(who(r), r.PathValue("principal"), role); err != nil {
 			return nil, err
 		}
-		h.log.Warn("audit", "event", "system-role.grant", "by", who(r), "principal", r.PathValue("principal"), "role", role)
+		h.d.DB.Audit.Record(audit.Entry{Event: audit.SystemRole, Actor: who(r), Addr: clientAddr(r), Subject: r.PathValue("principal"), Detail: map[string]string{"role": role}})
 		return nil, nil
 	})
+}
+
+func (h itemHandlers) listAudit(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, before := 100, 0
+	var err error
+	if v := q.Get("limit"); v != "" {
+		if limit, err = strconv.Atoi(v); err != nil || limit < 1 || limit > MaxPage {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be 1 to %d", MaxPage))
+			return
+		}
+	}
+	if v := q.Get("before"); v != "" {
+		if before, err = strconv.Atoi(v); err != nil || before < 1 {
+			writeError(w, http.StatusBadRequest, "before must be a sequence number")
+			return
+		}
+	}
+	admin := false
+	h.d.DB.Read(func(s *item.Store) { admin = s.HasSystemRole(who(r), item.RoleAdmin) })
+	if !admin {
+		writeError(w, http.StatusForbidden, "administrators only")
+		return
+	}
+	entries := h.d.DB.Audit.List(before, limit)
+	res := map[string]any{"entries": nonNilSlice(entries)}
+	if len(entries) == limit {
+		res["next"] = entries[len(entries)-1].Seq
+	}
+	writeJSON(w, http.StatusOK, res)
 }
 
 // --- items -------------------------------------------------------------------
@@ -511,7 +554,7 @@ func (h itemHandlers) purge(w http.ResponseWriter, r *http.Request) {
 		if err := x.Purge(it.ID); err != nil {
 			return err
 		}
-		h.log.Info("audit", "event", "item.purge", "user", who(r), "item", it.ID)
+		h.d.DB.Audit.Record(audit.Entry{Event: audit.ItemPurged, Actor: who(r), Addr: clientAddr(r), Subject: string(it.ID), Detail: map[string]string{"key": it.Key}})
 		return nil
 	})
 }
@@ -525,7 +568,7 @@ func (h itemHandlers) redact(w http.ResponseWriter, r *http.Request) {
 			if err := x.Redact(it.ID, req.Reason); err != nil {
 				return err
 			}
-			h.log.Warn("audit", "event", "item.redact", "user", who(r), "item", it.ID)
+			h.d.DB.Audit.Record(audit.Entry{Event: audit.ItemRedacted, Actor: who(r), Addr: clientAddr(r), Subject: string(it.ID), Detail: map[string]string{"key": it.Key, "reason": req.Reason}})
 			return nil
 		})
 	}

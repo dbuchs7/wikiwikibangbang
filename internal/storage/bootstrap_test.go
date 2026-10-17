@@ -39,9 +39,12 @@ func TestEnsureAdmin(t *testing.T) {
 	}
 	noErr(t, db.Close())
 
-	// Accounts and the role survive a restart.
+	// Accounts, the role and the audit trail survive a restart.
 	db = openFast(t, dir)
 	defer db.Close()
+	if got := db.Audit.List(0, 10); len(got) != 2 || got[1].Event != "user.create" || got[0].Event != "system-role.grant" || got[0].Actor != SystemActor {
+		t.Fatalf("audit after restart: %+v", got)
+	}
 	if b2, err := db.EnsureAdmin("admin", ""); err != nil || b2.Created || !isAdmin(db, b.User.ID) {
 		t.Fatalf("after restart: %+v, %v", b2, err)
 	}

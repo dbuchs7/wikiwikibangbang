@@ -38,7 +38,7 @@ Proposed option: **2.**
 - **Federation:** an OIDC relying party with just-in-time provisioning; roles are not taken from IdP claims in the first step.
 - **Login throttle** per address and per account, charged before the account is looked up so it does not reveal which accounts exist. A **security audit trail** records logins, failures, token creation and revocation, and role changes.
 
-**Implementation so far** ([ADR-0027](0027-local-accounts-sessions-and-api-tokens.md)): local accounts (with PBKDF2 instead of bcrypt, to stay within the standard library), sessions, scoped API tokens, the login throttle, the first administrator and audit log lines. Not built: OIDC, a persisted audit trail.
+**Implementation so far** ([ADR-0027](0027-local-accounts-sessions-and-api-tokens.md)): local accounts (with PBKDF2 instead of bcrypt, to stay within the standard library), sessions, scoped API tokens, the login throttle, the first administrator; the persisted audit trail ([ADR-0029](0029-persisted-security-audit-trail.md)). Not built: OIDC.
 
 ### Consequences
 

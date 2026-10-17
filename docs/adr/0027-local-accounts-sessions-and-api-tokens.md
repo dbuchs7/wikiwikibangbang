@@ -37,16 +37,16 @@ Proposed option: **2**, with the rest of the boundary as follows.
 - **Throttle:** ten failed logins in 15 minutes block the client address and the username, counted before the account is looked up; memory is bounded. The peer address is used; forwarding headers are not trusted (open question).
 - **First administrator:** on the first start the server creates `WWBB_ADMIN_USERNAME` (default `admin`) with `WWBB_ADMIN_PASSWORD`, or with a generated password logged once, and grants it the admin role. If accounts exist but no administrator (a crash between the two steps), the role goes to that username's account.
 - **Endpoints:** `POST /api/login` (public), `POST /api/logout`, `GET /api/me`, `PUT /api/me/password`, `GET|POST /api/tokens`, `DELETE /api/tokens/{id}`, `GET|POST /api/users` (administrators). Request bodies are at most 64 KiB, unknown fields are refused.
-- **Audit:** logins, failures, throttling, token creation and revocation, password changes and account creation are written as structured log lines (`msg=audit`).
+- **Audit:** logins, failures, throttling, token creation and revocation, password changes and account creation are recorded in the audit trail ([ADR-0029](0029-persisted-security-audit-trail.md)).
 - **Store access:** the HTTP layer reaches the item store only through `storage.DB.Read` and `Write`, which serialise access; this is the single writer of ADR-0008 for concurrent requests.
 
-**Implementation is Partial:** no OIDC (ADR-0013); the audit trail is a log, not a persisted record; no account deactivation or deletion; no UI login form yet; no `-insecure-no-auth` mode (none is planned).
+**Implementation is Partial:** no OIDC (ADR-0013); no account deactivation or deletion; no UI login form yet; no `-insecure-no-auth` mode (none is planned).
 
 ### Consequences
 
 - **Positive:** no new dependency; the whole boundary is tested end to end through the route table, including that every API route but login refuses anonymous requests.
 - **Negative / trade-offs accepted:** PBKDF2 is not memory-hard, so a GPU attacker who steals `accounts.wal` guesses faster than against bcrypt or Argon2id; a restart logs everyone out; the throttle cannot tell clients apart behind a proxy.
-- **Follow-ups / risks to watch:** the open question; OIDC; deactivating and erasing accounts (usernames are personal data and are not crypto-shredded, see ADR-0026's open question); a persisted audit trail; raising the iteration count as hardware gets faster.
+- **Follow-ups / risks to watch:** the open question; OIDC; deactivating and erasing accounts (usernames are personal data and are not crypto-shredded, see ADR-0026's open question); raising the iteration count as hardware gets faster.
 
 ## Pros and cons of the options
 

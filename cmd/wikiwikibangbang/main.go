@@ -97,7 +97,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	log.Info("starting", "build", buildinfo.Get().String())
 
-	db, rec, err := storage.Open(*dataDir)
+	db, rec, err := storage.OpenWith(*dataDir, storage.Options{Log: log})
 	if err != nil {
 		log.Error("cannot open the data directory", "dir", *dataDir, "err", err)
 		return 1
@@ -121,7 +121,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		log.Error("cannot listen", "addr", *addr, "err", err)
 		return 1
 	}
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Audit: log})
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log})
 	if err := server.Serve(ctx, ln, server.Handler(routes, db.Accounts), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1

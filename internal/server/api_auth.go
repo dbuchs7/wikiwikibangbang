@@ -2,22 +2,19 @@ package server
 
 import (
 	"errors"
-	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
 // authRoutes are the routes of the principal boundary (ADR-0013, ADR-0027).
 func authRoutes(d Deps) []Route {
-	h := authHandlers{d: d, audit: d.Audit}
-	if h.audit == nil {
-		h.audit = slog.New(slog.DiscardHandler)
-	}
+	h := authHandlers{d: d}
 	return []Route{
 		{Method: http.MethodPost, Pattern: "/api/login", Summary: "Log in with username and password; sets the session cookie", Access: Public, Handler: http.HandlerFunc(h.login)},
 		{Method: http.MethodPost, Pattern: "/api/logout", Summary: "End the current session", Handler: http.HandlerFunc(h.logout)},
@@ -32,9 +29,10 @@ func authRoutes(d Deps) []Route {
 }
 
 type authHandlers struct {
-	d     Deps
-	audit *slog.Logger
+	d Deps
 }
+
+func (h authHandlers) record(e audit.Entry) { h.d.DB.Audit.Record(e) }
 
 type userJSON struct {
 	ID       auth.UserID `json:"id"`
@@ -77,16 +75,16 @@ func (h authHandlers) login(w http.ResponseWriter, r *http.Request) {
 	var throttled *auth.ThrottledError
 	switch {
 	case errors.As(err, &throttled):
-		h.audit.Warn("audit", "event", "login.throttled", "username", req.Username, "addr", addr)
+		h.record(audit.Entry{Event: audit.LoginThrottled, Addr: addr, Detail: map[string]string{"username": req.Username}})
 		w.Header().Set("Retry-After", strconv.Itoa(int(throttled.Wait.Seconds())+1))
 		writeError(w, http.StatusTooManyRequests, "too many failed attempts; try again later")
 		return
 	case err != nil:
-		h.audit.Warn("audit", "event", "login.failed", "username", req.Username, "addr", addr)
+		h.record(audit.Entry{Event: audit.LoginFailed, Addr: addr, Detail: map[string]string{"username": req.Username}})
 		writeError(w, http.StatusUnauthorized, "wrong username or password")
 		return
 	}
-	h.audit.Info("audit", "event", "login", "user", p.User, "addr", addr)
+	h.record(audit.Entry{Event: audit.Login, Actor: string(p.User), Addr: addr})
 	http.SetCookie(w, &http.Cookie{
 		Name: SessionCookie, Value: secret, Path: "/",
 		MaxAge: int(auth.SessionLifetime.Seconds()), HttpOnly: true,
@@ -99,7 +97,7 @@ func (h authHandlers) logout(w http.ResponseWriter, r *http.Request) {
 	p, _ := PrincipalFrom(r.Context())
 	if p.Via == "session" {
 		h.d.DB.Accounts.Logout(p.Session)
-		h.audit.Info("audit", "event", "logout", "user", p.User)
+		h.record(audit.Entry{Event: audit.Logout, Actor: string(p.User), Addr: clientAddr(r)})
 	}
 	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil})
 	w.WriteHeader(http.StatusNoContent)
@@ -135,12 +133,12 @@ func (h authHandlers) setPassword(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, auth.ErrInvalid):
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, auth.ErrUnauthorized):
-		h.audit.Warn("audit", "event", "password.change.failed", "user", p.User)
+		h.record(audit.Entry{Event: audit.PasswordFailed, Actor: string(p.User), Addr: clientAddr(r)})
 		writeError(w, http.StatusForbidden, "the current password is wrong")
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "password not changed")
 	default:
-		h.audit.Info("audit", "event", "password.change", "user", p.User)
+		h.record(audit.Entry{Event: audit.PasswordChanged, Actor: string(p.User), Addr: clientAddr(r)})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -174,7 +172,7 @@ func (h authHandlers) createToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "token not created")
 		return
 	}
-	h.audit.Info("audit", "event", "token.create", "user", p.User, "token", t.ID, "scope", t.Scope)
+	h.record(audit.Entry{Event: audit.TokenCreated, Actor: string(p.User), Addr: clientAddr(r), Subject: t.ID, Detail: map[string]string{"scope": string(t.Scope), "name": t.Name}})
 	writeJSON(w, http.StatusCreated, map[string]any{"token": toTokenJSON(t), "secret": secret})
 }
 
@@ -187,7 +185,7 @@ func (h authHandlers) revokeToken(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "token not revoked")
 	default:
-		h.audit.Info("audit", "event", "token.revoke", "user", p.User, "token", id)
+		h.record(audit.Entry{Event: audit.TokenRevoked, Actor: string(p.User), Addr: clientAddr(r), Subject: id})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -228,7 +226,7 @@ func (h authHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		writeError(w, http.StatusInternalServerError, "account not created")
 	default:
-		h.audit.Info("audit", "event", "user.create", "by", p.User, "user", u.ID)
+		h.record(audit.Entry{Event: audit.UserCreated, Actor: string(p.User), Addr: clientAddr(r), Subject: string(u.ID), Detail: map[string]string{"username": u.Username}})
 		writeJSON(w, http.StatusCreated, map[string]userJSON{"user": {ID: u.ID, Username: u.Username}})
 	}
 }
