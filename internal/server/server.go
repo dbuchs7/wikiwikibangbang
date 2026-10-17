@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
@@ -56,10 +57,20 @@ type Deps struct {
 	Log *slog.Logger
 	// SSO is the OpenID Connect provider, or nil when none is configured.
 	SSO *sso.Provider
+	// Collab holds the live editing sessions (ADR-0010); Routes creates
+	// one over DB when it is nil. NewCollab makes one to share, for a
+	// caller that runs its Tick.
+	Collab *collab.Hub
 }
+
+// NewCollab returns a live-session hub over the data directory.
+func NewCollab(db *storage.DB) *collab.Hub { return collab.NewHub(storeBackend{db}) }
 
 // Routes is the product's route table.
 func Routes(d Deps) []Route {
+	if d.Collab == nil && d.DB != nil {
+		d.Collab = NewCollab(d.DB)
+	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},

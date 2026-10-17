@@ -17,12 +17,13 @@ type world struct {
 	admin, bert, vera, carla *client
 	ids                      map[string]string
 	db                       *storage.DB
+	deps                     Deps
 }
 
 func newWorld(t *testing.T) world {
 	t.Helper()
 	h, d := setupAuth(t)
-	w := world{admin: &client{t: t, h: h}, ids: map[string]string{}, db: d.DB}
+	w := world{admin: &client{t: t, h: h}, ids: map[string]string{}, db: d.DB, deps: d}
 	w.admin.login("admin", adminPassword)
 	w.admin.expect("POST", "/api/types", `{"name":"task","body":true,"fields":[
 		{"name":"priority","kind":"enum","required":true,"values":["low","high"]},

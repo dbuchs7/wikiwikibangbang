@@ -1,7 +1,7 @@
 # ADR-0010: Real-time collaboration starts with block-level locks, not a CRDT
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Do users accept that two people cannot type in the same paragraph at the same time, or is character-level co-editing (CRDT) required for the product to be credible against Confluence?
@@ -37,6 +37,19 @@ Chosen option: **2 as the first step, designed so that 3 can replace it.**
 - **Membership** follows the item's permissions: who may edit may lock; who may read may watch.
 - **AI agents** join as participants over MCP and see and respect the same locks.
 - The server folds accepted changes into the body and commits versions per ADR-0001.
+
+**Implementation so far** (`internal/collab`, `/api/items/{ref}/live`, `assets/live.js`):
+
+- **Block IDs are session-local.** The session numbers the blocks of the stored body when it opens; inserted blocks get IDs from their client. Nothing about them is persisted, so the body format and the event log are unchanged.
+- **Locks belong to a connection**, not to a person: two tabs of one person do not overwrite each other. A lock is taken implicitly by the first operation on a block and is shown to everyone with the holder's name.
+- **A release commits, in the releaser's name.** A block has a draft (being typed) and a stable text (its last release); a commit contains only stable text, so one person's unfinished paragraph never appears in a version attributed to someone else. A lock idle for 60 seconds, a closed connection and a server shutdown all release, and so commit, rather than drop typed text. A commit the store refuses keeps the block locked for its holder to correct.
+- **Operations come in atomic batches** (lock, set, insert, delete, release), so merging two blocks either takes both locks or changes nothing. Each block is validated when it is typed, with the same rules as a commit.
+- **Outside writers:** a body cannot be replaced through `PUT …/body` while a session holds locks or drafts (409). A change that slips in anyway (an import, a race) is detected at the next commit, which then resets the session to the stored body instead of overwriting it.
+- **Access follows the item at once:** after every command the hub rechecks its participants; trashing, purging or redacting the item closes its session and discards its drafts from memory (ADR-0026), and a participant who loses access is removed.
+- **The browser** keeps one ProseMirror editor in step with the session. Operations are computed as the difference between the document and what the server last confirmed, not recorded per keystroke; input into a block someone else holds is stopped before the browser changes the page. The browser test edits one body from two accounts at once.
+- **Budgets** (ADR-0015): 1,000 sessions, 50 clients per session, 5,000 blocks per session; a client that falls 256 events behind is dropped.
+
+Not built yet: agents over MCP (ADR-0012) — they can already use the same HTTP operations; showing where in a block another person's cursor is; undo across a release.
 
 ### Consequences
 

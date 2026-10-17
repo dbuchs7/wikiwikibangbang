@@ -104,8 +104,8 @@ function check(cond, msg) {
     await page.fill(".pm-target", "PLAT-1");
     await page.click(".pm-toolbar button:has-text('Embed')");
     await page.waitForSelector(".ProseMirror .pm-embed");
-    await page.click("text=Save body");
-    await page.waitForSelector("td:has-text('BodyCommitted')");
+    await page.click("#body h2"); // leaving the editor releases its blocks, which saves them
+    await page.waitForSelector(".live[data-pending='0']");
 
     step("the body survives a reload exactly");
     await page.reload();
@@ -116,6 +116,47 @@ function check(cond, msg) {
     check((await page.textContent(".pm-mention")) === "@PLAT-1", "the mention");
     check((await page.textContent(".pm-embed")).includes("PLAT-1"), "the embed");
     check((await editor.textContent()).includes("<script>alert('body')</script>"), "the script shows as text");
+
+    step("live: two people edit one body at once");
+    const other = await browser.newPage();
+    other.on("pageerror", (e) => problems.push("bert's page error: " + e.message));
+    other.on("dialog", async (d) => { problems.push("bert's dialog: " + d.message()); await d.dismiss(); });
+    await other.goto(base + "/");
+    await other.fill("#login [name=username]", "bert");
+    await other.fill("#login [name=password]", "bert's password");
+    await other.click("#login button[type=submit]");
+    await other.waitForSelector("nav >> text=bert");
+    await other.goto(base + "/#/item/PLAT-2");
+    await other.waitForSelector(".ProseMirror h3");
+    await page.waitForSelector(".live-presence:has-text('bert')");
+    // admin types in the heading; bert sees it live, marked as held.
+    await page.click(".ProseMirror h3");
+    await page.keyboard.press("End");
+    await page.keyboard.type(" now");
+    await other.waitForSelector(".pm-locked[data-holder='admin'] >> text=Steps now");
+    // bert cannot type into the held heading…
+    await other.click(".ProseMirror h3");
+    await other.keyboard.press("End");
+    await other.keyboard.type("XYZ");
+    check((await other.textContent(".ProseMirror h3")) === "Steps now", "a held block refuses others' typing");
+    // …but can edit another block at the same time.
+    await other.click(".ProseMirror .pm-bullet >> nth=0");
+    await other.keyboard.press("End");
+    await other.keyboard.type(" (bert)");
+    await page.waitForSelector(".pm-locked[data-holder='bert'] >> text=first item (bert)");
+    await page.click("#body h2");
+    await other.click("#body h2");
+    await page.waitForSelector(".live[data-pending='0']");
+    await other.waitForSelector(".live[data-pending='0']");
+    await other.close();
+    await page.reload();
+    await page.waitForSelector(".ProseMirror h3");
+    check((await page.textContent(".ProseMirror h3")) === "Steps now", "admin's change is saved");
+    const bullet = await page.textContent(".pm-bullet >> nth=0");
+    check(bullet === "first item (bert)", "bert's change is saved: " + bullet);
+    const authors = await page.$$eval("table.history tr", (rows) => rows
+      .filter((r) => r.children[2]?.textContent === "BodyCommitted").map((r) => r.children[1].textContent));
+    check(new Set(authors).size >= 2, "each person's change is a version in their name");
 
     step("the mention relates the items");
     await page.click(".pm-mention");

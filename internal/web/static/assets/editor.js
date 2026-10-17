@@ -9,9 +9,11 @@ import {
 } from "../vendor/prosemirror.js";
 import { h, safeHref } from "./dom.js";
 
-// Text blocks keep the mentions they had without a mention mark (imported
-// bodies), so saving does not drop their relations.
-const textAttrs = { mentions: { default: [] } };
+// Every block carries bid, its ID in a live session (ADR-0010); it is not
+// stored. Text blocks keep the mentions they had without a mention mark
+// (imported bodies), so saving does not drop their relations.
+const bid = { bid: { default: null } };
+const textAttrs = { ...bid, mentions: { default: [] } };
 
 export const schema = new Schema({
   nodes: {
@@ -26,13 +28,13 @@ export const schema = new Schema({
     bullet: { group: "block", content: "inline*", attrs: textAttrs, parseDOM: [{ tag: "ul > li" }], toDOM: () => ["div", { class: "pm-bullet" }, 0] },
     ordered: { group: "block", content: "inline*", attrs: textAttrs, parseDOM: [{ tag: "ol > li" }], toDOM: () => ["div", { class: "pm-ordered" }, 0] },
     quote: { group: "block", content: "inline*", attrs: textAttrs, parseDOM: [{ tag: "blockquote" }], toDOM: () => ["blockquote", 0] },
-    code_block: { group: "block", content: "text*", marks: "", code: true, defining: true, parseDOM: [{ tag: "pre", preserveWhitespace: "full" }], toDOM: () => ["pre", ["code", 0]] },
+    code_block: { group: "block", content: "text*", marks: "", code: true, defining: true, attrs: bid, parseDOM: [{ tag: "pre", preserveWhitespace: "full" }], toDOM: () => ["pre", ["code", 0]] },
     // Content an importer could not convert (ADR-0023), kept as it came and
     // shown as text; it cannot be created in the editor.
-    unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, toDOM: () => ["pre", { class: "pm-unsupported", title: "Imported content that could not be converted" }, 0] },
+    unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, attrs: bid, toDOM: () => ["pre", { class: "pm-unsupported", title: "Imported content that could not be converted" }, 0] },
     embed: {
       group: "block", atom: true, selectable: true,
-      attrs: { ref: {}, label: { default: "" }, href: { default: "" } },
+      attrs: { ...bid, ref: {}, label: { default: "" }, href: { default: "" } },
       toDOM: (n) => ["div", { class: "pm-embed", contenteditable: "false" },
         n.attrs.href ? ["a", { href: safeHref(n.attrs.href) }, n.attrs.label] : ["span", { class: "muted" }, n.attrs.label || "an item you cannot see"]],
     },
@@ -77,25 +79,29 @@ const cp = (s) => Array.from(s).length;
 // --- model blocks -> editor document ----------------------------------------
 
 export function docFromBlocks(blocks, embeds = []) {
-  const nodes = [];
-  for (const b of blocks) {
-    if (b.kind === "embed") {
-      const v = embeds.find((e) => e.ref === b.ref);
-      nodes.push(schema.nodes.embed.create({
-        ref: b.ref,
-        label: v && !v.restricted ? `${v.key} ${v.title}` : "",
-        href: v && !v.restricted ? "#/item/" + encodeURIComponent(v.key) : "",
-      }));
-      continue;
-    }
-    const type = nodeOf(b.kind);
-    const plain = type === schema.nodes.code_block || type === schema.nodes.unsupported;
-    const attrs = plain ? {} : { mentions: b.mentions || [] };
-    if (type === schema.nodes.heading) attrs.level = b.level || 1;
-    nodes.push(type.create(attrs, inlineContent(b.text || "", plain ? [] : b.marks || [])));
-  }
+  const nodes = blocks.map((b) => nodeFromBlock(b, embeds));
   if (nodes.length === 0) nodes.push(schema.nodes.paragraph.create());
   return schema.nodes.doc.create(null, nodes);
+}
+
+// nodeFromBlock makes the editor node of one model block; b.id becomes
+// its session ID.
+export function nodeFromBlock(b, embeds = []) {
+  const id = b.id ?? null;
+  if (b.kind === "embed") {
+    const v = embeds.find((e) => e.ref === b.ref);
+    return schema.nodes.embed.create({
+      bid: id,
+      ref: b.ref,
+      label: v && !v.restricted ? `${v.key} ${v.title}` : "",
+      href: v && !v.restricted ? "#/item/" + encodeURIComponent(v.key) : "",
+    });
+  }
+  const type = nodeOf(b.kind);
+  const plain = type === schema.nodes.code_block || type === schema.nodes.unsupported;
+  const attrs = plain ? { bid: id } : { bid: id, mentions: b.mentions || [] };
+  if (type === schema.nodes.heading) attrs.level = b.level || 1;
+  return type.create(attrs, inlineContent(b.text || "", plain ? [] : b.marks || []));
 }
 
 function inlineContent(text, marks) {
@@ -126,38 +132,38 @@ function inlineContent(text, marks) {
 
 export function blocksFromDoc(doc) {
   const blocks = [];
-  doc.forEach((node) => {
-    if (node.type === schema.nodes.embed) {
-      blocks.push({ kind: "embed", ref: node.attrs.ref });
+  doc.forEach((node) => blocks.push(blockFromNode(node)));
+  return blocks;
+}
+
+// blockFromNode is the model block of one editor node.
+export function blockFromNode(node) {
+  if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
+  let text = "";
+  const marks = [];
+  const mentions = new Set((node.attrs && node.attrs.mentions) || []);
+  node.forEach((child) => {
+    const start = cp(text);
+    if (child.type === schema.nodes.mention) {
+      text += child.attrs.label;
+      marks.push({ type: "mention", start, end: cp(text), ref: child.attrs.ref });
+      mentions.add(child.attrs.ref);
       return;
     }
-    let text = "";
-    const marks = [];
-    const mentions = new Set((node.attrs && node.attrs.mentions) || []);
-    node.forEach((child) => {
-      const start = cp(text);
-      if (child.type === schema.nodes.mention) {
-        text += child.attrs.label;
-        marks.push({ type: "mention", start, end: cp(text), ref: child.attrs.ref });
-        mentions.add(child.attrs.ref);
-        return;
-      }
-      text += child.text;
-      for (const m of child.marks) {
-        const mark = { type: m.type.name, start, end: cp(text) };
-        if (m.type.name === "link") mark.href = m.attrs.href;
-        const prev = marks.findLast((x) => x.type === mark.type && x.href === mark.href && x.end === start);
-        if (prev) prev.end = mark.end; // one mark across adjacent text nodes
-        else marks.push(mark);
-      }
-    });
-    const b = { kind: kindOf(node), text };
-    if (node.type === schema.nodes.heading) b.level = node.attrs.level;
-    if (marks.length) b.marks = marks;
-    if (mentions.size) b.mentions = [...mentions];
-    blocks.push(b);
+    text += child.text;
+    for (const m of child.marks) {
+      const mark = { type: m.type.name, start, end: cp(text) };
+      if (m.type.name === "link") mark.href = m.attrs.href;
+      const prev = marks.findLast((x) => x.type === mark.type && x.href === mark.href && x.end === start);
+      if (prev) prev.end = mark.end; // one mark across adjacent text nodes
+      else marks.push(mark);
+    }
   });
-  return blocks;
+  const b = { kind: kindOf(node), text };
+  if (node.type === schema.nodes.heading) b.level = node.attrs.level;
+  if (marks.length) b.marks = marks;
+  if (mentions.size) b.mentions = [...mentions];
+  return b;
 }
 
 // --- the editor -----------------------------------------------------------------
@@ -196,12 +202,15 @@ function plugins() {
 // createEditor mounts an editor for blocks and returns its element and a
 // function reading the blocks back. With editable false it is a viewer.
 // resolve(keyOrId) returns an item (for mentions and embeds) or throws.
-export function createEditor({ blocks, embeds, editable, resolve }) {
+// extra adds plugins, such as a live session's (live.js); viewProps adds
+// editor view properties.
+export function createEditor({ blocks, embeds, editable, resolve, extra = [], viewProps = {} }) {
   const mount = h("div", { class: "pm-editor" });
   const view = new EditorView(mount, {
-    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: plugins() }),
+    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...plugins()] }),
     editable: () => editable,
     attributes: { "aria-label": "Body", role: "textbox", "aria-multiline": "true" },
+    ...viewProps,
   });
   const run = (cmd) => () => { cmd(view.state, view.dispatch); view.focus(); };
   const kindSelect = h("select", { "aria-label": "Block kind", onchange: (e) => {

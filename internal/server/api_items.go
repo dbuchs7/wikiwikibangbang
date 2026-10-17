@@ -26,7 +26,7 @@ func itemRoutes(d Deps) []Route {
 		h.log = slog.New(slog.DiscardHandler)
 	}
 	get, post, put, del := http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete
-	return []Route{
+	routes := []Route{
 		{Method: get, Pattern: "/api/types", Summary: "List item types", Handler: http.HandlerFunc(h.listTypes)},
 		{Method: post, Pattern: "/api/types", Summary: "Define a type or a new version of it (administrators)", Handler: http.HandlerFunc(h.defineType)},
 		{Method: get, Pattern: "/api/spaces", Summary: "List the spaces one holds a role in", Handler: http.HandlerFunc(h.listSpaces)},
@@ -58,6 +58,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: post, Pattern: "/api/relations", Summary: "Add a typed relation", Handler: http.HandlerFunc(h.addRelation)},
 		{Method: del, Pattern: "/api/relations/{id}", Summary: "Remove a relation", Handler: http.HandlerFunc(h.removeRelation)},
 	}
+	return append(routes, liveRoutes(h)...)
 }
 
 type itemHandlers struct {
@@ -117,6 +118,12 @@ func (h itemHandlers) write(w http.ResponseWriter, r *http.Request, status int, 
 		out, err = fn(s.As(who(r)), s)
 		return err
 	})
+	if err == nil && h.d.Collab != nil {
+		// A command may have erased an item or changed who may see it;
+		// live sessions follow at once (ADR-0010, ADR-0026). This runs
+		// outside the store's lock: the hub calls the store under its own.
+		h.d.Collab.Revalidate()
+	}
 	switch {
 	case err != nil:
 		h.fail(w, err)
@@ -491,6 +498,13 @@ func (h itemHandlers) commitBody(w http.ResponseWriter, r *http.Request) {
 		Blocks []blockJSON `json:"blocks"`
 	}
 	if !decode(w, r, &req) {
+		return
+	}
+	// Checked before the write: the hub must not be called under the
+	// store's lock. A session that starts in between is reset by its next
+	// commit instead (collab.ErrDiverged).
+	if id, err := h.resolveID(r); err == nil && h.d.Collab != nil && h.d.Collab.Busy(id) {
+		writeError(w, http.StatusConflict, "the body is being edited in a live session; join it instead")
 		return
 	}
 	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {

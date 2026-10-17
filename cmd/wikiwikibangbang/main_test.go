@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -274,5 +277,93 @@ func TestAuditExpiryRunsOnEveryTick(t *testing.T) {
 	<-done
 	if !strings.Contains(logs.String(), "expired audit entries") || strings.Count(logs.String(), "removed=") != 1 {
 		t.Fatalf("logs: %s", logs.String())
+	}
+}
+
+// TestShutdownEndsLiveSessions: an open event stream must not hold up the
+// graceful shutdown, and a draft in it is committed, not lost.
+func TestShutdownEndsLiveSessions(t *testing.T) {
+	t.Setenv("WWBB_ADMIN_USERNAME", "root")
+	t.Setenv("WWBB_ADMIN_PASSWORD", "root's own password")
+	addr, dir := freeAddr(t), t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	var errOut bytes.Buffer
+	go func() { done <- run(ctx, []string{"serve", "-addr", addr, "-data-dir", dir}, io.Discard, &errOut) }()
+	base := "http://" + addr
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		if res, err := http.Get(base + "/healthz"); err == nil {
+			res.Body.Close()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("server did not start")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	jar, _ := cookiejar.New(nil)
+	c := &http.Client{Jar: jar}
+	call := func(method, path, body string, want int) []byte {
+		t.Helper()
+		req, _ := http.NewRequest(method, base+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		res, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		data, _ := io.ReadAll(res.Body)
+		if res.StatusCode != want {
+			t.Fatalf("%s %s: %d %s", method, path, res.StatusCode, data)
+		}
+		return data
+	}
+	call("POST", "/api/login", `{"username":"root","password":"root's own password"}`, http.StatusOK)
+	call("POST", "/api/types", `{"name":"page","body":true}`, http.StatusCreated)
+	call("POST", "/api/spaces", `{"key":"PLAT","name":"Platform"}`, http.StatusCreated)
+	call("POST", "/api/items", `{"space":"PLAT","type":"page","title":"p"}`, http.StatusCreated)
+	call("PUT", "/api/items/PLAT-1/body", `{"blocks":[{"kind":"paragraph","text":"before"}]}`, http.StatusOK)
+
+	res, err := c.Get(base + "/api/items/PLAT-1/live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	r := bufio.NewReader(res.Body)
+	var snap struct {
+		Client string `json:"client"`
+		Blocks []struct {
+			ID string `json:"id"`
+		} `json:"blocks"`
+	}
+	for snap.Client == "" {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.HasPrefix(line, "data: ") {
+			_ = json.Unmarshal([]byte(line[6:]), &snap)
+		}
+	}
+	call("POST", "/api/items/PLAT-1/live", `{"client":"`+snap.Client+`","ops":[{"op":"set","id":"`+snap.Blocks[0].ID+`","block":{"kind":"paragraph","text":"after"}}]}`, http.StatusNoContent)
+
+	cancel()
+	select {
+	case code := <-done:
+		if code != 0 {
+			t.Fatalf("serve exited %d:\n%s", code, errOut.String())
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("an open stream held up the shutdown")
+	}
+	db, _, err := storage.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	it, err := db.Store.ByKey("PLAT-1")
+	if err != nil || it.Body.Blocks[0].Text != "after" {
+		t.Fatalf("draft not committed: %v %v", it.Body, err)
 	}
 }
