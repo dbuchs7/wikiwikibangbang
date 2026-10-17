@@ -92,6 +92,11 @@ func TestServeAndHealthcheck(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatal("healthcheck never succeeded against the running server")
 		}
+		select {
+		case code := <-done:
+			t.Fatalf("serve exited with %d before it answered:\n%s", code, errOut.String())
+		default:
+		}
 		time.Sleep(20 * time.Millisecond)
 	}
 
