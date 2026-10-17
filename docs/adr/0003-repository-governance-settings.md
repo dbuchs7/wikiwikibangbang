@@ -58,7 +58,7 @@ Chosen option: **option 3, ADR plus versioned ruleset JSON**, because it makes t
 | Require linear history | on | consistent with squash/rebase only |
 | Require a pull request | on, **0 approvals** | a single maintainer cannot approve their own pull request; review is done by the person signing off |
 | Require conversation resolution | on | open review threads block the merge |
-| Required status checks | `fmt · vet · test (race)`, `DCO sign-off (humans only)` | the CI jobs in `.github/workflows/ci.yml` |
+| Required status checks | `fmt · vet · test (race)`, `cross-build (release platforms)`, `e2e (browser)`, `DCO sign-off (humans only)` | every job in `.github/workflows/ci.yml`: a pull request that breaks a release platform or the UI cannot be merged either |
 | Require branches to be up to date | on | checks run against the current `main` |
 
 The JSON file is the source of truth. A change to the settings is made in the file by pull request first and then applied on GitHub (*Settings → Rules → Rulesets → Import a ruleset*, or by editing the existing ruleset to match).
