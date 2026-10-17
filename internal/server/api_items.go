@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -37,6 +38,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: get, Pattern: "/api/audit", Summary: "The security audit trail, newest first, paged (administrators)", Handler: http.HandlerFunc(h.listAudit)},
 
 		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged", Handler: http.HandlerFunc(h.findItems)},
+		{Method: get, Pattern: "/api/search", Summary: "Full-text search over readable items (q; space, type, state), best first, paged", Handler: http.HandlerFunc(h.searchItems)},
 		{Method: post, Pattern: "/api/items", Summary: "Create an item", Handler: http.HandlerFunc(h.createItem)},
 		{Method: get, Pattern: "/api/items/{ref}", Summary: "Get an item by ID or key", Handler: http.HandlerFunc(h.getItem)},
 		{Method: put, Pattern: "/api/items/{ref}/title", Summary: "Set the title", Handler: http.HandlerFunc(h.setTitle)},
@@ -297,43 +299,95 @@ const MaxPage = 500
 
 func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	limit := 100
-	if v := q.Get("limit"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > MaxPage {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be 1 to %d", MaxPage))
-			return
-		}
-		limit = n
+	limit, ok := parseLimit(w, q)
+	if !ok {
+		return
 	}
 	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")),
 		IncludeDeleted: q.Get("deleted") == "true"}
-	after := item.ID(q.Get("after"))
 	h.read(w, r, func(x *item.Session) (any, error) {
 		all := x.Find(query)
-		start := 0
-		if after != "" {
-			start = -1
-			for i, it := range all {
-				if it.ID == after {
-					start = i + 1
-				}
-			}
-			if start < 0 {
-				return nil, badInput("cursor %q is not in this listing", after)
-			}
+		page, res, err := paged(all, func(it item.Item) item.ID { return it.ID }, item.ID(q.Get("after")), limit)
+		if err != nil {
+			return nil, err
 		}
-		page := all[start:min(start+limit, len(all))]
 		out := make([]itemJSON, len(page))
 		for i, it := range page {
 			out[i] = toItemJSON(it)
 		}
-		res := map[string]any{"items": out, "total": map[string]any{"value": len(all), "exact": true}}
-		if start+limit < len(all) {
-			res["next"] = page[len(page)-1].ID
-		}
+		res["items"] = out
 		return res, nil
 	})
+}
+
+// searchItems answers a full-text search (ADR-0033).
+func (h itemHandlers) searchItems(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, ok := parseLimit(w, q)
+	if !ok {
+		return
+	}
+	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state")}
+	h.read(w, r, func(x *item.Session) (any, error) {
+		all, err := x.Search(q.Get("q"), query)
+		if err != nil {
+			return nil, err
+		}
+		page, res, err := paged(all, func(hit item.Hit) item.ID { return hit.Item.ID }, item.ID(q.Get("after")), limit)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]hitJSON, len(page))
+		for i, hit := range page {
+			out[i] = hitJSON{Item: toItemJSON(hit.Item), Score: hit.Score, Snippet: hit.Snippet}
+		}
+		res["hits"] = out
+		return res, nil
+	})
+}
+
+type hitJSON struct {
+	Item    itemJSON `json:"item"`
+	Score   int      `json:"score"`
+	Snippet string   `json:"snippet,omitempty"`
+}
+
+// parseLimit reads the page size, 100 by default; it answers 400 itself.
+func parseLimit(w http.ResponseWriter, q url.Values) (int, bool) {
+	v := q.Get("limit")
+	if v == "" {
+		return 100, true
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 || n > MaxPage {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be 1 to %d", MaxPage))
+		return 0, false
+	}
+	return n, true
+}
+
+// paged cuts the page after the cursor out of a complete listing and
+// returns it with the listing's total and, when more follow, the next
+// cursor.
+func paged[T any](all []T, id func(T) item.ID, after item.ID, limit int) ([]T, map[string]any, error) {
+	start := 0
+	if after != "" {
+		start = -1
+		for i, v := range all {
+			if id(v) == after {
+				start = i + 1
+			}
+		}
+		if start < 0 {
+			return nil, nil, badInput("cursor %q is not in this listing", after)
+		}
+	}
+	page := all[start:min(start+limit, len(all))]
+	res := map[string]any{"total": map[string]any{"value": len(all), "exact": true}}
+	if start+limit < len(all) {
+		res["next"] = id(page[len(page)-1])
+	}
+	return page, res, nil
 }
 
 type newItemJSON struct {

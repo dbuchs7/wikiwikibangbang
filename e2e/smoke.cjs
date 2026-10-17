@@ -119,7 +119,30 @@ function check(cond, msg) {
 
     step("the mention relates the items");
     await page.click(".pm-mention");
+    // The runbook itself lists "mentions (from the body)", so wait for the
+    // mentioned item's own page first.
+    await page.waitForSelector("text=state: done");
     await page.waitForSelector("text=mentions (from the body)");
+
+    step("search: the body is found, its markup shows as text");
+    await page.fill("nav input[name=q]", "alert body");
+    await page.press("nav input[name=q]", "Enter");
+    await page.waitForSelector(".hits li");
+    check((await page.textContent(".hits li a")) === "PLAT-2", "the runbook is the hit");
+    check((await page.textContent(".hits .snippet")).includes("<script>alert('body')</script>"), "the snippet shows the script as text");
+    await page.fill("nav input[name=q]", "zzzz-nothing");
+    await page.press("nav input[name=q]", "Enter");
+    await page.waitForSelector("text=Nothing found");
+
+    step("a slow view does not replace the one chosen after it");
+    await page.route("**/api/items/PLAT-1", async (r) => { await new Promise((ok) => setTimeout(ok, 1500)); await r.continue(); });
+    await page.evaluate(() => { location.hash = "#/item/PLAT-1"; });
+    await page.fill("nav input[name=q]", "alert body");
+    await page.press("nav input[name=q]", "Enter");
+    await page.waitForSelector(".hits li");
+    await page.waitForTimeout(2500); // the item view has answered by now
+    check(await page.locator(".hits li").count() === 1, "the search results stay");
+    await page.unroute("**/api/items/PLAT-1");
 
     step("account: token");
     await page.click("nav a[href='#/account']");

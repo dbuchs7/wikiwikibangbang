@@ -60,16 +60,36 @@ function renderNav() {
     nav.replaceChildren();
     return;
   }
+  const current = location.hash.startsWith("#/search/") ? decodeURIComponent(location.hash.slice(9)) : "";
+  const search = h("form", { class: "search", role: "search", onsubmit: (ev) => {
+    ev.preventDefault();
+    const q = new FormData(ev.target).get("q").trim();
+    if (q) location.hash = "#/search/" + encodeURIComponent(q);
+  } }, h("input", { name: "q", type: "search", placeholder: "Search", "aria-label": "Search", value: current }));
   mount(nav,
     link("#/", "Spaces"),
+    search,
     me.admin ? link("#/admin", "Administration") : null,
     link("#/account", me.user.username),
     h("button", { class: "link", onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }, "Log out"),
   );
 }
 
+// navigation counts route() calls. A view shows its content only if no
+// later navigation started while it was loading; otherwise a slow view
+// would replace the one the user chose after it.
+let navigation = 0;
+
+// screen captures the current navigation; call it before a view's first
+// await and show the view through the function it returns.
+function screen() {
+  const n = navigation;
+  return (...children) => { if (n === navigation) mount(app, ...children); };
+}
+
 async function route() {
   const hash = location.hash.replace(/^#/, "") || "/";
+  const show = (navigation++, screen());
   try {
     if (!me) {
       try {
@@ -84,12 +104,13 @@ async function route() {
     switch (section) {
       case "space": return await spaceView(arg);
       case "item": return await itemView(arg);
+      case "search": return await searchView(arg || "");
       case "account": return await accountView();
       case "admin": return await adminView();
       default: return await homeView();
     }
   } catch (err) {
-    mount(app, errorBox(err));
+    show(errorBox(err));
   }
 }
 
@@ -99,9 +120,10 @@ route();
 // --- login -------------------------------------------------------------------
 
 async function loginView() {
+  const show = screen();
   const params = new URLSearchParams(location.search);
   const sso = await get("/api/oidc").catch(() => ({ enabled: false }));
-  mount(app,
+  show(
     h("section", { class: "card narrow" },
       h("h1", { text: "Log in" }),
       params.get("login_error") ? h("p", { class: "error", text: "Single sign-on failed. Try again or use your password." }) : null,
@@ -119,11 +141,41 @@ async function loginView() {
     ));
 }
 
+// --- search (ADR-0033) -------------------------------------------------------
+
+async function searchView(q) {
+  const show = screen();
+  const url = (after) => `/api/search?q=${encodeURIComponent(q)}&limit=50${after ? "&after=" + encodeURIComponent(after) : ""}`;
+  const first = await get(url());
+  const list = h("ol", { class: "list hits" });
+  const more = h("div");
+  const addHits = (page) => {
+    for (const hit of page.hits) {
+      const it = hit.item;
+      list.append(h("li", {},
+        link("#/item/" + encodeURIComponent(it.key), it.key), " ", h("strong", { text: it.title }),
+        " ", h("span", { class: "muted", text: `${it.space} · ${it.type}${it.state ? " · " + it.state : ""}` }),
+        hit.snippet ? h("p", { class: "snippet", text: hit.snippet }) : null,
+      ));
+    }
+    more.replaceChildren();
+    if (page.next) more.append(h("button", { text: "More", onclick: async () => addHits(await get(url(page.next))) }));
+  };
+  addHits(first);
+  show(
+    h("h1", { text: "Search" }),
+    h("p", { class: "muted", text: `${first.total.value} results for “${q}”` }),
+    first.total.value === 0 ? h("p", { text: "Nothing found among the items you may read." }) : list,
+    more,
+  );
+}
+
 // --- spaces ------------------------------------------------------------------
 
 async function homeView() {
+  const show = screen();
   const { spaces } = await get("/api/spaces");
-  mount(app,
+  show(
     h("h1", { text: "Spaces" }),
     spaces.length === 0
       ? h("p", { class: "muted", text: me.admin ? "No spaces yet. Create one under Administration." : "You have no role in any space yet. Ask an administrator." })
@@ -132,6 +184,7 @@ async function homeView() {
 }
 
 async function spaceView(key) {
+  const show = screen();
   const [{ types }, first] = await Promise.all([get("/api/types"), get(`/api/items?space=${encodeURIComponent(key)}&limit=100`)]);
   const rows = h("tbody");
   const more = h("div");
@@ -150,7 +203,7 @@ async function spaceView(key) {
     }
   };
   addRows(first);
-  mount(app,
+  show(
     h("p", {}, link("#/", "Spaces"), " / " + key),
     h("h1", { text: key }),
     h("p", { class: "muted", text: `${first.total.value} items` }),
@@ -220,6 +273,7 @@ function newItemForm(space, types) {
 // --- one item ---------------------------------------------------------------
 
 async function itemView(ref) {
+  const show = screen();
   const { item } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
   const [{ types }, history, out, inc, embeds] = await Promise.all([
@@ -262,7 +316,7 @@ async function itemView(ref) {
         h("button", { class: "danger", text: "Delete for good", onclick: () => confirm("Delete for good? The content cannot be recovered.") && action(() => post(path + "/purge"), status) })]
       : [];
 
-  mount(app,
+  show(
     h("p", {}, link("#/", "Spaces"), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
     title,
     h("p", { class: "muted" }, `${item.type} · ${item.presence}`, item.state ? ` · state: ${item.state}` : "", ` · version ${item.version}`),
@@ -314,9 +368,10 @@ function historySection(events) {
 // --- account -----------------------------------------------------------------
 
 async function accountView() {
+  const show = screen();
   const { tokens } = await get("/api/tokens");
   const secret = h("div");
-  mount(app,
+  show(
     h("h1", { text: me.user.username }),
     h("p", { class: "muted", text: `ID ${me.user.id} · signed in via ${me.via}` }),
     form({ class: "card", id: "password" }, [
@@ -352,11 +407,12 @@ async function accountView() {
 // --- administration ----------------------------------------------------------
 
 async function adminView() {
+  const show = screen();
   const [{ users }, { spaces }, { types }, auditPage] = await Promise.all([
     get("/api/users"), get("/api/spaces"), get("/api/types"), get("/api/audit?limit=50"),
   ]);
   const userOptions = users.map((u) => h("option", { value: u.id, text: u.username }));
-  mount(app,
+  show(
     h("h1", { text: "Administration" }),
     form({ class: "card", id: "new-space" }, [
       h("h2", { text: "New space" }),
