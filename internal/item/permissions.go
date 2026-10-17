@@ -39,8 +39,7 @@ func (s *Store) AddToGroup(actor, group, member string) error {
 	if strings.TrimSpace(group) == "" || strings.TrimSpace(member) == "" {
 		return invalid("group and member must not be empty")
 	}
-	s.record(actor, Event{Kind: GroupMemberAdded, Group: group, Principal: member})
-	return nil
+	return s.record(actor, Event{Kind: GroupMemberAdded, Group: group, Principal: member})
 }
 
 // GrantRole gives a principal (or "@group") a role in a space.
@@ -51,8 +50,7 @@ func (s *Store) GrantRole(actor, space, principal string, role Role) error {
 	if role < Viewer || role > SpaceAdmin {
 		return invalid("unknown role %d", role)
 	}
-	s.record(actor, Event{Kind: RoleGranted, Space: space, Principal: principal, Role: role})
-	return nil
+	return s.record(actor, Event{Kind: RoleGranted, Space: space, Principal: principal, Role: role})
 }
 
 // GrantSystemRole gives a principal a system role.
@@ -60,8 +58,7 @@ func (s *Store) GrantSystemRole(actor, principal, role string) error {
 	if role != RoleAdmin && role != RoleErasure {
 		return invalid("unknown system role %q", role)
 	}
-	s.record(actor, Event{Kind: SystemRoleGranted, Principal: principal, SystemRole: role})
-	return nil
+	return s.record(actor, Event{Kind: SystemRoleGranted, Principal: principal, SystemRole: role})
 }
 
 // Restrict replaces an item's restriction.
@@ -70,8 +67,7 @@ func (s *Store) Restrict(actor string, id ID, r Restriction) error {
 		return err
 	}
 	r = Restriction{Read: slices.Clone(r.Read), Edit: slices.Clone(r.Edit)}
-	s.record(actor, Event{Kind: RestrictionSet, Item: id, Restriction: &r})
-	return nil
+	return s.record(actor, Event{Kind: RestrictionSet, Item: id, Restriction: &r})
 }
 
 // Redact removes an item's content at once, whether or not it is
@@ -89,8 +85,7 @@ func (s *Store) Redact(actor string, id ID, reason string) error {
 	if strings.TrimSpace(reason) == "" {
 		return invalid("a redaction needs a reason")
 	}
-	s.record(actor, Event{Kind: ItemRedacted, Item: id, Reason: reason})
-	return nil
+	return s.record(actor, Event{Kind: ItemRedacted, Item: id, Reason: reason})
 }
 
 // applyAccess applies the permission and redaction events.

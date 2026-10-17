@@ -12,12 +12,12 @@ The product is one binary for Linux, macOS and Windows on amd64 and arm64, and 3
 ./wikiwikibangbang serve -addr :8080
 ```
 
-Then open <http://localhost:8080>.
+Then open <http://localhost:8080>. Data is kept in `./data` (change it with `-data-dir`); `wikiwikibangbang check -data-dir data` verifies it without changing it.
 
 As a container:
 
 ```bash
-docker run --rm -p 8080:8080 ghcr.io/dbuchs7/wikiwikibangbang:latest
+docker run --rm -p 8080:8080 -v wikiwikibangbang-data:/data ghcr.io/dbuchs7/wikiwikibangbang:latest
 ```
 
 From source (Go 1.26):

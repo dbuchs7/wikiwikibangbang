@@ -2,6 +2,7 @@ package item
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -157,9 +158,11 @@ func checkValue(f FieldDef, v any) error {
 	case KindText:
 		_, ok = v.(string)
 	case KindNumber:
-		switch v.(type) {
-		case float64, int:
+		switch x := v.(type) {
+		case int:
 			ok = true
+		case float64:
+			ok = !math.IsNaN(x) && !math.IsInf(x, 0) // must survive the journal
 		}
 	case KindBool:
 		_, ok = v.(bool)

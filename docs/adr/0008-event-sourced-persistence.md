@@ -1,7 +1,7 @@
 # ADR-0008: Event-sourced persistence in an embedded store, with a single writer
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators
 - **Open question:** Does one writer goroutine sustain the write rate of a large installation (many spaces, many concurrent editors), or does the model need partitioning by space from the start?
@@ -36,6 +36,8 @@ Proposed option: **3.**
 - **One writer goroutine** applies commands, so no locks guard item state and replay is deterministic. Non-deterministic values (timestamps, generated IDs) are frozen into the events. The function that applies an event to state runs both live and on recovery and must be side-effect-free.
 - **Durable before visible:** a change is acknowledged, broadcast or notified only after its batch is synced to disk.
 - **Live collaboration is not event-sourced.** Keystroke-level editing state (ADR-0010) is ephemeral server memory; only committed versions of a body become events (ADR-0001, "two speeds of change").
+
+**Implementation so far** ([ADR-0025](0025-event-log-file-and-in-memory-state.md)): the log exists as one checksummed, fsynced file with one record per command, and the store recovers by replaying it. State is still folded in memory; Pebble, snapshots and compaction are not built.
 
 ### Consequences
 

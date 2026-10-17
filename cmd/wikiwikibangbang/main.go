@@ -2,7 +2,8 @@
 // server, the API and the embedded web UI in one executable, for every
 // supported platform and as a container image.
 //
-//	wikiwikibangbang serve [-addr :8080]
+//	wikiwikibangbang serve [-addr :8080] [-data-dir data]
+//	wikiwikibangbang check [-data-dir data]
 //	wikiwikibangbang healthcheck [-url http://127.0.0.1:8080/healthz]
 //	wikiwikibangbang version
 package main
@@ -23,6 +24,7 @@ import (
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
+	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 	"github.com/dbuchs7/wikiwikibangbang/internal/web"
 )
 
@@ -37,6 +39,7 @@ const usage = `Usage: wikiwikibangbang <command> [flags]
 
 Commands:
   serve        run the server
+  check        verify a data directory without changing it
   healthcheck  exit 0 if a running server answers its liveness probe
   version      print the version
 
@@ -54,6 +57,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	switch cmd {
 	case "serve":
 		return serve(ctx, args, stderr)
+	case "check":
+		return check(args, stdout, stderr)
 	case "healthcheck":
 		return healthcheck(ctx, args, stderr)
 	case "version":
@@ -85,11 +90,23 @@ func parseFailed(err error) int {
 func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	fs := newFlags("serve", stderr)
 	addr := fs.String("addr", ":8080", "address to listen on")
+	dataDir := fs.String("data-dir", defaultDataDir, "directory holding the event log")
 	if err := fs.Parse(args); err != nil {
 		return parseFailed(err)
 	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	log.Info("starting", "build", buildinfo.Get().String())
+
+	db, rec, err := storage.Open(*dataDir)
+	if err != nil {
+		log.Error("cannot open the data directory", "dir", *dataDir, "err", err)
+		return 1
+	}
+	defer db.Close()
+	if rec.Torn > 0 {
+		log.Warn("dropped an interrupted write", "bytes", rec.Torn)
+	}
+	log.Info("data directory open", "dir", *dataDir, "events", rec.Events)
 
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
@@ -99,6 +116,30 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	if err := server.Serve(ctx, ln, server.Handler(server.Routes(web.FS())), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
+	}
+	return 0
+}
+
+// defaultDataDir is relative to the working directory, so a binary started
+// from a terminal keeps its data next to where it was started.
+const defaultDataDir = "data"
+
+// check verifies that a data directory's log is intact and replays, without
+// locking or changing it.
+func check(args []string, stdout, stderr io.Writer) int {
+	fs := newFlags("check", stderr)
+	dataDir := fs.String("data-dir", defaultDataDir, "directory holding the event log")
+	if err := fs.Parse(args); err != nil {
+		return parseFailed(err)
+	}
+	rec, err := storage.Inspect(*dataDir)
+	if err != nil {
+		fmt.Fprintln(stderr, "check:", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "ok: %d events in %d batches\n", rec.Events, rec.Batches)
+	if rec.Torn > 0 {
+		fmt.Fprintf(stdout, "an interrupted write of %d bytes at the end will be dropped on the next start\n", rec.Torn)
 	}
 	return 0
 }

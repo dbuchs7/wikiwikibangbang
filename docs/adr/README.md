@@ -20,7 +20,7 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0005](0005-test-driven-development.md) | Test-driven development as the default workflow | Accepted | Landed |
 | [0006](0006-decision-record-states-and-open-questions.md) | A decision record has two states, and its open questions expire | Accepted | Landed |
 | [0007](0007-adr-numbers-assigned-at-merge.md) | ADR numbers are assigned at merge, not on a branch | Proposed | Not started |
-| [0008](0008-event-sourced-persistence.md) | Event-sourced persistence in an embedded store, with a single writer | Proposed | Not started |
+| [0008](0008-event-sourced-persistence.md) | Event-sourced persistence in an embedded store, with a single writer | Proposed | Partial |
 | [0009](0009-single-binary-with-embedded-web-ui.md) | A single binary with an embedded web UI | Proposed | Not started |
 | [0010](0010-real-time-collaboration-with-block-locks.md) | Real-time collaboration starts with block-level locks, not a CRDT | Proposed | Not started |
 | [0011](0011-http-api-route-table-and-access-classes.md) | The HTTP API is one route table, described by OpenAPI, and every route declares its access class | Proposed | Not started |
@@ -37,3 +37,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0022](0022-permission-model.md) | Space roles, narrowing restrictions, and a logged erasure role | Proposed | Not started |
 | [0023](0023-import-and-sync-from-jira-and-confluence.md) | Import from Jira and Confluence through one engine — snapshot import and one-way sync, never two masters | Proposed | Not started |
 | [0024](0024-release-targets-and-container-image.md) | One binary for every common platform, and a distroless container image | Accepted | Partial |
+| [0025](0025-event-log-file-and-in-memory-state.md) | The event log is one file of checksummed batch records; state is folded in memory until it outgrows it | Proposed | Partial |
