@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 	"github.com/dbuchs7/wikiwikibangbang/internal/web"
 )
 
@@ -21,9 +23,26 @@ func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
 	return rec
 }
 
+// testDeps opens a data directory with cheap password hashing.
+func testDeps(t *testing.T) Deps {
+	t.Helper()
+	db, _, err := storage.OpenWith(t.TempDir(), storage.Options{Auth: []auth.Option{auth.WithIterations(1000)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return Deps{UI: web.FS(), DB: db}
+}
+
+func testHandler(t *testing.T) http.Handler {
+	t.Helper()
+	d := testDeps(t)
+	return Handler(Routes(d), d.DB.Accounts)
+}
+
 func TestRouteTableIsComplete(t *testing.T) {
 	seen := map[string]bool{}
-	for _, rt := range Routes(web.FS()) {
+	for _, rt := range Routes(testDeps(t)) {
 		key := rt.Method + " " + rt.Pattern
 		if rt.Method == "" || rt.Pattern == "" || rt.Summary == "" || rt.Handler == nil {
 			t.Errorf("%s: method, pattern, summary and handler are required", key)
@@ -36,7 +55,7 @@ func TestRouteTableIsComplete(t *testing.T) {
 }
 
 func TestPublicRoutes(t *testing.T) {
-	h := Handler(Routes(web.FS()))
+	h := testHandler(t)
 	cases := []struct {
 		path, status, contentType, body string
 	}{
@@ -60,7 +79,7 @@ func TestPublicRoutes(t *testing.T) {
 }
 
 func TestUnknownPathsAndListingsAreNotFound(t *testing.T) {
-	h := Handler(Routes(web.FS()))
+	h := testHandler(t)
 	for _, path := range []string{"/nope", "/assets/", "/assets/missing.js", "/index.html/x"} {
 		if rec := get(t, h, path); rec.Code != http.StatusNotFound {
 			t.Errorf("GET %s: status %d, want 404", path, rec.Code)
@@ -69,7 +88,7 @@ func TestUnknownPathsAndListingsAreNotFound(t *testing.T) {
 }
 
 func TestWrongMethodIsRejected(t *testing.T) {
-	h := Handler(Routes(web.FS()))
+	h := testHandler(t)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/healthz", nil))
 	if rec.Code != http.StatusMethodNotAllowed {
@@ -81,7 +100,7 @@ func TestUndeclaredAccessIsGated(t *testing.T) {
 	called := false
 	secret := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })
 	// No Access field: the zero value must be Authenticated.
-	h := Handler([]Route{{Method: http.MethodGet, Pattern: "/secret", Summary: "s", Handler: secret}})
+	h := Handler([]Route{{Method: http.MethodGet, Pattern: "/secret", Summary: "s", Handler: secret}}, nil)
 	if rec := get(t, h, "/secret"); rec.Code != http.StatusUnauthorized {
 		t.Errorf("status %d, want 401", rec.Code)
 	}
@@ -91,7 +110,7 @@ func TestUndeclaredAccessIsGated(t *testing.T) {
 }
 
 func TestEveryResponseCarriesSecurityHeaders(t *testing.T) {
-	h := Handler(Routes(web.FS()))
+	h := testHandler(t)
 	for _, path := range []string{"/", "/healthz", "/nope"} {
 		hd := get(t, h, path).Header()
 		if !strings.Contains(hd.Get("Content-Security-Policy"), "default-src 'self'") {
@@ -116,8 +135,9 @@ func TestServeAnswersAndShutsDownWhenContextEnds(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
+	h := testHandler(t)
 	go func() {
-		done <- Serve(ctx, ln, Handler(Routes(web.FS())), slog.New(slog.DiscardHandler))
+		done <- Serve(ctx, ln, h, slog.New(slog.DiscardHandler))
 	}()
 
 	res, err := http.Get("http://" + ln.Addr().String() + "/healthz")

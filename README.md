@@ -12,12 +12,20 @@ The product is one binary for Linux, macOS and Windows on amd64 and arm64, and 3
 ./wikiwikibangbang serve -addr :8080
 ```
 
-Then open <http://localhost:8080>. Data is kept in `./data` (change it with `-data-dir`); `wikiwikibangbang check -data-dir data` verifies it without changing it.
+Then open <http://localhost:8080>. The first start creates the administrator `admin` and logs a generated password once; set `WWBB_ADMIN_USERNAME` and `WWBB_ADMIN_PASSWORD` to choose them instead. The API is described in [ADR-0027](docs/adr/0027-local-accounts-sessions-and-api-tokens.md):
+
+```bash
+curl -c cookies -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"…"}' http://localhost:8080/api/login
+curl -b cookies http://localhost:8080/api/me
+```
+ Data is kept in `./data` (change it with `-data-dir`); `wikiwikibangbang check -data-dir data` verifies it without changing it.
 
 As a container:
 
 ```bash
-docker run --rm -p 8080:8080 -v wikiwikibangbang-data:/data ghcr.io/dbuchs7/wikiwikibangbang:latest
+docker run --rm -p 8080:8080 -v wikiwikibangbang-data:/data \
+  -e WWBB_ADMIN_PASSWORD='choose a long one' ghcr.io/dbuchs7/wikiwikibangbang:latest
 ```
 
 From source (Go 1.26):
