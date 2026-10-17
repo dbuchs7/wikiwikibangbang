@@ -372,16 +372,36 @@ func (s *Store) RemoveRelation(actor string, id ID) error {
 }
 
 // Trash moves an item and its live descendants to the trash, as one event
-// (ADR-0021). Descendants trashed earlier on their own stay in their batch.
+// (ADR-0021). It is refused while a live item outside that subtree still
+// references it — by embed, mention or hand-made relation. References from
+// inside the subtree, the subtree's own outgoing references and references
+// from trashed items do not block. Descendants trashed earlier on their own
+// stay in their batch.
 func (s *Store) Trash(actor string, id ID) error {
 	if _, err := s.live(id); err != nil {
 		return err
 	}
 	var members []ID
+	inSubtree := map[ID]bool{}
 	for _, m := range s.subtree(id) {
+		inSubtree[m] = true
 		if s.items[m].Presence == Live {
 			members = append(members, m)
 		}
+	}
+	var referrers []string
+	seen := map[ID]bool{}
+	for _, r := range s.rels {
+		from := s.items[r.From]
+		if inSubtree[r.To] && !inSubtree[r.From] && from.Presence == Live && !seen[from.ID] {
+			seen[from.ID] = true
+			referrers = append(referrers, from.Key)
+		}
+	}
+	if len(referrers) > 0 {
+		slices.Sort(referrers)
+		return fmt.Errorf("%w: %w: %s is referenced by %s; remove those references first",
+			ErrValidation, ErrReferenced, s.items[id].Key, strings.Join(referrers, ", "))
 	}
 	s.record(actor, Event{Kind: ItemTrashed, Item: id, Members: members})
 	return nil

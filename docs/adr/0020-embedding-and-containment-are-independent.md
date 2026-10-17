@@ -49,7 +49,7 @@ Proposed option: **1, independent links.**
 ### Consequences
 
 - **Positive:** one item, shown in many places, governed in one; no hidden data loss when editing pages; permissions follow a single rule; no synchronisation state.
-- **Negative / trade-offs accepted:** a page can show items it does not contain and contain items it does not show; the UI must make the two cases distinguishable; deleting a page has to say what happens to children it no longer shows (ADR-0021).
+- **Negative / trade-offs accepted:** a page can show items it does not contain and contain items it does not show; the UI must make the two cases distinguishable; deleting a page trashes its children with it, and an inline item cannot be deleted while its host still embeds it (ADR-0021).
 - **Follow-ups / risks to watch:** atomic multi-event commands in ADR-0008; the children list of an item must be a first-class view, otherwise items whose embed was removed are hard to find.
 
 ## Prototype (2026-10-17)
@@ -91,4 +91,4 @@ Strongest form: every child is visible in its parent without extra work, so noth
 ## Links
 
 - refines [ADR-0001](0001-unified-item-data-model.md) (decisions 4 and 5, D4, D5; "Prototype findings", point 4)
-- relates to [ADR-0008](0008-event-sourced-persistence.md) (atomic multi-event commands), [ADR-0021](0021-deletion-is-trash-then-purge.md) (deletion)
+- relates to [ADR-0008](0008-event-sourced-persistence.md) (atomic multi-event commands), [ADR-0021](0021-deletion-only-when-unreferenced.md) (deletion)

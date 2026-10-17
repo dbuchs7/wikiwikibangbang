@@ -19,6 +19,9 @@ import (
 var (
 	ErrValidation = errors.New("validation failed")
 	ErrNotFound   = errors.New("not found")
+	// ErrReferenced refuses a deletion while live items outside the deleted
+	// subtree still point into it (ADR-0021). It also matches ErrValidation.
+	ErrReferenced = errors.New("still referenced")
 )
 
 // ID is the immutable identity of an item or relation (D2).

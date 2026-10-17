@@ -102,8 +102,11 @@ func TestRemovingAnEmbedKeepsTheItem(t *testing.T) {
 	}
 }
 
-// --- ADR-0021: trash, restore, purge ----------------------------------------
+// --- ADR-0021: no deletion while referenced, then trash, then purge ---------
 
+// trashFixture builds a PLAT page with a child and a grandchild, and an OPS
+// page that references the PLAT items from outside: it embeds the child,
+// mentions the page and relates to the page by hand.
 func trashFixture(t *testing.T) (s *Store, page, child, grandchild, foreign Item) {
 	t.Helper()
 	s = setup(t)
@@ -111,7 +114,6 @@ func trashFixture(t *testing.T) (s *Store, page, child, grandchild, foreign Item
 	child = mustItem(t)(s.CreateEmbedded("anna", page.ID, NewItem{Type: "task", Title: "Patch", Properties: Props{"priority": "low"}}))
 	grandchild = mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "task", Parent: child.ID, Title: "Sub", Properties: Props{"priority": "low"}}))
 	foreign = mustItem(t)(s.Create("ben", NewItem{Space: "OPS", Type: "page", Title: "Ops overview"}))
-	// The OPS page embeds the PLAT child and mentions the PLAT page.
 	noErr(t, s.CommitBody("ben", foreign.ID, Doc{Blocks: []Block{
 		{Kind: Embed, Ref: child.ID},
 		{Kind: Paragraph, Mentions: []ID{page.ID}},
@@ -120,8 +122,71 @@ func trashFixture(t *testing.T) (s *Store, page, child, grandchild, foreign Item
 	return
 }
 
+// unreference removes every reference from the OPS page into the PLAT subtree.
+func unreference(t *testing.T, s *Store, foreign Item) {
+	t.Helper()
+	noErr(t, s.CommitBody("ben", foreign.ID, Doc{Blocks: []Block{{Kind: Paragraph, Text: "moved on"}}}))
+	for _, r := range s.Relations(foreign.ID, Outgoing) {
+		noErr(t, s.RemoveRelation("ben", r.ID))
+	}
+}
+
+func TestTrashIsRefusedWhileReferencedFromOutside(t *testing.T) {
+	s, page, child, grandchild, foreign := trashFixture(t)
+	before := len(s.Log())
+
+	err := s.Trash("anna", page.ID)
+	if !errors.Is(err, ErrReferenced) || !errors.Is(err, ErrValidation) {
+		t.Fatalf("err = %v, want ErrReferenced (an ErrValidation)", err)
+	}
+	if !strings.Contains(err.Error(), foreign.Key) {
+		t.Fatalf("the error must name the referring item %s: %v", foreign.Key, err)
+	}
+	// An embed of a descendant blocks too: the subtree would go with the page.
+	if err := s.Trash("anna", child.ID); !errors.Is(err, ErrReferenced) {
+		t.Fatalf("trash child embedded elsewhere: err = %v", err)
+	}
+	// The grandchild is referenced only from inside the subtree.
+	noErr(t, s.Trash("anna", grandchild.ID))
+	if len(s.Log()) != before+1 {
+		t.Fatal("refused trash commands must not write events")
+	}
+
+	// After the references are removed, trashing is allowed.
+	unreference(t, s, foreign)
+	noErr(t, s.Trash("anna", page.ID))
+}
+
+// TestInlineItemIsBlockedByItsOwnHost: an item created inline is embedded in
+// its parent's body, and the parent is outside the item's subtree, so the
+// embed has to go before the item can be trashed.
+func TestInlineItemIsBlockedByItsOwnHost(t *testing.T) {
+	s, page, child, _, foreign := trashFixture(t)
+	unreference(t, s, foreign)
+	err := s.Trash("anna", child.ID)
+	if !errors.Is(err, ErrReferenced) || !strings.Contains(err.Error(), page.Key) {
+		t.Fatalf("err = %v, want ErrReferenced naming the host %s", err, page.Key)
+	}
+	noErr(t, s.CommitBody("anna", page.ID, Doc{}))
+	noErr(t, s.Trash("anna", child.ID))
+}
+
+func TestReferencesThatDoNotBlock(t *testing.T) {
+	s, page, child, _, foreign := trashFixture(t)
+	other := mustItem(t)(s.Create("ben", NewItem{Space: "OPS", Type: "page", Title: "Other"}))
+	// References from items in the trash do not block: the OPS page, which
+	// references the PLAT subtree, goes to the trash first.
+	noErr(t, s.Trash("ben", foreign.ID))
+	// References from inside the subtree do not block.
+	noErr(t, s.AddRelation("anna", "blocks", child.ID, page.ID))
+	// The page's own outgoing references do not block either.
+	noErr(t, s.AddRelation("anna", "relates", page.ID, other.ID))
+	noErr(t, s.Trash("anna", page.ID))
+}
+
 func TestTrashMovesTheSubtreeOutOfSight(t *testing.T) {
 	s, page, child, grandchild, foreign := trashFixture(t)
+	unreference(t, s, foreign)
 	noErr(t, s.Trash("anna", page.ID))
 
 	for _, id := range []ID{page.ID, child.ID, grandchild.ID} {
@@ -135,26 +200,45 @@ func TestTrashMovesTheSubtreeOutOfSight(t *testing.T) {
 	if got := s.Find(Query{Space: "PLAT", IncludeDeleted: true}); len(got) != 3 {
 		t.Fatalf("IncludeDeleted must list the trash: %v", ids(got))
 	}
-	// Other bodies are not edited; they render the item as trashed (D4).
-	other := mustItem(t)(s.Get(foreign.ID))
-	if len(other.Body.Blocks) != 2 {
-		t.Fatal("trashing must not edit other bodies")
-	}
-	if v := mustViews(t)(s.Embeds(foreign.ID)); v[0].Presence != Trashed {
-		t.Fatalf("embed view = %+v, want trashed", v[0])
-	}
-	// Relations to trashed items are hidden, not removed.
-	if n := len(s.Relations(foreign.ID, Outgoing)); n != 0 {
-		t.Fatalf("relations to trashed items must be hidden, got %d", n)
-	}
-	// Keys keep resolving.
 	if got := mustItem(t)(s.ByKey(child.Key)); got.ID != child.ID {
 		t.Fatal("key of a trashed item must resolve")
 	}
 }
 
+// TestRestoredReferrerKeepsItsReferences covers the one way a live body can
+// point at a trashed item: the referrer was itself in the trash and comes back.
+func TestRestoredReferrerKeepsItsReferences(t *testing.T) {
+	s, page, child, _, foreign := trashFixture(t)
+	other := mustItem(t)(s.Create("ben", NewItem{Space: "OPS", Type: "page", Title: "Other"}))
+	noErr(t, s.Trash("ben", foreign.ID))
+	noErr(t, s.Trash("anna", page.ID))
+	noErr(t, s.Restore("ben", foreign.ID))
+
+	// The restored body is not edited; its embed renders the item as trashed (D4).
+	if v := mustViews(t)(s.Embeds(foreign.ID)); len(v) != 1 || v[0].Presence != Trashed {
+		t.Fatalf("embed view = %+v, want one trashed embed", v)
+	}
+	// Relations to trashed items are hidden, not removed.
+	if n := len(s.Relations(foreign.ID, Outgoing)); n != 0 {
+		t.Fatalf("relations to trashed items must be hidden, got %d", n)
+	}
+	// Editing the restored page while it still embeds the trashed task works.
+	kept := append(mustItem(t)(s.Get(foreign.ID)).Body.Blocks, Block{Kind: Paragraph, Text: "new text"})
+	noErr(t, s.CommitBody("ben", foreign.ID, Doc{Blocks: kept}))
+	// A new reference to a trashed item is refused.
+	if err := s.CommitBody("ben", other.ID, Doc{Blocks: []Block{{Kind: Embed, Ref: child.ID}}}); !errors.Is(err, ErrValidation) {
+		t.Fatalf("new embed of a trashed item: err = %v, want ErrValidation", err)
+	}
+	// Restoring the page brings the relations back.
+	noErr(t, s.Restore("anna", page.ID))
+	if n := len(s.Relations(foreign.ID, Outgoing)); n != 3 {
+		t.Fatalf("relations after restore = %d, want 3", n)
+	}
+}
+
 func TestRestoreBringsBackExactlyWhatWasTrashedTogether(t *testing.T) {
 	s, page, child, grandchild, foreign := trashFixture(t)
+	unreference(t, s, foreign)
 	noErr(t, s.Trash("anna", grandchild.ID)) // trashed on its own first
 	noErr(t, s.Trash("anna", page.ID))
 
@@ -168,9 +252,6 @@ func TestRestoreBringsBackExactlyWhatWasTrashedTogether(t *testing.T) {
 	if got := mustItem(t)(s.Get(grandchild.ID)); got.Presence != Trashed {
 		t.Fatal("an item trashed earlier on its own must stay in the trash")
 	}
-	if n := len(s.Relations(foreign.ID, Outgoing)); n != 3 {
-		t.Fatalf("relations must reappear after restore, got %d", n)
-	}
 	noErr(t, s.Restore("anna", grandchild.ID))
 	if err := s.Restore("anna", grandchild.ID); !errors.Is(err, ErrValidation) {
 		t.Fatalf("restoring a live item: err = %v", err)
@@ -178,7 +259,9 @@ func TestRestoreBringsBackExactlyWhatWasTrashedTogether(t *testing.T) {
 }
 
 func TestRestoreRequiresALiveParent(t *testing.T) {
-	s, page, child, _, _ := trashFixture(t)
+	s, page, child, _, foreign := trashFixture(t)
+	unreference(t, s, foreign)
+	noErr(t, s.CommitBody("anna", page.ID, Doc{})) // the page itself embeds the child
 	noErr(t, s.Trash("anna", child.ID))
 	noErr(t, s.Trash("anna", page.ID))
 	if err := s.Restore("anna", child.ID); !errors.Is(err, ErrValidation) {
@@ -194,7 +277,9 @@ func TestTrashedItemsAreReadOnly(t *testing.T) {
 			relates = r.ID
 		}
 	}
+	noErr(t, s.Trash("ben", foreign.ID))
 	noErr(t, s.Trash("anna", page.ID))
+	noErr(t, s.Restore("ben", foreign.ID))
 	checks := map[string]error{
 		"set title":                s.SetTitle("anna", child.ID, "x"),
 		"set property":             s.SetProperty("anna", child.ID, "estimate", 1.0),
@@ -220,25 +305,9 @@ func TestTrashedItemsAreReadOnly(t *testing.T) {
 	}
 }
 
-func TestBodiesKeepButCannotAddReferencesToDeletedItems(t *testing.T) {
-	s, page, child, _, foreign := trashFixture(t)
-	other := mustItem(t)(s.Create("ben", NewItem{Space: "OPS", Type: "page", Title: "Other"}))
-	noErr(t, s.Trash("anna", page.ID))
-
-	// Editing the OPS page while it still embeds the trashed task must work.
-	kept := mustItem(t)(s.Get(foreign.ID)).Body.Blocks
-	kept = append(kept, Block{Kind: Paragraph, Text: "new text"})
-	noErr(t, s.CommitBody("ben", foreign.ID, Doc{Blocks: kept}))
-
-	// A new reference to a trashed item is refused.
-	err := s.CommitBody("ben", other.ID, Doc{Blocks: []Block{{Kind: Embed, Ref: child.ID}}})
-	if !errors.Is(err, ErrValidation) {
-		t.Fatalf("new embed of a trashed item: err = %v, want ErrValidation", err)
-	}
-}
-
 func TestPurgeLeavesATombstone(t *testing.T) {
 	s, page, child, grandchild, foreign := trashFixture(t)
+	noErr(t, s.Trash("ben", foreign.ID))
 	if err := s.Purge("anna", page.ID); !errors.Is(err, ErrValidation) {
 		t.Fatalf("purging a live item: err = %v, want ErrValidation", err)
 	}
@@ -262,12 +331,14 @@ func TestPurgeLeavesATombstone(t *testing.T) {
 		t.Fatal("key of a purged item must resolve to its tombstone")
 	}
 	// Hand-made relations to purged items are gone; derived ones from the
-	// live OPS body remain (they are a function of that body) but are hidden.
+	// OPS body remain (they are a function of that body).
 	for _, r := range s.rels {
 		if !r.Derived && (r.To == page.ID || r.From == page.ID) {
 			t.Fatal("hand-made relation to a purged item survived")
 		}
 	}
+	// A referrer restored later renders the purged item as deleted.
+	noErr(t, s.Restore("ben", foreign.ID))
 	if v := mustViews(t)(s.Embeds(foreign.ID)); v[0].Presence != Purged || v[0].Title != "" {
 		t.Fatalf("embed of a purged item = %+v", v[0])
 	}
@@ -283,7 +354,8 @@ func TestPurgeLeavesATombstone(t *testing.T) {
 // content survives in past events until crypto-shredding is designed with
 // ADR-0008. When that lands, this test must be inverted.
 func TestPurgeLeavesContentInTheLog(t *testing.T) {
-	s, page, _, _, _ := trashFixture(t)
+	s, page, _, _, foreign := trashFixture(t)
+	unreference(t, s, foreign)
 	noErr(t, s.Trash("anna", page.ID))
 	noErr(t, s.Purge("anna", page.ID))
 	found := false
@@ -314,11 +386,13 @@ func TestLifecycleCommandsOnUnknownItems(t *testing.T) {
 }
 
 func TestReplayWithLifecycle(t *testing.T) {
-	s, page, _, grandchild, _ := trashFixture(t)
+	s, page, _, grandchild, foreign := trashFixture(t)
 	noErr(t, s.Trash("anna", grandchild.ID))
 	noErr(t, s.Restore("anna", grandchild.ID))
+	noErr(t, s.Trash("ben", foreign.ID))
 	noErr(t, s.Trash("anna", page.ID))
 	noErr(t, s.Purge("anna", page.ID))
+	noErr(t, s.Restore("ben", foreign.ID))
 	r, err := Replay(s.Log())
 	if err != nil {
 		t.Fatal(err)
