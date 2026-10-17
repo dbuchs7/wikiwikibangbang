@@ -1,0 +1,113 @@
+// Browser smoke test of the UI (ADR-0031). It drives a running server in
+// Chromium through the main flows and fails on any script error, any
+// content-security-policy violation and any dialog — a dialog would mean
+// user content ran as code (ADR-0014).
+//
+//   BASE_URL=http://127.0.0.1:8080 ADMIN_PASSWORD=... node smoke.cjs
+const { chromium } = require("playwright");
+
+const base = process.env.BASE_URL || "http://127.0.0.1:8080";
+const adminPassword = process.env.ADMIN_PASSWORD;
+const hostile = `<img src=x onerror="alert('xss')">`;
+
+function check(cond, msg) {
+  if (!cond) throw new Error("check failed: " + msg);
+}
+
+(async () => {
+  const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
+  const page = await browser.newPage();
+  const problems = [];
+  page.on("pageerror", (e) => problems.push("page error: " + e.message));
+  page.on("console", (m) => { if (m.type() === "error" && !/status of 401/.test(m.text())) problems.push("console: " + m.text()); });
+  page.on("dialog", async (d) => { problems.push("dialog: " + d.message()); await d.dismiss(); });
+  const step = (name) => console.log("·", name);
+
+  try {
+    step("login form, wrong password");
+    await page.goto(base + "/");
+    await page.fill("#login [name=username]", "admin");
+    await page.fill("#login [name=password]", "wrong password!");
+    await page.click("#login button[type=submit]");
+    await page.waitForSelector("#login .error");
+
+    step("log in");
+    await page.fill("#login [name=password]", adminPassword);
+    await page.click("#login button[type=submit]");
+    await page.waitForSelector("text=No spaces yet");
+
+    step("administration: space, type, user, role");
+    await page.click("text=Administration");
+    await page.fill("#new-space [name=key]", "PLAT");
+    await page.fill("#new-space [name=name]", "Platform");
+    await page.click("#new-space button[type=submit]");
+    await page.waitForSelector("#grant option[value=PLAT]", { state: "attached" });
+    await page.fill("#new-type [name=type]", JSON.stringify({
+      name: "task", body: true,
+      fields: [{ name: "priority", kind: "enum", required: true, values: ["low", "high"] }, { name: "estimate", kind: "number" }],
+      workflow: { initial: "open", states: ["open", "done"], transitions: [{ name: "finish", from: ["open"], to: "done" }] },
+    }));
+    await page.click("#new-type button[type=submit]");
+    await page.waitForSelector("text=task v1");
+    await page.fill("#new-user [name=username]", "bert");
+    await page.fill("#new-user [name=password]", "bert's password");
+    await page.click("#new-user button[type=submit]");
+    await page.waitForSelector("#grant option:has-text('bert')", { state: "attached" });
+    await page.selectOption("#grant [name=user]", { label: "bert" });
+    await page.selectOption("#grant [name=role]", "editor");
+    await page.click("#grant button[type=submit]");
+    await page.waitForSelector("#grant >> text=Granted.");
+    await page.waitForSelector("td:has-text('role.grant')", { state: "attached" }).catch(() => {});
+
+    step("create an item with a hostile title");
+    await page.click("text=Spaces");
+    await page.click("a:has-text('Platform')");
+    await page.fill("#new-item [name=title]", hostile);
+    await page.selectOption("#new-item [name='p:priority']", "high");
+    await page.fill("#new-item [name='p:estimate']", "3");
+    await page.click("#new-item button[type=submit]");
+    await page.waitForSelector("#title");
+    check(await page.inputValue("#title [name=title]") === hostile, "the title shows as typed");
+    check(page.url().endsWith("#/item/PLAT-1"), "the item is addressed by key");
+
+    step("edit property, transition, body");
+    await page.fill("[name='p:estimate']", "2.5");
+    await page.click("tr:has-text('estimate') button");
+    await page.waitForSelector("text=version 2");
+    await page.click("button:has-text('finish')");
+    await page.waitForSelector("text=state: done");
+    await page.click("text=Add paragraph");
+    await page.fill("#body textarea", "<script>alert('body')</script> plain text");
+    await page.click("text=Save body");
+    await page.waitForSelector("text=BodyCommitted");
+    check((await page.inputValue("#body textarea")).startsWith("<script>"), "the body shows as typed");
+
+    step("account: token");
+    await page.click("nav a[href='#/account']");
+    await page.fill("#new-token [name=name]", "ci");
+    await page.click("#new-token button[type=submit]");
+    await page.waitForSelector("text=Copy this token now");
+    check(/wwbb_[0-9a-f]{64}/.test(await page.textContent("code")), "the token secret is shown once");
+
+    step("log out, log in as bert, read the item");
+    await page.click("text=Log out");
+    await page.waitForSelector("#login");
+    await page.fill("#login [name=username]", "bert");
+    await page.fill("#login [name=password]", "bert's password");
+    await page.click("#login button[type=submit]");
+    await page.click("a:has-text('Platform')");
+    await page.click("a:has-text('PLAT-1')");
+    await page.waitForSelector("text=state: done");
+    check(await page.$("text=Administration") === null, "bert sees no administration");
+
+    check(problems.length === 0, problems.join("; "));
+    console.log("ok");
+  } catch (err) {
+    await page.screenshot({ path: "failure.png", fullPage: true }).catch(() => {});
+    console.error(err.message);
+    if (problems.length) console.error(problems.join("\n"));
+    process.exitCode = 1;
+  } finally {
+    await browser.close();
+  }
+})();

@@ -85,6 +85,46 @@ jobs:
             echo "::endgroup::"
           done
 
+  # ADR-0031: the embedded UI, driven in Chromium against the real binary.
+  e2e:
+    name: e2e (browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Playwright and Chromium
+        working-directory: e2e
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Run the UI smoke test against the binary
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/wwbb" ./cmd/wikiwikibangbang
+          WWBB_ADMIN_PASSWORD=e2e-admin-password "$RUNNER_TEMP/wwbb" serve -addr 127.0.0.1:8080 -data-dir "$RUNNER_TEMP/data" > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
+          cd e2e && BASE_URL=http://127.0.0.1:8080 ADMIN_PASSWORD=e2e-admin-password node smoke.cjs
+
+      - name: Keep the evidence of a failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          path: |
+            e2e/failure.png
+            ${{ runner.temp }}/server.log
+          retention-days: 7
+
   dco:
     name: DCO sign-off (humans only)
     # The rule applies to what is proposed for merge; agent commits on a work

@@ -80,7 +80,10 @@ func TestServeAndHealthcheck(t *testing.T) {
 	}()
 
 	url := "http://" + addr + "/healthz"
-	deadline := time.Now().Add(5 * time.Second)
+	// Start-up hashes the first administrator's password (PBKDF2, ADR-0027),
+	// which takes seconds under the race detector on a busy runner. The test
+	// asserts that the server comes up, not how fast.
+	deadline := time.Now().Add(60 * time.Second)
 	for {
 		code, _, _ := runCmd(t, context.Background(), "healthcheck", "-url", url, "-timeout", "500ms")
 		if code == 0 {
@@ -88,6 +91,11 @@ func TestServeAndHealthcheck(t *testing.T) {
 		}
 		if time.Now().After(deadline) {
 			t.Fatal("healthcheck never succeeded against the running server")
+		}
+		select {
+		case code := <-done:
+			t.Fatalf("serve exited with %d before it answered:\n%s", code, errOut.String())
+		default:
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

@@ -60,8 +60,8 @@ func TestPublicRoutes(t *testing.T) {
 		path, status, contentType, body string
 	}{
 		{"/healthz", "200", "text/plain", "ok"},
-		{"/", "200", "text/html", "<h1>wikiwikibangbang</h1>"},
-		{"/assets/app.js", "200", "javascript", "/healthz"},
+		{"/", "200", "text/html", `<main id="app">`},
+		{"/assets/app.js", "200", "javascript", "/api/me"},
 		{"/assets/style.css", "200", "text/css", "color-scheme"},
 	}
 	for _, c := range cases {
