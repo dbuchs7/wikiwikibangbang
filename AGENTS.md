@@ -36,7 +36,9 @@ These follow from ADR-0001. That ADR is currently **Proposed**, so the invariant
 5. **D5 – One containment parent.** Every item has at most one `parent`. Permission inheritance follows containment only; every other hierarchy is a typed relation.
 6. **D6 – Type-agnostic cross-cutting capabilities.** No type-specific code in search, permissions, history, comments or notifications.
 7. **D7 – Identities are permanent.** An item's ID is never reused and always resolves — to the item, to the item in the trash, or to its tombstone. Deletion removes content, never identity. ([ADR-0021](docs/adr/0021-deletion-only-when-unreferenced.md))
-8. **D8 – No deletion while referenced.** An item is trashed only when no live item outside its subtree references it; deleting never leaves live content pointing at it. ([ADR-0021](docs/adr/0021-deletion-only-when-unreferenced.md))
+8. **D8 – No deletion while referenced.** An item is trashed only when no live item outside its subtree references it; deleting never leaves live content pointing at it. The one exception is redaction by the erasure role, which is logged with a reason. ([ADR-0021](docs/adr/0021-deletion-only-when-unreferenced.md), [ADR-0022](docs/adr/0022-permission-model.md))
+9. **D9 – Access only narrows below the space.** An item is readable (editable) only if the space role allows it and no restriction on it or its ancestors excludes the principal; restrictions never grant. (*Proposed*, [ADR-0022](docs/adr/0022-permission-model.md))
+10. **D10 – Unreadable is non-existent, and only sessions face callers.** Nothing a caller receives — errors, embeds, relations, search results, history — reveals an item the caller may not read. API and MCP code act through `Store.As(principal)` sessions, never through the trusted `Store` commands. (*Proposed*, [ADR-0022](docs/adr/0022-permission-model.md))
 
 ## Commands
 
