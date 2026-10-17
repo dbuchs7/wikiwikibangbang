@@ -2,6 +2,7 @@
 // data through the HTTP API. Plain ES modules, no build step.
 import { api, get, post, put, del, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
+import { createEditor } from "./editor.js";
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -276,35 +277,16 @@ async function itemView(ref) {
 }
 
 function bodyEditor(item, path, embeds, live, status) {
-  // Each block keeps what the editor does not show (mentions, embed refs),
-  // so saving text does not drop references.
-  let blocks = item.body.map((b) => ({ ...b }));
-  const list = h("div", { class: "blocks" });
-  const embedView = (ref) => embeds.find((e) => e.ref === ref);
-  const draw = () => {
-    list.replaceChildren(...blocks.map((b, i) => {
-      if (b.kind === "embed") {
-        const v = embedView(b.ref);
-        return h("div", { class: "block embed" },
-          v && !v.restricted ? link("#/item/" + encodeURIComponent(v.key), `${v.key} ${v.title}`) : h("span", { class: "muted", text: "an item you cannot see" }),
-          live ? h("button", { class: "link", text: "remove", onclick: () => { blocks.splice(i, 1); draw(); } }) : null);
-      }
-      const kind = h("select", { disabled: !live, onchange: (e) => { b.kind = e.target.value; } },
-        ["paragraph", "heading"].map((k) => h("option", { value: k, text: k, selected: k === b.kind })));
-      const text = h("textarea", { rows: b.kind === "heading" ? 1 : 3, disabled: !live, oninput: (e) => { b.text = e.target.value; } });
-      text.value = b.text || "";
-      return h("div", { class: "block " + b.kind }, live ? kind : null, text,
-        (b.mentions || []).length ? h("p", { class: "muted" }, "mentions: ", b.mentions.map((m) => link("#/item/" + m, m.slice(0, 8)))) : null,
-        live ? h("button", { class: "link", text: "remove", onclick: () => { blocks.splice(i, 1); draw(); } }) : null);
-    }));
-  };
-  draw();
+  const ed = createEditor({
+    blocks: item.body,
+    embeds,
+    editable: live,
+    resolve: async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item,
+  });
   return h("section", { id: "body" },
     h("h2", { text: "Body" }),
-    list,
-    live ? h("p", {},
-      h("button", { text: "Add paragraph", onclick: () => { blocks.push({ kind: "paragraph", text: "" }); draw(); } }),
-      h("button", { text: "Save body", onclick: () => action(() => put(path + "/body", { blocks }), status) })) : null,
+    ed.element,
+    live ? h("p", {}, h("button", { text: "Save body", onclick: () => action(() => put(path + "/body", { blocks: ed.blocks() }), status) })) : null,
   );
 }
 

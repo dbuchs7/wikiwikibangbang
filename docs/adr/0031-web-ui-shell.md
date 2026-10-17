@@ -4,8 +4,6 @@
 - **Implementation:** Partial
 - **Date:** 2026-10-17
 - **Deciders:** Project initiators (maintainer request 2026-10-17); accepted by the maintainer 2026-10-17
-- **Open question:** Which rich-text editor replaces the block textareas (ADR-0009's open question), and how do mentions and embeds get created in the UI — by typing (`@`, `/embed`) or by pickers?
-- **Question checked:** 2026-10
 
 ## Context and problem statement
 
@@ -30,16 +28,16 @@ Chosen option: **2**, as ADR-0009 proposes.
 
 - **Shape:** `index.html`, `assets/app.js` (hash routes and views), `assets/api.js` (the API client), `assets/dom.js` (the only element factory), `assets/style.css`. Views: login (password and, when configured, single sign-on), spaces, a space's items with paging and an item form, an item (title, properties by field kind, transitions, body blocks, relations, history, trash, restore and delete), account (password, API tokens), administration (spaces, types, users, space roles, audit trail).
 - **Closed rendering (ADR-0014):** `dom.js` creates every element and inserts text only as text; link targets pass an allowlist (`#`, same-origin paths, `http`, `https`, `mailto`). A Go test fails the build if any UI file uses `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write`, `eval`, `new Function`, inline event attributes or inline scripts. The content-security policy (`default-src 'self'`) is the second line.
-- **Body editing:** paragraphs and headings are edited as text; embeds are shown as links (or as "an item you cannot see") and can be removed; mentions are kept on their blocks and shown as links. Creating mentions and embeds is left to the rich-text editor (open question).
+- **Body editing:** paragraphs and headings are edited as text; embeds are shown as links (or as "an item you cannot see") and can be removed; mentions are kept on their blocks and shown as links. Creating mentions and embeds is left to the rich-text editor, which [ADR-0032](0032-prosemirror-rich-text-editor.md) has since added; it replaces the block textareas.
 - **Browser test:** `e2e/smoke.cjs` drives Chromium through Playwright against the built binary — log in, administration, create an item with a hostile title, edit properties, transition, save a body containing a `<script>`, create a token, log in as another user — and fails on any page error, console error, CSP violation or dialog. CI runs it as the job `e2e (browser)`. Node and Playwright are test tools only; `e2e/package-lock.json` pins them.
 
-**Implementation is Partial:** the open question; history shows user IDs, not names, for non-administrators; no live updates; no search.
+**Implementation is Partial:** history shows user IDs, not names, for non-administrators; no live updates; no search.
 
 ### Consequences
 
 - **Positive:** the product is usable in a browser from the single binary; the UI cannot drift from the API because it has no other data source; XSS defences are enforced by a test and exercised by a browser.
-- **Negative / trade-offs accepted:** hand-written DOM code; textareas instead of a real editor; the browser test adds a Node toolchain to CI (not to the build) and about a minute per run.
-- **Follow-ups / risks to watch:** the open question; showing names instead of IDs needs a user lookup readable by non-administrators; accessibility review; the test is not yet a required check.
+- **Negative / trade-offs accepted:** hand-written DOM code; textareas instead of a real editor (until ADR-0032); the browser test adds a Node toolchain to CI (not to the build) and about a minute per run.
+- **Follow-ups / risks to watch:** showing names instead of IDs needs a user lookup readable by non-administrators; accessibility review; the test is not yet a required check.
 
 ## Pros and cons of the options
 

@@ -44,3 +44,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0029](0029-persisted-security-audit-trail.md) | The security audit trail is its own append-only journal | Accepted | Partial |
 | [0030](0030-openid-connect-single-sign-on.md) | Single sign-on through OpenID Connect, with go-oidc and just-in-time accounts without roles | Accepted | Partial |
 | [0031](0031-web-ui-shell.md) | The first web UI is a buildless shell over the item API, tested in a real browser | Accepted | Partial |
+| [0032](0032-prosemirror-rich-text-editor.md) | The rich-text editor is ProseMirror, vendored as one pre-built bundle | Accepted | Partial |

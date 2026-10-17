@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -438,12 +439,15 @@ func (h itemHandlers) commitBody(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
-	doc, err := toDoc(req.Blocks)
-	if err != nil {
-		h.fail(w, err)
-		return
-	}
-	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.CommitBody(it.ID, doc) })
+	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
+		doc, err := toDoc(req.Blocks, func(text string) bool {
+			return slices.ContainsFunc(it.Body.Blocks, func(b item.Block) bool { return b.Kind == item.Unsupported && b.Text == text })
+		})
+		if err != nil {
+			return err
+		}
+		return x.CommitBody(it.ID, doc)
+	})
 }
 
 func (h itemHandlers) move(w http.ResponseWriter, r *http.Request) {

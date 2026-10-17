@@ -53,3 +53,23 @@ table.history td { font-size: 0.9rem; }
 .blocks .block { margin: 0.5rem 0; }
 .blocks .heading textarea { font-weight: 700; font-size: 1.2rem; }
 .blocks .embed { padding: 0.5rem 0.75rem; border: 1px dashed var(--line); border-radius: 6px; }
+
+/* Rich-text editor (ADR-0032) */
+.pm-wrap { border: 1px solid var(--line); border-radius: 6px; }
+.pm-toolbar { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; padding: 0.4rem; border-bottom: 1px solid var(--line); background: var(--card); }
+.pm-toolbar button { margin: 0; padding: 0.2rem 0.6rem; }
+.pm-target { flex: 1; min-width: 10rem; }
+.pm-editor .ProseMirror { min-height: 6rem; padding: 0.75rem 1rem; outline: none; white-space: pre-wrap; word-wrap: break-word; font-variant-ligatures: none; counter-reset: ordered; }
+.pm-editor .ProseMirror > * { margin: 0.4rem 0; }
+.pm-editor .ProseMirror > :not(.pm-ordered) { counter-reset: ordered; }
+.pm-bullet { padding-left: 1.4rem; position: relative; }
+.pm-bullet::before { content: "•"; position: absolute; left: 0.4rem; }
+.pm-ordered { padding-left: 1.8rem; position: relative; counter-increment: ordered; }
+.pm-ordered::before { content: counter(ordered) "."; position: absolute; left: 0.2rem; }
+.pm-editor blockquote { border-left: 3px solid var(--line); padding-left: 0.75rem; color: var(--muted); }
+.pm-editor pre { background: var(--card); padding: 0.5rem 0.75rem; border-radius: 4px; overflow-x: auto; }
+.pm-unsupported { border: 1px dashed var(--danger); }
+.pm-embed { padding: 0.5rem 0.75rem; border: 1px dashed var(--line); border-radius: 6px; }
+.pm-embed.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.pm-mention { background: var(--card); border-radius: 3px; padding: 0 0.15rem; }
+.ProseMirror-hideselection *::selection { background: transparent; }

@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -46,8 +47,8 @@ func TestConvertStorage(t *testing.T) {
 		"heading:Actions::",
 		"paragraph:See the Runbook, ask @anna.::page-1",
 		"embed::issue-7:",
-		"paragraph:• first::",
-		"paragraph:• second::",
+		"bullet:first::",
+		"bullet:second::",
 		`unsupported:<ac:structured-macro ac:name="info"><ac:rich-text-body><p>Note</p></ac:rich-text-body></ac:structured-macro>::`,
 		"unsupported:<table><tr><td>a</td></tr></table>::",
 		"paragraph:Missing Gone and::",
@@ -87,4 +88,17 @@ func join(ids []item.ID) string {
 		s[i] = string(id)
 	}
 	return strings.Join(s, ",")
+}
+
+func TestConvertStorageRichBlocks(t *testing.T) {
+	src := `<h2>Two</h2><h5>Five</h5><blockquote>quoted</blockquote><ol><li><p>one</p></li><li>two<ul><li>inner</li></ul></li></ol>`
+	doc, problems := ConvertStorage(src, "PLAT", nil)
+	var got []string
+	for _, b := range doc.Blocks {
+		got = append(got, fmt.Sprintf("%s/%d:%s", b.Kind, b.Level, b.Text))
+	}
+	want := "heading/2:Two heading/3:Five quote/0:quoted ordered/0:one ordered/0:two bullet/0:inner"
+	if strings.Join(got, " ") != want || len(problems) != 0 {
+		t.Fatalf("got %s (problems %v), want %s", strings.Join(got, " "), problems, want)
+	}
 }
