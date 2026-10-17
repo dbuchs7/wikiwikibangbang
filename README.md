@@ -42,6 +42,15 @@ WWBB_BACKUP_PASSPHRASE='a long passphrase' ./wikiwikibangbang restore -from back
 
 The backup is encrypted and holds everything, including the keys to the content: keep the passphrase apart from the file, and delete old backups when content must be gone for good — a backup can still read what was purged after it was made.
 
+Operational metrics are served in the Prometheus format at `/metrics` to administrators and to API tokens of scope `metrics`, which an administrator creates under the account page and which can read nothing else ([ADR-0016](docs/adr/0016-metrics-and-backup.md)):
+
+```yaml
+scrape_configs:
+  - job_name: wikiwikibangbang
+    authorization: { credentials_file: /etc/prometheus/wwbb-token }
+    static_configs: [{ targets: ["wiki.example:8080"] }]
+```
+
 Behind a reverse proxy, live editing ([ADR-0010](docs/adr/0010-real-time-collaboration-with-block-locks.md)) needs `/api/items/*/live` passed through unbuffered and without a short read timeout; the server sends a heartbeat every 20 seconds. For nginx:
 
 ```nginx

@@ -678,6 +678,16 @@ func (s *Store) Find(q Query) []Item {
 	return out
 }
 
+// Counts reports how many items are in each presence state, for
+// operational metrics (ADR-0016).
+func (s *Store) Counts() map[Presence]int {
+	out := map[Presence]int{}
+	for _, it := range s.items {
+		out[it.Presence]++
+	}
+	return out
+}
+
 // Get returns a copy of one item.
 func (s *Store) Get(id ID) (Item, error) {
 	it, err := s.item(id)

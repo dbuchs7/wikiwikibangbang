@@ -33,6 +33,9 @@ const (
 	ScopeFull Scope = "full"
 	// ScopeRead allows only reading requests (GET, HEAD).
 	ScopeRead Scope = "read"
+	// ScopeMetrics allows only reading the operational metrics, the
+	// narrowest credential to hand to a scraper (ADR-0016).
+	ScopeMetrics Scope = "metrics"
 )
 
 // Principal is the authenticated caller of a request.
@@ -440,7 +443,7 @@ func (a *Accounts) Session(secret string) (Principal, bool) {
 // CreateToken issues an API token for a user. The secret is returned once
 // and only its SHA-256 hash is kept.
 func (a *Accounts) CreateToken(id UserID, name string, scope Scope, lifetime time.Duration) (string, Token, error) {
-	if scope != ScopeFull && scope != ScopeRead {
+	if scope != ScopeFull && scope != ScopeRead && scope != ScopeMetrics {
 		return "", Token{}, fmt.Errorf("%w: scope %q", ErrInvalid, scope)
 	}
 	if lifetime <= 0 || lifetime > MaxTokenLifetime {

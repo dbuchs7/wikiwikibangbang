@@ -1,12 +1,21 @@
 # Third-party notices
 
-wikiwikibangbang is licensed under AGPL-3.0-only (see `LICENSE`). The binary includes the following third-party modules. Their licenses are compatible with AGPL-3.0 (Apache-2.0 and BSD-3-Clause and MIT may be combined with GPLv3-family licenses). `internal/repoconfig` checks that this file names every module in `go.mod`.
+wikiwikibangbang is licensed under AGPL-3.0-only (see `LICENSE`). The binary includes the following third-party modules. Their licenses are compatible with AGPL-3.0 (Apache-2.0, BSD-3-Clause and MIT may be combined with GPLv3-family licenses). `internal/repoconfig` checks that this file names every module in `go.mod`.
 
 | Module | Version | License |
 |---|---|---|
+| github.com/beorn7/perks | v1.0.1 | MIT |
+| github.com/cespare/xxhash/v2 | v2.3.0 | MIT |
 | github.com/coreos/go-oidc/v3 | v3.21.0 | Apache-2.0 |
 | github.com/go-jose/go-jose/v4 | v4.1.4 | Apache-2.0 |
+| github.com/munnerz/goautoneg | v0.0.0-20191010083416-a7dc8b61c822 | BSD-3-Clause |
+| github.com/prometheus/client_golang | v1.24.1 | Apache-2.0 |
+| github.com/prometheus/client_model | v0.6.2 | Apache-2.0 |
+| github.com/prometheus/common | v0.70.1 | Apache-2.0 |
+| github.com/prometheus/procfs | v0.21.1 | Apache-2.0 |
 | golang.org/x/oauth2 | v0.37.0 | BSD-3-Clause |
+| golang.org/x/sys | v0.47.0 | BSD-3-Clause |
+| google.golang.org/protobuf | v1.36.11 | BSD-3-Clause |
 
 The web UI embeds a bundle of these JavaScript packages, built from `internal/web/vendor` (ADR-0032); `internal/web/static/vendor/prosemirror.LICENSE.txt` ships next to it:
 
@@ -36,7 +45,61 @@ This product includes software developed at CoreOS, Inc.
 (http://www.coreos.com/).
 ```
 
-## Apache License 2.0 (github.com/coreos/go-oidc/v3, github.com/go-jose/go-jose/v4)
+## NOTICE of github.com/prometheus/client_golang
+
+```text
+Prometheus instrumentation library for Go applications
+Copyright 2012-2015 The Prometheus Authors
+
+This product includes software developed at
+SoundCloud Ltd. (http://soundcloud.com/).
+
+The following components are included in this product:
+
+perks - a fork of https://github.com/bmizerany/perks
+https://github.com/beorn7/perks
+Copyright 2013-2015 Blake Mizerany, Björn Rabenstein
+See https://github.com/beorn7/perks/blob/master/README.md for license details.
+
+Go support for Protocol Buffers - Google's data interchange format
+http://github.com/golang/protobuf/
+Copyright 2010 The Go Authors
+See source code for license details.
+```
+
+## NOTICE of github.com/prometheus/client_model
+
+```text
+Data model artifacts for Prometheus.
+Copyright 2012-2015 The Prometheus Authors
+
+This product includes software developed at
+SoundCloud Ltd. (http://soundcloud.com/).
+```
+
+## NOTICE of github.com/prometheus/common
+
+```text
+Common libraries shared by Prometheus Go components.
+Copyright 2015 The Prometheus Authors
+
+This product includes software developed at
+SoundCloud Ltd. (http://soundcloud.com/).
+```
+
+## NOTICE of github.com/prometheus/procfs
+
+```text
+procfs provides functions to retrieve system, kernel and process
+metrics from the pseudo-filesystem proc.
+
+Copyright 2014-2015 The Prometheus Authors
+
+This product includes software developed at
+SoundCloud Ltd. (http://soundcloud.com/).
+```
+
+## Apache License 2.0 (github.com/coreos/go-oidc/v3, github.com/go-jose/go-jose/v4, github.com/prometheus/client_golang, github.com/prometheus/client_model, github.com/prometheus/common, github.com/prometheus/procfs)
 
 ```text
 Apache License
@@ -272,4 +335,156 @@ DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## BSD-3-Clause (golang.org/x/sys)
+
+```text
+Copyright 2009 The Go Authors.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google LLC nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## BSD-3-Clause (google.golang.org/protobuf)
+
+```text
+Copyright (c) 2018 The Go Authors. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+   * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+   * Neither the name of Google Inc. nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## BSD-3-Clause (github.com/munnerz/goautoneg)
+
+```text
+Copyright (c) 2011, Open Knowledge Foundation Ltd.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+    Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+    Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in
+    the documentation and/or other materials provided with the
+    distribution.
+
+    Neither the name of the Open Knowledge Foundation Ltd. nor the
+    names of its contributors may be used to endorse or promote
+    products derived from this software without specific prior written
+    permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## MIT (github.com/beorn7/perks)
+
+```text
+Copyright (C) 2013 Blake Mizerany
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+## MIT (github.com/cespare/xxhash/v2)
+
+```text
+Copyright (c) 2016 Caleb Spare
+
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```

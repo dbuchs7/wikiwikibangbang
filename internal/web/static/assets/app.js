@@ -400,7 +400,8 @@ async function accountView() {
       ))),
       form({ id: "new-token" }, [
         field("Name", h("input", { name: "name", required: true })),
-        field("Scope", h("select", { name: "scope" }, h("option", { value: "read", text: "read" }), h("option", { value: "full", text: "full" }))),
+        field("Scope", h("select", { name: "scope" }, h("option", { value: "read", text: "read" }), h("option", { value: "full", text: "full" }),
+          me.admin ? h("option", { value: "metrics", text: "metrics (only GET /metrics, for a scraper)" }) : null)),
         field("Days", h("input", { name: "days", type: "number", min: 1, max: 366, value: 30 })),
         h("button", { type: "submit", text: "Create token" }),
       ], async (data) => {
