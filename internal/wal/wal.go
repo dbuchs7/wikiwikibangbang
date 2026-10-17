@@ -161,7 +161,7 @@ func Open(dir string) (*Log, Scan, error) {
 	if err != nil {
 		return nil, Scan{}, err
 	}
-	l, sc, err := open(dir)
+	l, sc, err := OpenFile(dir, FileName)
 	if err != nil {
 		lock.Close()
 		return nil, Scan{}, err
@@ -170,8 +170,19 @@ func Open(dir string) (*Log, Scan, error) {
 	return l, sc, nil
 }
 
-func open(dir string) (*Log, Scan, error) {
-	path := filepath.Join(dir, FileName)
+// Lock takes the data directory's lock, for callers that open several log
+// files with OpenFile. Close releases it.
+func Lock(dir string) (io.Closer, error) {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return nil, err
+	}
+	return lockDir(dir)
+}
+
+// OpenFile opens the log file name in dir like Open, without taking the
+// directory lock; the caller holds it (Lock).
+func OpenFile(dir, name string) (*Log, Scan, error) {
+	path := filepath.Join(dir, name)
 	sc, err := Read(path)
 	if err != nil {
 		return nil, sc, err
@@ -259,13 +270,53 @@ func (l *Log) truncate(size int64) error {
 	return nil
 }
 
-// Close closes the log and releases the directory lock.
+// Close closes the log and releases the directory lock if Open took it.
 func (l *Log) Close() error {
 	err := l.f.Close()
-	if lerr := l.lock.Close(); err == nil {
-		err = lerr
+	if l.lock != nil {
+		if lerr := l.lock.Close(); err == nil {
+			err = lerr
+		}
 	}
 	return err
+}
+
+// Rewrite atomically replaces the log file name in dir with one holding
+// exactly records: it writes a temporary file, syncs it, renames it over the
+// old one and syncs the directory. A crash leaves either the old or the new
+// file, never a mixture. An open Log of that file must be reopened after.
+//
+// Rewrite is how data leaves an append-only file, e.g. a destroyed key
+// (ADR-0026). The old file's blocks are released to the file system, not
+// overwritten; on SSDs and copy-on-write file systems they can survive until
+// reused.
+func Rewrite(dir, name string, records [][]byte) error {
+	tmp := filepath.Join(dir, name+".tmp")
+	f, err := os.OpenFile(tmp, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o640)
+	if err != nil {
+		return err
+	}
+	l := &Log{f: f}
+	err = l.write(header)
+	for _, r := range records {
+		if err == nil {
+			err = l.Append(r)
+		}
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp, filepath.Join(dir, name))
+	}
+	if err == nil {
+		err = syncDir(dir)
+	}
+	if err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("wal: rewriting %s: %w", name, err)
+	}
+	return nil
 }
 
 // syncDir makes a newly created file's directory entry durable. Windows

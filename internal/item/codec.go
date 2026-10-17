@@ -3,6 +3,7 @@ package item
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -12,13 +13,38 @@ import (
 
 // CodecVersion is the version of the persisted event format (ADR-0025). A
 // reader refuses events from a newer version rather than misreading them.
-const CodecVersion = 1
+//
+//   - 1: plaintext events.
+//   - 2: content may be sealed with a key per item, and events may be marked
+//     erased (ADR-0026). Version 1 events are still read.
+const CodecVersion = 2
 
-// EncodeBatch encodes the events of one command for the journal.
-func EncodeBatch(batch []Event) ([]byte, error) {
+// Sealer encrypts the content of events with a key per item, so that
+// destroying the key makes the content unrecoverable (crypto-shredding,
+// ADR-0026). aad binds a ciphertext to its event.
+type Sealer interface {
+	Seal(item ID, plaintext, aad []byte) ([]byte, error)
+	// Open returns ErrKeyShredded when the item's key was destroyed.
+	Open(item ID, ciphertext, aad []byte) ([]byte, error)
+}
+
+// ErrKeyShredded is returned by a Sealer for content whose key was
+// destroyed. The decoder turns such an event into an erased one.
+var ErrKeyShredded = errors.New("item key was shredded")
+
+// EncodeBatch encodes the events of one command for the journal, with
+// content in plaintext.
+func EncodeBatch(batch []Event) ([]byte, error) { return EncodeBatchSealed(batch, nil) }
+
+// EncodeBatchSealed encodes a batch; with a sealer, the content of each
+// event is encrypted with its item's key.
+func EncodeBatchSealed(batch []Event, sl Sealer) ([]byte, error) {
 	wire := make([]wireEvent, len(batch))
 	for i, e := range batch {
 		w, err := toWire(e)
+		if err == nil && sl != nil && e.HasContent() && !e.Erased {
+			err = seal(&w, sl)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("event %d: %w", e.Seq, err)
 		}
@@ -27,8 +53,12 @@ func EncodeBatch(batch []Event) ([]byte, error) {
 	return json.Marshal(wire)
 }
 
-// DecodeBatch decodes a batch written by EncodeBatch.
-func DecodeBatch(data []byte) ([]Event, error) {
+// DecodeBatch decodes a batch with plaintext content.
+func DecodeBatch(data []byte) ([]Event, error) { return DecodeBatchSealed(data, nil) }
+
+// DecodeBatchSealed decodes a batch written by EncodeBatchSealed. Content
+// whose key was shredded decodes as an erased event.
+func DecodeBatchSealed(data []byte, sl Sealer) ([]Event, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var wire []wireEvent
@@ -40,7 +70,20 @@ func DecodeBatch(data []byte) ([]Event, error) {
 	}
 	batch := make([]Event, len(wire))
 	for i, w := range wire {
+		shredded := false
+		if w.Sealed != nil {
+			if sl == nil {
+				return nil, fmt.Errorf("event %d: content is sealed and no keys are available", w.Seq)
+			}
+			var err error
+			if shredded, err = unseal(&w, sl); err != nil {
+				return nil, fmt.Errorf("event %d: %w", w.Seq, err)
+			}
+		}
 		e, err := fromWire(w)
+		if shredded {
+			e.erase()
+		}
 		if err != nil {
 			return nil, fmt.Errorf("event %d: %w", w.Seq, err)
 		}
@@ -86,6 +129,69 @@ type wireEvent struct {
 	Origin      *Origin               `json:"origin,omitempty"`
 	Key         string                `json:"key,omitempty"`
 	Managed     string                `json:"managed,omitempty"`
+	Erased      bool                  `json:"erased,omitempty"`
+	// Sealed holds the encrypted content (wireContent) when a Sealer was
+	// used; the plaintext content fields are then empty.
+	Sealed []byte `json:"sealed,omitempty"`
+}
+
+// wireContent is the part of an event that is sealed: everything
+// Event.erase removes.
+type wireContent struct {
+	Title string                `json:"title,omitempty"`
+	Props map[string]*wireValue `json:"props,omitempty"`
+	Value *wireValue            `json:"value,omitempty"`
+	Body  *Doc                  `json:"body,omitempty"`
+	Raw   string                `json:"raw,omitempty"`
+}
+
+func aad(w *wireEvent) []byte {
+	return []byte(fmt.Sprintf("wikiwikibangbang event %d %s %s", w.Seq, w.Kind, w.Item))
+}
+
+func seal(w *wireEvent, sl Sealer) error {
+	c := wireContent{Title: w.Title, Props: w.Props, Value: w.Value, Body: w.Body}
+	if w.Origin != nil {
+		c.Raw = w.Origin.Raw
+		o := *w.Origin
+		o.Raw = ""
+		w.Origin = &o
+	}
+	pt, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+	ct, err := sl.Seal(w.Item, pt, aad(w))
+	if err != nil {
+		return err
+	}
+	w.Title, w.Props, w.Value, w.Body, w.Sealed = "", nil, nil, nil, ct
+	return nil
+}
+
+// unseal restores the content fields; it reports true when the key was
+// shredded and the event must be erased.
+func unseal(w *wireEvent, sl Sealer) (bool, error) {
+	pt, err := sl.Open(w.Item, w.Sealed, aad(w))
+	if errors.Is(err, ErrKeyShredded) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(pt))
+	dec.DisallowUnknownFields()
+	var c wireContent
+	if err := dec.Decode(&c); err != nil {
+		return false, fmt.Errorf("sealed content: %w", err)
+	}
+	w.Title, w.Props, w.Value, w.Body = c.Title, c.Props, c.Value, c.Body
+	if w.Origin != nil {
+		o := *w.Origin
+		o.Raw = c.Raw
+		w.Origin = &o
+	}
+	return false, nil
 }
 
 // wireValue is a property value with its Go type, so that a replayed value
@@ -107,6 +213,7 @@ func toWire(e Event) (wireEvent, error) {
 		Transition: e.Transition, From: e.From, To: e.To, Body: e.Body, Relation: e.Relation,
 		Members: e.Members, Group: e.Group, Principal: e.Principal, SystemRole: e.SystemRole,
 		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed,
+		Erased: e.Erased,
 	}
 	if e.Role != 0 {
 		name, ok := roleNames[e.Role]
@@ -144,6 +251,7 @@ func fromWire(w wireEvent) (Event, error) {
 		Transition: w.Transition, From: w.From, To: w.To, Body: w.Body, Relation: w.Relation,
 		Members: w.Members, Group: w.Group, Principal: w.Principal, SystemRole: w.SystemRole,
 		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed,
+		Erased: w.Erased,
 	}
 	if w.Role != "" {
 		for r, name := range roleNames {

@@ -4,8 +4,6 @@
 - **Implementation:** Partial
 - **Date:** 2026-10-17
 - **Deciders:** Project initiators (maintainer request 2026-10-17: "build persistence")
-- **Open question:** Purge and redaction remove content from the state but not from the log file, so erased content stays on disk. Which mechanism closes that gap — per-item encryption keys that are destroyed (crypto-shredding), or rewriting the log without the erased content — and must it exist before the first release?
-- **Question checked:** 2026-10
 
 ## Context and problem statement
 
@@ -47,7 +45,7 @@ Proposed option: **3.**
 - **Positive:** restarts keep everything; crash recovery is automatic and tested at every byte; no dependency was added; the format is human-readable for debugging and pinned against accidental change.
 - **Negative / trade-offs accepted:** startup time and memory grow with the whole history; JSON is larger and slower than a binary encoding; one `fsync` per command limits write throughput to what the disk syncs per second (no group commit yet).
 - **Follow-ups / risks to watch:**
-  - **Erasure on disk (open question).** Purge (ADR-0021) and redaction (ADR-0022) clear content in the state; the earlier events in the log still contain it. Until this is solved, "deleted" and "redacted" do not mean "gone from disk", which matters for personal data.
+  - **Erasure on disk.** Purge (ADR-0021) and redaction (ADR-0022) cleared content in the state only; the earlier events in the log still contained it. Answered by [ADR-0026](0026-crypto-shredding-of-item-content.md): content is encrypted per item and erasure destroys the key.
   - The store is not safe for concurrent use; the API must funnel all commands through one writer before it uses the store.
   - Snapshots, compaction and Pebble when the history makes startup slow; group commit when write throughput matters.
   - Nested structs in the format (type definitions, documents) are encoded with their Go field names; the golden test catches a rename, but the fix then needs a codec version.
@@ -71,7 +69,7 @@ Strongest form: the most battle-tested embedded storage there is, with crash saf
 ### Log file, state in memory
 
 - Good: small, dependency-free, fully tested; the journal hook keeps the path to ADR-0008 open.
-- Bad: bounded by memory and replay time; erasure on disk unsolved.
+- Bad: bounded by memory and replay time; erasure on disk needs its own mechanism (ADR-0026).
 
 ## Links
 

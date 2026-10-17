@@ -34,17 +34,17 @@ type roundTripJournal struct {
 }
 
 func (j *roundTripJournal) Append(batch []Event) error {
-	data, err := EncodeBatch(batch)
+	data, err := EncodeBatchSealed(batch, fakeSealer{})
 	if err != nil {
 		j.err = err
 		return err
 	}
-	decoded, err := DecodeBatch(data)
+	decoded, err := DecodeBatchSealed(data, fakeSealer{})
 	if err != nil {
 		j.err = err
 		return err
 	}
-	again, err := EncodeBatch(decoded)
+	again, err := EncodeBatchSealed(decoded, fakeSealer{})
 	if err == nil && string(again) != string(data) {
 		err = fmt.Errorf("encoding is not stable:\n first: %s\nsecond: %s", data, again)
 	}
@@ -71,6 +71,9 @@ func (j *roundTripJournal) verify(t *testing.T, live *Store) {
 	all := Query{IncludeDeleted: true}
 	if got, want := r.Find(all), live.Find(all); !reflect.DeepEqual(got, want) {
 		t.Fatalf("items rebuilt from the decoded log differ\n got: %#v\nwant: %#v", got, want)
+	}
+	if got, want := r.Log(), live.Log(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("history rebuilt from the decoded log differs\n got: %#v\nwant: %#v", got, want)
 	}
 }
 

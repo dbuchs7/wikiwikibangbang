@@ -401,6 +401,7 @@ func (s *Store) RemoveRelation(actor string, id ID) error {
 		}
 	}
 	rc := *r
+	rc.created = 0 // not persisted; the event must read the same after a restart
 	return s.record(actor, Event{Kind: RelationRemoved, Relation: &rc})
 }
 
@@ -609,6 +610,13 @@ func (s *Store) purgeItems(ids ...ID) []ID {
 	touched := slices.Clone(ids)
 	for _, id := range ids {
 		purged[id] = true
+		// The content leaves the history too, not only the item: what is
+		// purged must not be readable through History (ADR-0026).
+		for _, i := range s.touching[id] {
+			if s.log[i].Item == id {
+				s.log[i].erase()
+			}
+		}
 		it := s.items[id]
 		it.Presence, it.trashedBy = Purged, 0
 		it.Title, it.Properties, it.Body = "", Props{}, Doc{}
