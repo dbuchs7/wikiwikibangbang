@@ -92,3 +92,27 @@ func TestRequiredChecksNameExistingJobs(t *testing.T) {
 		}
 	}
 }
+
+// TestEveryJobIsRequired is the converse: a CI job the ruleset does not
+// require only reports, and a pull request could be merged with it red.
+func TestEveryJobIsRequired(t *testing.T) {
+	data, err := os.ReadFile("../../.github/rulesets/protect-main.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rs ruleset
+	if err := json.Unmarshal(data, &rs); err != nil {
+		t.Fatal(err)
+	}
+	required := make(map[string]bool)
+	for _, r := range rs.Rules {
+		for _, c := range r.Parameters.RequiredStatusChecks {
+			required[c.Context] = true
+		}
+	}
+	for job := range ciJobNames(t) {
+		if !required[job] {
+			t.Errorf("CI job %q is not a required check in protect-main.json", job)
+		}
+	}
+}

@@ -30,6 +30,8 @@
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
           { "context": "fmt · vet · test (race)" },
+          { "context": "cross-build (release platforms)" },
+          { "context": "e2e (browser)" },
           { "context": "DCO sign-off (humans only)" }
         ]
       }
