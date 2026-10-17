@@ -101,6 +101,15 @@ jobs:
           curl -fsS -c /tmp/cookies -H 'Content-Type: application/json' \
             -d '{"username":"admin","password":"ci-admin-password"}' http://127.0.0.1:8080/api/login
           curl -fsS -b /tmp/cookies http://127.0.0.1:8080/api/me
+          # Write an item, restart the container, read it back.
+          j='Content-Type: application/json'
+          curl -fsS -b /tmp/cookies -H "$j" -d '{"key":"CI","name":"CI"}' http://127.0.0.1:8080/api/spaces
+          curl -fsS -b /tmp/cookies -H "$j" -d '{"name":"page","body":true,"fields":[]}' http://127.0.0.1:8080/api/types
+          curl -fsS -b /tmp/cookies -H "$j" -d '{"space":"CI","type":"page","title":"survives"}' http://127.0.0.1:8080/api/items
+          docker restart wwbb
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
+          curl -fsS -c /tmp/cookies -H "$j" -d '{"username":"admin","password":"ci-admin-password"}' http://127.0.0.1:8080/api/login
+          curl -fsS -b /tmp/cookies http://127.0.0.1:8080/api/items/CI-1 | grep -q '"title":"survives"'
           docker logs wwbb
           docker rm -f wwbb
           [ "${ok:-0}" = 1 ]

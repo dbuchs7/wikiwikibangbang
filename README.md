@@ -2,7 +2,7 @@
 
 Knowledge and work in one model: wiki pages and issues as typed items of one data model, in one open-source application written in Go ([ADR-0001](docs/adr/0001-unified-item-data-model.md)).
 
-> **Status: design phase.** The binary starts and serves a placeholder page. There is nothing to use yet. The decisions so far are recorded in the [ADRs](docs/adr/README.md).
+> **Status: early prototype.** The binary stores items durably and serves an authenticated HTTP API; there is no web UI yet, and nothing is ready for production use. The decisions so far are recorded in the [ADRs](docs/adr/README.md).
 
 ## Run
 
@@ -18,6 +18,15 @@ Then open <http://localhost:8080>. The first start creates the administrator `ad
 curl -c cookies -H 'Content-Type: application/json' \
   -d '{"username":"admin","password":"…"}' http://localhost:8080/api/login
 curl -b cookies http://localhost:8080/api/me
+```
+
+Items, types and spaces are managed through the item API ([ADR-0028](docs/adr/0028-item-api.md)); `GET /api/openapi.json` lists every operation:
+
+```bash
+curl -b cookies -H 'Content-Type: application/json' -d '{"key":"PLAT","name":"Platform"}' http://localhost:8080/api/spaces
+curl -b cookies -H 'Content-Type: application/json' -d '{"name":"page","body":true,"fields":[]}' http://localhost:8080/api/types
+curl -b cookies -H 'Content-Type: application/json' -d '{"space":"PLAT","type":"page","title":"Runbook"}' http://localhost:8080/api/items
+curl -b cookies http://localhost:8080/api/items/PLAT-1
 ```
  Data is kept in `./data` (change it with `-data-dir`); `wikiwikibangbang check -data-dir data` verifies it without changing it.
 
