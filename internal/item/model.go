@@ -19,6 +19,9 @@ import (
 var (
 	ErrValidation = errors.New("validation failed")
 	ErrNotFound   = errors.New("not found")
+	// ErrReferenced refuses a deletion while live items outside the deleted
+	// subtree still point into it (ADR-0021). It also matches ErrValidation.
+	ErrReferenced = errors.New("still referenced")
 )
 
 // ID is the immutable identity of an item or relation (D2).
@@ -53,6 +56,18 @@ type Doc struct {
 	Blocks []Block
 }
 
+// Presence is an item's lifecycle position, separate from its workflow
+// state (ADR-0021).
+type Presence string
+
+// The presences. A trashed item can be restored; a purged item is a
+// tombstone that keeps only its identity (D7).
+const (
+	Live    Presence = "live"
+	Trashed Presence = "trashed"
+	Purged  Presence = "purged"
+)
+
 // Item is one piece of user content.
 type Item struct {
 	ID          ID
@@ -66,9 +81,22 @@ type Item struct {
 	State       string
 	Body        Doc
 	// Version counts the changes to the item itself.
-	Version int
+	Version  int
+	Presence Presence
 
-	created int // sequence number of the creating event; orders items
+	created   int // sequence number of the creating event; orders items
+	trashedBy int // sequence number of the event that trashed it, or 0
+}
+
+// EmbedView is how one embed block of a body renders (ADR-0020). Child is
+// derived, not stored: the target lives in the host when its parent is the
+// host. Title is empty for a purged target.
+type EmbedView struct {
+	Ref      ID
+	Key      string
+	Title    string
+	Child    bool
+	Presence Presence
 }
 
 // Relation is a typed, directed edge between two items. Derived relations
@@ -113,6 +141,9 @@ const (
 	BodyCommitted   EventKind = "BodyCommitted"
 	RelationAdded   EventKind = "RelationAdded"
 	RelationRemoved EventKind = "RelationRemoved"
+	ItemTrashed     EventKind = "ItemTrashed"
+	ItemRestored    EventKind = "ItemRestored"
+	ItemPurged      EventKind = "ItemPurged"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -124,6 +155,10 @@ type Event struct {
 	Actor string
 	Kind  EventKind
 	Item  ID
+	// Batch is the sequence number of the first event of a multi-event
+	// command, shared by all its events; 0 for a single-event command. A
+	// batch is applied as a whole or not at all (ADR-0020, ADR-0008).
+	Batch int
 
 	TypeDef     *TypeDef // TypeDefined
 	Space       string   // SpaceCreated, ItemCreated, ItemMoved
@@ -139,6 +174,7 @@ type Event struct {
 	From, To    string   // Transitioned
 	Body        *Doc     // BodyCommitted
 	Relation    *Relation
+	Members     []ID // ItemTrashed, ItemRestored, ItemPurged: every item affected
 }
 
 func (it *Item) clone() Item {

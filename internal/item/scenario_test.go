@@ -215,9 +215,9 @@ func hasRelation(rs []Relation, typ string, other ID) bool {
 // snapshot renders the observable state for comparison.
 func snapshot(s *Store) string {
 	out := ""
-	for _, it := range s.Find(Query{}) {
-		out += fmt.Sprintf("%s %s %s %s parent=%s state=%s props=%v body=%d v%d\n",
-			it.ID, it.Key, it.Type, it.Title, it.Parent, it.State, it.Properties, len(it.Body.Blocks), it.Version)
+	for _, it := range s.Find(Query{IncludeDeleted: true}) {
+		out += fmt.Sprintf("%s %s %s %s parent=%s state=%s presence=%s props=%v body=%d v%d\n",
+			it.ID, it.Key, it.Type, it.Title, it.Parent, it.State, it.Presence, it.Properties, len(it.Body.Blocks), it.Version)
 		for _, r := range s.Relations(it.ID, Outgoing) {
 			out += fmt.Sprintf("  %s -> %s (%s, derived=%v)\n", r.Type, r.To, r.ID, r.Derived)
 		}

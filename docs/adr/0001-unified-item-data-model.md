@@ -169,9 +169,9 @@ What it surfaced — decisions this record did not make explicit:
 1. **Moving between spaces moves the subtree.** Because a parent and its children share a space, moving a page to another space moves all its descendants and gives each a new key; old keys keep resolving (D2). The prototype does this; it should be stated as a rule.
 2. **Derived relations need deterministic identities.** A relation computed while applying an event cannot take a random ID, or replay diverges. The prototype derives it from `(from, type, to)`; hand-made relations get an ID frozen into their event.
 3. **History includes relation changes.** A body commit on a page appears in the history of the task it embeds and of the decision it mentions. Useful ("mentioned in …"), but it means an item's history can grow through edits to other items.
-4. **Embedding and containment overlap.** The task is both a child of the page (`parent`) and embedded in its body (`embeds`). If the task moves elsewhere, the embed remains. Whether embedding should imply or require containment is open.
+4. **Embedding and containment overlap.** The task is both a child of the page (`parent`) and embedded in its body (`embeds`). If the task moves elsewhere, the embed remains. Whether embedding should imply or require containment is open — proposal: [ADR-0020](0020-embedding-and-containment-are-independent.md).
 5. **Schema evolution is now concrete.** Items record the type version they were created with, but validation uses the latest version; a field that becomes required in v2 is not enforced on items from v1 until they are next changed. This sharpens the open question above.
-6. **Deletion is unmodelled.** What happens to embeds, mentions and relations pointing at a deleted item is undecided; the prototype has no delete.
+6. **Deletion is unmodelled.** What happens to embeds, mentions and relations pointing at a deleted item is undecided; the prototype has no delete — proposal: [ADR-0021](0021-deletion-only-when-unreferenced.md).
 7. **Title is intrinsic.** Every item has a title outside its properties, and names such as `title`, `state`, `parent` are reserved for fields.
 
 A space as a plain container (not an item), as provisionally decided above, was sufficient for the prototype.

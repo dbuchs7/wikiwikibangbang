@@ -35,6 +35,8 @@ These follow from ADR-0001. That ADR is currently **Proposed**, so the invariant
 4. **D4 – No shadow data in the document.** Anything queryable is a property. Relations derived from a document body are a deterministic function of the document version.
 5. **D5 – One containment parent.** Every item has at most one `parent`. Permission inheritance follows containment only; every other hierarchy is a typed relation.
 6. **D6 – Type-agnostic cross-cutting capabilities.** No type-specific code in search, permissions, history, comments or notifications.
+7. **D7 – Identities are permanent.** An item's ID is never reused and always resolves — to the item, to the item in the trash, or to its tombstone. Deletion removes content, never identity. ([ADR-0021](docs/adr/0021-deletion-only-when-unreferenced.md))
+8. **D8 – No deletion while referenced.** An item is trashed only when no live item outside its subtree references it; deleting never leaves live content pointing at it. ([ADR-0021](docs/adr/0021-deletion-only-when-unreferenced.md))
 
 ## Commands
 
