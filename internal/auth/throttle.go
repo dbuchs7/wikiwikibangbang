@@ -1,6 +1,10 @@
 package auth
 
-import "time"
+import (
+	"time"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+)
 
 // Login throttling (ADR-0013): after MaxFailures failed logins within
 // FailureWindow, a client address or a username is refused until the oldest
@@ -8,11 +12,11 @@ import "time"
 const (
 	MaxFailures   = 10
 	FailureWindow = 15 * time.Minute
-	// maxKeys bounds the memory an attacker can make the throttle use; when
-	// it is reached, the oldest entries are dropped.
-	maxKeys = 100_000
 )
 
+// throttle remembers recent failures per key. The memory an attacker can
+// make it use is bounded by budget.LoginTracked (ADR-0015); when that is
+// reached, an entry is dropped.
 type throttle struct {
 	failures map[string][]time.Time
 }
@@ -48,7 +52,7 @@ func (t *throttle) blocked(now time.Time, keys ...string) time.Duration {
 }
 
 func (t *throttle) fail(now time.Time, keys ...string) {
-	if len(t.failures) >= maxKeys {
+	if len(t.failures) >= budget.Get().LoginTracked {
 		for k := range t.failures { // map order: an arbitrary key goes
 			delete(t.failures, k)
 			break

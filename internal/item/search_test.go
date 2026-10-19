@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 )
 
 func hitKeys(hits []Hit) []string {
@@ -144,8 +146,8 @@ func TestSearchFilters(t *testing.T) {
 
 func TestSearchRejectsUnusableQueries(t *testing.T) {
 	s, _ := searchFixture(t)
-	for _, q := range []string{"", "   ", "!!!", strings.Repeat("a", MaxQueryBytes+1),
-		manyTerms(MaxQueryTerms + 1)} {
+	for _, q := range []string{"", "   ", "!!!", strings.Repeat("a", budget.Get().SearchQueryBytes+1),
+		manyTerms(budget.Get().SearchQueryTerms + 1)} {
 		if _, err := s.As("ben").Search(q, Query{}); !errors.Is(err, ErrValidation) {
 			t.Errorf("%.20q: err = %v, want ErrValidation", q, err)
 		}

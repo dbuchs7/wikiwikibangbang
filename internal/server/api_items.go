@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
@@ -274,8 +275,8 @@ func (h itemHandlers) listAudit(w http.ResponseWriter, r *http.Request) {
 	limit, before := 100, 0
 	var err error
 	if v := q.Get("limit"); v != "" {
-		if limit, err = strconv.Atoi(v); err != nil || limit < 1 || limit > MaxPage {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be 1 to %d", MaxPage))
+		if limit, err = strconv.Atoi(v); err != nil || limit < 1 || limit > budget.Get().PageItems {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be 1 to %d", budget.Get().PageItems))
 			return
 		}
 	}
@@ -300,9 +301,6 @@ func (h itemHandlers) listAudit(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- items -------------------------------------------------------------------
-
-// MaxPage bounds one page of a listing (ADR-0015).
-const MaxPage = 500
 
 func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -370,8 +368,8 @@ func parseLimit(w http.ResponseWriter, q url.Values) (int, bool) {
 		return 100, true
 	}
 	n, err := strconv.Atoi(v)
-	if err != nil || n < 1 || n > MaxPage {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be 1 to %d", MaxPage))
+	if err != nil || n < 1 || n > budget.Get().PageItems {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be 1 to %d", budget.Get().PageItems))
 		return 0, false
 	}
 	return n, true

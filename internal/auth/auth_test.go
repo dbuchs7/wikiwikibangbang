@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 )
 
 const pw = "correct horse battery"
@@ -110,6 +112,7 @@ func TestThrottleMemoryIsBounded(t *testing.T) {
 	var th throttle
 	th.init()
 	now := time.Now()
+	maxKeys := budget.Get().LoginTracked
 	for i := range maxKeys + 10 {
 		th.fail(now, "k"+strings.Repeat("x", i%7)+string(rune('a'+i%26))+time.Duration(i).String())
 	}

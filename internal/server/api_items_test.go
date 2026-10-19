@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
@@ -332,4 +333,17 @@ func TestImportedUnsupportedBlocksCanBeKeptNotAdded(t *testing.T) {
 	keep := `{"blocks":[{"kind":"paragraph","text":"intro"},{"kind":"unsupported","text":` + strconv.Quote(raw) + `}]}`
 	w.bert.expect("PUT", "/api/items/"+id+"/body", keep, http.StatusOK)
 	w.bert.expect("PUT", "/api/items/"+id+"/body", `{"blocks":[{"kind":"unsupported","text":"<b>new</b>"}]}`, http.StatusBadRequest)
+}
+
+// The page budget is read when a request arrives, so a value set from the
+// environment at startup bounds every listing (ADR-0015).
+func TestPageBudgetBoundsListings(t *testing.T) {
+	w := newWorld(t)
+	small := budget.Default()
+	small.PageItems = 3
+	budget.Set(small)
+	t.Cleanup(func() { budget.Set(budget.Default()) })
+	w.bert.expect("GET", "/api/items?space=PLAT&limit=3", "", http.StatusOK)
+	w.bert.expect("GET", "/api/items?space=PLAT&limit=4", "", http.StatusBadRequest)
+	w.admin.expect("GET", "/api/audit?limit=4", "", http.StatusBadRequest)
 }

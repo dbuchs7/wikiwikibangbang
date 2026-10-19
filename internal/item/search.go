@@ -6,12 +6,11 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 )
 
-// Search budgets (ADR-0015, ADR-0033).
 const (
-	MaxQueryBytes = 256
-	MaxQueryTerms = 10
 	// SnippetRunes is the length of a hit's snippet, without the ellipses.
 	SnippetRunes = 160
 )
@@ -90,8 +89,9 @@ func appendFold(buf []byte, text string) []byte {
 func fold(text string) string { return string(appendFold(nil, text)) }
 
 func searchTerms(text string) ([]string, error) {
-	if len(text) > MaxQueryBytes {
-		return nil, invalid("a search is at most %d bytes", MaxQueryBytes)
+	limits := budget.Get() // ADR-0015, ADR-0033
+	if len(text) > limits.SearchQueryBytes {
+		return nil, invalid("a search is at most %d bytes", limits.SearchQueryBytes)
 	}
 	words := strings.FieldsFunc(fold(text), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 	var terms []string
@@ -103,8 +103,8 @@ func searchTerms(text string) ([]string, error) {
 	switch {
 	case len(terms) == 0:
 		return nil, invalid("a search needs a letter or a digit")
-	case len(terms) > MaxQueryTerms:
-		return nil, invalid("a search has at most %d terms", MaxQueryTerms)
+	case len(terms) > limits.SearchQueryTerms:
+		return nil, invalid("a search has at most %d terms", limits.SearchQueryTerms)
 	}
 	return terms, nil
 }

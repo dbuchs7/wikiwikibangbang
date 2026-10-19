@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso/ssotest"
 )
 
@@ -118,11 +119,12 @@ func TestConfiguration(t *testing.T) {
 }
 
 func TestPendingLoginsAreBounded(t *testing.T) {
-	old := maxPending
-	maxPending = 50
-	t.Cleanup(func() { maxPending = old })
+	small := budget.Default()
+	small.SSOPending = 50
+	budget.Set(small)
+	t.Cleanup(func() { budget.Set(budget.Default()) })
 	p, _ := newProvider(t)
-	for range maxPending {
+	for range small.SSOPending {
 		if _, _, err := p.Begin(context.Background()); err != nil {
 			t.Fatal(err)
 		}

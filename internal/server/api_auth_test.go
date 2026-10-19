@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 )
 
 const adminPassword = "admin password!"
@@ -133,7 +134,7 @@ func TestRequestBodiesAreStrict(t *testing.T) {
 	c.expect("POST", "/api/login", `{"username":"admin","password":"x","admin":true}`, http.StatusBadRequest)
 	c.expect("POST", "/api/login", `{"username":"admin"} {}`, http.StatusBadRequest)
 	c.expect("POST", "/api/login", `{"username":"admin"} x`, http.StatusBadRequest)
-	big := `{"username":"` + strings.Repeat("a", MaxRequestBody) + `"}`
+	big := `{"username":"` + strings.Repeat("a", int(budget.Get().RequestBody)) + `"}`
 	c.expect("POST", "/api/login", big, http.StatusRequestEntityTooLarge)
 }
 
