@@ -1028,7 +1028,7 @@ async function itemView(ref) {
   const show = screen();
   const { item, editable } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
-  const [{ types }, history, out, inc, embeds, comments, { attachments }, { watches }] = await Promise.all([
+  const [{ types }, history, out, inc, embeds, comments, { attachments }, { watches }, { spaces }] = await Promise.all([
     get("/api/types"),
     get(path + "/history"),
     get(path + "/relations?direction=outgoing"),
@@ -1037,7 +1037,9 @@ async function itemView(ref) {
     get(path + "/comments"),
     get(path + "/attachments"),
     get("/api/me/watches"),
+    get("/api/spaces"),
   ]);
+  const spaceAdmin = spaces.find((sp) => sp.key === item.space)?.role === "space-admin";
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
   const level = `/api/spaces/${encodeURIComponent(item.space)}/tree` + (item.parent ? "?parent=" + item.parent : "");
   const [, open, siblings] = await Promise.all([
@@ -1115,7 +1117,8 @@ async function itemView(ref) {
     transitions.length ? h("p", {}, t("item.transitions"), transitions) : null,
     type.fields.length ? h("section", {}, h("h2", { text: t("item.properties") }), props) : null,
     type.body ? bodyEditor(item, embeds.embeds, live, threads) : null,
-    relationsSection(out.relations, inc.relations, item.id),
+    await relationsSection(path, out.relations, inc.relations, item.id, canEdit),
+    await accessSection(path, item, canEdit, spaceAdmin),
     attachmentsSection(path, attachments, canEdit),
     threads.section,
     h("p", {}, reorder, actions),
@@ -1139,13 +1142,81 @@ function bodyEditor(item, embeds, live, threads) {
   return h("section", { id: "body" }, h("h2", { text: t("item.body") }), session.element);
 }
 
-function relationsSection(out, inc, self) {
-  const row = (r, other) => h("li", {}, `${r.type}${r.derived ? t("rel.fromBody") : ""} `, link("#/item/" + other, other.slice(0, 8)));
-  if (out.length + inc.length === 0) return null;
-  return h("section", {},
+// relationsSection lists an item's relations both ways, with the related
+// items' keys and titles. One who may edit the item relates it to another
+// by key and removes relations made by hand; those derived from a body
+// change with the body.
+async function relationsSection(path, out, inc, self, canEdit) {
+  const others = [...new Set([...out.map((r) => r.to), ...inc.map((r) => r.from)])].slice(0, 50);
+  const known = new Map(await Promise.all(others.map(async (id) => [id, await get("/api/items/" + id).then((x) => x.item).catch(() => null)])));
+  const label = (id) => { const it = known.get(id); return it ? `${it.key} ${it.title}` : id.slice(0, 8); };
+  const status = h("div", { class: "status" });
+  const row = (r, other, outgoing) => h("li", {},
+    h("span", { class: "muted", text: (outgoing ? r.type : t("rel.incoming", { type: r.type })) + (r.derived ? t("rel.fromBody") : "") + " " }),
+    link("#/item/" + encodeURIComponent(known.get(other)?.key || other), label(other)),
+    canEdit && outgoing && !r.derived ? h("button", { type: "button", class: "link", text: "×", title: t("rel.remove"), "aria-label": t("rel.remove"),
+      onclick: () => action(() => del("/api/relations/" + encodeURIComponent(r.id)), status) }) : null);
+  const add = canEdit ? form({ id: "add-relation", class: "inline" }, [
+    h("input", { name: "type", required: true, list: "relation-types", placeholder: t("rel.type"), "aria-label": t("rel.type"), size: 12 }),
+    h("datalist", { id: "relation-types" }, ["relates-to", "blocks", "implements", "duplicates", "depends-on"].map((v) => h("option", { value: v }))),
+    h("input", { name: "target", required: true, placeholder: t("rel.target"), "aria-label": t("rel.target"), size: 12 }),
+    h("button", { type: "submit", text: t("rel.add") }),
+  ], async (d) => {
+    const target = (await get("/api/items/" + encodeURIComponent(d.get("target").trim()))).item;
+    await post("/api/relations", { type: d.get("type").trim(), from: self, to: target.id });
+    route();
+  }) : null;
+  if (out.length + inc.length === 0 && !add) return null;
+  return h("section", { id: "relations" },
     h("h2", { text: t("rel.title") }),
-    h("ul", { class: "list" }, out.map((r) => row(r, r.to)), inc.map((r) => row(r, r.from))),
-  );
+    out.length + inc.length ? h("ul", { class: "list" }, out.map((r) => row(r, r.to, true)), inc.map((r) => row(r, r.from, false)))
+      : h("p", { class: "muted", text: t("rel.none") }),
+    add, status);
+}
+
+// accessSection shows who may read and edit an item and lets one who may
+// edit it narrow that, without locking themselves out; a space
+// administrator may name anyone (ADR-0022). Holders of the erasure role
+// redact an item at once (ADR-0026).
+async function accessSection(path, item, canEdit, spaceAdmin) {
+  const r = item.restriction || { read: [], edit: [] };
+  const read = r.read || [], edit = r.edit || [];
+  await learnNames([...read, ...edit].filter((p) => !p.startsWith("@")));
+  const status = h("div", { class: "status" });
+  const listed = (list) => list.length ? list.map((p) => p.startsWith("@") ? p : person(p)).join(", ") : t("access.everyone");
+  const set = (next) => action(() => put(path + "/restriction", next), status);
+  const restricted = read.length + edit.length > 0;
+  // Who else may read or edit a restricted item is chosen among the
+  // accounts, which space administrators may list.
+  const users = canEdit && restricted && spaceAdmin ? (await get("/api/users")).users : null;
+  if (users) for (const u of users) names.set(u.id, u.username);
+  const pick = users ? form({ id: "restrict", class: "inline" }, [
+    h("select", { name: "who", "aria-label": t("access.who") }, users.map((u) => h("option", { value: u.id, text: u.username }))),
+    h("select", { name: "what", "aria-label": t("access.what") }, h("option", { value: "read", text: t("access.mayRead") }), h("option", { value: "edit", text: t("access.mayEdit") })),
+    h("button", { type: "submit", text: t("access.add") }),
+  ], async (d) => {
+    const who = d.get("who");
+    const next = { read: [...read], edit: [...edit] };
+    // Whoever may edit a restricted item must also read it.
+    if (next.read.length && !next.read.includes(who)) next.read.push(who);
+    if (d.get("what") === "edit" && next.edit.length && !next.edit.includes(who)) next.edit.push(who);
+    await put(path + "/restriction", next);
+    route();
+  }) : null;
+  if (!canEdit && !restricted && !me.erasure) return null;
+  return h("section", { id: "access" },
+    h("h2", { text: t("access.title") }),
+    h("p", {}, t("access.read", { who: listed(read) }), h("br"), t("access.edit", { who: listed(edit) })),
+    canEdit ? h("p", { class: "actions-row" },
+      h("button", { type: "button", class: "secondary", text: t("access.onlyMe"), onclick: () => set({ read: [me.user.id], edit: [me.user.id] }) }),
+      h("button", { type: "button", class: "secondary", text: t("access.onlyMeEdits"), onclick: () => set({ read: read, edit: [me.user.id] }) }),
+      restricted ? h("button", { type: "button", class: "secondary", text: t("access.lift"), onclick: () => set({ read: [], edit: [] }) }) : null) : null,
+    pick,
+    me.erasure && item.presence !== "purged" ? h("p", {}, h("button", { type: "button", class: "danger", text: t("access.redact"), onclick: () => {
+      const reason = prompt(t("access.redactReason"));
+      if (reason && reason.trim() && confirm(t("access.redactConfirm", { key: item.key }))) action(() => post(path + "/redact", { reason: reason.trim() }), status);
+    } })) : null,
+    status);
 }
 
 // commentThreads shows an item's comments (ADR-0035) as threads: a first

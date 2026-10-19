@@ -386,6 +386,18 @@ function check(cond, msg) {
     await page.waitForSelector(".resolved-threads summary:has-text('Resolved (1)')");
     check(await page.locator("#body .comment-anchor").count() === 0, "a resolved thread's text is not highlighted");
 
+    step("relations and access: a page is related by key and unrelated; only I may edit it, then everyone again");
+    await page.fill("#add-relation [name=type]", "depends-on");
+    await page.fill("#add-relation [name=target]", "PLAT-1");
+    await page.click("#add-relation button[type=submit]");
+    await page.waitForSelector("#relations li:has-text('depends-on') a:has-text('PLAT-1')");
+    await page.click("#relations li:has-text('depends-on') button[aria-label='Remove this relation']");
+    await page.waitForSelector("#relations li:has-text('depends-on')", { state: "detached" });
+    await page.click("#access button:has-text('Only I may edit')");
+    await page.waitForSelector("#access p:has-text('May edit: you')");
+    await page.click("#access button:has-text('Lift the restriction')");
+    await page.waitForSelector("#access p:has-text('May edit: everyone with a role in the space')");
+
     step("files: an upload is listed and downloads; an image goes into the body and shows after a reload");
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
     await page.setInputFiles("#upload", { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("<script>alert('file')</script>") });
