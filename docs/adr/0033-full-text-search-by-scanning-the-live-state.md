@@ -34,7 +34,7 @@ Chosen option: **1**, behind an interface that option 2 can replace.
 - **API:** `GET /api/search?q=…` with the filters `space`, `type`, `state` and the usual page envelope (`limit`, `after`, `total`, `next`; ADR-0015). The UI has a search field in the navigation and a result list; snippets are inserted as text (ADR-0014).
 - **Measured cost:** `BenchmarkSearch` — 10,000 items with about 1 KB of body each — takes about 30 ms per query on one core of a CI-class runner (roughly 3 ms per 1,000 such items), allocating about 1 MB. Folding writes into one reused buffer; the first version, which allocated a folded copy of every text, took 45 ms and 12 MB.
 
-**Implementation is Partial:** no index (see follow-ups), no phrase or prefix-only search, no diacritic folding beyond `ß` (`ä` does not match `a`), no search in attachments or comments (which do not exist yet).
+**Implementation is Partial:** no index (see follow-ups), no phrase or prefix-only search, no diacritic folding beyond `ß` (`ä` does not match `a`), no search in attachments (which do not exist yet). Comment text is searched like a property; when no body block matches, the snippet comes from the first matching comment, and the hit names it (ADR-0035).
 
 ### Consequences
 

@@ -55,6 +55,31 @@ async function action(fn, status) {
   }
 }
 
+// --- people ------------------------------------------------------------------
+
+// names caches usernames by user ID, so a view shows who did something
+// instead of an ID (ADR-0031, ADR-0035).
+const names = new Map();
+
+// learnNames looks up the usernames of the IDs not yet known, in one
+// request. IDs that are no user (such as "governance") stay as they are.
+async function learnNames(ids) {
+  const missing = [...new Set(ids.filter((id) => id && !names.has(id)))];
+  // 100 per request stays below any sensible page budget (ADR-0015).
+  for (let i = 0; i < missing.length; i += 100) {
+    const chunk = missing.slice(i, i + 100);
+    const res = await get("/api/users/names?" + chunk.map((id) => "id=" + encodeURIComponent(id)).join("&"));
+    for (const id of chunk) names.set(id, res.names[id] ?? id);
+  }
+}
+
+// person names a user: "you", their username, or the ID as given.
+function person(id) {
+  if (!id) return "—";
+  if (me && id === me.user.id) return t("common.you");
+  return names.get(id) ?? id;
+}
+
 // --- navigation ------------------------------------------------------------
 
 // renderFooter names the running build for signed-in users, e.g.
@@ -249,7 +274,7 @@ async function searchView(q) {
       list.append(h("li", {},
         link("#/item/" + encodeURIComponent(it.key), it.key), " ", h("strong", { text: it.title }),
         " ", h("span", { class: "muted", text: `${it.space} · ${it.type}${it.state ? " · " + it.state : ""}` }),
-        hit.snippet ? h("p", { class: "snippet", text: hit.snippet }) : null,
+        hit.snippet ? h("p", { class: "snippet", text: hit.comment ? t("search.inComment", { text: hit.snippet }) : hit.snippet }) : null,
       ));
     }
     more.replaceChildren();
@@ -439,8 +464,9 @@ async function governanceView(key) {
   const show = screen();
   const days = Number(new URLSearchParams(location.hash.split("?")[1] || "").get("staleDays")) || 365;
   const rep = await get(`/api/spaces/${encodeURIComponent(key)}/governance?staleDays=${days}`);
+  await learnNames([...rep.sensitive, ...rep.stale, ...rep.implausible].map((f) => f.responsible));
   const status = h("div", { class: "status" });
-  const who = (id) => !id ? "—" : id === me.user.id ? t("common.you") : id;
+  const who = person;
   const itemCell = (f) => h("td", {}, link("#/item/" + encodeURIComponent(f.key), f.title || f.key), h("div", { class: "muted", text: f.key }));
   const lift = async (f) => {
     const { item } = await get("/api/items/" + f.item);
@@ -486,8 +512,9 @@ async function linksView(key) {
   const show = screen();
   const path = `/api/spaces/${encodeURIComponent(key)}/linkcheck`;
   const report = await get(path);
+  await learnNames((report.broken || []).map((b) => b.responsible));
   const status = h("div", { class: "status" });
-  const who = (id) => id === me.user.id ? t("common.you") : id;
+  const who = person;
   let body;
   if (!report.enabled) {
     body = h("p", { class: "notice", text: t("links.off") });
@@ -598,6 +625,7 @@ async function itemView(ref) {
     get(path + "/comments"),
   ]);
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
+  await learnNames([...history.events.map((e) => e.actor), ...comments.comments.map((c) => c.author)]);
   const status = h("div", { class: "status" });
   const live = item.presence === "live";
 
@@ -674,7 +702,7 @@ function relationsSection(out, inc, self) {
 // commentsSection lists an item's comments (ADR-0035). Text is inserted as
 // text (ADR-0014); one's own comments can be edited and deleted.
 function commentsSection(path, page, live) {
-  const author = (c) => c.author === me.user.id ? t("common.you") : c.author;
+  const author = (c) => person(c.author);
   const row = (c) => {
     const li = h("li", { class: "comment" });
     const head = h("div", { class: "muted" }, `${author(c)} · ${when(c.created)}`, c.edited ? t("comment.edited") : "");
@@ -714,7 +742,7 @@ function historySection(events) {
     h("h2", { text: t("history.title") }),
     h("table", { class: "history" }, events.slice().reverse().map((e) => h("tr", {},
       h("td", { text: when(e.at) }),
-      h("td", { text: e.actor }),
+      h("td", { text: person(e.actor) }),
       h("td", { text: e.kind }),
       h("td", { text: e.erased ? t("history.erased") : [e.title, e.field && `${e.field} = ${JSON.stringify(e.value ?? null)}`, e.to, e.comment && t("history.comment", { id: e.comment.slice(0, 8) })].filter(Boolean).join(" ") }),
     ))),
@@ -779,6 +807,7 @@ async function adminView() {
     get("/api/users"), get("/api/spaces"), get("/api/types"), get("/api/audit?limit=50"),
   ]);
   const userOptions = users.map((u) => h("option", { value: u.id, text: u.username }));
+  for (const u of users) names.set(u.id, u.username);
   show(
     h("h1", { text: t("admin.title") }),
     form({ class: "card", id: "new-space" }, [
@@ -838,7 +867,7 @@ async function adminView() {
     h("section", { class: "card" },
       h("h2", { text: t("admin.audit", { n: 50 }) }),
       h("table", { class: "history" }, auditPage.entries.map((e) => h("tr", {},
-        h("td", { text: when(e.at) }), h("td", { text: e.event }), h("td", { text: e.actor || "" }),
+        h("td", { text: when(e.at) }), h("td", { text: e.event }), h("td", { text: e.actor ? person(e.actor) : "" }),
         h("td", { text: e.addr || "" }), h("td", { text: e.subject || "" }),
         h("td", { text: Object.entries(e.detail || {}).map(([k, v]) => `${k}=${v}`).join(" ") }),
       ))),

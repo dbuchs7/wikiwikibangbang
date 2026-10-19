@@ -31,13 +31,13 @@ Chosen option: **2**, as ADR-0009 proposes.
 - **Body editing:** paragraphs and headings are edited as text; embeds are shown as links (or as "an item you cannot see") and can be removed; mentions are kept on their blocks and shown as links. Creating mentions and embeds is left to the rich-text editor, which [ADR-0032](0032-prosemirror-rich-text-editor.md) has since added; it replaces the block textareas. Bodies are now edited in a live session ([ADR-0010](0010-real-time-collaboration-with-block-locks.md)) and saved when a block is left, so there is no save button.
 - **Browser test:** `e2e/smoke.cjs` drives Chromium through Playwright against the built binary — log in, administration, create an item with a hostile title, edit properties, transition, save a body containing a `<script>`, create a token, log in as another user — and fails on any page error, console error, CSP violation or dialog. CI runs it as the job `e2e (browser)`. Node and Playwright are test tools only; `e2e/package-lock.json` pins them.
 
-**Implementation is Partial:** history shows user IDs, not names, for non-administrators; no live updates; no search.
+**Implementation is Partial:** no live updates outside the body editor. Search came with ADR-0033. The UI names people instead of showing their IDs: `GET /api/users/names` resolves IDs for anyone signed in — IDs are random and appear only in what the caller may read, so it reveals the names of people whose work the caller sees and cannot list the accounts.
 
 ### Consequences
 
 - **Positive:** the product is usable in a browser from the single binary; the UI cannot drift from the API because it has no other data source; XSS defences are enforced by a test and exercised by a browser.
 - **Negative / trade-offs accepted:** hand-written DOM code; textareas instead of a real editor (until ADR-0032); the browser test adds a Node toolchain to CI (not to the build) and about a minute per run.
-- **Follow-ups / risks to watch:** showing names instead of IDs needs a user lookup readable by non-administrators; accessibility review; the test is not yet a required check.
+- **Follow-ups / risks to watch:** accessibility review; the test is not yet a required check.
 
 ## Pros and cons of the options
 
