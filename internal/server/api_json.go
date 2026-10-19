@@ -70,6 +70,9 @@ func (t typeJSON) toTypeDef() item.TypeDef {
 type spaceJSON struct {
 	Key  string `json:"key"`
 	Name string `json:"name"`
+	// Role is the caller's role in the space (viewer, editor or
+	// space-admin), so the UI offers only what the caller may do.
+	Role string `json:"role,omitempty"`
 }
 
 type markJSON struct {
