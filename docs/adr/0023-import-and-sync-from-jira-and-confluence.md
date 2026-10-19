@@ -146,7 +146,8 @@ An imported space had no roles: only system administrators could see it. Copying
 
 1. **`-grant principal=role`**, repeatable: a role (viewer, editor, space-admin) for a local account or `@group` in every space the import writes to. A run only adds: a principal that already holds the role or a higher one directly keeps it, so roles changed by space administrators survive the next run, and a re-run grants nothing.
 2. **`-groups file`**: maps source groups to local groups. A page restriction naming a mapped group names the local group; an unmapped one stays a placeholder no one holds and is reported once per page. Members of local groups are managed locally; the import adds none.
-3. Not built: proposing roles and group mappings from the source's space permissions and project roles in a dry run, for a person to review.
+3. **Empty groups are reported.** A local group named by a grant or the group mapping that has no members yet is reported once per run: a role or restriction through it admits no one, so imported content stays hidden until members are added (`PUT /api/groups/{group}/members/{principal}`).
+4. Not built: proposing roles and group mappings from the source's space permissions and project roles in a dry run, for a person to review.
 
 ## Pros and cons of the options
 

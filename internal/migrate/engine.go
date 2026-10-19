@@ -66,6 +66,7 @@ func Run(s *item.Store, snap Snapshot, m Mapping, opt Options) (Report, error) {
 	e.rep.Problems = slices.Clone(m.Notes)
 	e.ensureSpaces()
 	e.grantRoles()
+	e.reportEmptyGroups()
 	e.ensureTypes()
 	issues, pages := e.orderedIssues(), e.orderedPages()
 	for _, is := range issues {
@@ -338,6 +339,30 @@ func (e *engine) targetSpaces() []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// reportEmptyGroups warns about local groups the mapping names that have no
+// members yet: a role or restriction through such a group admits no one, so
+// imported content stays hidden until the group is filled.
+func (e *engine) reportEmptyGroups() {
+	var groups []string
+	add := func(g string) {
+		if strings.HasPrefix(g, "@") && !slices.Contains(groups, g) {
+			groups = append(groups, g)
+		}
+	}
+	for _, g := range e.m.Grants {
+		add(g.Principal)
+	}
+	for _, g := range e.m.Groups {
+		add(g)
+	}
+	slices.Sort(groups)
+	for _, g := range groups {
+		if e.s.GroupSize(g) == 0 {
+			e.problem("group "+g, "has no members yet; no one gets access through it until members are added")
+		}
+	}
 }
 
 // grantRoles gives the mapping's roles in every target space. A principal

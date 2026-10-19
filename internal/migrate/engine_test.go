@@ -344,3 +344,27 @@ func TestSourceGroupsMapToLocalGroups(t *testing.T) {
 		t.Errorf("an unmapped group is reported once per page, a mapped one not: %+v", rep.Problems)
 	}
 }
+
+func TestEmptyLocalGroupsAreReported(t *testing.T) {
+	s := newStore(t)
+	if err := s.AddToGroup("admin", "engineering", "u-anna"); err != nil {
+		t.Fatal(err)
+	}
+	snap := sample()
+	m := Derive(snap)
+	m.Groups = map[string]string{"devs": "@engineering", "ops": "@operations"}
+	m.Grants = []Grant{{Principal: "@platform", Role: item.Editor}, {Principal: "@operations", Role: item.Viewer}, {Principal: "u-anna", Role: item.Editor}}
+	rep, err := Run(s, snap, m, Options{Actor: "import"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var empty []string
+	for _, p := range rep.Problems {
+		if strings.Contains(p.Message, "no members yet") {
+			empty = append(empty, p.Source)
+		}
+	}
+	if want := []string{"group @operations", "group @platform"}; !slices.Equal(empty, want) {
+		t.Errorf("reported %v, want %v once each", empty, want)
+	}
+}
