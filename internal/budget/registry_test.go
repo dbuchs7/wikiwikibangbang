@@ -32,6 +32,9 @@ var classified = map[string]string{
 		"must not depend on the restoring server's environment",
 	"internal/backup/backup.go:1 << 20": "the manifest of a backup, read by the restore command from its own format",
 	"cmd/settingscheck/main.go:4 << 20": "a command-line client reading GitHub's answer, not this server's input",
+	"internal/mcp.maxAnswer": "the MCP adapter reading an answer of the API it calls; the API's own budgets bound " +
+		"what it sends, this only guards the adapter against a server that misbehaves",
+	"internal/mcp/client.go:maxAnswer": "the same bound, where the adapter reads",
 }
 
 // TestNoCeilingWithoutAName keeps the budgets complete (ADR-0015). Every

@@ -27,6 +27,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
+	"github.com/dbuchs7/wikiwikibangbang/internal/mcp"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
@@ -47,10 +48,14 @@ Commands:
   check        verify a data directory without changing it
   restore      restore a backup into a new data directory
   healthcheck  exit 0 if a running server answers its liveness probe
+  mcp          serve the MCP tools of a running server on stdin and stdout
   version      print the version
 
 Run "wikiwikibangbang <command> -h" for the flags of a command.
 `
+
+// stdin is what the mcp command reads; a variable so its test can feed it.
+var stdin io.Reader = os.Stdin
 
 // run executes one command and returns the process exit code: 0 on success,
 // 1 on failure, 2 on wrong usage.
@@ -69,6 +74,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return restore(args, stdout, stderr)
 	case "healthcheck":
 		return healthcheck(ctx, args, stderr)
+	case "mcp":
+		return mcpStdio(ctx, args, stdin, stdout, stderr)
 	case "version":
 		fmt.Fprintln(stdout, buildinfo.Get())
 		return 0
@@ -320,6 +327,30 @@ func restore(args []string, stdout, stderr io.Writer) int {
 
 // healthcheck lets a container runtime probe the server without a shell or
 // curl in the image.
+// mcpStdio is the MCP adapter for a local agent process (ADR-0012): one
+// JSON-RPC message per line on in, the answers on out. Every tool call is a
+// request to the server at -url with the API token in WWBB_TOKEN; the token
+// is read from the environment, not a flag, so it does not show in the
+// process list.
+func mcpStdio(ctx context.Context, args []string, in io.Reader, out, stderr io.Writer) int {
+	fs := newFlags("mcp", stderr)
+	url := fs.String("url", "http://127.0.0.1:8080", "the server's base URL")
+	if err := fs.Parse(args); err != nil {
+		return parseFailed(err)
+	}
+	token := strings.TrimSpace(os.Getenv("WWBB_TOKEN"))
+	if token == "" {
+		fmt.Fprintln(stderr, "mcp: set WWBB_TOKEN to an API token (POST /api/tokens); the agent acts with its rights")
+		return 2
+	}
+	api := mcp.HTTPAPI{Base: *url, Header: http.Header{"Authorization": {"Bearer " + token}}}
+	if err := mcp.Serve(ctx, api, in, out); err != nil {
+		fmt.Fprintln(stderr, "mcp:", err)
+		return 1
+	}
+	return 0
+}
+
 func healthcheck(ctx context.Context, args []string, stderr io.Writer) int {
 	fs := newFlags("healthcheck", stderr)
 	url := fs.String("url", "http://127.0.0.1:8080/healthz", "liveness probe to query")
