@@ -60,3 +60,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0045](0045-attachments-encrypted-files-beside-the-log.md) | Attachments are encrypted files beside the event log, described by events of their item | Accepted | Landed |
 | [0046](0046-watching-and-notifications-from-the-log.md) | Watching items and spaces; notifications are read from the event log | Accepted | Partial |
 | [0047](0047-inline-comments-anchored-by-quoted-text.md) | Inline comments are anchored by the text they quote; threads take replies and are resolved | Accepted | Landed |
+| [0048](0048-roles-are-listed-and-taken-back.md) | Roles, group memberships and system roles are listed and taken back | Accepted | Landed |

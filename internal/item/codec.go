@@ -37,7 +37,9 @@ import (
 //   - 10: CommentAdded may carry anchor, sealed content, and reply; the
 //     kinds CommentResolved and CommentReopened (ADR-0047). Versions 1 to
 //     9 are still read.
-const CodecVersion = 10
+//   - 11: the kinds RoleRevoked, GroupMemberRemoved and SystemRoleRevoked
+//     (ADR-0048). Versions 1 to 10 are still read.
+const CodecVersion = 11
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

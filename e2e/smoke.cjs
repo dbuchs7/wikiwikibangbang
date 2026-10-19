@@ -401,6 +401,26 @@ function check(cond, msg) {
     await page.waitForSelector("#governance h2:has-text('Not changed')");
     await page.waitForSelector("#governance h2:has-text('Implausible')");
 
+    step("administration: groups, a group's role in a space, system roles");
+    await page.click("nav a:has-text('Administration')");
+    await page.fill("#add-member [name=group]", "ops");
+    await page.selectOption("#add-member [name=user]", { label: "bert" });
+    await page.click("#add-member button[type=submit]");
+    await page.waitForSelector("#groups th:text-is('@ops')");
+    await page.click("#users tr:has-text('bert') label:has-text('erasure') input");
+    await page.waitForSelector("#users tr:has-text('bert') label:has-text('erasure') input:checked");
+    await page.click("#users tr:has-text('bert') label:has-text('erasure') input");
+    await page.waitForSelector("#users tr:has-text('bert') label:has-text('erasure') input:not(:checked)");
+    await page.click("#admin-spaces a:has-text('Members and roles')");
+    await page.fill("#add-role [name=group]", "ops");
+    await page.selectOption("#add-role [name=role]", "editor");
+    await page.click("#add-role button[type=submit]");
+    await page.waitForSelector("#members tr:has-text('@ops')");
+    check(await page.inputValue("#members tr:has-text('@ops') select") === "editor", "the group holds the role granted");
+    await page.click("nav a:has-text('Administration')");
+    await page.click("#groups button[aria-label^='Take bert out']");
+    await page.waitForSelector("#admin-groups p:has-text('No groups yet.')");
+
     step("AI assistants: a token made on the MCP page lets an assistant write a page with its content");
     await page.click("#app-switcher");
     await page.click("#drawer-apps a:has-text('AI assistants (MCP)')");
