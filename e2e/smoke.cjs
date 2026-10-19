@@ -230,6 +230,22 @@ function check(cond, msg) {
     await page.click("#drawer-apps a:has-text('Governance')");
     await page.waitForSelector("#governance-overview td:has-text('PLAT')");
 
+    step("task inbox: an overdue unassigned task is taken over and lands under Assigned to me");
+    await page.evaluate(async () => {
+      const send = (method, path, body) => fetch(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      await send("POST", "/api/types", { name: "ticket", body: true,
+        fields: [{ name: "assignee", kind: "user" }, { name: "due", kind: "date" }, { name: "priority", kind: "enum", values: ["low", "high"] }],
+        workflow: { initial: "open", states: ["open", "closed"], transitions: [{ name: "close", from: ["open"], to: "closed" }] } });
+      await send("POST", "/api/items", { space: "PLAT", type: "ticket", title: "Renew the certificate", properties: { due: "2020-01-31", priority: "high" } });
+    });
+    await page.goto(base + "/#/tasks/unassigned");
+    await page.waitForSelector("#tasks tr.overdue:has-text('Renew the certificate') .badge:has-text('overdue since 2020-01-31')");
+    await page.click("#tasks tr:has-text('Renew the certificate') button:has-text('Take over')");
+    await page.goto(base + "/#/tasks/mine");
+    await page.waitForSelector("#tasks tr:has-text('Renew the certificate') td:has-text('you')");
+    await page.click("#tasks tr:has-text('Renew the certificate') button:has-text('close')");
+    await page.waitForSelector("#tasks tr:has-text('Renew the certificate')", { state: "detached" });
+
     step("board: columns are the workflow's states; dragging a card performs the transition");
     await page.click("a.brand");
     await page.click("a:has-text('Platform')");

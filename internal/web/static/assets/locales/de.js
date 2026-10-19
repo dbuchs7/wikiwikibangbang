@@ -59,7 +59,6 @@ export default {
   "board.truncated": "Dieses Board zeigt die ersten {n} Einträge.",
 
   "tasks.none": "Keine offenen Aufgaben.",
-  "tasks.open": { "one": "{n} offen, in allen Bereichen, die Sie lesen dürfen.", "other": "{n} offen, in allen Bereichen, die Sie lesen dürfen." },
   "tasks.title": "Aufgaben",
   "tasks.truncated": "Nur die ersten {n} Einträge wurden gelesen.",
 
@@ -369,5 +368,20 @@ export default {
   "members.none": "Hier hat noch niemand eine Rolle.",
   "members.add": "Rolle vergeben",
   "members.orGroup": "oder eine Gruppe",
-  "members.nobody": "Wählen Sie eine Person oder nennen Sie eine Gruppe."
+  "members.nobody": "Wählen Sie eine Person oder nennen Sie eine Gruppe.",
+  "tasks.mine": "Mir zugewiesen",
+  "tasks.unassigned": "Nicht zugewiesen",
+  "tasks.all": "Alle offenen",
+  "tasks.allSpaces": "Alle Bereiche",
+  "tasks.claim": "Übernehmen",
+  "tasks.unclaim": "Zurückgeben",
+  "tasks.nobody": "niemand",
+  "tasks.overdue": "überfällig seit {date}",
+  "tasks.new": "Neue Aufgabe",
+  "tasks.assignee": "Zuständig",
+  "tasks.due": "Fällig",
+  "tasks.priority": "Priorität",
+  "tasks.noneMine": "Ihnen ist nichts zugewiesen. Übernehmen Sie eine Aufgabe unter Nicht zugewiesen.",
+  "tasks.conventions": "Aufgeführt ist jeder Eintrag, dessen Typ einen Workflow hat und der nicht in dessen letztem Zustand ist. Das Benutzerfeld assignee eines Typs (oder sein erstes Benutzerfeld) nennt, wer daran arbeitet, ein Datumsfeld namens due oder deadline die Fälligkeit, ein Auswahlfeld priority die Dringlichkeit, von tief nach hoch.",
+  "tasks.assignMe": "Mir zuweisen"
 };

@@ -395,7 +395,7 @@ async function route() {
     if (!me) return loginView();
     switch (section) {
       case "new": return await newView(params);
-      case "tasks": return await tasksView();
+      case "tasks": return await tasksView(arg, params);
       case "space": return await spaceView(arg);
       case "board": return await boardView(arg, arg2);
       case "links": return await linksView(arg);
@@ -719,10 +719,28 @@ async function boardView(key, typeName) {
 // tasksView lists open work across every space one may read: items of a
 // type with a workflow that are not in its last state. It reads the paged
 // item listing, at most boardMax items, like the board.
-async function tasksView() {
+// taskFields finds the fields of a type that make it a task in the inbox
+// (ADR-0049), by convention: the assignee is the user field named assignee
+// or, failing that, the first user field; the due date the first date
+// field named like a deadline (as governance reads it, ADR-0040); the
+// priority an enum named priority, its values ordered from low to high.
+function taskFields(type) {
+  const users = type.fields.filter((f) => f.kind === "user");
+  return {
+    assignee: users.find((f) => /^(assignee|zugewiesen|bearbeiter)/i.test(f.name)) || users[0] || null,
+    due: type.fields.find((f) => f.kind === "date" && /due|deadline|f(ä|ae)llig/i.test(f.name)) || null,
+    priority: type.fields.find((f) => f.kind === "enum" && /^(priority|priorität|prioritaet)$/i.test(f.name)) || null,
+  };
+}
+
+// tasksView is the inbox of open work across spaces (ADR-0049): the items
+// whose type has a workflow and that are not in its last state, in three
+// lists — assigned to me, unassigned, all — overdue and urgent first. One
+// takes a task over or gives it back, and moves it on by its transitions.
+async function tasksView(tab, params) {
   const show = screen();
-  const { types } = await get("/api/types");
-  const flows = new Map(types.filter((ty) => ty.workflow).map((ty) => [ty.name, ty.workflow]));
+  const [{ types }, { spaces }] = await Promise.all([get("/api/types"), get("/api/spaces")]);
+  const typeOf = new Map(types.filter((ty) => ty.workflow).map((ty) => [ty.name, { ty, f: taskFields(ty) }]));
   let page = await get("/api/items?limit=100");
   const items = [...page.items];
   while (page.next && items.length < boardMax) {
@@ -730,23 +748,81 @@ async function tasksView() {
     items.push(...page.items);
   }
   const open = items.filter((it) => {
-    const wf = flows.get(it.type);
+    const wf = typeOf.get(it.type)?.ty.workflow;
     return wf && it.state !== wf.states[wf.states.length - 1];
   });
-  open.sort((a, b) => a.space.localeCompare(b.space) || a.key.localeCompare(b.key, undefined, { numeric: true }));
+  const assigneeOf = (it) => {
+    const f = typeOf.get(it.type).f.assignee;
+    return f ? it.properties[f.name] || "" : null;
+  };
+  await learnNames(open.map(assigneeOf).filter(Boolean));
+  const today = new Date().toISOString().slice(0, 10);
+  const dueOf = (it) => {
+    const f = typeOf.get(it.type).f.due;
+    return f && it.properties[f.name] ? String(it.properties[f.name]).slice(0, 10) : "";
+  };
+  const rankOf = (it) => {
+    const f = typeOf.get(it.type).f.priority;
+    return f ? f.values.indexOf(it.properties[f.name]) : -1;
+  };
+  const space = params.get("space") || "";
+  const lists = {
+    mine: open.filter((it) => assigneeOf(it) === me.user.id),
+    unassigned: open.filter((it) => assigneeOf(it) === ""),
+    all: open,
+  };
+  const current = lists[tab] ? tab : (lists.mine.length ? "mine" : "all");
+  const shown = lists[current].filter((it) => !space || it.space === space);
+  // Overdue first, then by due date, then the most urgent, then by key.
+  shown.sort((a, b) => {
+    const da = dueOf(a) || "9999", db = dueOf(b) || "9999";
+    return da.localeCompare(db) || rankOf(b) - rankOf(a) || a.space.localeCompare(b.space) || a.key.localeCompare(b.key, undefined, { numeric: true });
+  });
+  const mayEditIn = new Set(spaces.filter((s) => mayEdit(s.role)).map((s) => s.key));
+  const status = h("div", { class: "status" });
+  const setAssignee = (it, value) => action(() =>
+    put(`/api/items/${it.id}/properties/${encodeURIComponent(typeOf.get(it.type).f.assignee.name)}`, { value }), status);
+
+  const row = (it) => {
+    const { ty, f } = typeOf.get(it.type);
+    const who = assigneeOf(it);
+    const due = dueOf(it);
+    const canAct = mayEditIn.has(it.space);
+    const claim = canAct && f.assignee
+      ? (who === me.user.id
+        ? h("button", { class: "link", text: t("tasks.unclaim"), onclick: () => setAssignee(it, null) })
+        : h("button", { class: "link", text: t("tasks.claim"), onclick: () => setAssignee(it, me.user.id) }))
+      : null;
+    const moves = canAct ? ty.workflow.transitions.filter((tr) => tr.from.includes(it.state))
+      .map((tr) => h("button", { class: "link", text: tr.name, onclick: () => action(() => post(`/api/items/${it.id}/transitions`, { name: tr.name }), status) })) : [];
+    return h("tr", { class: due && due < today ? "overdue" : "" },
+      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)),
+      h("td", { text: it.title }),
+      h("td", { text: it.state }),
+      h("td", { text: who === null ? "" : who ? person(who) : t("tasks.nobody") }),
+      h("td", {}, due ? h("span", { class: due < today ? "badge danger" : due === today ? "badge" : "", text: due < today ? t("tasks.overdue", { date: due }) : due }) : ""),
+      h("td", { text: f.priority ? it.properties[f.priority.name] || "" : "" }),
+      h("td", {}, link(`#/board/${encodeURIComponent(it.space)}/${encodeURIComponent(it.type)}`, it.space)),
+      h("td", { class: "task-actions" }, [claim, ...moves].filter(Boolean).flatMap((b, k) => k ? [" · ", b] : [b])));
+  };
+  const tabLink = (id, label) => link(`#/tasks/${id}${space ? "?space=" + encodeURIComponent(space) : ""}`, `${label} (${lists[id].length})`,
+    id === current ? "tab active" : "tab");
+  const spaceFilter = h("select", { "aria-label": t("col.space"), onchange: (ev) => {
+    location.hash = `#/tasks/${current}` + (ev.target.value ? "?space=" + encodeURIComponent(ev.target.value) : "");
+  } }, h("option", { value: "", text: t("tasks.allSpaces") }),
+  [...new Set(open.map((it) => it.space))].sort().map((k) => h("option", { value: k, text: k, selected: k === space })));
   show(
-    h("h1", { text: t("tasks.title") }),
-    h("p", { class: "muted", text: t("tasks.open", { n: open.length }) }),
-    h("section", { id: "tasks" }, open.length
-      ? h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("col.type"), t("col.state"), t("col.space")].map((c) => h("th", { text: c })))),
-        h("tbody", {}, open.map((it) => h("tr", {},
-          h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)),
-          h("td", { text: it.title }),
-          h("td", { text: it.type }),
-          h("td", { text: it.state }),
-          h("td", {}, link(`#/board/${encodeURIComponent(it.space)}/${encodeURIComponent(it.type)}`, it.space)),
-        ))))
-      : h("p", { class: "muted", text: t("tasks.none") })),
+    h("div", { class: "page-head" }, h("h1", { text: t("tasks.title") }),
+      h("p", { class: "actions" }, link(newHref(space || here.space), t("tasks.new"), "button"))),
+    h("nav", { class: "tabs", "aria-label": t("tasks.title") },
+      tabLink("mine", t("tasks.mine")), tabLink("unassigned", t("tasks.unassigned")), tabLink("all", t("tasks.all")), spaceFilter),
+    status,
+    h("section", { id: "tasks" }, shown.length
+      ? h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space"), ""]
+        .map((c) => h("th", { text: c })))),
+      h("tbody", {}, shown.map(row)))
+      : h("p", { class: "muted", text: current === "mine" ? t("tasks.noneMine") : t("tasks.none") })),
+    h("p", { class: "muted", text: t("tasks.conventions") }),
     page.next ? h("p", { class: "notice", text: t("tasks.truncated", { n: items.length }) }) : null,
   );
 }
@@ -965,7 +1041,7 @@ async function itemView(ref) {
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
   const level = `/api/spaces/${encodeURIComponent(item.space)}/tree` + (item.parent ? "?parent=" + item.parent : "");
   const [, open, siblings] = await Promise.all([
-    learnNames([...history.events.map((e) => e.actor), ...comments.comments.flatMap((c) => c.resolvedBy ? [c.author, c.resolvedBy] : [c.author]), ...attachments.map((a) => a.author)]),
+    learnNames([...history.events.map((e) => e.actor), ...type.fields.filter((f) => f.kind === "user").map((f) => item.properties[f.name]), ...comments.comments.flatMap((c) => c.resolvedBy ? [c.author, c.resolvedBy] : [c.author]), ...attachments.map((a) => a.author)]),
     ancestors(item),
     item.presence === "live" ? get(level) : { items: [] },
   ]);
@@ -1002,7 +1078,12 @@ async function itemView(ref) {
     return h("tr", {},
       h("th", { text: f.name }),
       h("td", {}, input),
-      h("td", {}, canEdit ? h("button", { text: t("common.save"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) }), status) }) : null),
+      h("td", {}, canEdit ? h("button", { text: t("common.save"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) }), status) }) : null,
+        // A user field names a person by ID; show who it is, and let one
+        // put oneself in (ADR-0049).
+        f.kind === "user" && item.properties[f.name] ? h("span", { class: "muted", text: " " + person(item.properties[f.name]) }) : null,
+        f.kind === "user" && canEdit && item.properties[f.name] !== me.user.id
+          ? h("button", { class: "link", text: t("tasks.assignMe"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: me.user.id }), status) }) : null),
     );
   }));
 

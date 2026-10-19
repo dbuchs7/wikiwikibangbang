@@ -61,7 +61,6 @@ export default {
   "board.truncated": "This board shows the first {n} items.",
 
   "tasks.none": "No open tasks.",
-  "tasks.open": { "one": "{n} open, in every space you can read.", "other": "{n} open, in every space you can read." },
   "tasks.title": "Tasks",
   "tasks.truncated": "Only the first {n} items were read.",
 
@@ -371,5 +370,20 @@ export default {
   "members.none": "Nobody holds a role here yet.",
   "members.add": "Grant a role",
   "members.orGroup": "or a group",
-  "members.nobody": "Choose a user or name a group."
+  "members.nobody": "Choose a user or name a group.",
+  "tasks.mine": "Assigned to me",
+  "tasks.unassigned": "Unassigned",
+  "tasks.all": "All open",
+  "tasks.allSpaces": "All spaces",
+  "tasks.claim": "Take over",
+  "tasks.unclaim": "Give back",
+  "tasks.nobody": "nobody",
+  "tasks.overdue": "overdue since {date}",
+  "tasks.new": "New task",
+  "tasks.assignee": "Assignee",
+  "tasks.due": "Due",
+  "tasks.priority": "Priority",
+  "tasks.noneMine": "Nothing is assigned to you. Take over a task under Unassigned.",
+  "tasks.conventions": "Every item whose type has a workflow and is not in its last state is listed. A type’s user field named assignee (or its first user field) is who works on it, a date field named due or deadline is its due date, an enum named priority its urgency, from low to high.",
+  "tasks.assignMe": "Assign to me"
 };

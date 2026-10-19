@@ -396,3 +396,11 @@ details.card > summary { cursor: pointer; font-weight: 600; }
 .admin-toc { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 12px; }
 .member { display: inline-flex; align-items: center; gap: 2px; margin-right: 10px; }
 .card h3 { margin: 16px 0 8px; }
+/* The task inbox (ADR-0049). */
+.tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 8px 0 12px; }
+.tabs .tab { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border); text-decoration: none; }
+.tabs .tab.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.tabs select { margin-left: auto; }
+.badge.danger { background: var(--danger-soft); color: var(--danger); }
+tr.overdue td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
+.task-actions { white-space: nowrap; }
