@@ -477,7 +477,7 @@ function check(cond, msg) {
 
     step("language: German on request, kept across sign-ins");
     await page.selectOption("#language [name=language]", "de");
-    await page.waitForSelector("#nav-notifications[aria-label='Benachrichtigungen']");
+    await page.waitForSelector("#nav-notifications[aria-label^='Benachrichtigungen']");
     check(await page.getAttribute("html", "lang") === "de", "the document is marked German");
     check((await page.textContent("#password h2")) === "Passwort ändern", "the account page is German");
     // A German browser does not override bert's own earlier choice (English,
@@ -490,10 +490,10 @@ function check(cond, msg) {
     await bertDe.fill("#login [name=username]", "bert");
     await bertDe.fill("#login [name=password]", "bert's password");
     await bertDe.click("#login button[type=submit]");
-    await bertDe.waitForSelector("#nav-notifications[aria-label='Notifications']");
+    await bertDe.waitForSelector("#nav-notifications[aria-label^='Notifications']");
     await german.close();
     await page.selectOption("#language [name=language]", "en");
-    await page.waitForSelector("#nav-notifications[aria-label='Notifications']");
+    await page.waitForSelector("#nav-notifications[aria-label^='Notifications']");
 
     step("log out, log in as bert, read the item");
     await page.click("text=Log out");
