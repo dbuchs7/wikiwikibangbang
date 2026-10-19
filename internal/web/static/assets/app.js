@@ -47,6 +47,70 @@ function link(href, text) {
   return h("a", { href, text });
 }
 
+// --- watching (ADR-0046) --------------------------------------------------------
+
+// watchButton starts or stops watching; path is the item's or space's.
+function watchButton(path, watching, status) {
+  return h("button", { class: watching ? "secondary" : "", id: "watch", "aria-pressed": String(watching),
+    text: watching ? t("watch.stop") : t("watch.start"),
+    onclick: () => action(() => (watching ? del(path + "/watch") : put(path + "/watch")), status) });
+}
+
+// what says what a notification's change was.
+function what(n) {
+  if (n.created) return t("notif.child");
+  switch (n.kind) {
+    case "ItemCreated": return t("notif.created");
+    case "ItemImported": return t("notif.imported");
+    case "TitleSet": return t("notif.renamed");
+    case "BodyCommitted": return t("notif.edited");
+    case "PropertySet": return t("notif.field");
+    case "Transitioned": return t("notif.state");
+    case "ItemMoved": return t("notif.moved");
+    case "ItemTrashed": return t("notif.trashed");
+    case "ItemRestored": return t("notif.restored");
+    case "CommentAdded": return t("notif.commented");
+    case "LabelsSet": return t("notif.labels");
+    case "AttachmentAdded": return t("notif.attached");
+    default: return n.kind;
+  }
+}
+
+// notificationsView lists what others changed on what one watches, and
+// marks it seen.
+async function notificationsView() {
+  const show = screen();
+  const [first, { watches }] = await Promise.all([get("/api/notifications?limit=50"), get("/api/me/watches")]);
+  const list = h("ul", { class: "notifications", id: "notifications" });
+  const more = h("div");
+  const add = async (page) => {
+    await learnNames(page.notifications.map((n) => n.actor));
+    for (const n of page.notifications) {
+      list.append(h("li", { class: n.unread ? "unread" : "" },
+        h("span", { text: `${person(n.actor)} ${what(n)} ` }),
+        link("#/item/" + encodeURIComponent(n.key), `${n.key} ${n.title}`),
+        h("span", { class: "muted", text: " · " + when(n.at) })));
+    }
+    more.replaceChildren();
+    if (page.next) more.append(h("button", { text: t("common.more"), onclick: async () => add(await get(`/api/notifications?limit=50&before=${page.next}`)) }));
+  };
+  await add(first);
+  if (first.notifications.length && first.notifications[0].seq > first.seen) {
+    post("/api/notifications/seen", { seq: first.notifications[0].seq }).then(() => renderNav()).catch(() => {});
+  }
+  show(
+    h("h1", { text: t("notif.title") }),
+    first.notifications.length ? list : h("p", { class: "muted", text: watches.length ? t("notif.none") : t("notif.noWatches") }),
+    more,
+    h("h2", { text: t("watch.title") }),
+    watches.length
+      ? h("ul", { class: "list", id: "watches" }, watches.map((w) => h("li", {}, w.item
+        ? link("#/item/" + encodeURIComponent(w.key), `${w.key} ${w.title}`)
+        : [t("watch.space") + " ", link("#/space/" + encodeURIComponent(w.space), w.space)])))
+      : h("p", { class: "muted", text: t("watch.none") }),
+  );
+}
+
 // --- labels (ADR-0044) ----------------------------------------------------------
 
 function labelChip(label, onRemove) {
@@ -251,9 +315,16 @@ function renderNav() {
     const q = new FormData(ev.target).get("q").trim();
     if (q) location.hash = "#/search/" + encodeURIComponent(q);
   } }, h("input", { name: "q", type: "search", placeholder: t("nav.search"), "aria-label": t("nav.search"), value: current }));
+  // The unread count arrives after the navigation is drawn (ADR-0046).
+  const bell = h("a", { href: "#/notifications", id: "nav-notifications", text: t("nav.notifications") });
+  get("/api/notifications?limit=1").then((n) => {
+    if (n.unread) bell.textContent = t("nav.notificationsUnread", { n: n.unread >= 100 ? "99+" : n.unread });
+    bell.classList.toggle("unread", n.unread > 0);
+  }).catch(() => {});
   mount(nav,
     link("#/", t("nav.spaces")),
     search,
+    bell,
     me.admin ? link("#/admin", t("nav.admin")) : null,
     link("#/account", me.user.username),
     h("button", { class: "link", onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }, t("nav.logout")),
@@ -305,6 +376,7 @@ async function route() {
       case "governance": return arg ? await governanceView(arg) : await governanceOverview();
       case "item": return await itemView(arg);
       case "label": return await labelView(arg);
+      case "notifications": return await notificationsView();
       case "search": return await searchView(arg || "");
       case "account": return await accountView();
       case "admin": return await adminView();
@@ -398,11 +470,12 @@ async function homeView() {
 
 async function spaceView(key) {
   const show = screen();
-  const [{ types }, first, top, { labels }] = await Promise.all([
+  const [{ types }, first, top, { labels }, { watches }] = await Promise.all([
     get("/api/types"),
     get(`/api/items?space=${encodeURIComponent(key)}&limit=100`),
     get(`/api/spaces/${encodeURIComponent(key)}/tree?limit=1`),
     get(`/api/labels?space=${encodeURIComponent(key)}`),
+    get("/api/me/watches"),
   ]);
   const status = h("div", { class: "status" });
   // The space's home is its first page at the top of the tree.
@@ -436,6 +509,7 @@ async function spaceView(key) {
   show(withTree(tree,
     h("p", {}, link("#/", t("nav.spaces")), " / " + key),
     h("h1", { text: key }),
+    h("p", {}, watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status)),
     h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance"))].flatMap((b, i) => i ? [" · ", b] : [b])),
     status,
     home,
@@ -732,7 +806,7 @@ async function itemView(ref) {
   const show = screen();
   const { item } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
-  const [{ types }, history, out, inc, embeds, comments, { attachments }] = await Promise.all([
+  const [{ types }, history, out, inc, embeds, comments, { attachments }, { watches }] = await Promise.all([
     get("/api/types"),
     get(path + "/history"),
     get(path + "/relations?direction=outgoing"),
@@ -740,6 +814,7 @@ async function itemView(ref) {
     get(path + "/embeds"),
     get(path + "/comments"),
     get(path + "/attachments"),
+    get("/api/me/watches"),
   ]);
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
   const level = `/api/spaces/${encodeURIComponent(item.space)}/tree` + (item.parent ? "?parent=" + item.parent : "");
@@ -801,6 +876,7 @@ async function itemView(ref) {
     guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
     h("p", { class: "muted" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : "", t("item.version", { n: item.version })),
     labelsLine(path, item, live, status),
+    item.presence === "live" ? h("p", {}, watchButton(path, watches.some((w) => w.item === item.id), status)) : null,
     status,
     transitions.length ? h("p", {}, t("item.transitions"), transitions) : null,
     type.fields.length ? h("section", {}, h("h2", { text: t("item.properties") }), props) : null,

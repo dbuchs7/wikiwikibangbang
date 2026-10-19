@@ -1,0 +1,97 @@
+package item
+
+import (
+	"errors"
+	"slices"
+	"testing"
+)
+
+func kinds(ns []Notification) []string {
+	var out []string
+	for _, n := range ns {
+		k := string(n.Kind) + ":" + n.Title
+		if n.Created {
+			k += ":child"
+		}
+		out = append(out, k)
+	}
+	return out
+}
+
+func TestWatchersAreToldWhatOthersChange(t *testing.T) {
+	s := permFixture(t)
+	anna, ben, carl := s.As("anna"), s.As("ben"), s.As("carl")
+	page := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	other := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Other"}))
+	noErr(t, anna.SetTitle(page.ID, "Before the watch"))
+
+	noErr(t, ben.Watch(page.ID, true))
+	noErr(t, ben.Watch(page.ID, true)) // twice is once
+	if !ben.Watching(page.ID) || len(ben.Watches()) != 1 {
+		t.Fatalf("watches %v", ben.Watches())
+	}
+	if err := carl.Watch(page.ID, true); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("an outsider watches: %v", err)
+	}
+	if err := carl.WatchSpace("PLAT", true); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("an outsider watches a space: %v", err)
+	}
+
+	noErr(t, anna.SetTitle(page.ID, "Runbook v2"))
+	noErr(t, anna.CommitBody(page.ID, Doc{Blocks: []Block{{Kind: Paragraph, Text: "steps"}}}))
+	mustComment(t)(anna.AddComment(page.ID, "looks good"))
+	mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Child", Parent: page.ID}))
+	noErr(t, anna.SetTitle(other.ID, "Not watched"))
+	noErr(t, s.GrantRole("root", "PLAT", "ben", Editor))
+	noErr(t, ben.SetTitle(page.ID, "Runbook v3")) // one's own change is no news
+
+	got, more := ben.Notifications(0, 10)
+	want := []string{"ItemCreated:Child:child", "CommentAdded:Runbook v3", "BodyCommitted:Runbook v3", "TitleSet:Runbook v3"}
+	if !slices.Equal(kinds(got), want) || more {
+		t.Fatalf("notifications %v (more %v), want %v", kinds(got), more, want)
+	}
+	if got[0].Actor != "anna" || got[0].Key == "" {
+		t.Errorf("notification %+v", got[0])
+	}
+	// Paging: newest first, then older ones before the last seen.
+	first, more := ben.Notifications(0, 2)
+	if len(first) != 2 || !more {
+		t.Fatalf("first page %v, more %v", kinds(first), more)
+	}
+	rest, more := ben.Notifications(first[1].Seq, 10)
+	if !slices.Equal(kinds(rest), want[2:]) || more {
+		t.Fatalf("second page %v", kinds(rest))
+	}
+	if n := ben.Unread(first[1].Seq, 100); n != 1 {
+		t.Errorf("unread after the second newest: %d", n)
+	}
+	if n := ben.Unread(0, 2); n != 2 {
+		t.Errorf("unread is capped: %d", n)
+	}
+
+	// A space watch covers every item; a restriction hides an item's news.
+	noErr(t, ben.Watch(page.ID, false))
+	noErr(t, ben.WatchSpace("PLAT", true))
+	noErr(t, anna.SetTitle(other.ID, "Now watched"))
+	secret := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Secret"}))
+	noErr(t, anna.Restrict(secret.ID, Restriction{Read: []string{"anna"}}))
+	noErr(t, anna.SetTitle(secret.ID, "Still secret"))
+	got, _ = ben.Notifications(0, 1)
+	if len(got) != 1 || got[0].Title != "Now watched" {
+		t.Fatalf("after a space watch %v", kinds(got))
+	}
+	// Watches are no part of an item's history, and survive a replay.
+	for _, e := range s.History(page.ID) {
+		if e.Kind == Watched || e.Kind == Unwatched {
+			t.Fatalf("history holds %s", e.Kind)
+		}
+	}
+	again, err := Replay(s.Log())
+	noErr(t, err)
+	if !again.As("ben").WatchingSpace("PLAT") || again.As("ben").Watching(page.ID) {
+		t.Error("watches do not replay")
+	}
+	if len(carl.Watches()) != 0 {
+		t.Error("an outsider has watches")
+	}
+}

@@ -400,6 +400,28 @@ function check(cond, msg) {
     check((await page.textContent(".comment .muted")).startsWith("admin · "), "the comment names its author");
     check(await page.$(".comment button:has-text('Edit')") === null, "bert cannot edit admin's comment");
 
+    step("watching: bert watches the item, admin renames it, bert is told");
+    await page.click("#watch:has-text('Watch')");
+    await page.waitForSelector("#watch:has-text('Stop watching')");
+    const adminCtx = await browser.newContext();
+    const admin = await adminCtx.newPage();
+    await admin.goto(base + "/");
+    await admin.fill("#login [name=username]", "admin");
+    await admin.fill("#login [name=password]", adminPassword);
+    await admin.click("#login button[type=submit]");
+    await admin.waitForSelector("#nav a");
+    const renamed = await admin.evaluate(async () => (await fetch("/api/items/PLAT-1/title", {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Renamed by admin" }),
+    })).status);
+    check(renamed === 200, "admin renames the item: " + renamed);
+    await adminCtx.close();
+    await page.reload();
+    await page.waitForSelector("#nav-notifications:has-text('Notifications (1)')");
+    await page.click("#nav-notifications");
+    await page.waitForSelector("#notifications li.unread:has-text('admin renamed PLAT-1 Renamed by admin')");
+    await page.waitForSelector("#nav-notifications:text-is('Notifications')"); // seen now
+    await page.waitForSelector("#watches a:has-text('PLAT-1')");
+
     check(problems.length === 0, problems.join("; "));
     console.log("ok");
   } catch (err) {

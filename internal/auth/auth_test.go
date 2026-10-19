@@ -346,3 +346,30 @@ func TestLanguageIsKeptPerUserAndSurvivesReload(t *testing.T) {
 		t.Fatalf("cleared: %q", got)
 	}
 }
+
+func TestNotificationsSeenOnlyMovesForward(t *testing.T) {
+	var journal [][]byte
+	a, err := New(nil, func(b []byte) error { journal = append(journal, append([]byte{}, b...)); return nil }, WithIterations(1000))
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := a.CreateUser("anna", "anna's password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, seq := range []int{10, 5, 12} {
+		if err := a.SetSeen(u.ID, seq); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if a.Seen(u.ID) != 12 {
+		t.Fatalf("seen %d", a.Seen(u.ID))
+	}
+	again, err := New(journal, func([]byte) error { return nil }, WithIterations(1000))
+	if err != nil || again.Seen(u.ID) != 12 {
+		t.Fatalf("after reload %d, %v", again.Seen(u.ID), err)
+	}
+	if err := a.SetSeen("nobody", 1); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown user: %v", err)
+	}
+}

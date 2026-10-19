@@ -39,6 +39,10 @@ type Store struct {
 	// parent -> children; children it does not list follow, oldest first.
 	order map[string][]ID
 
+	// watches are what each principal watches (ADR-0046): principal ->
+	// watchKey -> the sequence number of the event that started it.
+	watches map[string]map[string]int
+
 	journal Journal
 }
 
@@ -80,6 +84,7 @@ func NewStore(opts ...Option) *Store {
 
 		groups:     map[string]map[string]bool{},
 		order:      map[string][]ID{},
+		watches:    map[string]map[string]int{},
 		spaceRoles: map[string]map[string]Role{},
 		sysRoles:   map[string]map[string]bool{},
 
@@ -726,6 +731,8 @@ func (s *Store) apply(e Event) {
 		s.applyComment(e, touch)
 	case AttachmentAdded, AttachmentDeleted:
 		s.applyAttachment(e, touch)
+	case Watched, Unwatched:
+		s.applyWatch(e)
 	default:
 		s.applyAccess(e, touch)
 	}
