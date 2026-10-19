@@ -59,6 +59,8 @@ WWBB_BACKUP_PASSPHRASE='a long passphrase' ./wikiwikibangbang restore -from back
 
 The backup is encrypted and holds everything, including the keys to the content: keep the passphrase apart from the file, and delete old backups when content must be gone for good — a backup can still read what was purged after it was made.
 
+Spaces of a Confluence Cloud site are imported with the server stopped ([ADR-0023](docs/adr/0023-import-and-sync-from-jira-and-confluence.md)): `WWBB_IMPORT_EMAIL=you@example.com WWBB_IMPORT_TOKEN=<API token> ./wikiwikibangbang import -from confluence-cloud -site https://example.atlassian.net -spaces ENG,OPS -data-dir data -users users.txt`. Run it with `-dry-run` first; a re-run updates what changed and creates nothing twice, and the report lists everything that could not be mapped. Confluence Cloud usually hides e-mail addresses (ADR-0023), so source accounts are mapped to local accounts by `users.txt`, one `accountId username` per line; a page restricted to an unmapped account or a group, or whose restriction cannot be read, is restricted to no one here until an administrator checks it — an import never shows a page to more people than the source did (ADR-0023).
+
 Operational metrics are served in the Prometheus format at `/metrics` to administrators and to API tokens of scope `metrics`, which an administrator creates under the account page and which can read nothing else ([ADR-0016](docs/adr/0016-metrics-and-backup.md)):
 
 ```yaml
