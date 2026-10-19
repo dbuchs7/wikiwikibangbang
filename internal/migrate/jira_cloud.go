@@ -16,9 +16,9 @@ import (
 // JiraCloud reads projects and their issues from a Jira Cloud site through
 // its REST API v3 (ADR-0023) and produces the Jira part of a Snapshot.
 //
-// Issue types are read with their statuses; Jira's transitions are not, so
-// an imported type may move from any of its states to any other, and the
-// report says so. A type's fields are the fields its issues hold a value
+// Issue types are read with their statuses and the transitions of their
+// workflows. Where a workflow cannot be read, the type may move from any of
+// its states to any other, and the report says so. A type's fields are the fields its issues hold a value
 // for, and an option field's values are the values its issues use.
 type JiraCloud struct {
 	// Site is the site's address, e.g. https://example.atlassian.net.
@@ -60,7 +60,7 @@ func (j JiraCloud) Read(ctx context.Context, projectKeys []string) (Snapshot, []
 		return snap, nil, err
 	}
 	for _, key := range projectKeys {
-		var p struct{ Key, Name string }
+		var p struct{ ID, Key, Name string }
 		err := r.get(ctx, "/rest/api/3/project/"+url.PathEscape(key), &p)
 		var status statusError
 		if errors.As(err, &status) && status.code == http.StatusNotFound {
@@ -70,8 +70,14 @@ func (j JiraCloud) Read(ctx context.Context, projectKeys []string) (Snapshot, []
 			return snap, r.problems, err
 		}
 		snap.Projects = append(snap.Projects, SrcSpace{Key: p.Key, Name: p.Name})
-		if err := r.readStatuses(ctx, p.Key); err != nil {
+		typeIDs, err := r.readStatuses(ctx, p.Key)
+		if err != nil {
 			return snap, r.problems, err
+		}
+		for _, name := range sortedKeys(typeIDs) {
+			if err := r.readWorkflow(ctx, p.ID, typeIDs[name], name); err != nil {
+				return snap, r.problems, err
+			}
 		}
 		issues, err := r.readIssues(ctx, p.Key)
 		if err != nil {
@@ -103,9 +109,10 @@ type jiraField struct {
 
 // jiraType collects an issue type across projects.
 type jiraType struct {
-	statuses []string
-	initial  string
-	fields   map[string]*SrcField
+	statuses    []string
+	initial     string
+	fields      map[string]*SrcField
+	transitions []SrcTransition // nil: no workflow was read
 }
 
 func (r *jiraReader) readFields(ctx context.Context) error {
@@ -130,10 +137,12 @@ func (r *jiraReader) typ(name string) *jiraType {
 	return t
 }
 
-// readStatuses reads the statuses of a project's issue types. A type's
-// initial state is its first status of the category "new" (To Do).
-func (r *jiraReader) readStatuses(ctx context.Context, project string) error {
+// readStatuses reads the statuses of a project's issue types and returns
+// the types' IDs by name. A type's initial state is its first status of the
+// category "new" (To Do), unless its workflow names one.
+func (r *jiraReader) readStatuses(ctx context.Context, project string) (map[string]string, error) {
 	var types []struct {
+		ID       string `json:"id"`
 		Name     string `json:"name"`
 		Statuses []struct {
 			Name     string `json:"name"`
@@ -143,9 +152,11 @@ func (r *jiraReader) readStatuses(ctx context.Context, project string) error {
 		} `json:"statuses"`
 	}
 	if err := r.get(ctx, "/rest/api/3/project/"+url.PathEscape(project)+"/statuses", &types); err != nil {
-		return err
+		return nil, err
 	}
+	ids := map[string]string{}
 	for _, it := range types {
+		ids[it.Name] = it.ID
 		t := r.typ(it.Name)
 		for _, st := range it.Statuses {
 			if !slices.Contains(t.statuses, st.Name) {
@@ -156,7 +167,139 @@ func (r *jiraReader) readStatuses(ctx context.Context, project string) error {
 			}
 		}
 	}
+	return ids, nil
+}
+
+// jiraWorkflows is the answer of the workflow read API.
+type jiraWorkflows struct {
+	Statuses []struct {
+		ID              string `json:"id"`
+		Name            string `json:"name"`
+		StatusReference string `json:"statusReference"`
+	} `json:"statuses"`
+	Workflows []struct {
+		Name        string `json:"name"`
+		Transitions []struct {
+			Name string `json:"name"`
+			Type string `json:"type"` // INITIAL, GLOBAL or DIRECTED
+			From []struct {
+				StatusReference string `json:"statusReference"`
+			} `json:"from"`
+			Links []struct {
+				FromStatusReference string `json:"fromStatusReference"`
+			} `json:"links"`
+			ToStatusReference string `json:"toStatusReference"`
+			To                *struct {
+				StatusReference string `json:"statusReference"`
+			} `json:"to"`
+		} `json:"transitions"`
+	} `json:"workflows"`
+}
+
+// readWorkflow reads the transitions of the workflow an issue type uses in a
+// project. A workflow that cannot be read leaves the type without
+// transitions, which issueTypes reports; it does not stop the import.
+func (r *jiraReader) readWorkflow(ctx context.Context, projectID, typeID, typeName string) error {
+	ref := "jira type " + typeName
+	body := map[string]any{"projectAndIssueTypes": []map[string]string{{"projectId": projectID, "issueTypeId": typeID}}}
+	var res jiraWorkflows
+	err := r.site.do(ctx, http.MethodPost, "/rest/api/3/workflows", body, &res)
+	var status statusError
+	switch {
+	case errors.As(err, &status) && status.code != http.StatusTooManyRequests:
+		r.problem(ref, "its workflow could not be read (%v)", err)
+		return nil
+	case err != nil:
+		return err
+	case len(res.Workflows) != 1:
+		r.problem(ref, "%d workflows were found for it in project %s, expected one", len(res.Workflows), projectID)
+		return nil
+	}
+	names := map[string]string{} // status reference or ID -> name
+	for _, st := range res.Statuses {
+		names[st.ID] = st.Name
+		if st.StatusReference != "" {
+			names[st.StatusReference] = st.Name
+		}
+	}
+	t := r.typ(typeName)
+	known := func(ref string) (string, bool) {
+		n, ok := names[ref]
+		return n, ok && slices.Contains(t.statuses, n)
+	}
+	var trs []SrcTransition
+	initial := ""
+	for _, tr := range res.Workflows[0].Transitions {
+		toRef := tr.ToStatusReference
+		if toRef == "" && tr.To != nil {
+			toRef = tr.To.StatusReference
+		}
+		to, ok := known(toRef)
+		if !ok {
+			r.problem(ref, "transition %q goes to a status the project does not list; it is not imported", tr.Name)
+			continue
+		}
+		var from []string
+		switch tr.Type {
+		case "INITIAL":
+			initial = to
+			continue
+		case "GLOBAL":
+			for _, s := range t.statuses {
+				if s != to {
+					from = append(from, s)
+				}
+			}
+		default:
+			refs := []string{}
+			for _, f := range tr.From {
+				refs = append(refs, f.StatusReference)
+			}
+			for _, l := range tr.Links {
+				refs = append(refs, l.FromStatusReference)
+			}
+			for _, fr := range refs {
+				if n, ok := known(fr); ok && !slices.Contains(from, n) {
+					from = append(from, n)
+				}
+			}
+		}
+		if len(from) > 0 {
+			trs = append(trs, SrcTransition{Name: tr.Name, From: from, To: to})
+		}
+	}
+	if initial != "" {
+		t.initial = initial
+	}
+	t.transitions = mergeTransitions(t.transitions, trs)
+	if t.transitions == nil {
+		t.transitions = []SrcTransition{} // read, but without a way out of any state
+	}
 	return nil
+}
+
+// mergeTransitions adds transitions to a type's, keeping names unique as
+// the target requires: a transition with the name and target of one already
+// there widens its starting states; one with the name of another target is
+// named after its target, too.
+func mergeTransitions(have, add []SrcTransition) []SrcTransition {
+	for _, tr := range add {
+		i := slices.IndexFunc(have, func(h SrcTransition) bool { return sanitize(h.Name, "-") == sanitize(tr.Name, "-") })
+		switch {
+		case i < 0:
+			have = append(have, tr)
+		case have[i].To == tr.To:
+			for _, f := range tr.From {
+				if !slices.Contains(have[i].From, f) {
+					have[i].From = append(have[i].From, f)
+				}
+			}
+		default:
+			tr.Name += " (to " + tr.To + ")"
+			have = mergeTransitions(have, []SrcTransition{tr})
+		}
+	}
+	return have
 }
 
 func (r *jiraReader) readIssues(ctx context.Context, project string) ([]SrcIssue, error) {
@@ -339,8 +482,8 @@ func (r *jiraReader) detachForeignParents(issues []SrcIssue) {
 	}
 }
 
-// issueTypes builds the types. Jira's transitions are not read: every state
-// can be reached from every other, and the report says so once per type.
+// issueTypes builds the types. A type whose workflow could not be read can
+// reach every state from every other, and the report says so once.
 func (r *jiraReader) issueTypes() []SrcIssueType {
 	var out []SrcIssueType
 	for _, name := range r.order {
@@ -354,20 +497,23 @@ func (r *jiraReader) issueTypes() []SrcIssueType {
 			if wf.Initial == "" {
 				wf.Initial = t.statuses[0]
 			}
-			for _, to := range t.statuses {
-				var from []string
-				for _, s := range t.statuses {
-					if s != to {
-						from = append(from, s)
+			if t.transitions != nil {
+				wf.Transitions = t.transitions
+			} else {
+				for _, to := range t.statuses {
+					var from []string
+					for _, s := range t.statuses {
+						if s != to {
+							from = append(from, s)
+						}
+					}
+					if len(from) > 0 {
+						wf.Transitions = append(wf.Transitions, SrcTransition{Name: to, From: from, To: to})
 					}
 				}
-				if len(from) == 0 {
-					continue
-				}
-				wf.Transitions = append(wf.Transitions, SrcTransition{Name: to, From: from, To: to})
+				r.problem("jira type "+name, "no workflow was read for it; every state can be reached from every other until the type is edited")
 			}
 			it.Workflow = wf
-			r.problem("jira type "+name, "its workflow's transitions are not read; every state can be reached from every other until the type is edited")
 		}
 		out = append(out, it)
 	}
