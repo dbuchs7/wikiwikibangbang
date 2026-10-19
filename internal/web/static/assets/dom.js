@@ -47,6 +47,8 @@ export function mount(container, ...children) {
   append(container, children);
 }
 
+// when formats a time in the UI language (ADR-0017), which i18n.js sets
+// on the document.
 export function when(iso) {
-  return iso ? new Date(iso).toLocaleString() : "";
+  return iso ? new Date(iso).toLocaleString(document.documentElement.lang || undefined) : "";
 }

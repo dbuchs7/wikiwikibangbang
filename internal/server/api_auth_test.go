@@ -233,3 +233,20 @@ func TestUsersAndPasswords(t *testing.T) {
 	bert.expect("GET", "/api/me", "", http.StatusUnauthorized) // sessions end with the old password
 	bert.login("bert", "a new password!")
 }
+
+func TestLanguageThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	me := w.bert.expect("GET", "/api/me", "", http.StatusOK)
+	if me["language"] != "" || len(me["languages"].([]any)) < 2 {
+		t.Fatalf("me %v", me)
+	}
+	w.bert.expect("PUT", "/api/me/language", `{"language":"de"}`, http.StatusNoContent)
+	if got := w.bert.expect("GET", "/api/me", "", http.StatusOK)["language"]; got != "de" {
+		t.Fatalf("language %v", got)
+	}
+	if got := w.vera.expect("GET", "/api/me", "", http.StatusOK)["language"]; got != "" {
+		t.Fatalf("another user's language changed: %v", got)
+	}
+	w.bert.expect("PUT", "/api/me/language", `{"language":"fr"}`, http.StatusBadRequest)
+	w.bert.expect("PUT", "/api/me/language", `{"language":""}`, http.StatusNoContent)
+}

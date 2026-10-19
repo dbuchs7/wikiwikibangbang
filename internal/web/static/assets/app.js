@@ -4,6 +4,7 @@ import { api, get, post, put, del, download, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { liveBody } from "./live.js";
+import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -70,9 +71,9 @@ function renderFooter() {
 // modules are offered behind the nine dots, as in the atlas console. match
 // names the route sections that belong to a module, for its highlight.
 const modules = [
-  { id: "spaces", name: "Spaces", href: "#/", match: ["", "space", "item", "board", "links", "search"] },
-  { id: "tasks", name: "Tasks", href: "#/tasks", match: ["tasks"] },
-  { id: "governance", name: "Governance", href: "#/governance", match: ["governance"] },
+  { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search"] },
+  { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks"] },
+  { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"] },
 ];
 
 const switcher = document.getElementById("app-switcher");
@@ -108,10 +109,20 @@ document.addEventListener("keydown", (ev) => {
 function renderModules(section) {
   switcher.hidden = !me;
   mount(document.getElementById("drawer-apps"), ...modules.map((m) =>
-    h("a", { href: m.href, class: m.match.includes(section) ? "active" : "", "aria-current": m.match.includes(section) ? "page" : "false", text: m.name })));
+    h("a", { href: m.href, class: m.match.includes(section) ? "active" : "", "aria-current": m.match.includes(section) ? "page" : "false", text: t(m.name) })));
+}
+
+// labelChrome translates the fixed parts of index.html.
+function labelChrome() {
+  for (const el of [switcher, drawer, document.getElementById("drawer-apps")]) el.setAttribute("aria-label", t("nav.modules"));
+  switcher.title = t("nav.modules");
+  const close = document.getElementById("drawer-close");
+  close.title = t("common.close");
+  close.setAttribute("aria-label", t("common.close"));
 }
 
 function renderNav() {
+  labelChrome();
   if (!me) {
     nav.replaceChildren();
     return;
@@ -121,13 +132,13 @@ function renderNav() {
     ev.preventDefault();
     const q = new FormData(ev.target).get("q").trim();
     if (q) location.hash = "#/search/" + encodeURIComponent(q);
-  } }, h("input", { name: "q", type: "search", placeholder: "Search", "aria-label": "Search", value: current }));
+  } }, h("input", { name: "q", type: "search", placeholder: t("nav.search"), "aria-label": t("nav.search"), value: current }));
   mount(nav,
-    link("#/", "Spaces"),
+    link("#/", t("nav.spaces")),
     search,
-    me.admin ? link("#/admin", "Administration") : null,
+    me.admin ? link("#/admin", t("nav.admin")) : null,
     link("#/account", me.user.username),
-    h("button", { class: "link", onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }, "Log out"),
+    h("button", { class: "link", onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }, t("nav.logout")),
   );
 }
 
@@ -160,6 +171,7 @@ async function route() {
       } catch (err) {
         if (!(err instanceof ApiError) || err.status !== 401) throw err;
       }
+      await chooseLanguage();
     }
     renderNav();
     renderFooter();
@@ -184,6 +196,18 @@ async function route() {
   }
 }
 
+// chooseLanguage applies the signed-in user's language (ADR-0017). The
+// browser's language is only a suggestion, taken on the first sign-in and
+// saved, so it does not change behind the user's back later.
+async function chooseLanguage() {
+  if (!me) return setLanguage(suggestedLanguage());
+  if (!me.language) {
+    me.language = suggestedLanguage();
+    await put("/api/me/language", { language: me.language }).catch(() => {});
+  }
+  setLanguage(me.language);
+}
+
 window.addEventListener("hashchange", route);
 route();
 
@@ -195,19 +219,19 @@ async function loginView() {
   const sso = await get("/api/oidc").catch(() => ({ enabled: false }));
   show(
     h("section", { class: "card narrow" },
-      h("h1", { text: "Log in" }),
-      params.get("login_error") ? h("p", { class: "error", text: "Single sign-on failed. Try again or use your password." }) : null,
+      h("h1", { text: t("login.title") }),
+      params.get("login_error") ? h("p", { class: "error", text: t("login.failed") }) : null,
       form({ id: "login" }, [
-        field("Username", h("input", { name: "username", autocomplete: "username", required: true })),
-        field("Password", h("input", { name: "password", type: "password", autocomplete: "current-password", required: true })),
-        h("button", { type: "submit", text: "Log in" }),
+        field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true })),
+        field(t("field.password"), h("input", { name: "password", type: "password", autocomplete: "current-password", required: true })),
+        h("button", { type: "submit", text: t("login.submit") }),
       ], async (data) => {
         await post("/api/login", { username: data.get("username"), password: data.get("password") });
         me = null;
         history.replaceState(null, "", "/#/");
         route();
       }),
-      sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: "Log in with " + sso.name })) : null,
+      sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: t("login.with", { name: sso.name }) })) : null,
     ));
 }
 
@@ -229,13 +253,13 @@ async function searchView(q) {
       ));
     }
     more.replaceChildren();
-    if (page.next) more.append(h("button", { text: "More", onclick: async () => addHits(await get(url(page.next))) }));
+    if (page.next) more.append(h("button", { text: t("common.more"), onclick: async () => addHits(await get(url(page.next))) }));
   };
   addHits(first);
   show(
-    h("h1", { text: "Search" }),
-    h("p", { class: "muted", text: `${first.total.value} results for “${q}”` }),
-    first.total.value === 0 ? h("p", { text: "Nothing found among the items you may read." }) : list,
+    h("h1", { text: t("search.title") }),
+    h("p", { class: "muted", text: t("search.results", { n: first.total.value, q }) }),
+    first.total.value === 0 ? h("p", { text: t("search.none") }) : list,
     more,
   );
 }
@@ -246,9 +270,9 @@ async function homeView() {
   const show = screen();
   const { spaces } = await get("/api/spaces");
   show(
-    h("h1", { text: "Spaces" }),
+    h("h1", { text: t("spaces.title") }),
     spaces.length === 0
-      ? h("p", { class: "muted", text: me.admin ? "No spaces yet. Create one under Administration." : "You have no role in any space yet. Ask an administrator." })
+      ? h("p", { class: "muted", text: me.admin ? t("spaces.noneAdmin") : t("spaces.none") })
       : h("ul", { class: "list" }, spaces.map((s) => h("li", {}, link("#/space/" + encodeURIComponent(s.key), s.name), " ", h("span", { class: "muted", text: s.key })))),
   );
 }
@@ -269,18 +293,18 @@ async function spaceView(key) {
     }
     more.replaceChildren();
     if (page.next) {
-      more.append(h("button", { text: "More", onclick: async () => addRows(await get(`/api/items?space=${encodeURIComponent(key)}&limit=100&after=${page.next}`)) }));
+      more.append(h("button", { text: t("common.more"), onclick: async () => addRows(await get(`/api/items?space=${encodeURIComponent(key)}&limit=100&after=${page.next}`)) }));
     }
   };
   addRows(first);
-  const boards = types.filter((t) => t.workflow)
-    .map((t) => link(`#/board/${encodeURIComponent(key)}/${encodeURIComponent(t.name)}`, "Board: " + t.name));
+  const boards = types.filter((ty) => ty.workflow)
+    .map((ty) => link(`#/board/${encodeURIComponent(key)}/${encodeURIComponent(ty.name)}`, t("space.board", { type: ty.name })));
   show(
-    h("p", {}, link("#/", "Spaces"), " / " + key),
+    h("p", {}, link("#/", t("nav.spaces")), " / " + key),
     h("h1", { text: key }),
-    h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, "Link check"), link(`#/governance/${encodeURIComponent(key)}`, "Governance")].flatMap((b, i) => i ? [" · ", b] : [b])),
-    h("p", { class: "muted", text: `${first.total.value} items` }),
-    h("table", {}, h("thead", {}, h("tr", {}, ["Key", "Title", "Type", "State"].map((c) => h("th", { text: c })))), rows),
+    h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance"))].flatMap((b, i) => i ? [" · ", b] : [b])),
+    h("p", { class: "muted", text: t("space.items", { n: first.total.value }) }),
+    h("table", {}, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type"), t("col.state")].map((c) => h("th", { text: c })))), rows),
     more,
     newItemForm(key, types),
   );
@@ -298,8 +322,8 @@ const boardMax = 2000;
 async function boardView(key, typeName) {
   const show = screen();
   const { types } = await get("/api/types");
-  const type = types.find((t) => t.name === typeName);
-  if (!type || !type.workflow) throw new Error(`type ${typeName} has no workflow`);
+  const type = types.find((ty) => ty.name === typeName);
+  if (!type || !type.workflow) throw new Error(t("board.noWorkflow", { type: typeName }));
   const base = `/api/items?space=${encodeURIComponent(key)}&type=${encodeURIComponent(typeName)}&limit=100`;
   let page = await get(base);
   const items = [...page.items];
@@ -308,15 +332,15 @@ async function boardView(key, typeName) {
     items.push(...page.items);
   }
   const status = h("div", { class: "status" });
-  const transitionsFrom = (state) => type.workflow.transitions.filter((t) => t.from.includes(state));
+  const transitionsFrom = (state) => type.workflow.transitions.filter((tr) => tr.from.includes(state));
   const perform = (it, name) => action(() => post(`/api/items/${it.id}/transitions`, { name }), status);
 
   const card = (it) => h("li", { class: "card-item", draggable: "true", "data-id": it.id,
     ondragstart: (ev) => { ev.dataTransfer.setData("text/plain", it.id); ev.dataTransfer.effectAllowed = "move"; } },
   link("#/item/" + encodeURIComponent(it.key), it.key),
   h("div", { class: "card-title", text: it.title }),
-  h("div", { class: "card-actions" }, transitionsFrom(it.state).map((t) =>
-    h("button", { class: "link", text: `${t.name} → ${t.to}`, onclick: () => perform(it, t.name) }))),
+  h("div", { class: "card-actions" }, transitionsFrom(it.state).map((tr) =>
+    h("button", { class: "link", text: `${tr.name} → ${tr.to}`, onclick: () => perform(it, tr.name) }))),
   );
 
   const byID = new Map(items.map((it) => [it.id, it]));
@@ -330,20 +354,18 @@ async function boardView(key, typeName) {
         col.classList.remove("drop");
         const it = byID.get(ev.dataTransfer.getData("text/plain"));
         if (!it || it.state === state) return;
-        const to = transitionsFrom(it.state).filter((t) => t.to === state);
+        const to = transitionsFrom(it.state).filter((tr) => tr.to === state);
         if (to.length === 1) return perform(it, to[0].name);
-        status.replaceChildren(h("p", { class: "error", text: to.length
-          ? `Several transitions lead from ${it.state} to ${state}; use the buttons on the card.`
-          : `No transition leads from ${it.state} to ${state}.` }));
+        status.replaceChildren(h("p", { class: "error", text: t(to.length ? "board.several" : "board.none", { from: it.state, to: state }) }));
       } },
     h("h2", {}, state, h("span", { class: "muted", text: ` ${cards.length}` })),
     h("ul", { class: "board-cards" }, cards.map(card)));
     return col;
   };
   show(
-    h("p", {}, link("#/", "Spaces"), " / ", link("#/space/" + encodeURIComponent(key), key), ` / board: ${typeName}`),
+    h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("board.crumb", { type: typeName })),
     h("h1", { text: `${key} · ${typeName}` }),
-    page.next ? h("p", { class: "notice", text: `This board shows the first ${items.length} items.` }) : null,
+    page.next ? h("p", { class: "notice", text: t("board.truncated", { n: items.length }) }) : null,
     status,
     h("div", { class: "board" }, type.workflow.states.map(column)),
   );
@@ -357,7 +379,7 @@ async function boardView(key, typeName) {
 async function tasksView() {
   const show = screen();
   const { types } = await get("/api/types");
-  const flows = new Map(types.filter((t) => t.workflow).map((t) => [t.name, t.workflow]));
+  const flows = new Map(types.filter((ty) => ty.workflow).map((ty) => [ty.name, ty.workflow]));
   let page = await get("/api/items?limit=100");
   const items = [...page.items];
   while (page.next && items.length < boardMax) {
@@ -370,10 +392,10 @@ async function tasksView() {
   });
   open.sort((a, b) => a.space.localeCompare(b.space) || a.key.localeCompare(b.key, undefined, { numeric: true }));
   show(
-    h("h1", { text: "Tasks" }),
-    h("p", { class: "muted", text: `${open.length} open, in every space you can read.` }),
+    h("h1", { text: t("tasks.title") }),
+    h("p", { class: "muted", text: t("tasks.open", { n: open.length }) }),
     h("section", { id: "tasks" }, open.length
-      ? h("table", {}, h("thead", {}, h("tr", {}, ["Item", "Title", "Type", "State", "Space"].map((c) => h("th", { text: c })))),
+      ? h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("col.type"), t("col.state"), t("col.space")].map((c) => h("th", { text: c })))),
         h("tbody", {}, open.map((it) => h("tr", {},
           h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)),
           h("td", { text: it.title }),
@@ -381,8 +403,8 @@ async function tasksView() {
           h("td", { text: it.state }),
           h("td", {}, link(`#/board/${encodeURIComponent(it.space)}/${encodeURIComponent(it.type)}`, it.space)),
         ))))
-      : h("p", { class: "muted", text: "No open tasks." })),
-    page.next ? h("p", { class: "notice", text: `Only the first ${items.length} items were read.` }) : null,
+      : h("p", { class: "muted", text: t("tasks.none") })),
+    page.next ? h("p", { class: "notice", text: t("tasks.truncated", { n: items.length }) }) : null,
   );
 }
 
@@ -393,17 +415,17 @@ async function governanceOverview() {
   const { spaces } = await get("/api/spaces");
   const reports = await Promise.all(spaces.map((s) => get(`/api/spaces/${encodeURIComponent(s.key)}/governance`)));
   show(
-    h("h1", { text: "Governance" }),
-    h("p", { class: "muted", text: "Sensitive data, items not changed for a year, and implausible values, per space." }),
+    h("h1", { text: t("gov.title") }),
+    h("p", { class: "muted", text: t("gov.intro") }),
     h("section", { id: "governance-overview" }, spaces.length
-      ? h("table", {}, h("thead", {}, h("tr", {}, ["Space", "Sensitive data", "Not changed", "Implausible"].map((c) => h("th", { text: c })))),
+      ? h("table", {}, h("thead", {}, h("tr", {}, [t("col.space"), t("gov.colSensitive"), t("gov.colStale"), t("gov.colImplausible")].map((c) => h("th", { text: c })))),
         h("tbody", {}, spaces.map((s, i) => h("tr", {},
           h("td", {}, link("#/governance/" + encodeURIComponent(s.key), s.key), " ", h("span", { class: "muted", text: s.name })),
           h("td", { text: String(reports[i].sensitive.length) }),
           h("td", { text: String(reports[i].stale.length) }),
           h("td", { text: String(reports[i].implausible.length) }),
         ))))
-      : h("p", { class: "muted", text: "You hold a role in no space." })),
+      : h("p", { class: "muted", text: t("gov.noSpaces") })),
   );
 }
 
@@ -418,7 +440,7 @@ async function governanceView(key) {
   const days = Number(new URLSearchParams(location.hash.split("?")[1] || "").get("staleDays")) || 365;
   const rep = await get(`/api/spaces/${encodeURIComponent(key)}/governance?staleDays=${days}`);
   const status = h("div", { class: "status" });
-  const who = (id) => !id ? "—" : id === me.user.id ? "you" : id;
+  const who = (id) => !id ? "—" : id === me.user.id ? t("common.you") : id;
   const itemCell = (f) => h("td", {}, link("#/item/" + encodeURIComponent(f.key), f.title || f.key), h("div", { class: "muted", text: f.key }));
   const lift = async (f) => {
     const { item } = await get("/api/items/" + f.item);
@@ -426,30 +448,30 @@ async function governanceView(key) {
   };
   const table = (cols, rows) => rows.length
     ? h("table", {}, h("thead", {}, h("tr", {}, cols.map((c) => h("th", { text: c })))), h("tbody", {}, rows))
-    : h("p", { class: "muted", text: "Nothing found." });
-  const daysInput = h("input", { type: "number", min: 1, max: 3650, value: days, "aria-label": "Days", class: "days" });
+    : h("p", { class: "muted", text: t("common.nothing") });
+  const daysInput = h("input", { type: "number", min: 1, max: 3650, value: days, "aria-label": t("gov.days"), class: "days" });
   show(
-    h("p", {}, link("#/", "Spaces"), " / ", link("#/space/" + encodeURIComponent(key), key), " / governance"),
-    h("h1", { text: `${key} · governance` }),
+    h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("gov.crumb")),
+    h("h1", { text: t("gov.heading", { key }) }),
     h("section", { id: "governance" },
-      h("p", {}, h("button", { text: "Check again", onclick: () => {
+      h("p", {}, h("button", { text: t("gov.checkAgain"), onclick: () => {
         location.hash = `#/governance/${encodeURIComponent(key)}?staleDays=${Number(daysInput.value) || 365}`;
         route();
-      } }), " Not changed for ", daysInput, " days or more."),
+      } }), t("gov.staleBefore"), daysInput, t("gov.staleAfter")),
       status,
-      h("h2", { text: `Sensitive data (${rep.sensitive.length})` }),
-      h("p", { class: "muted", text: "Saving new sensitive data restricts the item to whoever saved it; space administrators still read it." }),
-      table(["Item", "Where", "What", "Responsible", "Access"], rep.sensitive.map((f) => h("tr", {},
+      h("h2", { text: t("gov.sensitive", { n: rep.sensitive.length }) }),
+      h("p", { class: "muted", text: t("gov.sensitiveNote") }),
+      table([t("col.item"), t("gov.where"), t("gov.what"), t("col.responsible"), t("gov.access")], rep.sensitive.map((f) => h("tr", {},
         itemCell(f), h("td", { text: f.where }), h("td", {}, h("div", { text: f.kind }), h("code", { text: f.masked })),
         h("td", { text: who(f.responsible) }),
         h("td", {}, f.restricted
-          ? [h("span", { text: "restricted " }), h("button", { class: "link", text: "Lift", onclick: () => action(() => lift(f), status) })]
-          : "open to the space")))),
-      h("h2", { text: `Not changed for ${rep.staleDays} days (${rep.stale.length})` }),
-      table(["Item", "Last change", "Responsible"], rep.stale.map((f) => h("tr", {},
+          ? [h("span", { text: t("gov.restricted") + " " }), h("button", { class: "link", text: t("gov.lift"), onclick: () => action(() => lift(f), status) })]
+          : t("gov.open"))))),
+      h("h2", { text: t("gov.stale", { days: rep.staleDays, n: rep.stale.length }) }),
+      table([t("col.item"), t("gov.lastChange"), t("col.responsible")], rep.stale.map((f) => h("tr", {},
         itemCell(f), h("td", { text: when(f.lastChange) }), h("td", { text: who(f.responsible) })))),
-      h("h2", { text: `Implausible (${rep.implausible.length})` }),
-      table(["Item", "Problem", "Responsible"], rep.implausible.map((f) => h("tr", {},
+      h("h2", { text: t("gov.implausible", { n: rep.implausible.length }) }),
+      table([t("col.item"), t("col.problem"), t("col.responsible")], rep.implausible.map((f) => h("tr", {},
         itemCell(f), h("td", { text: f.problem }), h("td", { text: who(f.responsible) })))),
     ),
   );
@@ -465,31 +487,31 @@ async function linksView(key) {
   const path = `/api/spaces/${encodeURIComponent(key)}/linkcheck`;
   const report = await get(path);
   const status = h("div", { class: "status" });
-  const who = (id) => id === me.user.id ? "you" : id;
+  const who = (id) => id === me.user.id ? t("common.you") : id;
   let body;
   if (!report.enabled) {
-    body = h("p", { class: "notice", text: "Link checking is switched off on this server. An administrator enables it with WWBB_LINKCHECK=on." });
+    body = h("p", { class: "notice", text: t("links.off") });
   } else {
-    const start = h("button", { text: report.running ? "Checking…" : "Check links", disabled: report.running,
+    const start = h("button", { text: report.running ? t("links.checking") : t("links.check"), disabled: report.running,
       onclick: () => action(() => post(path), status) });
-    const summary = !report.started ? "No check has run yet."
-      : report.running ? `Checking since ${when(report.started)}…`
-        : `Checked ${report.checked} addresses, finished ${when(report.finished)}${report.truncated ? " (only the first ones; the space has more)" : ""}.`;
+    const summary = !report.started ? t("links.never")
+      : report.running ? t("links.since", { when: when(report.started) })
+        : t(report.truncated ? "links.doneTruncated" : "links.done", { n: report.checked, when: when(report.finished) });
     body = h("div", {},
       h("p", {}, start, " ", h("span", { class: "muted", text: summary })),
       status,
       report.finished && !report.running
         ? (report.broken.length
-          ? h("table", { class: "links" }, h("thead", {}, h("tr", {}, ["Used in", "Link", "Problem", "Responsible"].map((c) => h("th", { text: c })))),
+          ? h("table", { class: "links" }, h("thead", {}, h("tr", {}, [t("links.usedIn"), t("links.link"), t("col.problem"), t("col.responsible")].map((c) => h("th", { text: c })))),
             h("tbody", {}, report.broken.map((b) => h("tr", {},
               // The item the link is used in, and where in its body.
               h("td", {}, link("#/item/" + encodeURIComponent(b.key), b.title || b.key),
-                h("div", { class: "muted", text: `${b.key} · block ${b.block + 1}` })),
+                h("div", { class: "muted", text: t("links.block", { key: b.key, n: b.block + 1 }) })),
               h("td", { class: "href", text: b.href }),
               h("td", { text: b.problem }),
               h("td", { text: b.responsible ? who(b.responsible) : "—" }),
             ))))
-          : h("p", { text: "No broken links found." }))
+          : h("p", { text: t("links.none") }))
         : null,
     );
     if (report.running) {
@@ -498,8 +520,8 @@ async function linksView(key) {
     }
   }
   show(
-    h("p", {}, link("#/", "Spaces"), " / ", link("#/space/" + encodeURIComponent(key), key), " / link check"),
-    h("h1", { text: `${key} · link check` }),
+    h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("links.crumb")),
+    h("h1", { text: t("links.heading", { key }) }),
     h("section", { id: "linkcheck" }, body),
   );
 }
@@ -535,27 +557,27 @@ function readProperty(f, el) {
 function newItemForm(space, types) {
   if (types.length === 0) return null;
   const fields = h("div");
-  const typeSelect = h("select", { name: "type" }, types.map((t) => h("option", { value: t.name, text: t.name })));
+  const typeSelect = h("select", { name: "type" }, types.map((ty) => h("option", { value: ty.name, text: ty.name })));
   const showFields = () => {
-    const t = types.find((x) => x.name === typeSelect.value);
-    fields.replaceChildren(...t.fields.map((f) => field(f.name + (f.required ? " *" : ""), propertyInput(f))));
+    const ty = types.find((x) => x.name === typeSelect.value);
+    fields.replaceChildren(...ty.fields.map((f) => field(f.name + (f.required ? " *" : ""), propertyInput(f))));
   };
   typeSelect.addEventListener("change", showFields);
   showFields();
   const f = form({ class: "card", id: "new-item" }, [
-    h("h2", { text: "New item" }),
-    field("Type", typeSelect),
-    field("Title", h("input", { name: "title", required: true })),
+    h("h2", { text: t("item.new") }),
+    field(t("col.type"), typeSelect),
+    field(t("col.title"), h("input", { name: "title", required: true })),
     fields,
-    h("button", { type: "submit", text: "Create" }),
+    h("button", { type: "submit", text: t("common.create") }),
   ], async () => {
-    const t = types.find((x) => x.name === typeSelect.value);
+    const ty = types.find((x) => x.name === typeSelect.value);
     const properties = {};
-    for (const fd of t.fields) {
+    for (const fd of ty.fields) {
       const v = readProperty(fd, f.querySelector(`[name="p:${CSS.escape(fd.name)}"]`));
       if (v !== null) properties[fd.name] = v;
     }
-    const { item } = await post("/api/items", { space, type: t.name, title: f.querySelector("[name=title]").value, properties });
+    const { item } = await post("/api/items", { space, type: ty.name, title: f.querySelector("[name=title]").value, properties });
     location.hash = "#/item/" + encodeURIComponent(item.key);
   });
   return f;
@@ -575,16 +597,16 @@ async function itemView(ref) {
     get(path + "/embeds"),
     get(path + "/comments"),
   ]);
-  const type = types.find((t) => t.name === item.type) || { fields: [], workflow: null, body: false };
+  const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
   const status = h("div", { class: "status" });
   const live = item.presence === "live";
 
   const title = live
     ? form({ class: "inline", id: "title" }, [
-      h("input", { name: "title", value: item.title, class: "title", "aria-label": "Title" }),
-      h("button", { type: "submit", text: "Save title" }),
+      h("input", { name: "title", value: item.title, class: "title", "aria-label": t("col.title") }),
+      h("button", { type: "submit", text: t("item.saveTitle") }),
     ], async (data) => { await put(path + "/title", { title: data.get("title") }); route(); })
-    : h("h1", { text: item.title || "(erased)" });
+    : h("h1", { text: item.title || t("item.erased") });
 
   const props = h("table", { class: "props" }, type.fields.map((f) => {
     const input = propertyInput(f, item.properties[f.name]);
@@ -592,32 +614,32 @@ async function itemView(ref) {
     return h("tr", {},
       h("th", { text: f.name }),
       h("td", {}, input),
-      h("td", {}, live ? h("button", { text: "Save", onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) }), status) }) : null),
+      h("td", {}, live ? h("button", { text: t("common.save"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) }), status) }) : null),
     );
   }));
 
   const transitions = type.workflow && live
-    ? type.workflow.transitions.filter((t) => t.from.includes(item.state))
-      .map((t) => h("button", { text: t.name, onclick: () => action(() => post(path + "/transitions", { name: t.name }), status) }))
+    ? type.workflow.transitions.filter((tr) => tr.from.includes(item.state))
+      .map((tr) => h("button", { text: tr.name, onclick: () => action(() => post(path + "/transitions", { name: tr.name }), status) }))
     : [];
 
   const actions = item.presence === "live"
-    ? [h("button", { text: "Move to trash", onclick: () => action(() => post(path + "/trash"), status) })]
+    ? [h("button", { text: t("item.trash"), onclick: () => action(() => post(path + "/trash"), status) })]
     : item.presence === "trashed"
-      ? [h("button", { text: "Restore", onclick: () => action(() => post(path + "/restore"), status) }),
-        h("button", { class: "danger", text: "Delete for good", onclick: () => confirm("Delete for good? The content cannot be recovered.") && action(() => post(path + "/purge"), status) })]
+      ? [h("button", { text: t("item.restore"), onclick: () => action(() => post(path + "/restore"), status) }),
+        h("button", { class: "danger", text: t("item.purge"), onclick: () => confirm(t("item.purgeConfirm")) && action(() => post(path + "/purge"), status) })]
       : [];
 
   const lastRestriction = history.events.filter((e) => e.kind === "RestrictionSet").pop();
   const guarded = item.restriction?.read?.length && lastRestriction?.actor === "governance";
   show(
-    h("p", {}, link("#/", "Spaces"), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
+    h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
     title,
-    guarded ? h("p", { class: "notice", text: "Restricted automatically: this item seems to contain sensitive data, such as a password. Only its author and the space administrators can read it until an administrator lifts the restriction under Governance." }) : null,
-    h("p", { class: "muted" }, `${item.type} · ${item.presence}`, item.state ? ` · state: ${item.state}` : "", ` · version ${item.version}`),
+    guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
+    h("p", { class: "muted" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : "", t("item.version", { n: item.version })),
     status,
-    transitions.length ? h("p", {}, "Transitions: ", transitions) : null,
-    type.fields.length ? h("section", {}, h("h2", { text: "Properties" }), props) : null,
+    transitions.length ? h("p", {}, t("item.transitions"), transitions) : null,
+    type.fields.length ? h("section", {}, h("h2", { text: t("item.properties") }), props) : null,
     type.body ? bodyEditor(item, embeds.embeds, live) : null,
     relationsSection(out.relations, inc.relations, item.id),
     commentsSection(path, comments, live),
@@ -632,19 +654,19 @@ async function itemView(ref) {
 function bodyEditor(item, embeds, live) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!live) {
-    return h("section", { id: "body" }, h("h2", { text: "Body" }),
+    return h("section", { id: "body" }, h("h2", { text: t("item.body") }),
       createEditor({ blocks: item.body, embeds, editable: false, resolve }).element);
   }
   const session = liveBody({ ref: item.id, embeds, resolve });
   onLeave(session.close);
-  return h("section", { id: "body" }, h("h2", { text: "Body" }), session.element);
+  return h("section", { id: "body" }, h("h2", { text: t("item.body") }), session.element);
 }
 
 function relationsSection(out, inc, self) {
-  const row = (r, other) => h("li", {}, `${r.type}${r.derived ? " (from the body)" : ""} `, link("#/item/" + other, other.slice(0, 8)));
+  const row = (r, other) => h("li", {}, `${r.type}${r.derived ? t("rel.fromBody") : ""} `, link("#/item/" + other, other.slice(0, 8)));
   if (out.length + inc.length === 0) return null;
   return h("section", {},
-    h("h2", { text: "Relations" }),
+    h("h2", { text: t("rel.title") }),
     h("ul", { class: "list" }, out.map((r) => row(r, r.to)), inc.map((r) => row(r, r.from))),
   );
 }
@@ -652,49 +674,49 @@ function relationsSection(out, inc, self) {
 // commentsSection lists an item's comments (ADR-0035). Text is inserted as
 // text (ADR-0014); one's own comments can be edited and deleted.
 function commentsSection(path, page, live) {
-  const author = (c) => c.author === me.user.id ? "you" : c.author;
+  const author = (c) => c.author === me.user.id ? t("common.you") : c.author;
   const row = (c) => {
     const li = h("li", { class: "comment" });
-    const head = h("div", { class: "muted" }, `${author(c)} · ${when(c.created)}`, c.edited ? " · edited" : "");
+    const head = h("div", { class: "muted" }, `${author(c)} · ${when(c.created)}`, c.edited ? t("comment.edited") : "");
     if (c.deleted) {
-      li.append(head, h("p", { class: "muted", text: "(comment deleted)" }));
+      li.append(head, h("p", { class: "muted", text: t("comment.deleted") }));
       return li;
     }
     const mine = live && c.author === me.user.id;
     const status = h("div", { class: "status" });
     const edit = () => li.replaceChildren(head, form({ class: "comment-form" }, [
-      h("textarea", { name: "text", rows: 3, "aria-label": "Edit comment", value: c.text }),
-      h("p", {}, h("button", { type: "submit", text: "Save comment" }), h("button", { type: "button", class: "link", text: "Cancel", onclick: () => route() })),
+      h("textarea", { name: "text", rows: 3, "aria-label": t("comment.editLabel"), value: c.text }),
+      h("p", {}, h("button", { type: "submit", text: t("comment.save") }), h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => route() })),
     ], async (data) => { await put(`${path}/comments/${c.id}`, { text: data.get("text") }); route(); }));
     li.append(head, h("p", { class: "comment-text", text: c.text }), status, mine
       ? h("p", {},
-        h("button", { class: "link", text: "Edit", onclick: edit }), " · ",
-        h("button", { class: "link", text: "Delete", onclick: () => confirm("Delete this comment?") && action(() => del(`${path}/comments/${c.id}`), status) }))
+        h("button", { class: "link", text: t("common.edit"), onclick: edit }), " · ",
+        h("button", { class: "link", text: t("common.delete"), onclick: () => confirm(t("comment.deleteConfirm")) && action(() => del(`${path}/comments/${c.id}`), status) }))
       : null);
     return li;
   };
   const add = live
     ? form({ id: "add-comment", class: "comment-form" }, [
-      h("textarea", { name: "text", rows: 3, placeholder: "Write a comment", "aria-label": "Comment", required: true }),
-      h("p", {}, h("button", { type: "submit", text: "Add comment" })),
+      h("textarea", { name: "text", rows: 3, placeholder: t("comment.placeholder"), "aria-label": t("comment.label"), required: true }),
+      h("p", {}, h("button", { type: "submit", text: t("comment.add") })),
     ], async (data) => { await post(path + "/comments", { text: data.get("text") }); route(); })
     : null;
   return h("section", { id: "comments" },
-    h("h2", { text: `Comments (${page.total.value})` }),
-    page.comments.length ? h("ul", { class: "comments" }, page.comments.map(row)) : h("p", { class: "muted", text: "No comments yet." }),
-    page.next ? h("p", { class: "muted", text: `Showing the first ${page.comments.length}.` }) : null,
+    h("h2", { text: t("comment.title", { n: page.total.value }) }),
+    page.comments.length ? h("ul", { class: "comments" }, page.comments.map(row)) : h("p", { class: "muted", text: t("comment.none") }),
+    page.next ? h("p", { class: "muted", text: t("comment.truncated", { n: page.comments.length }) }) : null,
     add,
   );
 }
 
 function historySection(events) {
   return h("section", {},
-    h("h2", { text: "History" }),
+    h("h2", { text: t("history.title") }),
     h("table", { class: "history" }, events.slice().reverse().map((e) => h("tr", {},
       h("td", { text: when(e.at) }),
       h("td", { text: e.actor }),
       h("td", { text: e.kind }),
-      h("td", { text: e.erased ? "(content erased)" : [e.title, e.field && `${e.field} = ${JSON.stringify(e.value ?? null)}`, e.to, e.comment && `comment ${e.comment.slice(0, 8)}`].filter(Boolean).join(" ") }),
+      h("td", { text: e.erased ? t("history.erased") : [e.title, e.field && `${e.field} = ${JSON.stringify(e.value ?? null)}`, e.to, e.comment && t("history.comment", { id: e.comment.slice(0, 8) })].filter(Boolean).join(" ") }),
     ))),
   );
 }
@@ -707,32 +729,42 @@ async function accountView() {
   const secret = h("div");
   show(
     h("h1", { text: me.user.username }),
-    h("p", { class: "muted", text: `ID ${me.user.id} · signed in via ${me.via}` }),
+    h("p", { class: "muted", text: t("account.id", { id: me.user.id, via: me.via }) }),
+    form({ class: "card", id: "language" }, [
+      field(t("account.language"), h("select", { name: "language", onchange: (ev) => ev.target.form.requestSubmit() },
+        languages.filter((l) => !me.languages || me.languages.includes(l.code))
+          .map((l) => h("option", { value: l.code, text: l.name, selected: l.code === language() })))),
+    ], async (data) => {
+      me.language = data.get("language");
+      await put("/api/me/language", { language: me.language });
+      setLanguage(me.language);
+      route();
+    }),
     form({ class: "card", id: "password" }, [
-      h("h2", { text: "Change password" }),
-      field("Current password", h("input", { name: "current", type: "password", autocomplete: "current-password", required: true })),
-      field("New password", h("input", { name: "new", type: "password", autocomplete: "new-password", minlength: 12, required: true })),
-      h("button", { type: "submit", text: "Change" }),
+      h("h2", { text: t("account.password") }),
+      field(t("account.current"), h("input", { name: "current", type: "password", autocomplete: "current-password", required: true })),
+      field(t("account.new"), h("input", { name: "new", type: "password", autocomplete: "new-password", minlength: 12, required: true })),
+      h("button", { type: "submit", text: t("account.change") }),
     ], async (data) => {
       await put("/api/me/password", { current: data.get("current"), new: data.get("new") });
       me = null;
       route();
     }),
     h("section", { class: "card" },
-      h("h2", { text: "API tokens" }),
-      h("table", {}, tokens.map((t) => h("tr", {},
-        h("td", { text: t.name }), h("td", { text: t.scope }), h("td", { text: "expires " + when(t.expires) }),
-        h("td", {}, h("button", { text: "Revoke", onclick: () => action(() => del("/api/tokens/" + t.id)) })),
+      h("h2", { text: t("account.tokens") }),
+      h("table", {}, tokens.map((tok) => h("tr", {},
+        h("td", { text: tok.name }), h("td", { text: tok.scope }), h("td", { text: t("account.expires", { when: when(tok.expires) }) }),
+        h("td", {}, h("button", { text: t("account.revoke"), onclick: () => action(() => del("/api/tokens/" + tok.id)) })),
       ))),
       form({ id: "new-token" }, [
-        field("Name", h("input", { name: "name", required: true })),
-        field("Scope", h("select", { name: "scope" }, h("option", { value: "read", text: "read" }), h("option", { value: "full", text: "full" }),
-          me.admin ? h("option", { value: "metrics", text: "metrics (only GET /metrics, for a scraper)" }) : null)),
-        field("Days", h("input", { name: "days", type: "number", min: 1, max: 366, value: 30 })),
-        h("button", { type: "submit", text: "Create token" }),
+        field(t("field.name"), h("input", { name: "name", required: true })),
+        field(t("account.scope"), h("select", { name: "scope" }, h("option", { value: "read", text: "read" }), h("option", { value: "full", text: "full" }),
+          me.admin ? h("option", { value: "metrics", text: t("account.scopeMetrics") }) : null)),
+        field(t("account.days"), h("input", { name: "days", type: "number", min: 1, max: 366, value: 30 })),
+        h("button", { type: "submit", text: t("account.createToken") }),
       ], async (data) => {
         const res = await post("/api/tokens", { name: data.get("name"), scope: data.get("scope"), days: Number(data.get("days")) });
-        secret.replaceChildren(h("p", { class: "notice" }, "Copy this token now; it is not shown again: ", h("code", { text: res.secret })));
+        secret.replaceChildren(h("p", { class: "notice" }, t("account.copy"), h("code", { text: res.secret })));
       }),
       secret,
     ),
@@ -748,63 +780,63 @@ async function adminView() {
   ]);
   const userOptions = users.map((u) => h("option", { value: u.id, text: u.username }));
   show(
-    h("h1", { text: "Administration" }),
+    h("h1", { text: t("admin.title") }),
     form({ class: "card", id: "new-space" }, [
-      h("h2", { text: "New space" }),
-      field("Key (upper-case letters and digits)", h("input", { name: "key", required: true, pattern: "[A-Z][A-Z0-9]*" })),
-      field("Name", h("input", { name: "name", required: true })),
-      h("button", { type: "submit", text: "Create space" }),
+      h("h2", { text: t("admin.newSpace") }),
+      field(t("admin.key"), h("input", { name: "key", required: true, pattern: "[A-Z][A-Z0-9]*" })),
+      field(t("field.name"), h("input", { name: "name", required: true })),
+      h("button", { type: "submit", text: t("admin.createSpace") }),
     ], async (d) => { await post("/api/spaces", { key: d.get("key"), name: d.get("name") }); route(); }),
     form({ class: "card", id: "new-type" }, [
-      h("h2", { text: "Define a type" }),
-      h("p", { class: "muted", text: "Existing: " + (types.map((t) => `${t.name} v${t.version}`).join(", ") || "none") }),
-      field("Type as JSON", h("textarea", { name: "type", rows: 6, required: true },
+      h("h2", { text: t("admin.defineType") }),
+      h("p", { class: "muted", text: t("admin.existing", { list: types.map((ty) => `${ty.name} v${ty.version}`).join(", ") || t("admin.none") }) }),
+      field(t("admin.typeJson"), h("textarea", { name: "type", rows: 6, required: true },
         '{"name":"page","body":true,"fields":[{"name":"owner","kind":"user"}]}')),
-      h("button", { type: "submit", text: "Define" }),
+      h("button", { type: "submit", text: t("admin.define") }),
     ], async (d) => {
       let def;
       try {
         def = JSON.parse(d.get("type"));
       } catch (err) {
-        throw new Error("not valid JSON: " + err.message);
+        throw new Error(t("admin.badJson", { error: err.message }));
       }
       await post("/api/types", def);
       route();
     }),
     form({ class: "card", id: "new-user" }, [
-      h("h2", { text: "New user" }),
-      field("Username", h("input", { name: "username", required: true })),
-      field("Password", h("input", { name: "password", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
-      h("button", { type: "submit", text: "Create user" }),
+      h("h2", { text: t("admin.newUser") }),
+      field(t("field.username"), h("input", { name: "username", required: true })),
+      field(t("field.password"), h("input", { name: "password", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
+      h("button", { type: "submit", text: t("admin.createUser") }),
     ], async (d) => { await post("/api/users", { username: d.get("username"), password: d.get("password") }); route(); }),
     form({ class: "card", id: "grant" }, [
-      h("h2", { text: "Grant a space role" }),
-      field("Space", h("select", { name: "space" }, spaces.map((s) => h("option", { value: s.key, text: s.key })))),
-      field("User", h("select", { name: "user" }, userOptions)),
-      field("Role", h("select", { name: "role" }, ["viewer", "editor", "space-admin"].map((r) => h("option", { value: r, text: r })))),
-      h("button", { type: "submit", text: "Grant" }),
+      h("h2", { text: t("admin.grant") }),
+      field(t("col.space"), h("select", { name: "space" }, spaces.map((s) => h("option", { value: s.key, text: s.key })))),
+      field(t("admin.user"), h("select", { name: "user" }, userOptions)),
+      field(t("admin.role"), h("select", { name: "role" }, [["viewer", t("role.viewer")], ["editor", t("role.editor")], ["space-admin", t("role.space-admin")]].map(([r, label]) => h("option", { value: r, text: label })))),
+      h("button", { type: "submit", text: t("admin.grantButton") }),
     ], async (d, status) => {
       await put(`/api/spaces/${encodeURIComponent(d.get("space"))}/roles/${encodeURIComponent(d.get("user"))}`, { role: d.get("role") });
-      status.replaceChildren(h("p", { class: "notice", text: "Granted." }));
+      status.replaceChildren(h("p", { class: "notice", text: t("admin.granted") }));
     }),
     form({ class: "card", id: "backup" }, [
-      h("h2", { text: "Backup" }),
-      h("p", { class: "muted", text: "An encrypted copy of all data, including the keys to the content and the account hashes. Keep the passphrase apart from the file: without it the backup cannot be restored, with it anyone can read everything in it — also content deleted for good after the backup was made." }),
-      field("Passphrase", h("input", { name: "passphrase", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
-      field("Repeat", h("input", { name: "repeat", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
-      h("button", { type: "submit", text: "Download backup" }),
+      h("h2", { text: t("admin.backup") }),
+      h("p", { class: "muted", text: t("admin.backupNote") }),
+      field(t("admin.passphrase"), h("input", { name: "passphrase", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
+      field(t("admin.repeat"), h("input", { name: "repeat", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
+      h("button", { type: "submit", text: t("admin.download") }),
     ], async (d, status) => {
-      if (d.get("passphrase") !== d.get("repeat")) throw new Error("The passphrases differ.");
+      if (d.get("passphrase") !== d.get("repeat")) throw new Error(t("admin.differ"));
       const { blob, name } = await download("/api/backup", { passphrase: d.get("passphrase") });
       const url = URL.createObjectURL(blob);
       const a = h("a", { download: name, text: name });
       a.href = url; // a blob made here, not user content; safeHref would refuse the scheme
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      status.replaceChildren(h("p", { class: "notice", text: `Saved ${name}. Restore it with: wikiwikibangbang restore -from ${name}` }));
+      status.replaceChildren(h("p", { class: "notice", text: t("admin.saved", { name }) }));
     }),
     h("section", { class: "card" },
-      h("h2", { text: "Audit trail (latest 50)" }),
+      h("h2", { text: t("admin.audit", { n: 50 }) }),
       h("table", { class: "history" }, auditPage.entries.map((e) => h("tr", {},
         h("td", { text: when(e.at) }), h("td", { text: e.event }), h("td", { text: e.actor || "" }),
         h("td", { text: e.addr || "" }), h("td", { text: e.subject || "" }),

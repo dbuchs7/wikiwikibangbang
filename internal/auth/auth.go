@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -121,6 +122,8 @@ type Accounts struct {
 type user struct {
 	User
 	hash string
+	// language is the UI language the user chose (ADR-0017), or empty.
+	language string
 }
 
 type token struct {
@@ -185,6 +188,7 @@ type event struct {
 	Expires  time.Time `json:"expires,omitzero"`
 	Issuer   string    `json:"issuer,omitempty"`
 	Subject  string    `json:"subject,omitempty"`
+	Language string    `json:"language,omitempty"`
 }
 
 const (
@@ -195,6 +199,8 @@ const (
 	// identityLinked ties an account to an identity at an external
 	// provider (OIDC issuer and subject).
 	identityLinked = "IdentityLinked"
+	// languageSet records the UI language a user chose (ADR-0017).
+	languageSet = "LanguageSet"
 )
 
 // apply is the only code that changes accounts; it runs live and on load.
@@ -222,6 +228,12 @@ func (a *Accounts) apply(e event) error {
 			return fmt.Errorf("identity for unknown user %s", e.User)
 		}
 		a.external[e.Issuer+"\x00"+e.Subject] = e.User
+	case languageSet:
+		u, ok := a.users[e.User]
+		if !ok {
+			return fmt.Errorf("language for unknown user %s", e.User)
+		}
+		u.language = e.Language
 	case tokenRevoked:
 		if t, ok := a.tokenIDs[e.Token]; ok {
 			delete(a.tokens, t.hash)
@@ -307,6 +319,38 @@ func (a *Accounts) CreateUser(username, password string) (User, error) {
 		return User{}, err
 	}
 	return a.users[uid].User, nil
+}
+
+// languageRE is a language tag as the UI names its catalogues: "de",
+// "en", or with a region, "de-CH".
+var languageRE = regexp.MustCompile(`^[a-z]{2}(-[A-Z]{2})?$`)
+
+// SetLanguage records the UI language a user chose (ADR-0017); empty
+// clears it. Which languages the UI offers is the caller's concern.
+func (a *Accounts) SetLanguage(id UserID, language string) error {
+	if language != "" && !languageRE.MatchString(language) {
+		return fmt.Errorf("%w: language %q", ErrInvalid, language)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	u, ok := a.users[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if u.language == language {
+		return nil
+	}
+	return a.record(event{Kind: languageSet, User: id, Language: language})
+}
+
+// Language is the UI language a user chose, or empty.
+func (a *Accounts) Language(id UserID) string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if u, ok := a.users[id]; ok {
+		return u.language
+	}
+	return ""
 }
 
 // SetPassword replaces a user's password after checking the current one.

@@ -12,6 +12,7 @@ import { Plugin, PluginKey, Decoration, DecorationSet, EditorState } from "../ve
 import { createEditor, nodeFromBlock, blockFromNode, schema } from "./editor.js";
 import { post, ApiError } from "./api.js";
 import { h } from "./dom.js";
+import { t } from "./i18n.js";
 
 const key = new PluginKey("live");
 const SEND_AFTER = 250; // ms of quiet before a batch is sent
@@ -111,7 +112,7 @@ export function liveBody({ ref, embeds, resolve }) {
           decos.push(Decoration.node(offset, offset + node.nodeSize, { class: "pm-locked", "data-holder": who }));
           // The name is a widget, not generated CSS content: generated
           // content inside an editable block misplaces the browser's caret.
-          decos.push(Decoration.widget(offset, () => h("div", { class: "pm-holder", contenteditable: "false", text: `${who} is editing` }),
+          decos.push(Decoration.widget(offset, () => h("div", { class: "pm-holder", contenteditable: "false", text: t("live.holder", { name: who }) }),
             { side: -1, key: `holder-${node.attrs.bid}-${who}`, ignoreSelection: true }));
         });
         return DecorationSet.create(state.doc, decos);
@@ -154,7 +155,7 @@ export function liveBody({ ref, embeds, resolve }) {
   function pending(yes) {
     const now = yes || mine.size > 0 || sending || (view && ops().some((o) => o.op !== "lock"));
     el.dataset.pending = now ? "1" : "0";
-    if (!status.classList.contains("error")) say(now ? "Saving…" : "All changes saved.");
+    if (!status.classList.contains("error")) say(now ? t("live.saving") : t("live.allSaved"));
   }
 
   function cursorBlock() {
@@ -213,7 +214,7 @@ export function liveBody({ ref, embeds, resolve }) {
     } catch (err) {
       // The batch was refused as a whole; the snapshot of a fresh
       // connection replaces what this one could not send.
-      say(err instanceof ApiError ? err.message + " — reloading the body." : String(err), true);
+      say(t("live.reloading", { error: err instanceof ApiError ? err.message : String(err) }), true);
       reconnect();
     } finally {
       sending = false;
@@ -301,7 +302,7 @@ export function liveBody({ ref, embeds, resolve }) {
     },
     presence(e) {
       const others = (e.participants || []).map((p) => p.name);
-      presence.textContent = others.length ? "In this body now: " + others.join(", ") : "";
+      presence.textContent = others.length ? t("live.present", { names: others.join(", ") }) : "";
     },
     lock(e) {
       setHolder(e.id, e.holder);
@@ -343,10 +344,10 @@ export function liveBody({ ref, embeds, resolve }) {
       reorder(e.order);
     },
     committed(e) {
-      presence.title = `Last saved by ${e.name}`;
+      presence.title = t("live.lastSaved", { name: e.name });
     },
     closed(e) {
-      say(e.reason || "The live session ended.", true);
+      say(e.reason || t("live.ended"), true);
       close();
     },
   };
@@ -382,7 +383,7 @@ export function liveBody({ ref, embeds, resolve }) {
         if (!closed) handlers[kind](JSON.parse(ev.data));
       });
     }
-    source.onerror = () => { if (!closed) say("Connection lost; reconnecting…", true); };
+    source.onerror = () => { if (!closed) say(t("live.lost"), true); };
     source.onopen = () => { if (status.classList.contains("error")) say(""); };
   }
   function reconnect() {

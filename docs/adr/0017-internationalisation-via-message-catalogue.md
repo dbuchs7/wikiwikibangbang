@@ -1,7 +1,7 @@
 # ADR-0017: The UI is translated through a message catalogue, with English as source
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Should user content (page titles, field labels of custom types, workflow state names) be translatable per language, or is translation limited to the product's own UI?
@@ -34,6 +34,8 @@ Chosen option: **2.**
 - A **missing key renders as the key** in development, so a hole is visibly broken; a test reports keys present in the source locale but missing in another, as a list of gaps rather than a build failure.
 - The language is a per-user setting (with the browser's language as the initial suggestion on first sign-in only); dates, numbers and time zones follow the same setting.
 - Plurals and simple placeholders are supported; ICU message format is not, until a language needs it.
+
+**Implementation so far:** `assets/i18n.js` with `t(key, params)`, `{name}` placeholders and plural forms chosen by `Intl.PluralRules`; the catalogues `assets/locales/en.js` (source) and `de.js` (Swiss spelling) are ES modules whose object is strict JSON, so Go reads them. `web.Languages` names the offered languages. Every string of the web UI, its editor and its live session goes through `t`. Tests in `internal/web`: a key used in the code but missing in the source fails, as do a translated key the source lacks and a translation with other placeholders than its source; a key a translation lacks is listed as a gap in the test log and falls back to English. The language is stored per user in the accounts log (`LanguageSet`, `PUT /api/me/language`); the browser's language is taken once, at the first sign-in, and saved; signed out, the login page follows the browser. Dates follow the chosen language. Not translated yet: messages the server sends (API errors, live-session notices), which the UI shows as they come; content and type definitions, per the open question.
 
 ### Consequences
 

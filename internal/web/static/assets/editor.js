@@ -8,6 +8,7 @@ import {
   splitBlockAs, chainCommands, history, undo, redo, inputRules, textblockTypeInputRule,
 } from "../vendor/prosemirror.js";
 import { h, safeHref } from "./dom.js";
+import { t } from "./i18n.js";
 
 // Every block carries bid, its ID in a live session (ADR-0010); it is not
 // stored. Text blocks keep the mentions they had without a mention mark
@@ -31,12 +32,12 @@ export const schema = new Schema({
     code_block: { group: "block", content: "text*", marks: "", code: true, defining: true, attrs: bid, parseDOM: [{ tag: "pre", preserveWhitespace: "full" }], toDOM: () => ["pre", ["code", 0]] },
     // Content an importer could not convert (ADR-0023), kept as it came and
     // shown as text; it cannot be created in the editor.
-    unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, attrs: bid, toDOM: () => ["pre", { class: "pm-unsupported", title: "Imported content that could not be converted" }, 0] },
+    unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, attrs: bid, toDOM: () => ["pre", { class: "pm-unsupported", title: t("editor.unsupported") }, 0] },
     embed: {
       group: "block", atom: true, selectable: true,
       attrs: { ...bid, ref: {}, label: { default: "" }, href: { default: "" } },
       toDOM: (n) => ["div", { class: "pm-embed", contenteditable: "false" },
-        n.attrs.href ? ["a", { href: safeHref(n.attrs.href) }, n.attrs.label] : ["span", { class: "muted" }, n.attrs.label || "an item you cannot see"]],
+        n.attrs.href ? ["a", { href: safeHref(n.attrs.href) }, n.attrs.label] : ["span", { class: "muted" }, n.attrs.label || t("editor.hidden")]],
     },
     mention: {
       group: "inline", inline: true, atom: true, selectable: false,
@@ -209,25 +210,25 @@ export function createEditor({ blocks, embeds, editable, resolve, extra = [], vi
   const view = new EditorView(mount, {
     state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...plugins()] }),
     editable: () => editable,
-    attributes: { "aria-label": "Body", role: "textbox", "aria-multiline": "true" },
+    attributes: { "aria-label": t("editor.body"), role: "textbox", "aria-multiline": "true" },
     ...viewProps,
   });
   const run = (cmd) => () => { cmd(view.state, view.dispatch); view.focus(); };
-  const kindSelect = h("select", { "aria-label": "Block kind", onchange: (e) => {
+  const kindSelect = h("select", { "aria-label": t("editor.blockKind"), onchange: (e) => {
     const [kind, level] = e.target.value.split(":");
     const attrs = kind === "heading" ? { level: Number(level) } : null;
     run(setBlockType(schema.nodes[kind], attrs))();
   } }, [
-    ["paragraph", "Paragraph"], ["heading:1", "Heading 1"], ["heading:2", "Heading 2"], ["heading:3", "Heading 3"],
-    ["bullet", "Bulleted item"], ["ordered", "Numbered item"], ["quote", "Quote"], ["code_block", "Code block"],
+    ["paragraph", t("editor.paragraph")], ["heading:1", t("editor.heading", { n: 1 })], ["heading:2", t("editor.heading", { n: 2 })], ["heading:3", t("editor.heading", { n: 3 })],
+    ["bullet", t("editor.bullet")], ["ordered", t("editor.ordered")], ["quote", t("editor.quote")], ["code_block", t("editor.codeBlock")],
   ].map(([v, label]) => h("option", { value: v, text: label })));
-  const target = h("input", { class: "pm-target", placeholder: "URL or item key", "aria-label": "Link target or item key" });
+  const target = h("input", { class: "pm-target", placeholder: t("editor.target"), "aria-label": t("editor.targetLabel") });
   const status = h("span", { class: "error", role: "status" });
   const withTarget = (fn) => async () => {
     status.textContent = "";
     const value = target.value;
     try {
-      if (!value.trim()) throw new Error("Enter a URL or an item key first.");
+      if (!value.trim()) throw new Error(t("editor.needTarget"));
       await fn(value.trim());
       // Clear only what this action used: the field may have been edited
       // while the item was being resolved.
@@ -239,27 +240,27 @@ export function createEditor({ blocks, embeds, editable, resolve, extra = [], vi
   };
   const toolbar = editable ? h("div", { class: "pm-toolbar", role: "toolbar" },
     kindSelect,
-    h("button", { type: "button", title: "Bold (Ctrl+B)", onclick: run(toggleMark(schema.marks.bold)) }, h("strong", { text: "B" })),
-    h("button", { type: "button", title: "Italic (Ctrl+I)", onclick: run(toggleMark(schema.marks.italic)) }, h("em", { text: "I" })),
-    h("button", { type: "button", title: "Code", onclick: run(toggleMark(schema.marks.code)), text: "</>" }),
+    h("button", { type: "button", title: t("editor.bold"), onclick: run(toggleMark(schema.marks.bold)) }, h("strong", { text: "B" })),
+    h("button", { type: "button", title: t("editor.italic"), onclick: run(toggleMark(schema.marks.italic)) }, h("em", { text: "I" })),
+    h("button", { type: "button", title: t("editor.code"), onclick: run(toggleMark(schema.marks.code)), text: "</>" }),
     target,
-    h("button", { type: "button", text: "Link", onclick: withTarget(async (href) => {
-      if (!isSafeLink(href)) throw new Error("A link needs an http, https or mailto URL.");
-      if (view.state.selection.empty) throw new Error("Select the text to link first.");
+    h("button", { type: "button", text: t("editor.link"), onclick: withTarget(async (href) => {
+      if (!isSafeLink(href)) throw new Error(t("editor.linkNeedsURL"));
+      if (view.state.selection.empty) throw new Error(t("editor.linkNeedsSelection"));
       toggleMark(schema.marks.link, { href })(view.state, view.dispatch);
     }) }),
-    h("button", { type: "button", text: "Mention", onclick: withTarget(async (ref) => {
+    h("button", { type: "button", text: t("editor.mention"), onclick: withTarget(async (ref) => {
       const it = await resolve(ref);
       view.dispatch(view.state.tr.replaceSelectionWith(schema.nodes.mention.create({ ref: it.id, label: "@" + it.key })));
     }) }),
-    h("button", { type: "button", text: "Embed", onclick: withTarget(async (ref) => {
+    h("button", { type: "button", text: t("editor.embed"), onclick: withTarget(async (ref) => {
       const it = await resolve(ref);
       const node = schema.nodes.embed.create({ ref: it.id, label: `${it.key} ${it.title}`, href: "#/item/" + encodeURIComponent(it.key) });
       const { $to } = view.state.selection;
       view.dispatch(view.state.tr.insert($to.depth >= 1 ? $to.after(1) : $to.pos, node));
     }) }),
-    h("button", { type: "button", title: "Undo (Ctrl+Z)", text: "↶", onclick: run(undo) }),
-    h("button", { type: "button", title: "Redo (Ctrl+Y)", text: "↷", onclick: run(redo) }),
+    h("button", { type: "button", title: t("editor.undo"), text: "↶", onclick: run(undo) }),
+    h("button", { type: "button", title: t("editor.redo"), text: "↷", onclick: run(redo) }),
     status,
   ) : null;
   return { element: h("div", { class: "pm-wrap" }, toolbar, mount), blocks: () => blocksFromDoc(view.state.doc), view };

@@ -259,6 +259,26 @@ function check(cond, msg) {
     await page.waitForSelector("text=Copy this token now");
     check(/wwbb_[0-9a-f]{64}/.test(await page.textContent("code")), "the token secret is shown once");
 
+    step("language: German on request, kept across sign-ins");
+    await page.selectOption("#language [name=language]", "de");
+    await page.waitForSelector("nav >> text=Bereiche");
+    check(await page.getAttribute("html", "lang") === "de", "the document is marked German");
+    check((await page.textContent("#password h2")) === "Passwort ändern", "the account page is German");
+    // A German browser does not override bert's own earlier choice (English,
+    // taken from his browser at his first sign-in).
+    const german = await browser.newContext({ locale: "de-CH" });
+    const bertDe = await german.newPage();
+    bertDe.on("pageerror", (e) => problems.push("bert's German page: " + e.message));
+    await bertDe.goto(base + "/");
+    await bertDe.waitForSelector("#login >> text=Anmelden"); // signed out: the browser's language
+    await bertDe.fill("#login [name=username]", "bert");
+    await bertDe.fill("#login [name=password]", "bert's password");
+    await bertDe.click("#login button[type=submit]");
+    await bertDe.waitForSelector("nav >> text=Spaces");
+    await german.close();
+    await page.selectOption("#language [name=language]", "en");
+    await page.waitForSelector("nav >> text=Spaces");
+
     step("log out, log in as bert, read the item");
     await page.click("text=Log out");
     await page.waitForSelector("#login");

@@ -314,3 +314,35 @@ func TestExternalUsers(t *testing.T) {
 		t.Fatal("a link to an unknown user loaded")
 	}
 }
+
+func TestLanguageIsKeptPerUserAndSurvivesReload(t *testing.T) {
+	a, j, _ := newAccounts(t)
+	u, err := a.CreateUser("anna", "anna's password")
+	noErr(t, err)
+	if got := a.Language(u.ID); got != "" {
+		t.Fatalf("a new user has language %q", got)
+	}
+	noErr(t, a.SetLanguage(u.ID, "de"))
+	n := len(j.records)
+	noErr(t, a.SetLanguage(u.ID, "de")) // unchanged: nothing recorded
+	if len(j.records) != n {
+		t.Error("an unchanged language was recorded again")
+	}
+	for _, bad := range []string{"german", "DE", "de-ch", "de_CH", "x"} {
+		if err := a.SetLanguage(u.ID, bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+	if err := a.SetLanguage("nobody", "de"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown user: %v", err)
+	}
+	b, err := New(j.records, j.append, WithIterations(1000))
+	noErr(t, err)
+	if got := b.Language(u.ID); got != "de" {
+		t.Fatalf("after reload: %q", got)
+	}
+	noErr(t, b.SetLanguage(u.ID, ""))
+	if got := b.Language(u.ID); got != "" {
+		t.Fatalf("cleared: %q", got)
+	}
+}
