@@ -1,7 +1,7 @@
 # ADR-0001: Unified item data model for knowledge and work
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Is a space itself an item or a separate container? How are type schemas migrated once instances exist? (see "Open questions")

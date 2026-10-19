@@ -1,7 +1,7 @@
 # ADR-0022: Space roles, narrowing restrictions, and a logged erasure role
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-17
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Should space admins be able to read restricted items (recoverability: nothing can be locked away for good) or must restrictions bind them too (privacy: HR and security content hidden even from space admins)?

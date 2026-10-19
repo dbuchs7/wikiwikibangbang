@@ -1,7 +1,7 @@
 # ADR-0015: One place names every resource budget, and a capped listing answers with a page
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 
