@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -40,14 +41,48 @@ func (f *fakeJira) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			map[string]any{"id": "customfield_10030", "name": "Notes", "custom": true, "schema": map[string]any{"type": "string"}},
 		})
 	case r.URL.Path == "/rest/api/3/project/PLAT":
-		answer(map[string]any{"id": "1", "key": "PLAT", "name": "Platform"})
+		answer(map[string]any{"id": "10000", "key": "PLAT", "name": "Platform"})
 	case r.URL.Path == "/rest/api/3/project/PLAT/statuses":
 		st := func(name, cat string) map[string]any {
 			return map[string]any{"name": name, "statusCategory": map[string]any{"key": cat}}
 		}
 		answer([]any{
-			map[string]any{"name": "Bug", "statuses": []any{st("Triage", "indeterminate"), st("Open", "new"), st("Done", "done")}},
-			map[string]any{"name": "Sub-task", "subtask": true, "statuses": []any{st("Open", "new"), st("Done", "done")}},
+			map[string]any{"id": "1", "name": "Bug", "statuses": []any{st("Triage", "indeterminate"), st("Open", "new"), st("Done", "done")}},
+			map[string]any{"id": "5", "name": "Sub-task", "subtask": true, "statuses": []any{st("Open", "new"), st("Done", "done")}},
+		})
+	case r.URL.Path == "/rest/api/3/workflows" && r.Method == http.MethodPost:
+		var req struct {
+			ProjectAndIssueTypes []struct{ ProjectID, IssueTypeID string } `json:"projectAndIssueTypes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.ProjectAndIssueTypes) != 1 || req.ProjectAndIssueTypes[0].ProjectID != "10000" {
+			f.t.Errorf("workflows asked with %+v, %v", req, err)
+		}
+		if req.ProjectAndIssueTypes[0].IssueTypeID != "1" {
+			http.Error(w, "forbidden", http.StatusForbidden) // the sub-task's workflow cannot be read
+			return
+		}
+		from := func(refs ...string) []any {
+			var out []any
+			for _, r := range refs {
+				out = append(out, map[string]any{"statusReference": r})
+			}
+			return out
+		}
+		answer(map[string]any{
+			"statuses": []any{
+				map[string]any{"id": "11", "name": "Triage", "statusReference": "11"},
+				map[string]any{"id": "12", "name": "Open", "statusReference": "12"},
+				map[string]any{"id": "13", "name": "Done", "statusReference": "13"},
+			},
+			"workflows": []any{map[string]any{"name": "Bug workflow", "transitions": []any{
+				map[string]any{"name": "Create", "type": "INITIAL", "toStatusReference": "11"},
+				map[string]any{"name": "Accept", "type": "DIRECTED", "from": from("11"), "toStatusReference": "12"},
+				map[string]any{"name": "Resolve", "type": "DIRECTED", "links": []any{map[string]any{"fromStatusReference": "12"}}, "to": map[string]any{"statusReference": "13"}},
+				map[string]any{"name": "Reopen", "type": "GLOBAL", "toStatusReference": "12"},
+				map[string]any{"name": "Back", "type": "DIRECTED", "from": from("13"), "toStatusReference": "12"},
+				map[string]any{"name": "Back", "type": "DIRECTED", "from": from("12"), "toStatusReference": "11"},
+				map[string]any{"name": "Archive", "type": "DIRECTED", "from": from("13"), "toStatusReference": "99"},
+			}}},
 		})
 	case r.URL.Path == "/rest/api/3/search/jql" && r.Method == http.MethodPost:
 		var req struct {
@@ -150,8 +185,15 @@ func TestJiraCloudReadsProjectsTypesAndIssues(t *testing.T) {
 			bug = it
 		}
 	}
-	if bug.Workflow.Initial != "Open" || !slices.Equal(bug.Workflow.Statuses, []string{"Triage", "Open", "Done"}) || len(bug.Workflow.Transitions) != 3 {
-		t.Errorf("bug workflow %+v", bug.Workflow)
+	wantBug := SrcWorkflow{Initial: "Triage", Statuses: []string{"Triage", "Open", "Done"}, Transitions: []SrcTransition{
+		{Name: "Accept", From: []string{"Triage"}, To: "Open"},
+		{Name: "Resolve", From: []string{"Open"}, To: "Done"},
+		{Name: "Reopen", From: []string{"Triage", "Done"}, To: "Open"},
+		{Name: "Back", From: []string{"Done"}, To: "Open"},
+		{Name: "Back (to Triage)", From: []string{"Open"}, To: "Triage"},
+	}}
+	if !reflect.DeepEqual(bug.Workflow, wantBug) {
+		t.Errorf("bug workflow\n%+v\nwant\n%+v", bug.Workflow, wantBug)
 	}
 	team := slices.IndexFunc(bug.Fields, func(f SrcField) bool { return f.ID == "customfield_10020" })
 	if team < 0 || bug.Fields[team].Kind != "option" || !slices.Equal(bug.Fields[team].Options, []string{"Core", "Edge"}) {
@@ -164,7 +206,7 @@ func TestJiraCloudReadsProjectsTypesAndIssues(t *testing.T) {
 		t.Errorf("users %+v", snap.Users)
 	}
 	text := fmt.Sprint(problems)
-	for _, want := range []string{"PLAT-4", "99999", "transitions are not read"} {
+	for _, want := range []string{"PLAT-4", "99999", "Sub-task no workflow was read", `"Archive" goes to a status`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("problems lack %q: %v", want, problems)
 		}
@@ -225,7 +267,7 @@ func TestJiraCloudImportsEndToEnd(t *testing.T) {
 		t.Error("the link was not imported")
 	}
 	// The imported workflow lets the issue move on.
-	if err := s.Transition("anna", plat1.ID, "done"); err != nil {
+	if err := s.Transition("anna", plat1.ID, "resolve"); err != nil {
 		t.Errorf("transition: %v", err)
 	}
 	again, err := Run(s, snap, m, Options{Actor: "import"})
