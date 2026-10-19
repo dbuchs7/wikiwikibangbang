@@ -45,7 +45,7 @@ export default {
   "search.title": "Suche",
 
   "spaces.none": "Sie haben noch in keinem Bereich eine Rolle. Wenden Sie sich an eine Administratorin oder einen Administrator.",
-  "spaces.noneAdmin": "Noch keine Bereiche. Erstellen Sie einen unter Administration.",
+  "spaces.noneAdmin": "Noch keine Bereiche. Erstellen Sie unten den ersten.",
   "spaces.title": "Bereiche",
 
   "space.board": "Board: {type}",
@@ -184,6 +184,7 @@ export default {
   "admin.title": "Administration",
   "admin.typeJson": "Typ als JSON",
   "admin.user": "Benutzer",
+  "admin.keyHint": "Grossbuchstaben und Ziffern, beginnend mit einem Buchstaben, z. B. DOCS",
 
   "role.editor": "Bearbeitungsrecht",
   "role.space-admin": "Bereichsadministration",
@@ -226,9 +227,12 @@ export default {
   "tree.empty": "Noch keine Seiten.",
   "tree.expand": "{title} aufklappen",
   "tree.collapse": "{title} zuklappen",
+  "tree.newPage": "+ Neue Seite",
   "space.allItems": "Alle Einträge",
   "space.noPages": "Dieser Bereich hat noch keine Seiten.",
   "space.homeEmpty": "Diese Seite ist leer.",
+  "space.firstPage": "Erste Seite erstellen",
+  "space.newPage": "Neue Seite",
   "item.moveUp": "Nach oben",
   "item.moveDown": "Nach unten",
   "item.newChild": "Neue Unterseite",
@@ -275,6 +279,9 @@ export default {
 
   "nav.notifications": "Benachrichtigungen",
   "nav.notificationsUnread": "Benachrichtigungen ({n})",
+  "nav.new": "Erstellen",
+  "nav.newButton": "+ Neu",
+  "nav.account": "Konto",
   "watch.start": "Beobachten",
   "watch.stop": "Nicht mehr beobachten",
   "watch.title": "Was Sie beobachten",
@@ -295,5 +302,18 @@ export default {
   "notif.restored": "hat wiederhergestellt:",
   "notif.commented": "hat kommentiert:",
   "notif.labels": "hat die Labels geändert bei",
-  "notif.attached": "hat eine Datei angehängt an"
+  "notif.attached": "hat eine Datei angehängt an",
+  "home.newPage": "Neue Seite",
+  "setup.title": "Erste Schritte: Typen",
+  "setup.noTypes": "Es gibt noch keine Typen, darum können keine Seiten erstellt werden. Erstellen Sie die vorbereiteten Typen Seite (page), Aufgabe (task) und Entscheid (decision), oder definieren Sie eigene unter Administration.",
+  "setup.someTypes": "Noch nicht definierte vorbereitete Typen: {list}.",
+  "setup.create": "{list} erstellen",
+  "new.title": "Erstellen",
+  "new.page": "Neue Seite oder neuer Eintrag",
+  "new.noTypes": "Es gibt noch keine Typen. Bitten Sie eine Administratorin oder einen Administrator, sie zu erstellen.",
+  "new.noTypesAdmin": "Es gibt noch keine Typen. Erstellen Sie unten die vorbereiteten.",
+  "new.noSpace": "Sie dürfen in keinem Bereich Seiten erstellen. Bitten Sie um das Bearbeitungsrecht.",
+  "new.noSpaceAdmin": "Es gibt noch keinen Bereich. Erstellen Sie unten einen.",
+  "new.moreAdmin": "Typen, Benutzer, Gruppen und Rollen richten Sie ein unter",
+  "new.under": "Unterhalb von «{title}»"
 };

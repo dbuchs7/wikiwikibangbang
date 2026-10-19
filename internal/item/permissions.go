@@ -242,6 +242,12 @@ func (x *Session) readable(id ID) (*Item, error) {
 }
 
 // editable returns the item if the principal may edit it.
+// CanEdit reports whether the principal may change an item now.
+func (x *Session) CanEdit(id ID) bool {
+	_, err := x.editable(id)
+	return err == nil
+}
+
 func (x *Session) editable(id ID) (*Item, error) {
 	it, err := x.readable(id)
 	if err != nil {
@@ -305,6 +311,10 @@ func (x *Session) ByKey(key string) (Item, error) {
 	}
 	return x.Get(id)
 }
+
+// Role is the principal's role in a space: Viewer, Editor, SpaceAdmin, or
+// zero when they hold none.
+func (x *Session) Role(space string) Role { return x.s.spaceRole(x.who, space) }
 
 // Spaces lists the spaces in which the principal holds a role.
 func (x *Session) Spaces() []SpaceInfo {

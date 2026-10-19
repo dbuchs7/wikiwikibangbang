@@ -9,8 +9,9 @@ import { t } from "./i18n.js";
 // pageTree returns the tree as a <details>: a sidebar on wide screens, a
 // block that folds away on narrow ones. current is the ID of the page
 // shown, open the IDs of its ancestors; onMoved runs after a page moved,
-// onError with a failed request.
-export function pageTree({ space, current = "", open = [], onMoved, onError }) {
+// onError with a failed request. newPage, if given, is the address that
+// creates a page here.
+export function pageTree({ space, current = "", open = [], newPage = "", onMoved, onError }) {
   const opened = new Set(open);
   // A list of links with disclosure buttons, not an ARIA tree: that role
   // promises arrow-key navigation this tree does not have.
@@ -18,6 +19,7 @@ export function pageTree({ space, current = "", open = [], onMoved, onError }) {
   // Folded on narrow screens, where it would push the page down.
   const wide = !window.matchMedia || window.matchMedia("(min-width: 801px)").matches;
   const box = h("details", { class: "tree-box", open: wide }, h("summary", { text: t("tree.title") }),
+    newPage ? h("a", { class: "tree-new", href: newPage, text: t("tree.newPage") }) : null,
     h("nav", { "aria-label": t("tree.title") }, root));
   let dragged = null;
 

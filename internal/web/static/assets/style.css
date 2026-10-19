@@ -373,3 +373,17 @@ ul.notifications li.unread { font-weight: 600; }
 ul.notifications li.unread::before { content: "● "; color: var(--accent); }
 button.secondary { background: var(--surface); color: var(--accent); }
 button.secondary:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* Creating and finding actions (discoverability): a view's heading with
+   its main actions, role badges, the tree's "new page" link. */
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.page-head h1, .page-head form { margin: 0; }
+.page-head .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+a.button { display: inline-block; }
+.badge { display: inline-block; padding: 0 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 0.8em; }
+.tree-new { display: block; margin: 4px 0 8px; font-weight: 600; }
+.card.empty { text-align: left; }
+.notice-card { border-left: 4px solid var(--accent); }
+label.check { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
+#nav-new { white-space: nowrap; }
+details.card > summary { cursor: pointer; font-weight: 600; }

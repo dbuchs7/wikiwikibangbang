@@ -47,7 +47,7 @@ export default {
   "search.title": "Search",
 
   "spaces.none": "You have no role in any space yet. Ask an administrator.",
-  "spaces.noneAdmin": "No spaces yet. Create one under Administration.",
+  "spaces.noneAdmin": "No spaces yet. Create the first one below.",
   "spaces.title": "Spaces",
 
   "space.board": "Board: {type}",
@@ -186,6 +186,7 @@ export default {
   "admin.title": "Administration",
   "admin.typeJson": "Type as JSON",
   "admin.user": "User",
+  "admin.keyHint": "Capital letters and digits, starting with a letter, e.g. DOCS",
 
   "role.editor": "editor",
   "role.space-admin": "space administrator",
@@ -228,9 +229,12 @@ export default {
   "tree.empty": "No pages yet.",
   "tree.expand": "Expand {title}",
   "tree.collapse": "Collapse {title}",
+  "tree.newPage": "+ New page",
   "space.allItems": "All items",
   "space.noPages": "This space has no pages yet.",
   "space.homeEmpty": "This page is empty.",
+  "space.firstPage": "Create the first page",
+  "space.newPage": "New page",
   "item.moveUp": "Move up",
   "item.moveDown": "Move down",
   "item.newChild": "New child page",
@@ -277,6 +281,9 @@ export default {
 
   "nav.notifications": "Notifications",
   "nav.notificationsUnread": "Notifications ({n})",
+  "nav.new": "Create",
+  "nav.newButton": "+ New",
+  "nav.account": "Account",
   "watch.start": "Watch",
   "watch.stop": "Stop watching",
   "watch.title": "What you watch",
@@ -297,5 +304,18 @@ export default {
   "notif.restored": "restored",
   "notif.commented": "commented on",
   "notif.labels": "changed the labels of",
-  "notif.attached": "attached a file to"
+  "notif.attached": "attached a file to",
+  "home.newPage": "New page",
+  "setup.title": "Get started: item types",
+  "setup.noTypes": "There are no item types yet, so no pages can be created. Create the ready-made types page, task and decision, or define your own under Administration.",
+  "setup.someTypes": "Ready-made types not defined yet: {list}.",
+  "setup.create": "Create {list}",
+  "new.title": "Create",
+  "new.page": "New page or item",
+  "new.noTypes": "There are no item types yet. Ask an administrator to create them.",
+  "new.noTypesAdmin": "There are no item types yet. Create the ready-made ones below.",
+  "new.noSpace": "You may not create pages in any space. Ask an administrator for the editor role.",
+  "new.noSpaceAdmin": "There is no space yet. Create one below.",
+  "new.moreAdmin": "Types, users, groups and roles are set up under",
+  "new.under": "Below “{title}”"
 };

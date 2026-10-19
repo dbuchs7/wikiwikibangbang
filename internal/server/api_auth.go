@@ -115,10 +115,12 @@ func (h authHandlers) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h authHandlers) isAdmin(p auth.Principal) bool {
-	admin := false
-	h.d.DB.Read(func(s *item.Store) { admin = s.HasSystemRole(string(p.User), item.RoleAdmin) })
-	return admin
+func (h authHandlers) isAdmin(p auth.Principal) bool { return h.hasSystemRole(p, item.RoleAdmin) }
+
+func (h authHandlers) hasSystemRole(p auth.Principal, role string) bool {
+	held := false
+	h.d.DB.Read(func(s *item.Store) { held = s.HasSystemRole(string(p.User), role) })
+	return held
 }
 
 func (h authHandlers) me(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +130,9 @@ func (h authHandlers) me(w http.ResponseWriter, r *http.Request) {
 		"via":   p.Via,
 		"scope": p.Scope,
 		"admin": h.isAdmin(p),
+		// Whether the caller may erase content for good (ADR-0026), so the
+		// UI offers redaction only to them.
+		"erasure": h.hasSystemRole(p, item.RoleErasure),
 		// The UI language the user chose (ADR-0017), or empty: the UI
 		// then suggests the browser's language once.
 		"language":  h.d.DB.Accounts.Language(p.User),

@@ -202,7 +202,7 @@ func (h itemHandlers) listSpaces(w http.ResponseWriter, r *http.Request) {
 	h.read(w, r, func(x *item.Session) (any, error) {
 		out := []spaceJSON{}
 		for _, sp := range x.Spaces() {
-			out = append(out, spaceJSON(sp))
+			out = append(out, spaceJSON{Key: sp.Key, Name: sp.Name, Role: roleName(x.Role(sp.Key))})
 		}
 		return map[string]any{"spaces": out}, nil
 	})
@@ -225,6 +225,16 @@ func (h itemHandlers) createSpace(w http.ResponseWriter, r *http.Request) {
 }
 
 var roleByName = map[string]item.Role{"viewer": item.Viewer, "editor": item.Editor, "space-admin": item.SpaceAdmin}
+
+// roleName is the API name of a role, or empty for none.
+func roleName(r item.Role) string {
+	for name, role := range roleByName {
+		if role == r {
+			return name
+		}
+	}
+	return ""
+}
 
 func (h itemHandlers) grantRole(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -448,7 +458,9 @@ func (h itemHandlers) getItem(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		return map[string]itemJSON{"item": toItemJSON(it)}, nil
+		// editable tells the UI whether to offer changes: the caller's
+		// role, the item's restriction and an import's hold decide it.
+		return map[string]any{"item": toItemJSON(it), "editable": x.CanEdit(it.ID)}, nil
 	})
 }
 

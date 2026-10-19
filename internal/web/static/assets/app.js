@@ -44,8 +44,10 @@ function field(label, input) {
   return h("label", { class: "field" }, h("span", { text: label }), input);
 }
 
-function link(href, text) {
-  return h("a", { href, text });
+// link is an anchor; cls styles it, e.g. "button" for an action that
+// navigates.
+function link(href, text, cls, id) {
+  return h("a", { href, text, class: cls || null, id: id || null });
 }
 
 // --- watching (ADR-0046) --------------------------------------------------------
@@ -253,10 +255,15 @@ function renderFooter() {
 
 // modules are offered behind the nine dots, as in the atlas console. match
 // names the route sections that belong to a module, for its highlight.
+// admin marks the modules only administrators see.
 const modules = [
   { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"] },
+  { id: "new", name: "nav.new", href: "#/new", match: ["new"] },
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks"] },
+  { id: "notifications", name: "nav.notifications", href: "#/notifications", match: ["notifications"] },
   { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"] },
+  { id: "account", name: "nav.account", href: "#/account", match: ["account"] },
+  { id: "admin", name: "nav.admin", href: "#/admin", match: ["admin"], admin: true },
 ];
 
 const switcher = document.getElementById("app-switcher");
@@ -291,7 +298,7 @@ document.addEventListener("keydown", (ev) => {
 // renderModules lists the modules and marks the one the route belongs to.
 function renderModules(section) {
   switcher.hidden = !me;
-  mount(document.getElementById("drawer-apps"), ...modules.map((m) =>
+  mount(document.getElementById("drawer-apps"), ...modules.filter((m) => !m.admin || me?.admin).map((m) =>
     h("a", { href: m.href, class: m.match.includes(section) ? "active" : "", "aria-current": m.match.includes(section) ? "page" : "false", text: t(m.name) })));
 }
 
@@ -326,11 +333,24 @@ function renderNav() {
   // page tree navigates within a space (ADR-0041).
   mount(nav,
     search,
+    h("button", { id: "nav-new", class: "primary", type: "button", text: t("nav.newButton"), onclick: () => { location.hash = newHref(); } }),
     bell,
     me.admin ? link("#/admin", t("nav.admin")) : null,
     link("#/account", me.user.username),
     h("button", { class: "link", onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }, t("nav.logout")),
   );
+}
+
+// here is where the user is: the space and item shown, so that "New"
+// creates in the right place. Views set it; route() clears it.
+const here = { space: "", parent: "" };
+
+// newHref is the address of the creation view for the place shown.
+function newHref(space = here.space, parent = here.parent) {
+  const q = new URLSearchParams();
+  if (space) q.set("space", space);
+  if (parent) q.set("parent", parent);
+  return "#/new" + (q.size ? "?" + q : "");
 }
 
 // navigation counts route() calls. A view shows its content only if no
@@ -354,6 +374,7 @@ async function route() {
   const hash = location.hash.replace(/^#/, "") || "/";
   for (const fn of leaving) fn();
   leaving = [];
+  here.space = here.parent = "";
   const show = (navigation++, screen());
   try {
     if (!me) {
@@ -368,9 +389,11 @@ async function route() {
     renderFooter();
     closeDrawer();
     const [, section, arg, arg2] = hash.split("?")[0].split("/").map(decodeURIComponent);
+    const params = new URLSearchParams(hash.split("?")[1] || "");
     renderModules(section || "");
     if (!me) return loginView();
     switch (section) {
+      case "new": return await newView(params);
       case "tasks": return await tasksView();
       case "space": return await spaceView(arg);
       case "board": return await boardView(arg, arg2);
@@ -459,29 +482,125 @@ async function searchView(q) {
 
 // --- spaces ------------------------------------------------------------------
 
+// roleText names a space role for people.
+function roleText(role) {
+  switch (role) {
+    case "viewer": return t("role.viewer");
+    case "editor": return t("role.editor");
+    case "space-admin": return t("role.space-admin");
+    default: return role || "";
+  }
+}
+
+// mayEdit says whether a role lets one create and change pages.
+const mayEdit = (role) => role === "editor" || role === "space-admin";
+
 async function homeView() {
   const show = screen();
-  const { spaces } = await get("/api/spaces");
+  const [{ spaces }, { types }] = await Promise.all([get("/api/spaces"), get("/api/types")]);
+  const anyEditable = spaces.some((s) => mayEdit(s.role));
   show(
-    h("h1", { text: t("spaces.title") }),
+    h("div", { class: "page-head" },
+      h("h1", { text: t("spaces.title") }),
+      anyEditable ? h("p", { class: "actions" }, link("#/new", t("home.newPage"), "button primary")) : null),
     spaces.length === 0
       ? h("p", { class: "muted", text: me.admin ? t("spaces.noneAdmin") : t("spaces.none") })
-      : h("ul", { class: "list" }, spaces.map((s) => h("li", {}, link("#/space/" + encodeURIComponent(s.key), s.name), " ", h("span", { class: "muted", text: s.key })))),
+      : h("ul", { class: "list spaces" }, spaces.map((s) => h("li", {},
+        link("#/space/" + encodeURIComponent(s.key), s.name), " ", h("span", { class: "muted", text: s.key }), " ",
+        h("span", { class: "badge", text: roleText(s.role) })))),
+    me.admin ? setupCard(types) : null,
+    me.admin ? newSpaceForm(spaces.length === 0) : null,
+  );
+}
+
+// newSpaceForm creates a space and opens it (administrators). It starts
+// folded unless open is set.
+function newSpaceForm(open) {
+  const f = form({ id: "create-space" }, [
+    field(t("admin.key"), h("input", { name: "key", required: true, pattern: "[A-Z][A-Z0-9]*", placeholder: "DOCS", title: t("admin.keyHint") })),
+    field(t("field.name"), h("input", { name: "name", required: true })),
+    h("button", { type: "submit", class: "primary", text: t("admin.createSpace") }),
+  ], async (d) => {
+    await post("/api/spaces", { key: d.get("key"), name: d.get("name") });
+    location.hash = "#/space/" + encodeURIComponent(d.get("key"));
+  });
+  return h("details", { class: "card", id: "new-space-card", open: open || null }, h("summary", { text: t("admin.newSpace") }), f);
+}
+
+// typeTemplates are ready-made types for a new installation: types are
+// data (ADR-0001), so an empty server has none until someone defines them.
+const typeTemplates = [
+  { name: "page", body: true, fields: [{ name: "owner", kind: "user" }] },
+  { name: "task", body: true,
+    fields: [{ name: "assignee", kind: "user" }, { name: "due", kind: "date" }, { name: "priority", kind: "enum", values: ["low", "normal", "high"] }],
+    workflow: { initial: "open", states: ["open", "in progress", "done"],
+      transitions: [{ name: "start", from: ["open"], to: "in progress" }, { name: "finish", from: ["open", "in progress"], to: "done" },
+        { name: "reopen", from: ["done"], to: "open" }] } },
+  { name: "decision", body: true, fields: [{ name: "decided", kind: "date" }],
+    workflow: { initial: "proposed", states: ["proposed", "accepted", "rejected"],
+      transitions: [{ name: "accept", from: ["proposed"], to: "accepted" }, { name: "reject", from: ["proposed"], to: "rejected" }] } },
+];
+
+// setupCard offers administrators the ready-made types that are missing.
+function setupCard(types) {
+  const missing = typeTemplates.filter((tt) => !types.some((ty) => ty.name === tt.name));
+  if (missing.length === 0) return null;
+  const status = h("div", { class: "status" });
+  return h("section", { class: "card notice-card", id: "setup-types" },
+    h("h2", { text: t("setup.title") }),
+    h("p", { text: types.length ? t("setup.someTypes", { list: missing.map((m) => m.name).join(", ") }) : t("setup.noTypes") }),
+    h("button", { class: "primary", text: t("setup.create", { list: missing.map((m) => m.name).join(", ") }),
+      onclick: () => action(async () => { for (const tt of missing) await post("/api/types", tt); }, status) }),
+    status);
+}
+
+// newView creates a page or another item, and for administrators a space:
+// one place that lists what can be created (#/new?space=X&parent=Y).
+async function newView(params) {
+  const show = screen();
+  const [{ spaces }, { types }] = await Promise.all([get("/api/spaces"), get("/api/types")]);
+  const editable = spaces.filter((s) => mayEdit(s.role));
+  let parent = null;
+  if (params.get("parent")) parent = (await get("/api/items/" + encodeURIComponent(params.get("parent")))).item;
+  const space = editable.some((s) => s.key === params.get("space")) ? params.get("space") : editable[0]?.key;
+  here.space = space || "";
+  let pageCard;
+  if (types.length === 0) {
+    pageCard = h("p", { class: "muted", text: me.admin ? t("new.noTypesAdmin") : t("new.noTypes") });
+  } else if (editable.length === 0) {
+    pageCard = h("p", { class: "muted", text: me.admin ? t("new.noSpaceAdmin") : t("new.noSpace") });
+  } else {
+    pageCard = newItemForm({ space, spaces: editable, types, parent: parent && parent.space === space ? parent : null, heading: t("new.page") });
+  }
+  show(
+    h("h1", { text: t("new.title") }),
+    pageCard,
+    me.admin ? setupCard(types) : null,
+    me.admin ? newSpaceForm(spaces.length === 0) : null,
+    me.admin ? h("p", { class: "muted" }, t("new.moreAdmin"), " ", link("#/admin", t("nav.admin"))) : null,
   );
 }
 
 async function spaceView(key) {
   const show = screen();
-  const [{ types }, first, top, { labels }, { watches }] = await Promise.all([
+  const [{ types }, first, top, { labels }, { watches }, { spaces }] = await Promise.all([
     get("/api/types"),
     get(`/api/items?space=${encodeURIComponent(key)}&limit=100`),
     get(`/api/spaces/${encodeURIComponent(key)}/tree?limit=1`),
     get(`/api/labels?space=${encodeURIComponent(key)}`),
     get("/api/me/watches"),
+    get("/api/spaces"),
   ]);
+  here.space = key;
+  const sp = spaces.find((s) => s.key === key) || { key, name: key, role: "" };
+  const canEdit = mayEdit(sp.role);
   const status = h("div", { class: "status" });
+  const create = canEdit ? newItemForm({ space: key, types }) : null;
+  // "New page" leads to the form at the end of the view.
+  const toForm = () => { create.scrollIntoView({ block: "start" }); create.querySelector("[name=title]").focus(); };
   // The space's home is its first page at the top of the tree.
-  let home = h("p", { class: "muted", text: t("space.noPages") });
+  let home = h("section", { class: "card empty" }, h("p", { class: "muted", text: t("space.noPages") }),
+    create ? h("button", { class: "primary", text: t("space.firstPage"), onclick: toForm }) : null);
   if (top.items.length) {
     const [{ item }, { embeds }] = await Promise.all([get("/api/items/" + top.items[0].id), get(`/api/items/${top.items[0].id}/embeds`)]);
     home = h("section", { id: "home", class: "card" },
@@ -507,11 +626,14 @@ async function spaceView(key) {
   addRows(first);
   const boards = types.filter((ty) => ty.workflow)
     .map((ty) => link(`#/board/${encodeURIComponent(key)}/${encodeURIComponent(ty.name)}`, t("space.board", { type: ty.name })));
-  const tree = pageTree({ space: key, onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
+  const tree = pageTree({ space: key, newPage: canEdit ? newHref(key, "") : "", onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
   show(withTree(tree,
     h("p", {}, link("#/", t("nav.spaces")), " / " + key),
-    h("h1", { text: key }),
-    h("p", {}, watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status)),
+    h("div", { class: "page-head" },
+      h("h1", { text: sp.name }),
+      h("p", { class: "actions" },
+        create && types.length ? h("button", { class: "primary", id: "space-new-page", text: t("space.newPage"), onclick: toForm }) : null,
+        watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status))),
     h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance"))].flatMap((b, i) => i ? [" · ", b] : [b])),
     status,
     home,
@@ -521,7 +643,7 @@ async function spaceView(key) {
     h("p", { class: "muted", text: t("space.items", { n: first.total.value }) }),
     h("table", {}, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type"), t("col.state")].map((c) => h("th", { text: c })))), rows),
     more,
-    newItemForm(key, types),
+    create,
   ));
 }
 
@@ -771,10 +893,22 @@ function readProperty(f, el) {
   return v;
 }
 
-// newItemForm creates an item in a space, below parent if one is given;
-// "page" is preselected when the type exists.
-function newItemForm(space, types, parent = "", heading = t("item.new"), id = "new-item") {
+// newItemForm creates an item in a space, below parent (an item) if one is
+// given; "page" is preselected when the type exists. With spaces, the
+// space is chosen in the form.
+function newItemForm({ space, spaces = null, types, parent = null, heading = t("item.new"), id = "new-item" }) {
   if (types.length === 0) return null;
+  const spaceSelect = spaces && spaces.length > 1
+    ? h("select", { name: "space" }, spaces.map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})`, selected: s.key === space })))
+    : null;
+  const under = parent ? h("input", { type: "checkbox", name: "under", checked: true }) : null;
+  // A page lies below its parent only in the parent's space.
+  if (spaceSelect && under) {
+    spaceSelect.addEventListener("change", () => {
+      under.disabled = spaceSelect.value !== parent.space;
+      if (under.disabled) under.checked = false;
+    });
+  }
   const fields = h("div");
   const typeSelect = h("select", { name: "type" }, types.map((ty) => h("option", { value: ty.name, text: ty.name, selected: ty.name === "page" })));
   const showFields = () => {
@@ -785,6 +919,8 @@ function newItemForm(space, types, parent = "", heading = t("item.new"), id = "n
   showFields();
   const f = form({ class: "card", id }, [
     h("h2", { text: heading }),
+    spaceSelect ? field(t("col.space"), spaceSelect) : null,
+    under ? h("label", { class: "check" }, under, " ", t("new.under", { title: parent.title || parent.key })) : null,
     field(t("col.type"), typeSelect),
     field(t("col.title"), h("input", { name: "title", required: true })),
     fields,
@@ -796,7 +932,9 @@ function newItemForm(space, types, parent = "", heading = t("item.new"), id = "n
       const v = readProperty(fd, f.querySelector(`[name="p:${CSS.escape(fd.name)}"]`));
       if (v !== null) properties[fd.name] = v;
     }
-    const { item } = await post("/api/items", { space, type: ty.name, parent, title: f.querySelector("[name=title]").value, properties });
+    const target = spaceSelect ? spaceSelect.value : space;
+    const below = under && under.checked && !under.disabled ? parent.id : "";
+    const { item } = await post("/api/items", { space: target, type: ty.name, parent: below, title: f.querySelector("[name=title]").value, properties });
     location.hash = "#/item/" + encodeURIComponent(item.key);
   });
   return f;
@@ -806,7 +944,7 @@ function newItemForm(space, types, parent = "", heading = t("item.new"), id = "n
 
 async function itemView(ref) {
   const show = screen();
-  const { item } = await get("/api/items/" + encodeURIComponent(ref));
+  const { item, editable } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
   const [{ types }, history, out, inc, embeds, comments, { attachments }, { watches }] = await Promise.all([
     get("/api/types"),
@@ -827,20 +965,25 @@ async function itemView(ref) {
   ]);
   const status = h("div", { class: "status" });
   const live = item.presence === "live";
-  const threads = commentThreads(path, comments, live);
+  // Changes are offered only to who may make them (role, restriction,
+  // import hold); the server decides again on every request.
+  const canEdit = live && editable;
+  here.space = item.space;
+  here.parent = item.id;
+  const threads = commentThreads(path, comments, canEdit);
 
   // Moving up or down among the siblings: the keyboard's way to reorder,
   // besides dragging in the tree (ADR-0041).
   const at = siblings.items.findIndex((n) => n.id === item.id);
   const place = (before) => action(() => post(path + "/move", { space: item.space, parent: item.parent || "", before }), status);
   const reorder = [];
-  if (live && at > 0) reorder.push(h("button", { text: t("item.moveUp"), onclick: () => place(siblings.items[at - 1].id) }));
-  if (live && at >= 0 && (at + 1 < siblings.items.length)) {
+  if (canEdit && at > 0) reorder.push(h("button", { text: t("item.moveUp"), onclick: () => place(siblings.items[at - 1].id) }));
+  if (canEdit && at >= 0 && (at + 1 < siblings.items.length)) {
     const after = siblings.items[at + 2];
     if (after || !siblings.next) reorder.push(h("button", { text: t("item.moveDown"), onclick: () => place(after ? after.id : "") }));
   }
 
-  const title = live
+  const title = canEdit
     ? form({ class: "inline", id: "title" }, [
       h("input", { name: "title", value: item.title, class: "title", "aria-label": t("col.title") }),
       h("button", { type: "submit", text: t("item.saveTitle") }),
@@ -849,22 +992,22 @@ async function itemView(ref) {
 
   const props = h("table", { class: "props" }, type.fields.map((f) => {
     const input = propertyInput(f, item.properties[f.name]);
-    input.disabled = !live;
+    input.disabled = !canEdit;
     return h("tr", {},
       h("th", { text: f.name }),
       h("td", {}, input),
-      h("td", {}, live ? h("button", { text: t("common.save"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) }), status) }) : null),
+      h("td", {}, canEdit ? h("button", { text: t("common.save"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) }), status) }) : null),
     );
   }));
 
-  const transitions = type.workflow && live
+  const transitions = type.workflow && canEdit
     ? type.workflow.transitions.filter((tr) => tr.from.includes(item.state))
       .map((tr) => h("button", { text: tr.name, onclick: () => action(() => post(path + "/transitions", { name: tr.name }), status) }))
     : [];
 
-  const actions = item.presence === "live"
+  const actions = canEdit
     ? [h("button", { text: t("item.trash"), onclick: () => action(() => post(path + "/trash"), status) })]
-    : item.presence === "trashed"
+    : item.presence === "trashed" && editable
       ? [h("button", { text: t("item.restore"), onclick: () => action(() => post(path + "/restore"), status) }),
         h("button", { class: "danger", text: t("item.purge"), onclick: () => confirm(t("item.purgeConfirm")) && action(() => post(path + "/purge"), status) })]
       : [];
@@ -872,24 +1015,25 @@ async function itemView(ref) {
   const lastRestriction = history.events.filter((e) => e.kind === "RestrictionSet").pop();
   const guarded = item.restriction?.read?.length && lastRestriction?.actor === "governance";
   // The tree opens down to the page and shows the page's own children.
-  const tree = pageTree({ space: item.space, current: item.id, open: [...open, item.id], onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
+  const tree = pageTree({ space: item.space, current: item.id, newPage: canEdit ? newHref(item.space, item.id) : "", open: [...open, item.id], onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
   show(withTree(tree,
     h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
-    title,
+    h("div", { class: "page-head" }, title,
+      canEdit ? h("p", { class: "actions" }, link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child")) : null),
     guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
     h("p", { class: "muted" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : "", t("item.version", { n: item.version })),
-    labelsLine(path, item, live, status),
+    labelsLine(path, item, canEdit, status),
     item.presence === "live" ? h("p", {}, watchButton(path, watches.some((w) => w.item === item.id), status)) : null,
     status,
     transitions.length ? h("p", {}, t("item.transitions"), transitions) : null,
     type.fields.length ? h("section", {}, h("h2", { text: t("item.properties") }), props) : null,
     type.body ? bodyEditor(item, embeds.embeds, live, threads) : null,
     relationsSection(out.relations, inc.relations, item.id),
-    attachmentsSection(path, attachments, live),
+    attachmentsSection(path, attachments, canEdit),
     threads.section,
     h("p", {}, reorder, actions),
-    live ? newItemForm(item.space, types, item.id, t("item.newChild"), "new-child") : null,
-    historySection(path, history.events, live),
+    canEdit ? newItemForm({ space: item.space, types, parent: item, heading: t("item.newChild"), id: "new-child" }) : null,
+    historySection(path, history.events, canEdit),
   ));
 }
 

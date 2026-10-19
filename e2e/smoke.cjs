@@ -216,7 +216,8 @@ function check(cond, msg) {
     step("app switcher: nine dots open the modules; Tasks lists open work across spaces");
     await page.click("#app-switcher");
     await page.waitForSelector("#drawer:not([hidden])");
-    check((await page.locator("#drawer-apps a").allTextContents()).join(",") === "Spaces,Tasks,Governance", "the three modules");
+    const modules = (await page.locator("#drawer-apps a").allTextContents()).join(",");
+    check(modules === "Spaces,Create,Tasks,Notifications,Governance,Account,Administration", "the modules of an administrator: " + modules);
     await page.keyboard.press("Escape");
     await page.waitForSelector("#drawer", { state: "hidden" });
     await page.click("#app-switcher");
@@ -265,6 +266,21 @@ function check(cond, msg) {
     await page.waitForFunction(() => [...document.querySelectorAll(".tree li.open > ul > li > .tree-row a")].map((a) => a.textContent).join(",") === "Upgrade,Install");
     await page.dragAndDrop(".tree .tree-row:has(a:text-is('Install'))", ".tree .tree-row:has(a:text-is('Upgrade'))", { targetPosition: { x: 40, y: 1 } });
     await page.waitForFunction(() => [...document.querySelectorAll(".tree li.open > ul > li > .tree-row a")].map((a) => a.textContent).join(",") === "Install,Upgrade");
+
+    step("creating: New offers a page below the page shown, in its space");
+    await page.click(".tree a:has-text('Upgrade')");
+    await page.waitForSelector("#item-new-child");
+    await page.click("#nav-new");
+    await page.waitForSelector("#new-item [name=under]:checked");
+    await page.fill("#new-item [name=title]", "Created from New");
+    await page.selectOption("#new-item [name=type]", "task");
+    await page.selectOption("#new-item [name='p:priority']", "low");
+    await page.click("#new-item button[type=submit]");
+    await page.waitForSelector(".tree a.current:has-text('Created from New')");
+    check(await page.locator(".tree li.open > .tree-row a:has-text('Upgrade')").count() === 1, "the new page lies below the page it was created from");
+    await page.click("#item-new-child"); // the item's own "new child page"
+    await page.waitForSelector("#new-item [name=under]:checked");
+    await page.goBack();
 
     step("blocks: a task, a warning panel, a table and a table of contents survive a reload");
     await page.click(".tree a:has-text('Install')");
