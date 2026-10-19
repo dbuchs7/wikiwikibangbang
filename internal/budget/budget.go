@@ -47,6 +47,9 @@ type Budgets struct {
 	LoginTracked int
 	// SSOPending bounds the single sign-on logins begun and not finished.
 	SSOPending int
+	// LinkCheckLinks bounds the distinct web addresses one link check
+	// calls (ADR-0039).
+	LinkCheckLinks int
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
@@ -61,6 +64,7 @@ func Default() Budgets {
 		LiveBlocks:       5000,
 		LoginTracked:     100_000,
 		SSOPending:       10_000,
+		LinkCheckLinks:   500,
 	}
 }
 

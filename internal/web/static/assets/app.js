@@ -122,6 +122,7 @@ async function route() {
     switch (section) {
       case "space": return await spaceView(arg);
       case "board": return await boardView(arg, arg2);
+      case "links": return await linksView(arg);
       case "item": return await itemView(arg);
       case "search": return await searchView(arg || "");
       case "account": return await accountView();
@@ -227,7 +228,7 @@ async function spaceView(key) {
   show(
     h("p", {}, link("#/", "Spaces"), " / " + key),
     h("h1", { text: key }),
-    boards.length ? h("p", {}, boards.flatMap((b, i) => i ? [" · ", b] : [b])) : null,
+    h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, "Link check")].flatMap((b, i) => i ? [" · ", b] : [b])),
     h("p", { class: "muted", text: `${first.total.value} items` }),
     h("table", {}, h("thead", {}, h("tr", {}, ["Key", "Title", "Type", "State"].map((c) => h("th", { text: c })))), rows),
     more,
@@ -295,6 +296,53 @@ async function boardView(key, typeName) {
     page.next ? h("p", { class: "notice", text: `This board shows the first ${items.length} items.` }) : null,
     status,
     h("div", { class: "board" }, type.workflow.states.map(column)),
+  );
+}
+
+// --- link check --------------------------------------------------------------
+
+// linksView shows the latest link check of a space (ADR-0039): the broken
+// web links of items one may read, with who is to fix each. A space
+// administrator starts a run; while it runs the view refreshes itself.
+async function linksView(key) {
+  const show = screen();
+  const path = `/api/spaces/${encodeURIComponent(key)}/linkcheck`;
+  const report = await get(path);
+  const status = h("div", { class: "status" });
+  const who = (id) => id === me.user.id ? "you" : id;
+  let body;
+  if (!report.enabled) {
+    body = h("p", { class: "notice", text: "Link checking is switched off on this server. An administrator enables it with WWBB_LINKCHECK=on." });
+  } else {
+    const start = h("button", { text: report.running ? "Checking…" : "Check links", disabled: report.running,
+      onclick: () => action(() => post(path), status) });
+    const summary = !report.started ? "No check has run yet."
+      : report.running ? `Checking since ${when(report.started)}…`
+        : `Checked ${report.checked} addresses, finished ${when(report.finished)}${report.truncated ? " (only the first ones; the space has more)" : ""}.`;
+    body = h("div", {},
+      h("p", {}, start, " ", h("span", { class: "muted", text: summary })),
+      status,
+      report.finished && !report.running
+        ? (report.broken.length
+          ? h("table", {}, h("thead", {}, h("tr", {}, ["Item", "Link", "Problem", "Responsible"].map((c) => h("th", { text: c })))),
+            h("tbody", {}, report.broken.map((b) => h("tr", {},
+              h("td", {}, link("#/item/" + encodeURIComponent(b.key), b.key), " ", h("span", { class: "muted", text: b.title })),
+              h("td", { class: "href", text: b.href }),
+              h("td", { text: b.problem }),
+              h("td", { text: b.responsible ? who(b.responsible) : "—" }),
+            ))))
+          : h("p", { text: "No broken links found." }))
+        : null,
+    );
+    if (report.running) {
+      const timer = setTimeout(route, 2000);
+      onLeave(() => clearTimeout(timer));
+    }
+  }
+  show(
+    h("p", {}, link("#/", "Spaces"), " / ", link("#/space/" + encodeURIComponent(key), key), " / link check"),
+    h("h1", { text: `${key} · link check` }),
+    h("section", { id: "linkcheck" }, body),
   );
 }
 

@@ -107,7 +107,14 @@ On a space's page, *Board: task* shows the space's tasks as columns, one per wor
 - Is it clear why a card cannot be dropped on some columns?
 - **The open question:** is creation order enough, or do you need to order cards by hand, filter them, or see several states in one column?
 
-### 8. Everything else
+### 8. Link check (ADR-0039)
+
+Only if the server runs with `WWBB_LINKCHECK=on`. Put links into a body, some working, some not, and one to an address in your home network. As a space administrator, open *Link check* on the space's page and start a check.
+
+- Does the list name the right items and the person who edited them last?
+- Is a page reported as broken that works in your browser? Say which one; some sites turn away automated checks.
+
+### 9. Everything else
 
 Search, item history, relations, mentions (toolbar: *Mention*), formatting, the API at `/api/openapi.json`. Anything that surprises you is worth a report.
 

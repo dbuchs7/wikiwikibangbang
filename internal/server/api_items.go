@@ -60,6 +60,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: del, Pattern: "/api/relations/{id}", Summary: "Remove a relation", Handler: http.HandlerFunc(h.removeRelation)},
 	}
 	routes = append(routes, commentRoutes(h)...)
+	routes = append(routes, linkCheckRoutes(h)...)
 	return append(routes, liveRoutes(h)...)
 }
 

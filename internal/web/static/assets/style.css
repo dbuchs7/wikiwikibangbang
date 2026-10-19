@@ -199,6 +199,9 @@ table.history td { font-size: 13px; }
 .card-title { margin: 2px 0 4px; overflow-wrap: anywhere; }
 .card-actions { font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
 
+/* ---------- Link check (ADR-0039) ---------- */
+td.href { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; }
+
 /* ---------- Comments (ADR-0035) ---------- */
 .comments { list-style: none; padding: 0; margin: 0 0 12px; }
 .comment { padding: 10px 0; border-bottom: 1px solid var(--border); }

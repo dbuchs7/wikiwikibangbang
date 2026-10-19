@@ -29,6 +29,7 @@ body:
         - Search
         - Comments
         - Boards
+        - Link check
         - Items, types, workflows
         - Installation and startup
         - Something else
