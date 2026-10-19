@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":8,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":9,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -136,8 +136,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	tree := treeLog(t)
 	blocks := blockKindsLog(t)
 	labels := labelLog(t)
+	files := attachmentLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels) {
+	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -150,13 +151,15 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v7.golden.jsonl", nil, log},
-		{"events.v7.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v7.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v7.comments.golden.jsonl", fakeSealer{}, comments},
-		{"events.v7.tree.golden.jsonl", fakeSealer{}, tree},
-		{"events.v7.blocks.golden.jsonl", fakeSealer{}, blocks},
-		{"events.v7.labels.golden.jsonl", fakeSealer{}, labels},
+		{"events.v8.golden.jsonl", nil, log},
+		{"events.v8.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v8.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v8.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v8.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v8.blocks.golden.jsonl", fakeSealer{}, blocks},
+		{"events.v8.labels.golden.jsonl", fakeSealer{}, labels},
+		{"events.v8.attachments.golden.jsonl", fakeSealer{}, files},
+		{"events.v8.attachments.plain.golden.jsonl", nil, files},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -188,7 +191,8 @@ func TestPersistedFormatIsStable(t *testing.T) {
 
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
-// text), 4 (comments), 5 (sibling order), 6 (block kinds) — still open and rebuild the same state and history as today's log
+// text), 4 (comments), 5 (sibling order), 6 (block kinds), 7 (labels) —
+// still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -214,6 +218,39 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v6.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v6.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v6.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v7.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v7.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v7.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v7.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v7.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v7.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v7.labels.golden.jsonl"), fakeSealer{}, labelLog(t))
+}
+
+// attachmentLog adds files, shows one as an image, deletes one and purges
+// an item with a file, so the golden files pin sealed, deleted and erased
+// attachments (ADR-0045).
+func attachmentLog(t *testing.T) []Event {
+	s := setup(t)
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	file := func(id, name string) Attachment {
+		return Attachment{ID: ID(id), Name: name, Type: "image/png", Size: 3, SHA256: strings.Repeat("ab", 32)}
+	}
+	if _, err := s.AddAttachment("anna", page.ID, file("0123456789abcdef0123456789abcdef", "diagram.png")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddAttachment("anna", page.ID, file("fedcba9876543210fedcba9876543210", "old.png")); err != nil {
+		t.Fatal(err)
+	}
+	noErr(t, s.CommitBody("anna", page.ID, Doc{Blocks: []Block{{Kind: Image, Ref: "0123456789abcdef0123456789abcdef", Text: "The flow"}}}))
+	noErr(t, s.DeleteAttachment("anna", page.ID, "fedcba9876543210fedcba9876543210"))
+	old := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Old"}))
+	if _, err := s.AddAttachment("anna", old.ID, file("00000000000000000000000000000001", "secret.pdf")); err != nil {
+		t.Fatal(err)
+	}
+	noErr(t, s.Trash("anna", old.ID))
+	noErr(t, s.Purge("anna", old.ID))
+	return s.Log()
 }
 
 // labelLog labels items, then purges one, so the golden file pins sealed
@@ -418,6 +455,7 @@ var allEventKinds = []EventKind{
 	BodyCommitted, RelationAdded, RelationRemoved, ItemTrashed, ItemRestored, ItemPurged,
 	ItemRedacted, GroupMemberAdded, RoleGranted, SystemRoleGranted, RestrictionSet,
 	ItemImported, ItemReleased, CommentAdded, CommentEdited, CommentDeleted, LabelsSet,
+	AttachmentAdded, AttachmentDeleted,
 }
 
 // everyKindLog runs commands that produce every event kind, deterministically.

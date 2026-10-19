@@ -328,6 +328,23 @@ function check(cond, msg) {
     await page.click("#labels .label-remove");
     await page.waitForFunction(() => document.querySelectorAll("#labels .label").length === 0);
 
+    step("files: an upload is listed and downloads; an image goes into the body and shows after a reload");
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    await page.setInputFiles("#upload", { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("<script>alert('file')</script>") });
+    await page.waitForSelector("#attachments li:has-text('notes.txt')");
+    const notes = await page.getAttribute("#attachments li a:has-text('notes.txt')", "href");
+    const served = await page.evaluate(async (href) => { const r = await fetch(href); return [r.headers.get("content-type"), r.headers.get("content-disposition"), await r.text()]; }, notes);
+    check(served[0] === "application/octet-stream" && served[1].startsWith("attachment") && served[2].includes("alert('file')"), "a text file only downloads: " + served);
+    await page.waitForSelector("#body .ProseMirror");
+    await page.locator("#body .ProseMirror").click();
+    await page.setInputFiles("#body .pm-toolbar input[type=file]", { name: "pixel.png", mimeType: "image/png", buffer: png });
+    await page.waitForSelector("#body .pm-image img");
+    await page.click("#body h2"); // leave the editor: the new block is released and saved
+    await page.waitForSelector(".live[data-pending='0']");
+    await page.reload();
+    await page.waitForFunction(() => { const img = document.querySelector("#body .pm-image img"); return img && img.complete && img.naturalWidth === 1; });
+    check(await page.locator("#attachments li").count() === 2, "both files are listed");
+
     step("links: the link check page says when checking is off");
     await page.click("#nav >> text=Spaces");
     await page.click("a:has-text('Platform')");

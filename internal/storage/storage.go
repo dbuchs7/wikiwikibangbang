@@ -68,6 +68,9 @@ type Recovery struct {
 	// interrupted before their keys were destroyed, and keys of items that
 	// never reached the log.
 	Shredded int
+	// Orphans counts attachment files removed while opening: uploads never
+	// recorded, and files of attachments deleted or purged (ADR-0045).
+	Orphans int
 }
 
 // Options configure Open.
@@ -143,6 +146,9 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 	rec := recovery(sc, log)
 	if rec.Shredded, err = db.heal(); err != nil {
 		return nil, Recovery{}, fmt.Errorf("storage: destroying leftover keys: %w", err)
+	}
+	if rec.Orphans, err = db.healAttachments(); err != nil {
+		return nil, Recovery{}, fmt.Errorf("storage: removing unneeded attachment files: %w", err)
 	}
 	return db, rec, nil
 }
@@ -290,12 +296,15 @@ func (j journal) Append(batch []item.Event) error {
 		return err
 	}
 	var gone []item.ID
+	deleted := map[item.ID][]item.ID{}
 	for _, e := range batch {
 		switch e.Kind {
 		case item.ItemPurged:
 			gone = append(gone, e.Members...)
 		case item.ItemRedacted:
 			gone = append(gone, e.Item)
+		case item.AttachmentDeleted:
+			deleted[e.Item] = append(deleted[e.Item], e.Attachment.ID)
 		}
 	}
 	if len(gone) > 0 || len(kr.unshred) > 0 {
@@ -303,6 +312,9 @@ func (j journal) Append(batch []item.Event) error {
 		// the keys now is retried on the next purge and on the next start;
 		// it must not fail a command that is already on disk.
 		_ = kr.shred(gone...)
+	}
+	if len(gone) > 0 || len(deleted) > 0 {
+		j.db.removeAttachments(gone, deleted) // likewise healed on the next start
 	}
 	return nil
 }

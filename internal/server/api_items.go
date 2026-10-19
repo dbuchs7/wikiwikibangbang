@@ -67,6 +67,7 @@ func itemRoutes(d Deps) []Route {
 	routes = append(routes, commentRoutes(h)...)
 	routes = append(routes, linkCheckRoutes(h)...)
 	routes = append(routes, governanceRoutes(h)...)
+	routes = append(routes, attachmentRoutes(h)...)
 	return append(routes, liveRoutes(h)...)
 }
 

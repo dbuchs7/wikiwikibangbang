@@ -452,6 +452,15 @@ func (s *Store) CommitBody(actor string, id ID, d Doc) error {
 		if err := checkBlock(b, id); err != nil {
 			return wrapf(err, "block %d", i+1)
 		}
+		// An image shows an attachment of this item; one deleted since
+		// may stay if the current body still shows it (ADR-0045).
+		if b.Kind == Image {
+			a, ok := it.attachment(b.Ref)
+			kept := slices.ContainsFunc(it.Body.Blocks, func(o Block) bool { return o.Kind == Image && o.Ref == b.Ref })
+			if !ok || (a.Deleted && !kept) {
+				return wrapf(notFound("attachment %s of item %s", b.Ref, id), "block %d", i+1)
+			}
+		}
 	}
 	// A body may keep references to items that were deleted since its last
 	// version, so that the page stays editable; it may not add new ones.
@@ -715,6 +724,8 @@ func (s *Store) apply(e Event) {
 		s.applyImport(e, touch)
 	case CommentAdded, CommentEdited, CommentDeleted:
 		s.applyComment(e, touch)
+	case AttachmentAdded, AttachmentDeleted:
+		s.applyAttachment(e, touch)
 	default:
 		s.applyAccess(e, touch)
 	}
@@ -738,7 +749,7 @@ func (s *Store) purgeItems(ids ...ID) []ID {
 		}
 		it := s.items[id]
 		it.Presence, it.trashedBy = Purged, 0
-		it.Title, it.Properties, it.Body, it.Comments, it.Labels = "", Props{}, Doc{}, nil, nil
+		it.Title, it.Properties, it.Body, it.Comments, it.Labels, it.Attachments = "", Props{}, Doc{}, nil, nil, nil
 		if it.Origin != nil {
 			o := *it.Origin
 			o.Raw = ""
@@ -990,11 +1001,15 @@ func checkBlock(b Block, self ID) error {
 		if b.Text != "" || len(b.Marks) > 0 || len(b.Mentions) > 0 {
 			return invalid("a %s block has no text", b.Kind)
 		}
+	case Image:
+		if !ValidAttachmentID(string(b.Ref)) || len(b.Marks) > 0 || len(b.Mentions) > 0 {
+			return invalid("an image names an attachment and has a plain caption")
+		}
 	default:
 		return invalid("unknown block kind %q", b.Kind)
 	}
-	if b.Kind != Embed && b.Ref != "" {
-		return invalid("only an embed has a reference")
+	if b.Kind != Embed && b.Kind != Image && b.Ref != "" {
+		return invalid("only an embed or an image has a reference")
 	}
 	if b.Checked && b.Kind != TaskItem {
 		return invalid("only a task is checked")
