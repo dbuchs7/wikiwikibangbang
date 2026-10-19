@@ -81,6 +81,8 @@ docker run --rm -p 8080:8080 -v wikiwikibangbang-data:/data \
   -e WWBB_ADMIN_PASSWORD='choose a long one' ghcr.io/dbuchs7/wikiwikibangbang:latest
 ```
 
+A directory of the host works as well as a volume, e.g. `-v /volume1/docker/wikiwikibangbang/data:/data`: the server starts as root only to hand the directory to uid 65532 and then runs as that account ([ADR-0038](docs/adr/0038-container-starts-as-root-and-drops.md)). Set `WWBB_RUN_AS=<uid>:<gid>` to have another account own the files.
+
 From source (Go 1.26):
 
 ```bash

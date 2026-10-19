@@ -277,6 +277,14 @@ func TestTrustedProxiesConfiguration(t *testing.T) {
 	}
 }
 
+func TestRunAsConfiguration(t *testing.T) {
+	t.Setenv("WWBB_RUN_AS", "0:0")
+	code, _, errOut := runCmd(t, context.Background(), "serve", "-addr", freeAddr(t), "-data-dir", t.TempDir())
+	if code != 1 || !strings.Contains(errOut, "WWBB_RUN_AS is unusable") {
+		t.Errorf("root as target: exit %d, stderr %q", code, errOut)
+	}
+}
+
 func TestAuditExpiryRunsOnEveryTick(t *testing.T) {
 	db, _, err := storage.Open(t.TempDir())
 	if err != nil {
