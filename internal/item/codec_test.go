@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":10,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":11,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -138,8 +138,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	labels := labelLog(t)
 	files := attachmentLog(t)
 	watches := watchLog(t)
+	inline := inlineCommentLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches) {
+	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -152,16 +153,17 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v9.golden.jsonl", nil, log},
-		{"events.v9.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v9.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v9.comments.golden.jsonl", fakeSealer{}, comments},
-		{"events.v9.tree.golden.jsonl", fakeSealer{}, tree},
-		{"events.v9.blocks.golden.jsonl", fakeSealer{}, blocks},
-		{"events.v9.labels.golden.jsonl", fakeSealer{}, labels},
-		{"events.v9.attachments.golden.jsonl", fakeSealer{}, files},
-		{"events.v9.attachments.plain.golden.jsonl", nil, files},
-		{"events.v9.watches.golden.jsonl", fakeSealer{}, watches},
+		{"events.v10.golden.jsonl", nil, log},
+		{"events.v10.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v10.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v10.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v10.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v10.blocks.golden.jsonl", fakeSealer{}, blocks},
+		{"events.v10.labels.golden.jsonl", fakeSealer{}, labels},
+		{"events.v10.attachments.golden.jsonl", fakeSealer{}, files},
+		{"events.v10.attachments.plain.golden.jsonl", nil, files},
+		{"events.v10.watches.golden.jsonl", fakeSealer{}, watches},
+		{"events.v10.inline.golden.jsonl", fakeSealer{}, inline},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -194,7 +196,7 @@ func TestPersistedFormatIsStable(t *testing.T) {
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
 // text), 4 (comments), 5 (sibling order), 6 (block kinds), 7 (labels), 8
-// (attachments) — still open and rebuild the same state and history as today's log
+// (attachments), 9 (watches) — still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -235,6 +237,35 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v8.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v8.labels.golden.jsonl"), fakeSealer{}, labelLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v8.attachments.golden.jsonl"), fakeSealer{}, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.labels.golden.jsonl"), fakeSealer{}, labelLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.attachments.golden.jsonl"), fakeSealer{}, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.attachments.plain.golden.jsonl"), nil, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v9.watches.golden.jsonl"), fakeSealer{}, watchLog(t))
+}
+
+// inlineCommentLog comments on a passage, answers it, resolves and reopens
+// the thread, and purges an item with an inline comment, so the golden file
+// pins sealed and erased anchors (ADR-0047).
+func inlineCommentLog(t *testing.T) []Event {
+	s := setup(t)
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	noErr(t, s.CommitBody("anna", page.ID, Doc{Blocks: []Block{{Kind: Paragraph, Text: "Stop the writers first."}}}))
+	c := mustComment(t)(s.Comment("anna", page.ID, NewComment{Text: "Which ones?", Anchor: &Anchor{Quote: "writers", Prefix: "Stop the ", Suffix: " first."}}))
+	mustComment(t)(s.Comment("bert", page.ID, NewComment{Text: "All of them.", Reply: c.ID}))
+	noErr(t, s.ResolveComment("anna", page.ID, c.ID, true))
+	noErr(t, s.ResolveComment("bert", page.ID, c.ID, false))
+	old := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Old"}))
+	noErr(t, s.CommitBody("anna", old.ID, Doc{Blocks: []Block{{Kind: Paragraph, Text: "secret plan"}}}))
+	mustComment(t)(s.Comment("anna", old.ID, NewComment{Text: "gone with the page", Anchor: &Anchor{Quote: "secret"}}))
+	noErr(t, s.Trash("anna", old.ID))
+	noErr(t, s.Purge("anna", old.ID))
+	return s.Log()
 }
 
 // watchLog watches an item and a space and stops one watch (ADR-0046).
@@ -474,7 +505,7 @@ var allEventKinds = []EventKind{
 	TypeDefined, SpaceCreated, ItemCreated, TitleSet, PropertySet, Transitioned, ItemMoved,
 	BodyCommitted, RelationAdded, RelationRemoved, ItemTrashed, ItemRestored, ItemPurged,
 	ItemRedacted, GroupMemberAdded, RoleGranted, SystemRoleGranted, RestrictionSet,
-	ItemImported, ItemReleased, CommentAdded, CommentEdited, CommentDeleted, LabelsSet,
+	ItemImported, ItemReleased, CommentAdded, CommentEdited, CommentDeleted, CommentResolved, CommentReopened, LabelsSet,
 	AttachmentAdded, AttachmentDeleted, Watched, Unwatched,
 }
 

@@ -55,7 +55,8 @@ var (
 
 // tools are the API routes offered to agents (ADR-0012). Not offered, on
 // purpose: moving, trashing, restoring, purging and redacting items, item
-// restrictions, removing relations, and editing or deleting comments (they
+// restrictions, removing relations, editing or deleting comments and
+// resolving comment threads (they
 // change who sees what, or destroy content, and are a person's decision;
 // ADR-0035); administration of types,
 // spaces, roles, groups, users and backups; and everything about
@@ -117,8 +118,12 @@ var tools = []tool{
 		}},
 	{Name: "list_comments", Description: "The item's comments, oldest first, paged. A deleted comment is listed without text.",
 		Method: "GET", Path: "/api/items/{ref}/comments", Params: append([]param{refParam}, paging...)},
-	{Name: "add_comment", Description: "Comment on an item, in plain text. Needs the right to edit the item.",
-		Method: "POST", Path: "/api/items/{ref}/comments", Params: []param{refParam, {"text", str, inBody, true, "The comment, plain text."}}},
+	{Name: "add_comment", Description: "Comment on an item, in plain text: on the whole item, on a passage of its body (anchor), or in answer to a comment (reply). Needs the right to edit the item.",
+		Method: "POST", Path: "/api/items/{ref}/comments", Params: []param{refParam,
+			{"text", str, inBody, true, "The comment, plain text."},
+			{"anchor", object, inBody, false, "The passage commented on: {\"quote\": text of one body block, \"prefix\" and \"suffix\": up to 32 characters before and after it, to tell apart passages of the same text}."},
+			{"reply", str, inBody, false, "The ID of the comment answered; the answer joins its thread."},
+		}},
 }
 
 func find(name string) *tool {

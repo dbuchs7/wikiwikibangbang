@@ -739,7 +739,7 @@ func (s *Store) apply(e Event) {
 		touch(s.purgeItems(e.Members...)...)
 	case ItemImported, ItemReleased:
 		s.applyImport(e, touch)
-	case CommentAdded, CommentEdited, CommentDeleted:
+	case CommentAdded, CommentEdited, CommentDeleted, CommentResolved, CommentReopened:
 		s.applyComment(e, touch)
 	case AttachmentAdded, AttachmentDeleted:
 		s.applyAttachment(e, touch)

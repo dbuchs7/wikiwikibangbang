@@ -11,6 +11,7 @@ import {
 } from "../vendor/prosemirror.js";
 import { h, safeHref } from "./dom.js";
 import { t } from "./i18n.js";
+import { anchorOf } from "./anchors.js";
 
 // Every block carries bid, its ID in a live session (ADR-0010); it is not
 // stored. Text blocks keep the mentions they had without a mention mark
@@ -366,8 +367,9 @@ function imageView(node, view, getPos, fileURL) {
 // child pages. files, for an item's attachments (ADR-0045), has url(id),
 // where a file is served, and upload(file), which stores a file and returns
 // the attachment. extra adds plugins, such as a live session's (live.js);
-// viewProps adds editor view properties.
-export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {} }) {
+// viewProps adds editor view properties. comment(anchor), if given, starts
+// an inline comment on the selected text (anchors.js, ADR-0047).
+export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
   const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
@@ -464,6 +466,12 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       const { $to } = view.state.selection;
       view.dispatch(view.state.tr.insert($to.depth >= 1 ? $to.after(1) : $to.pos, node));
     }) }),
+    comment ? h("button", { type: "button", id: "comment-selection", text: t("editor.comment"), onclick: () => {
+      status.textContent = "";
+      const anchor = anchorOf(view.state);
+      if (!anchor) status.textContent = t("editor.commentNeedsSelection");
+      else comment(anchor);
+    } }) : null,
     h("button", { type: "button", title: t("editor.undo"), text: "↶", onclick: run(undo) }),
     h("button", { type: "button", title: t("editor.redo"), text: "↷", onclick: run(redo) }),
     status,

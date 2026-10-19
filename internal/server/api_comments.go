@@ -15,29 +15,57 @@ func commentRoutes(h itemHandlers) []Route {
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/comments", Summary: "Comment on the item", Handler: http.HandlerFunc(h.addComment)},
 		{Method: http.MethodPut, Pattern: "/api/items/{ref}/comments/{id}", Summary: "Edit one's own comment", Handler: http.HandlerFunc(h.editComment)},
 		{Method: http.MethodDelete, Pattern: "/api/items/{ref}/comments/{id}", Summary: "Delete one's own comment, or any as a space administrator", Handler: http.HandlerFunc(h.deleteComment)},
+		{Method: http.MethodPut, Pattern: "/api/items/{ref}/comments/{id}/resolved", Summary: "Mark a comment thread done (ADR-0047)", Handler: h.resolveComment(true)},
+		{Method: http.MethodDelete, Pattern: "/api/items/{ref}/comments/{id}/resolved", Summary: "Open a comment thread again (ADR-0047)", Handler: h.resolveComment(false)},
 	}
 }
 
 // commentJSON is a comment; a deleted one keeps its place without text.
+// An inline comment names its passage (anchor), a reply the first comment
+// of its thread (ADR-0047).
 type commentJSON struct {
-	ID      item.ID    `json:"id"`
-	Author  string     `json:"author"`
-	Created time.Time  `json:"created"`
-	Edited  *time.Time `json:"edited,omitempty"`
-	Text    string     `json:"text,omitempty"`
-	Deleted bool       `json:"deleted,omitempty"`
+	ID         item.ID     `json:"id"`
+	Author     string      `json:"author"`
+	Created    time.Time   `json:"created"`
+	Edited     *time.Time  `json:"edited,omitempty"`
+	Text       string      `json:"text,omitempty"`
+	Deleted    bool        `json:"deleted,omitempty"`
+	Anchor     *anchorJSON `json:"anchor,omitempty"`
+	Reply      item.ID     `json:"reply,omitempty"`
+	Resolved   bool        `json:"resolved,omitempty"`
+	ResolvedBy string      `json:"resolvedBy,omitempty"`
+	ResolvedAt *time.Time  `json:"resolvedAt,omitempty"`
+}
+
+type anchorJSON struct {
+	Quote  string `json:"quote"`
+	Prefix string `json:"prefix,omitempty"`
+	Suffix string `json:"suffix,omitempty"`
 }
 
 func toCommentJSON(c item.Comment) commentJSON {
-	j := commentJSON{ID: c.ID, Author: c.Author, Created: c.Created, Text: c.Text, Deleted: c.Deleted}
+	j := commentJSON{ID: c.ID, Author: c.Author, Created: c.Created, Text: c.Text, Deleted: c.Deleted,
+		Reply: c.Reply, Resolved: c.Resolved, ResolvedBy: c.ResolvedBy}
 	if !c.Edited.IsZero() {
 		j.Edited = &c.Edited
+	}
+	if c.Anchor != nil {
+		j.Anchor = &anchorJSON{Quote: c.Anchor.Quote, Prefix: c.Anchor.Prefix, Suffix: c.Anchor.Suffix}
+	}
+	if !c.ResolvedAt.IsZero() {
+		j.ResolvedAt = &c.ResolvedAt
 	}
 	return j
 }
 
 type commentTextJSON struct {
 	Text string `json:"text"`
+}
+
+type newCommentJSON struct {
+	Text   string      `json:"text"`
+	Anchor *anchorJSON `json:"anchor"`
+	Reply  item.ID     `json:"reply"`
 }
 
 func (h itemHandlers) listComments(w http.ResponseWriter, r *http.Request) {
@@ -69,16 +97,20 @@ func (h itemHandlers) listComments(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h itemHandlers) addComment(w http.ResponseWriter, r *http.Request) {
-	var req commentTextJSON
+	var req newCommentJSON
 	if !decode(w, r, &req) {
 		return
+	}
+	n := item.NewComment{Text: req.Text, Reply: req.Reply}
+	if req.Anchor != nil {
+		n.Anchor = &item.Anchor{Quote: req.Anchor.Quote, Prefix: req.Anchor.Prefix, Suffix: req.Anchor.Suffix}
 	}
 	h.write(w, r, http.StatusCreated, func(x *item.Session, _ *item.Store) (any, error) {
 		it, err := resolveItem(x, r.PathValue("ref"))
 		if err != nil {
 			return nil, err
 		}
-		c, err := x.AddComment(it.ID, req.Text)
+		c, err := x.Comment(it.ID, n)
 		if err != nil {
 			return nil, err
 		}
@@ -118,4 +150,17 @@ func (h itemHandlers) deleteComment(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil, x.DeleteComment(it.ID, item.ID(r.PathValue("id")))
 	})
+}
+
+// resolveComment marks a thread done, or open again.
+func (h itemHandlers) resolveComment(resolved bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.write(w, r, 0, func(x *item.Session, _ *item.Store) (any, error) {
+			it, err := resolveItem(x, r.PathValue("ref"))
+			if err != nil {
+				return nil, err
+			}
+			return nil, x.ResolveComment(it.ID, item.ID(r.PathValue("id")), resolved)
+		})
+	}
 }

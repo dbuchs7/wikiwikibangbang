@@ -236,6 +236,8 @@ const (
 	Watched           EventKind = "Watched"
 	Unwatched         EventKind = "Unwatched"
 	CommentDeleted    EventKind = "CommentDeleted"
+	CommentResolved   EventKind = "CommentResolved"
+	CommentReopened   EventKind = "CommentReopened"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -281,8 +283,10 @@ type Event struct {
 	Origin      *Origin      // ItemImported
 	Key         string       // ItemImported: the source key to keep, if free
 	Managed     string       // ItemImported, ItemReleased
-	Comment     ID           // CommentAdded, CommentEdited, CommentDeleted
+	Comment     ID           // CommentAdded, CommentEdited, CommentDeleted, CommentResolved, CommentReopened
 	Text        string       // CommentAdded, CommentEdited
+	Anchor      *Anchor      // CommentAdded: the text an inline comment is on (ADR-0047)
+	Reply       ID           // CommentAdded: the comment a reply answers (ADR-0047)
 	Labels      []string     // LabelsSet: the item's labels after the event
 	Attachment  *Attachment  // AttachmentAdded; AttachmentDeleted: only its ID
 
@@ -311,7 +315,7 @@ func (e *Event) erase() {
 	if !e.HasContent() {
 		return
 	}
-	e.Title, e.Props, e.Value, e.Text, e.Labels = "", nil, nil, "", nil
+	e.Title, e.Props, e.Value, e.Text, e.Labels, e.Anchor = "", nil, nil, "", nil, nil
 	if e.Kind == AttachmentAdded {
 		e.Attachment = nil
 	}
