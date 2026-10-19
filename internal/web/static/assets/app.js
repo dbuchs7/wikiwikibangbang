@@ -53,10 +53,12 @@ function link(href, text, cls, id) {
 // --- watching (ADR-0046) --------------------------------------------------------
 
 // watchButton starts or stops watching; path is the item's or space's.
+// It is a bell: filled while one watches, outlined while one does not; its
+// name and tooltip say what a press does.
 function watchButton(path, watching, status) {
-  return h("button", { class: watching ? "secondary" : "", id: "watch", "aria-pressed": String(watching),
-    text: watching ? t("watch.stop") : t("watch.start"),
-    onclick: () => action(() => (watching ? del(path + "/watch") : put(path + "/watch")), status) });
+  const label = watching ? t("watch.stop") : t("watch.start");
+  return h("button", { type: "button", class: "watch-bell", id: "watch", "aria-pressed": String(watching), "aria-label": label, title: label,
+    onclick: () => action(() => (watching ? del(path + "/watch") : put(path + "/watch")), status) }, bellIcon(watching));
 }
 
 // what says what a notification's change was.
@@ -324,8 +326,9 @@ function labelChrome() {
   close.setAttribute("aria-label", t("common.close"));
 }
 
-// bellIcon draws a bell, as SVG: h() makes HTML elements only.
-function bellIcon() {
+// bellIcon draws a bell, as SVG: h() makes HTML elements only; filled
+// fills it.
+function bellIcon(filled = false) {
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", "0 0 24 24");
@@ -334,7 +337,7 @@ function bellIcon() {
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS(ns, "path");
   path.setAttribute("d", "M12 3a6 6 0 0 0-6 6v3.6L4.3 15.4A1 1 0 0 0 5.2 17h13.6a1 1 0 0 0 .9-1.6L18 12.6V9a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0");
-  path.setAttribute("fill", "none");
+  path.setAttribute("fill", filled ? "currentColor" : "none");
   path.setAttribute("stroke", "currentColor");
   path.setAttribute("stroke-width", "2");
   path.setAttribute("stroke-linejoin", "round");

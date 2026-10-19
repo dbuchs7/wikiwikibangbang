@@ -82,7 +82,7 @@ function check(cond, msg) {
     await page.waitForSelector("#title");
     check(await page.inputValue("#title [name=title]") === hostile, "the title shows as typed");
     check(page.url().endsWith("#/item/PLAT-1"), "the item is addressed by key");
-    await page.waitForSelector("#watch:has-text('Stop watching')"); // its creator watches it
+    await page.waitForSelector("#watch[aria-pressed='true'][aria-label='Stop watching']"); // its creator watches it
 
     step("edit property, transition");
     await page.fill("[name='p:estimate']", "2.5");
@@ -528,8 +528,8 @@ function check(cond, msg) {
     check(!(await page.textContent(".comment")).includes("null"), "another's comment shows no stray text");
 
     step("watching: bert watches the item, admin renames it, bert is told");
-    await page.click("#watch:has-text('Watch')");
-    await page.waitForSelector("#watch:has-text('Stop watching')");
+    await page.click("#watch[aria-pressed='false'][aria-label='Watch']");
+    await page.waitForSelector("#watch[aria-pressed='true'][aria-label='Stop watching']");
     const adminCtx = await browser.newContext();
     const admin = await adminCtx.newPage();
     await admin.goto(base + "/");
