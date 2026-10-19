@@ -347,3 +347,37 @@ func TestPageBudgetBoundsListings(t *testing.T) {
 	w.bert.expect("GET", "/api/items?space=PLAT&limit=4", "", http.StatusBadRequest)
 	w.admin.expect("GET", "/api/audit?limit=4", "", http.StatusBadRequest)
 }
+
+// TestTheAPISaysWhatTheCallerMayDo: the UI offers only what the caller may
+// do, from the role per space, the item's editable flag and /api/me.
+func TestTheAPISaysWhatTheCallerMayDo(t *testing.T) {
+	w := newWorld(t)
+	roleIn := func(c *client) string {
+		for _, s := range c.expect("GET", "/api/spaces", "", http.StatusOK)["spaces"].([]any) {
+			if s.(map[string]any)["key"] == "PLAT" {
+				return s.(map[string]any)["role"].(string)
+			}
+		}
+		return ""
+	}
+	if r := roleIn(w.bert); r != "editor" {
+		t.Errorf("bert's role %q", r)
+	}
+	if r := roleIn(w.vera); r != "viewer" {
+		t.Errorf("vera's role %q", r)
+	}
+	if r := roleIn(w.admin); r != "space-admin" {
+		t.Errorf("the administrator's role %q", r)
+	}
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Patch","properties":{"priority":"low"}}`, http.StatusCreated)
+	path := "/api/items/" + field(it, "item", "id").(string)
+	if got := w.bert.expect("GET", path, "", http.StatusOK)["editable"]; got != true {
+		t.Errorf("the editor may not edit: %v", got)
+	}
+	if got := w.vera.expect("GET", path, "", http.StatusOK)["editable"]; got != false {
+		t.Errorf("the viewer may edit: %v", got)
+	}
+	if me := w.bert.expect("GET", "/api/me", "", http.StatusOK); me["erasure"] != false || me["admin"] != false {
+		t.Errorf("me %v", me)
+	}
+}
