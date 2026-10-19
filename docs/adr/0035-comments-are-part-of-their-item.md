@@ -9,7 +9,7 @@
 
 ## Context and problem statement
 
-Confluence pages and Jira issues both carry comments; ADR-0001 lists them among the universal capabilities that exist once, for every item, and D6 forbids type-specific code for them. Nothing in the product holds a discussion yet. The questions are what a comment is in the model, who may write one, and what happens to it when its item is purged or redacted — content must then be unrecoverable (ADR-0026).
+Wiki pages and issues both need discussion next to their content; ADR-0001 lists comments among the universal capabilities that exist once, for every item, and D6 forbids type-specific code for them. Nothing in the product holds a discussion yet. The questions are what a comment is in the model, who may write one, and what happens to it when its item is purged or redacted — content must then be unrecoverable (ADR-0026).
 
 ## Decision drivers
 
