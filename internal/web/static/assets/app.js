@@ -407,6 +407,7 @@ async function route() {
       case "account": return await accountView();
       case "mcp": return await mcpView();
       case "admin": return await adminView();
+      case "members": return await membersView(arg);
       default: return await homeView();
     }
   } catch (err) {
@@ -638,7 +639,8 @@ async function spaceView(key) {
       h("p", { class: "actions" },
         create && types.length ? h("button", { class: "primary", id: "space-new-page", text: t("space.newPage"), onclick: toForm }) : null,
         watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status))),
-    h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance"))].flatMap((b, i) => i ? [" · ", b] : [b])),
+    h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance")),
+      sp.role === "space-admin" ? link(`#/members/${encodeURIComponent(key)}`, t("members.title")) : null].filter(Boolean).flatMap((b, i) => i ? [" · ", b] : [b])),
     status,
     home,
     labels.length ? h("section", { id: "space-labels" }, h("h2", { text: t("label.title") }),
@@ -1345,24 +1347,54 @@ async function mcpView() {
 
 async function adminView() {
   const show = screen();
-  const [{ users }, { spaces }, { types }, auditPage] = await Promise.all([
-    get("/api/users"), get("/api/spaces"), get("/api/types"), get("/api/audit?limit=50"),
+  const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }] = await Promise.all([
+    get("/api/users"), get("/api/spaces"), get("/api/types"), get("/api/audit?limit=50"), get("/api/groups"), get("/api/system-roles"),
   ]);
-  const userOptions = users.map((u) => h("option", { value: u.id, text: u.username }));
   for (const u of users) names.set(u.id, u.username);
-  show(
-    h("h1", { text: t("admin.title") }),
-    form({ class: "card", id: "new-space" }, [
-      h("h2", { text: t("admin.newSpace") }),
-      field(t("admin.key"), h("input", { name: "key", required: true, pattern: "[A-Z][A-Z0-9]*" })),
+  const status = h("div", { class: "status" });
+  const userOptions = () => users.map((u) => h("option", { value: u.id, text: u.username }));
+  const rolesOf = (id) => holders.find((x) => x.principal === id)?.roles || [];
+
+  // The table of contents scrolls to a section; the hash stays the route.
+  const sections = [];
+  const section = (id, title, ...content) => {
+    const el = h("section", { class: "card", id: "admin-" + id }, h("h2", { text: title }), ...content);
+    sections.push([el, title]);
+    return el;
+  };
+
+  const spacesSection = section("spaces", t("admin.spaces"),
+    spaces.length ? h("table", {}, spaces.map((sp) => h("tr", {},
+      h("td", {}, link("#/space/" + encodeURIComponent(sp.key), sp.name)), h("td", { class: "muted", text: sp.key }),
+      h("td", {}, link("#/members/" + encodeURIComponent(sp.key), t("admin.members")))))) : h("p", { class: "muted", text: t("admin.none") }),
+    form({ id: "new-space" }, [
+      h("h3", { text: t("admin.newSpace") }),
+      field(t("admin.key"), h("input", { name: "key", required: true, pattern: "[A-Z][A-Z0-9]*", title: t("admin.keyHint") })),
       field(t("field.name"), h("input", { name: "name", required: true })),
       h("button", { type: "submit", text: t("admin.createSpace") }),
-    ], async (d) => { await post("/api/spaces", { key: d.get("key"), name: d.get("name") }); route(); }),
-    form({ class: "card", id: "new-type" }, [
-      h("h2", { text: t("admin.defineType") }),
-      h("p", { class: "muted", text: t("admin.existing", { list: types.map((ty) => `${ty.name} v${ty.version}`).join(", ") || t("admin.none") }) }),
-      field(t("admin.typeJson"), h("textarea", { name: "type", rows: 6, required: true },
-        '{"name":"page","body":true,"fields":[{"name":"owner","kind":"user"}]}')),
+    ], async (d) => { await post("/api/spaces", { key: d.get("key"), name: d.get("name") }); route(); }));
+
+  const typeText = h("textarea", { name: "type", rows: 8, required: true },
+    '{"name":"page","body":true,"fields":[{"name":"owner","kind":"user"}]}');
+  const describe = (ty) => [
+    ty.body ? t("admin.typeBody") : null,
+    ty.fields.length ? t("admin.typeFields", { list: ty.fields.map((f) => `${f.name} (${f.kind}${f.required ? ", *" : ""})`).join(", ") }) : null,
+    ty.workflow ? t("admin.typeStates", { list: ty.workflow.states.join(" → ") }) : null,
+  ].filter(Boolean).join(" · ");
+  const typesSection = section("types", t("admin.types"),
+    setupCard(types),
+    types.length ? h("table", { id: "types" }, types.map((ty) => h("tr", {},
+      h("td", {}, h("strong", { text: ty.name }), ` v${ty.version}`), h("td", { class: "muted", text: describe(ty) }),
+      h("td", {}, h("button", { type: "button", class: "link", text: t("common.edit"), onclick: () => {
+        const { version, ...def } = ty;
+        typeText.value = JSON.stringify(def, null, 2);
+        typeText.scrollIntoView({ block: "center" });
+        typeText.focus();
+      } }))))) : null,
+    form({ id: "new-type" }, [
+      h("h3", { text: t("admin.defineType") }),
+      h("p", { class: "muted", text: t("admin.typeHelp") }),
+      field(t("admin.typeJson"), typeText),
       h("button", { type: "submit", text: t("admin.define") }),
     ], async (d) => {
       let def;
@@ -1373,30 +1405,60 @@ async function adminView() {
       }
       await post("/api/types", def);
       route();
-    }),
-    form({ class: "card", id: "new-user" }, [
-      h("h2", { text: t("admin.newUser") }),
+    }));
+
+  const sysToggle = (u, role, label) => {
+    const box = h("input", { type: "checkbox", checked: rolesOf(u.id).includes(role), "aria-label": `${label}: ${u.username}` });
+    box.addEventListener("change", () => action(() => (box.checked ? put : del)(`/api/system-roles/${role}/${encodeURIComponent(u.id)}`), status));
+    return h("label", { class: "check" }, box, " ", label);
+  };
+  const usersSection = section("users", t("admin.users"),
+    h("p", { class: "muted", text: t("admin.usersHelp") }),
+    h("table", { id: "users" }, users.map((u) => h("tr", {},
+      h("td", { text: u.username }),
+      h("td", {}, sysToggle(u, "admin", t("admin.roleAdmin"))),
+      h("td", {}, sysToggle(u, "erasure", t("admin.roleErasure")))))),
+    form({ id: "new-user" }, [
+      h("h3", { text: t("admin.newUser") }),
       field(t("field.username"), h("input", { name: "username", required: true })),
       field(t("field.password"), h("input", { name: "password", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
       h("button", { type: "submit", text: t("admin.createUser") }),
-    ], async (d) => { await post("/api/users", { username: d.get("username"), password: d.get("password") }); route(); }),
-    form({ class: "card", id: "grant" }, [
-      h("h2", { text: t("admin.grant") }),
-      field(t("col.space"), h("select", { name: "space" }, spaces.map((s) => h("option", { value: s.key, text: s.key })))),
-      field(t("admin.user"), h("select", { name: "user" }, userOptions)),
+    ], async (d) => { await post("/api/users", { username: d.get("username"), password: d.get("password") }); route(); }));
+
+  const groupsSection = section("groups", t("admin.groups"),
+    h("p", { class: "muted", text: t("admin.groupsHelp") }),
+    groups.length ? h("table", { id: "groups" }, groups.map((g) => h("tr", {},
+      h("th", { text: "@" + g.name }),
+      h("td", {}, g.members.map((m) => h("span", { class: "member" }, person(m),
+        h("button", { type: "button", class: "link", text: "×", title: t("admin.removeMember", { name: person(m), group: g.name }),
+          "aria-label": t("admin.removeMember", { name: person(m), group: g.name }),
+          onclick: () => action(() => del(`/api/groups/${encodeURIComponent(g.name)}/members/${encodeURIComponent(m)}`), status) }))))))) : h("p", { class: "muted", text: t("admin.noGroups") }),
+    form({ id: "add-member" }, [
+      field(t("admin.group"), h("input", { name: "group", required: true, pattern: "[A-Za-z0-9][A-Za-z0-9._\\-]*", list: "group-names" })),
+      h("datalist", { id: "group-names" }, groups.map((g) => h("option", { value: g.name }))),
+      field(t("admin.user"), h("select", { name: "user" }, userOptions())),
+      h("button", { type: "submit", text: t("admin.addMember") }),
+    ], async (d) => { await put(`/api/groups/${encodeURIComponent(d.get("group"))}/members/${encodeURIComponent(d.get("user"))}`); route(); }));
+
+  const grantSection = section("roles", t("admin.grant"),
+    h("p", { class: "muted", text: t("admin.grantHelp") }),
+    form({ id: "grant" }, [
+      field(t("col.space"), h("select", { name: "space" }, spaces.map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})` })))),
+      field(t("admin.user"), h("select", { name: "user" }, userOptions(), groups.map((g) => h("option", { value: "@" + g.name, text: "@" + g.name })))),
       field(t("admin.role"), h("select", { name: "role" }, [["viewer", t("role.viewer")], ["editor", t("role.editor")], ["space-admin", t("role.space-admin")]].map(([r, label]) => h("option", { value: r, text: label })))),
       h("button", { type: "submit", text: t("admin.grantButton") }),
-    ], async (d, status) => {
+    ], async (d, st) => {
       await put(`/api/spaces/${encodeURIComponent(d.get("space"))}/roles/${encodeURIComponent(d.get("user"))}`, { role: d.get("role") });
-      status.replaceChildren(h("p", { class: "notice", text: t("admin.granted") }));
-    }),
-    form({ class: "card", id: "backup" }, [
-      h("h2", { text: t("admin.backup") }),
+      st.replaceChildren(h("p", { class: "notice", text: t("admin.granted") }));
+    }));
+
+  const backupSection = section("backup", t("admin.backup"),
+    form({ id: "backup" }, [
       h("p", { class: "muted", text: t("admin.backupNote") }),
       field(t("admin.passphrase"), h("input", { name: "passphrase", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
       field(t("admin.repeat"), h("input", { name: "repeat", type: "password", minlength: 12, required: true, autocomplete: "new-password" })),
       h("button", { type: "submit", text: t("admin.download") }),
-    ], async (d, status) => {
+    ], async (d, st) => {
       if (d.get("passphrase") !== d.get("repeat")) throw new Error(t("admin.differ"));
       const { blob, name } = await download("/api/backup", { passphrase: d.get("passphrase") });
       const url = URL.createObjectURL(blob);
@@ -1404,15 +1466,75 @@ async function adminView() {
       a.href = url; // a blob made here, not user content; safeHref would refuse the scheme
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      status.replaceChildren(h("p", { class: "notice", text: t("admin.saved", { name }) }));
+      st.replaceChildren(h("p", { class: "notice", text: t("admin.saved", { name }) }));
+    }));
+
+  const importSection = section("import", t("admin.import"),
+    h("p", { text: t("admin.importText") }),
+    h("pre", { class: "snippet", text: "wikiwikibangbang import -help" }));
+
+  const auditSection = section("audit", t("admin.audit", { n: 50 }),
+    h("table", { class: "history" }, auditPage.entries.map((e) => h("tr", {},
+      h("td", { text: when(e.at) }), h("td", { text: e.event }), h("td", { text: e.actor ? person(e.actor) : "" }),
+      h("td", { text: e.addr || "" }), h("td", { text: e.subject ? person(e.subject) : "" }),
+      h("td", { text: Object.entries(e.detail || {}).map(([k, v]) => `${k}=${v}`).join(" ") }),
+    ))));
+
+  show(
+    h("h1", { text: t("admin.title") }),
+    h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, sections.map(([el, title]) =>
+      h("button", { type: "button", class: "link", text: title, onclick: () => el.scrollIntoView({ block: "start" }) }))),
+    status,
+    spacesSection, typesSection, usersSection, groupsSection, grantSection, backupSection, importSection, auditSection,
+  );
+}
+
+// membersView lists who holds which role in a space, for its
+// administrators (ADR-0048): change a role, take it back, grant one to a
+// person or a group.
+async function membersView(key) {
+  const show = screen();
+  const [{ roles }, { users }, { spaces }] = await Promise.all([
+    get(`/api/spaces/${encodeURIComponent(key)}/roles`), get("/api/users"), get("/api/spaces"),
+  ]);
+  for (const u of users) names.set(u.id, u.username);
+  await learnNames(roles.map((r) => r.principal).filter((p) => !p.startsWith("@")));
+  here.space = key;
+  const sp = spaces.find((s) => s.key === key) || { name: key };
+  const status = h("div", { class: "status" });
+  const base = `/api/spaces/${encodeURIComponent(key)}/roles/`;
+  const roleSelect = (value) => h("select", { name: "role" }, [["viewer", t("role.viewer")], ["editor", t("role.editor")], ["space-admin", t("role.space-admin")]]
+    .map(([r, label]) => h("option", { value: r, text: label, selected: r === value })));
+  const row = (g) => {
+    const sel = roleSelect(g.role);
+    sel.setAttribute("aria-label", t("admin.role"));
+    sel.addEventListener("change", () => action(() => put(base + encodeURIComponent(g.principal), { role: sel.value }), status));
+    return h("tr", {},
+      h("td", { text: g.principal.startsWith("@") ? g.principal : person(g.principal) }),
+      h("td", {}, sel),
+      h("td", {}, h("button", { type: "button", class: "link", text: t("members.revoke"),
+        onclick: () => confirm(t("members.revokeConfirm", { name: g.principal.startsWith("@") ? g.principal : person(g.principal) }))
+          && action(() => del(base + encodeURIComponent(g.principal)), status) })));
+  };
+  const known = new Set(roles.map((r) => r.principal));
+  show(
+    h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("members.title")),
+    h("h1", { text: t("members.heading", { space: sp.name }) }),
+    h("p", { class: "muted", text: t("members.help") }),
+    status,
+    roles.length ? h("table", { id: "members" }, roles.map(row)) : h("p", { class: "muted", text: t("members.none") }),
+    form({ class: "card", id: "add-role" }, [
+      h("h2", { text: t("members.add") }),
+      field(t("admin.user"), h("select", { name: "principal" }, users.filter((u) => !known.has(u.id)).map((u) => h("option", { value: u.id, text: u.username })))),
+      field(t("members.orGroup"), h("input", { name: "group", placeholder: "@ops", pattern: "@?[A-Za-z0-9][A-Za-z0-9._\\-]*" })),
+      field(t("admin.role"), roleSelect("viewer")),
+      h("button", { type: "submit", text: t("admin.grantButton") }),
+    ], async (d) => {
+      const group = String(d.get("group") || "").trim();
+      const principal = group ? "@" + group.replace(/^@/, "") : d.get("principal");
+      if (!principal) throw new Error(t("members.nobody"));
+      await put(base + encodeURIComponent(principal), { role: d.get("role") });
+      route();
     }),
-    h("section", { class: "card" },
-      h("h2", { text: t("admin.audit", { n: 50 }) }),
-      h("table", { class: "history" }, auditPage.entries.map((e) => h("tr", {},
-        h("td", { text: when(e.at) }), h("td", { text: e.event }), h("td", { text: e.actor ? person(e.actor) : "" }),
-        h("td", { text: e.addr || "" }), h("td", { text: e.subject || "" }),
-        h("td", { text: Object.entries(e.detail || {}).map(([k, v]) => `${k}=${v}`).join(" ") }),
-      ))),
-    ),
   );
 }

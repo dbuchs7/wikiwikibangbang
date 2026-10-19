@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -35,6 +36,12 @@ func itemRoutes(d Deps) []Route {
 		{Method: put, Pattern: "/api/spaces/{space}/roles/{principal}", Summary: "Grant a space role to a user ID or @group (space administrators)", Handler: http.HandlerFunc(h.grantRole)},
 		{Method: put, Pattern: "/api/groups/{group}/members/{principal}", Summary: "Add a member to a group (administrators)", Handler: http.HandlerFunc(h.addMember)},
 		{Method: put, Pattern: "/api/system-roles/{role}/{principal}", Summary: "Grant a system role, admin or erasure (administrators)", Handler: http.HandlerFunc(h.grantSystemRole)},
+		{Method: get, Pattern: "/api/spaces/{space}/roles", Summary: "The roles granted in a space (space administrators)", Handler: http.HandlerFunc(h.listGrants)},
+		{Method: del, Pattern: "/api/spaces/{space}/roles/{principal}", Summary: "Take back a role in a space (space administrators)", Handler: http.HandlerFunc(h.revokeRole)},
+		{Method: get, Pattern: "/api/groups", Summary: "The groups and their members (administrators)", Handler: http.HandlerFunc(h.listGroups)},
+		{Method: del, Pattern: "/api/groups/{group}/members/{principal}", Summary: "Take a member out of a group (administrators)", Handler: http.HandlerFunc(h.removeMember)},
+		{Method: get, Pattern: "/api/system-roles", Summary: "Who holds the system roles admin and erasure (administrators)", Handler: http.HandlerFunc(h.listSystemRoles)},
+		{Method: del, Pattern: "/api/system-roles/{role}/{principal}", Summary: "Take back a system role; the last administrator keeps it (administrators)", Handler: http.HandlerFunc(h.revokeSystemRole)},
 
 		{Method: get, Pattern: "/api/audit", Summary: "The security audit trail, newest first, paged (administrators)", Handler: http.HandlerFunc(h.listAudit)},
 
@@ -288,6 +295,100 @@ func (h itemHandlers) grantSystemRole(w http.ResponseWriter, r *http.Request) {
 		h.d.DB.Audit.Record(audit.Entry{Event: audit.SystemRole, Actor: who(r), Addr: clientAddr(r), Subject: r.PathValue("principal"), Detail: map[string]string{"role": role}})
 		return nil, nil
 	})
+}
+
+// listGrants lists the roles granted in a space (ADR-0048).
+func (h itemHandlers) listGrants(w http.ResponseWriter, r *http.Request) {
+	h.read(w, r, func(x *item.Session) (any, error) {
+		grants, err := x.SpaceGrants(r.PathValue("space"))
+		if err != nil {
+			return nil, err
+		}
+		out := []map[string]string{}
+		for _, g := range grants {
+			out = append(out, map[string]string{"principal": g.Principal, "role": roleName(g.Role)})
+		}
+		return map[string]any{"roles": out}, nil
+	})
+}
+
+func (h itemHandlers) revokeRole(w http.ResponseWriter, r *http.Request) {
+	h.write(w, r, 0, func(x *item.Session, _ *item.Store) (any, error) {
+		if err := x.Revoke(r.PathValue("space"), r.PathValue("principal")); err != nil {
+			return nil, err
+		}
+		h.d.DB.Audit.Record(audit.Entry{Event: audit.RoleRevoked, Actor: who(r), Addr: clientAddr(r), Subject: r.PathValue("principal"),
+			Detail: map[string]string{"space": r.PathValue("space")}})
+		return nil, nil
+	})
+}
+
+func (h itemHandlers) listGroups(w http.ResponseWriter, r *http.Request) {
+	h.adminRead(w, r, func(s *item.Store) any {
+		out := []map[string]any{}
+		groups := s.Groups()
+		for _, name := range slices.Sorted(maps.Keys(groups)) {
+			out = append(out, map[string]any{"name": name, "members": groups[name]})
+		}
+		return map[string]any{"groups": out}
+	})
+}
+
+func (h itemHandlers) removeMember(w http.ResponseWriter, r *http.Request) {
+	h.write(w, r, 0, func(_ *item.Session, s *item.Store) (any, error) {
+		if err := h.isAdmin(s, r); err != nil {
+			return nil, err
+		}
+		if err := s.RemoveFromGroup(who(r), r.PathValue("group"), r.PathValue("principal")); err != nil {
+			return nil, err
+		}
+		h.d.DB.Audit.Record(audit.Entry{Event: audit.GroupLeft, Actor: who(r), Addr: clientAddr(r), Subject: r.PathValue("principal"),
+			Detail: map[string]string{"group": r.PathValue("group")}})
+		return nil, nil
+	})
+}
+
+func (h itemHandlers) listSystemRoles(w http.ResponseWriter, r *http.Request) {
+	h.adminRead(w, r, func(s *item.Store) any {
+		out := []map[string]any{}
+		holders := s.SystemRoles()
+		for _, p := range slices.Sorted(maps.Keys(holders)) {
+			if len(holders[p]) > 0 {
+				out = append(out, map[string]any{"principal": p, "roles": holders[p]})
+			}
+		}
+		return map[string]any{"holders": out}
+	})
+}
+
+func (h itemHandlers) revokeSystemRole(w http.ResponseWriter, r *http.Request) {
+	h.write(w, r, 0, func(_ *item.Session, s *item.Store) (any, error) {
+		if err := h.isAdmin(s, r); err != nil {
+			return nil, err
+		}
+		if err := s.RevokeSystemRole(who(r), r.PathValue("principal"), r.PathValue("role")); err != nil {
+			return nil, err
+		}
+		h.d.DB.Audit.Record(audit.Entry{Event: audit.SystemRoleTaken, Actor: who(r), Addr: clientAddr(r), Subject: r.PathValue("principal"),
+			Detail: map[string]string{"role": r.PathValue("role")}})
+		return nil, nil
+	})
+}
+
+// adminRead answers a read only administrators may make.
+func (h itemHandlers) adminRead(w http.ResponseWriter, r *http.Request, fn func(s *item.Store) any) {
+	var out any
+	var err error
+	h.d.DB.Read(func(s *item.Store) {
+		if err = h.isAdmin(s, r); err == nil {
+			out = fn(s)
+		}
+	})
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (h itemHandlers) listAudit(w http.ResponseWriter, r *http.Request) {

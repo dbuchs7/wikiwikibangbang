@@ -787,6 +787,8 @@ func (s *Store) apply(e Event) {
 		s.applyAttachment(e, touch)
 	case Watched, Unwatched:
 		s.applyWatch(e)
+	case RoleRevoked, GroupMemberRemoved, SystemRoleRevoked:
+		s.applyRevocation(e)
 	default:
 		s.applyAccess(e, touch)
 	}

@@ -238,6 +238,10 @@ const (
 	CommentDeleted    EventKind = "CommentDeleted"
 	CommentResolved   EventKind = "CommentResolved"
 	CommentReopened   EventKind = "CommentReopened"
+	// Taking access back (ADR-0048).
+	RoleRevoked        EventKind = "RoleRevoked"
+	GroupMemberRemoved EventKind = "GroupMemberRemoved"
+	SystemRoleRevoked  EventKind = "SystemRoleRevoked"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -274,8 +278,8 @@ type Event struct {
 	Relation   *Relation
 	Members    []ID // ItemTrashed, ItemRestored, ItemPurged: every item affected
 
-	Group       string       // GroupMemberAdded
-	Principal   string       // GroupMemberAdded, RoleGranted, SystemRoleGranted
+	Group       string       // GroupMemberAdded, GroupMemberRemoved
+	Principal   string       // GroupMemberAdded, RoleGranted, SystemRoleGranted, and their revocations
 	Role        Role         // RoleGranted
 	SystemRole  string       // SystemRoleGranted
 	Restriction *Restriction // RestrictionSet

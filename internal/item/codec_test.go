@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":11,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":12,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -139,8 +139,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	files := attachmentLog(t)
 	watches := watchLog(t)
 	inline := inlineCommentLog(t)
+	access := revocationLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline) {
+	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline, access) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -153,17 +154,18 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v10.golden.jsonl", nil, log},
-		{"events.v10.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v10.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v10.comments.golden.jsonl", fakeSealer{}, comments},
-		{"events.v10.tree.golden.jsonl", fakeSealer{}, tree},
-		{"events.v10.blocks.golden.jsonl", fakeSealer{}, blocks},
-		{"events.v10.labels.golden.jsonl", fakeSealer{}, labels},
-		{"events.v10.attachments.golden.jsonl", fakeSealer{}, files},
-		{"events.v10.attachments.plain.golden.jsonl", nil, files},
-		{"events.v10.watches.golden.jsonl", fakeSealer{}, watches},
-		{"events.v10.inline.golden.jsonl", fakeSealer{}, inline},
+		{"events.v11.golden.jsonl", nil, log},
+		{"events.v11.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v11.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v11.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v11.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v11.blocks.golden.jsonl", fakeSealer{}, blocks},
+		{"events.v11.labels.golden.jsonl", fakeSealer{}, labels},
+		{"events.v11.attachments.golden.jsonl", fakeSealer{}, files},
+		{"events.v11.attachments.plain.golden.jsonl", nil, files},
+		{"events.v11.watches.golden.jsonl", fakeSealer{}, watches},
+		{"events.v11.inline.golden.jsonl", fakeSealer{}, inline},
+		{"events.v11.revocations.golden.jsonl", nil, access},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -196,7 +198,7 @@ func TestPersistedFormatIsStable(t *testing.T) {
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
 // text), 4 (comments), 5 (sibling order), 6 (block kinds), 7 (labels), 8
-// (attachments), 9 (watches) — still open and rebuild the same state and history as today's log
+// (attachments), 9 (watches), 10 (inline comments) — still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -247,6 +249,31 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v9.attachments.golden.jsonl"), fakeSealer{}, attachmentLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v9.attachments.plain.golden.jsonl"), nil, attachmentLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v9.watches.golden.jsonl"), fakeSealer{}, watchLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.labels.golden.jsonl"), fakeSealer{}, labelLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.attachments.golden.jsonl"), fakeSealer{}, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.attachments.plain.golden.jsonl"), nil, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.watches.golden.jsonl"), fakeSealer{}, watchLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v10.inline.golden.jsonl"), fakeSealer{}, inlineCommentLog(t))
+}
+
+// revocationLog grants and takes back a space role, a group membership and
+// a system role (ADR-0048).
+func revocationLog(t *testing.T) []Event {
+	s := setup(t)
+	noErr(t, s.GrantRole("admin", "PLAT", "anna", Editor))
+	noErr(t, s.RevokeRole("admin", "PLAT", "anna"))
+	noErr(t, s.AddToGroup("admin", "ops", "bert"))
+	noErr(t, s.RemoveFromGroup("admin", "ops", "bert"))
+	noErr(t, s.GrantSystemRole("admin", "root", RoleAdmin))
+	noErr(t, s.GrantSystemRole("admin", "erin", RoleAdmin))
+	noErr(t, s.RevokeSystemRole("root", "erin", RoleAdmin))
+	return s.Log()
 }
 
 // inlineCommentLog comments on a passage, answers it, resolves and reopens
@@ -505,7 +532,7 @@ var allEventKinds = []EventKind{
 	TypeDefined, SpaceCreated, ItemCreated, TitleSet, PropertySet, Transitioned, ItemMoved,
 	BodyCommitted, RelationAdded, RelationRemoved, ItemTrashed, ItemRestored, ItemPurged,
 	ItemRedacted, GroupMemberAdded, RoleGranted, SystemRoleGranted, RestrictionSet,
-	ItemImported, ItemReleased, CommentAdded, CommentEdited, CommentDeleted, CommentResolved, CommentReopened, LabelsSet,
+	ItemImported, ItemReleased, CommentAdded, CommentEdited, CommentDeleted, CommentResolved, CommentReopened, RoleRevoked, GroupMemberRemoved, SystemRoleRevoked, LabelsSet,
 	AttachmentAdded, AttachmentDeleted, Watched, Unwatched,
 }
 

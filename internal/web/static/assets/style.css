@@ -392,3 +392,7 @@ details.card > summary { cursor: pointer; font-weight: 600; }
 .copyable .snippet { flex: 1; margin: 0; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
   font-family: var(--font-mono); font-size: 0.85em; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tools li { margin: 4px 0; }
+/* Administration: a table of contents, members of groups. */
+.admin-toc { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 12px; }
+.member { display: inline-flex; align-items: center; gap: 2px; margin-right: 10px; }
+.card h3 { margin: 16px 0 8px; }

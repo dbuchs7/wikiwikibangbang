@@ -29,7 +29,7 @@ func authRoutes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/api/tokens", Summary: "List one's own API tokens", Handler: http.HandlerFunc(h.listTokens)},
 		{Method: http.MethodPost, Pattern: "/api/tokens", Summary: "Create an API token; the secret is returned once", Handler: http.HandlerFunc(h.createToken)},
 		{Method: http.MethodDelete, Pattern: "/api/tokens/{id}", Summary: "Revoke one of one's own API tokens", Handler: http.HandlerFunc(h.revokeToken)},
-		{Method: http.MethodGet, Pattern: "/api/users", Summary: "List accounts (administrators)", Handler: http.HandlerFunc(h.listUsers)},
+		{Method: http.MethodGet, Pattern: "/api/users", Summary: "List accounts (administrators and space administrators)", Handler: http.HandlerFunc(h.listUsers)},
 		{Method: http.MethodGet, Pattern: "/api/users/names", Summary: "Usernames of the user IDs given as id parameters, for showing authors", Handler: http.HandlerFunc(h.userNames)},
 		{Method: http.MethodPost, Pattern: "/api/users", Summary: "Create an account (administrators)", Handler: http.HandlerFunc(h.createUser)},
 		{Method: http.MethodPost, Pattern: "/api/backup", Summary: "Download an encrypted backup of the data directory (administrators; passphrase in the body)", Handler: http.HandlerFunc(h.backup)},
@@ -233,10 +233,14 @@ func (h authHandlers) revokeToken(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// listUsers lists the accounts for administrators and for space
+// administrators, who choose among them whom to grant a role.
 func (h authHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 	p, _ := PrincipalFrom(r.Context())
-	if !h.isAdmin(p) {
-		writeError(w, http.StatusForbidden, "administrators only")
+	may := false
+	h.d.DB.Read(func(s *item.Store) { may = s.As(string(p.User)).AdministersASpace() })
+	if !may {
+		writeError(w, http.StatusForbidden, "administrators and space administrators only")
 		return
 	}
 	out := []userJSON{}
