@@ -72,7 +72,7 @@ function check(cond, msg) {
     if (process.env.BACKUP_OUT) require("fs").writeFileSync(process.env.BACKUP_OUT, saved);
 
     step("create an item with a hostile title");
-    await page.click("text=Spaces");
+    await page.click("#nav >> text=Spaces");
     await page.click("a:has-text('Platform')");
     await page.fill("#new-item [name=title]", hostile);
     await page.selectOption("#new-item [name='p:priority']", "high");
@@ -208,8 +208,24 @@ function check(cond, msg) {
     check(await page.locator(".hits li").count() === 1, "the search results stay");
     await page.unroute("**/api/items/PLAT-1");
 
+    step("app switcher: nine dots open the modules; Tasks lists open work across spaces");
+    await page.click("#app-switcher");
+    await page.waitForSelector("#drawer:not([hidden])");
+    check((await page.locator("#drawer-apps a").allTextContents()).join(",") === "Spaces,Tasks,Governance", "the three modules");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#drawer", { state: "hidden" });
+    await page.click("#app-switcher");
+    await page.click("#drawer-apps a:has-text('Tasks')");
+    await page.waitForSelector("#drawer", { state: "hidden" });
+    await page.waitForSelector("#tasks td:has-text('PLAT-2')");
+    check(await page.locator("#tasks td:has-text('PLAT-1')").count() === 0, "a finished task is not open work");
+    check(await page.locator("#drawer-apps a.active").count() === 1, "one module is marked active");
+    await page.click("#app-switcher");
+    await page.click("#drawer-apps a:has-text('Governance')");
+    await page.waitForSelector("#governance-overview td:has-text('PLAT')");
+
     step("board: columns are the workflow's states; dragging a card performs the transition");
-    await page.click("text=Spaces");
+    await page.click("#nav >> text=Spaces");
     await page.click("a:has-text('Platform')");
     await page.click("a:has-text('Board: task')");
     await page.waitForSelector(".board");
@@ -223,15 +239,15 @@ function check(cond, msg) {
     check(await page.locator(`${column("open")} .card-item`).count() === 0, "the open column is empty");
 
     step("links: the link check page says when checking is off");
-    await page.click("text=Spaces");
+    await page.click("#nav >> text=Spaces");
     await page.click("a:has-text('Platform')");
     await page.click("a:has-text('Link check')");
     await page.waitForSelector("#linkcheck >> text=switched off");
 
     step("governance: the check of a space lists its three kinds of findings");
-    await page.click("text=Spaces");
+    await page.click("#nav >> text=Spaces");
     await page.click("a:has-text('Platform')");
-    await page.click("a:has-text('Governance')");
+    await page.click("main a:has-text('Governance')");
     await page.waitForSelector("#governance h2:has-text('Sensitive data')");
     await page.waitForSelector("#governance h2:has-text('Not changed')");
     await page.waitForSelector("#governance h2:has-text('Implausible')");

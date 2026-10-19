@@ -65,6 +65,52 @@ function renderFooter() {
   footer.replaceChildren(`wikiwikibangbang ${me.version}${rev}`);
 }
 
+// --- module switcher ---------------------------------------------------------
+
+// modules are offered behind the nine dots, as in the atlas console. match
+// names the route sections that belong to a module, for its highlight.
+const modules = [
+  { id: "spaces", name: "Spaces", href: "#/", match: ["", "space", "item", "board", "links", "search"] },
+  { id: "tasks", name: "Tasks", href: "#/tasks", match: ["tasks"] },
+  { id: "governance", name: "Governance", href: "#/governance", match: ["governance"] },
+];
+
+const switcher = document.getElementById("app-switcher");
+const drawer = document.getElementById("drawer");
+const scrim = document.getElementById("scrim");
+
+function openDrawer() {
+  drawer.hidden = false;
+  scrim.hidden = false;
+  switcher.setAttribute("aria-expanded", "true");
+  drawer.querySelector("#drawer-apps a")?.focus();
+}
+
+function closeDrawer() {
+  if (drawer.hidden) return;
+  drawer.hidden = true;
+  scrim.hidden = true;
+  switcher.setAttribute("aria-expanded", "false");
+}
+
+switcher.addEventListener("click", () => (drawer.hidden ? openDrawer() : closeDrawer()));
+document.getElementById("drawer-close").addEventListener("click", () => { closeDrawer(); switcher.focus(); });
+scrim.addEventListener("click", closeDrawer);
+document.getElementById("drawer-apps").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !drawer.hidden) {
+    closeDrawer();
+    switcher.focus();
+  }
+});
+
+// renderModules lists the modules and marks the one the route belongs to.
+function renderModules(section) {
+  switcher.hidden = !me;
+  mount(document.getElementById("drawer-apps"), ...modules.map((m) =>
+    h("a", { href: m.href, class: m.match.includes(section) ? "active" : "", "aria-current": m.match.includes(section) ? "page" : "false", text: m.name })));
+}
+
 function renderNav() {
   if (!me) {
     nav.replaceChildren();
@@ -117,13 +163,16 @@ async function route() {
     }
     renderNav();
     renderFooter();
-    if (!me) return loginView();
+    closeDrawer();
     const [, section, arg, arg2] = hash.split("?")[0].split("/").map(decodeURIComponent);
+    renderModules(section || "");
+    if (!me) return loginView();
     switch (section) {
+      case "tasks": return await tasksView();
       case "space": return await spaceView(arg);
       case "board": return await boardView(arg, arg2);
       case "links": return await linksView(arg);
-      case "governance": return await governanceView(arg);
+      case "governance": return arg ? await governanceView(arg) : await governanceOverview();
       case "item": return await itemView(arg);
       case "search": return await searchView(arg || "");
       case "account": return await accountView();
@@ -297,6 +346,64 @@ async function boardView(key, typeName) {
     page.next ? h("p", { class: "notice", text: `This board shows the first ${items.length} items.` }) : null,
     status,
     h("div", { class: "board" }, type.workflow.states.map(column)),
+  );
+}
+
+// --- tasks -------------------------------------------------------------------
+
+// tasksView lists open work across every space one may read: items of a
+// type with a workflow that are not in its last state. It reads the paged
+// item listing, at most boardMax items, like the board.
+async function tasksView() {
+  const show = screen();
+  const { types } = await get("/api/types");
+  const flows = new Map(types.filter((t) => t.workflow).map((t) => [t.name, t.workflow]));
+  let page = await get("/api/items?limit=100");
+  const items = [...page.items];
+  while (page.next && items.length < boardMax) {
+    page = await get(`/api/items?limit=100&after=${encodeURIComponent(page.next)}`);
+    items.push(...page.items);
+  }
+  const open = items.filter((it) => {
+    const wf = flows.get(it.type);
+    return wf && it.state !== wf.states[wf.states.length - 1];
+  });
+  open.sort((a, b) => a.space.localeCompare(b.space) || a.key.localeCompare(b.key, undefined, { numeric: true }));
+  show(
+    h("h1", { text: "Tasks" }),
+    h("p", { class: "muted", text: `${open.length} open, in every space you can read.` }),
+    h("section", { id: "tasks" }, open.length
+      ? h("table", {}, h("thead", {}, h("tr", {}, ["Item", "Title", "Type", "State", "Space"].map((c) => h("th", { text: c })))),
+        h("tbody", {}, open.map((it) => h("tr", {},
+          h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)),
+          h("td", { text: it.title }),
+          h("td", { text: it.type }),
+          h("td", { text: it.state }),
+          h("td", {}, link(`#/board/${encodeURIComponent(it.space)}/${encodeURIComponent(it.type)}`, it.space)),
+        ))))
+      : h("p", { class: "muted", text: "No open tasks." })),
+    page.next ? h("p", { class: "notice", text: `Only the first ${items.length} items were read.` }) : null,
+  );
+}
+
+// governanceOverview shows the governance check of every space one holds
+// a role in, as counts that lead to each space's check (ADR-0040).
+async function governanceOverview() {
+  const show = screen();
+  const { spaces } = await get("/api/spaces");
+  const reports = await Promise.all(spaces.map((s) => get(`/api/spaces/${encodeURIComponent(s.key)}/governance`)));
+  show(
+    h("h1", { text: "Governance" }),
+    h("p", { class: "muted", text: "Sensitive data, items not changed for a year, and implausible values, per space." }),
+    h("section", { id: "governance-overview" }, spaces.length
+      ? h("table", {}, h("thead", {}, h("tr", {}, ["Space", "Sensitive data", "Not changed", "Implausible"].map((c) => h("th", { text: c })))),
+        h("tbody", {}, spaces.map((s, i) => h("tr", {},
+          h("td", {}, link("#/governance/" + encodeURIComponent(s.key), s.key), " ", h("span", { class: "muted", text: s.name })),
+          h("td", { text: String(reports[i].sensitive.length) }),
+          h("td", { text: String(reports[i].stale.length) }),
+          h("td", { text: String(reports[i].implausible.length) }),
+        ))))
+      : h("p", { class: "muted", text: "You hold a role in no space." })),
   );
 }
 
