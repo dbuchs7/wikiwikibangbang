@@ -254,5 +254,13 @@ export default {
   "label.placeholder": "Add a label",
   "label.remove": "Remove the label {label}",
   "label.noItems": "Nothing you may read carries this label.",
-  "label.more": "Showing the first page of {n}."
+  "label.more": "Showing the first page of {n}.",
+
+  "att.title": {"one": "Files ({n})", "other": "Files ({n})"},
+  "att.none": "No files yet.",
+  "att.upload": "Upload files",
+  "att.deleteConfirm": "Delete {name}? Its content is destroyed and cannot be restored.",
+  "editor.image": "Image",
+  "editor.caption": "Caption",
+  "editor.notAnImage": "The file was attached, but only PNG, JPEG, GIF and WebP images show in the page."
 };

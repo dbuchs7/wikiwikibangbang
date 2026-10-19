@@ -35,8 +35,9 @@ function blockAt(doc, pos) {
 
 // liveBody joins the live session of an item and returns the editor
 // element and a close function. resolve(keyOrId) finds an item;
-// childPages() lists the item's child pages (editor.js).
-export function liveBody({ ref, embeds, resolve, childPages }) {
+// childPages() lists the item's child pages and files serves and stores
+// its attachments (editor.js).
+export function liveBody({ ref, embeds, resolve, childPages, files }) {
   const el = h("div", { class: "live" });
   const presence = h("p", { class: "muted live-presence", "aria-live": "polite" });
   const status = h("p", { class: "status live-status", role: "status" });
@@ -263,7 +264,7 @@ export function liveBody({ ref, embeds, resolve, childPages }) {
     });
     if (blocks.length === 0) blocks.push({ kind: "paragraph", text: "", id: newID() });
     if (!view) {
-      const ed = createEditor({ blocks, embeds, editable: e.editable, resolve, childPages, extra: [plugin] });
+      const ed = createEditor({ blocks, embeds, editable: e.editable, resolve, childPages, files, extra: [plugin] });
       view = ed.view;
       el.insertBefore(ed.element, status);
       // Leaving the editor releases its blocks, after a moment: a click on
@@ -281,6 +282,7 @@ export function liveBody({ ref, embeds, resolve, childPages }) {
     const out = { kind: b.kind, text: b.text ?? "" };
     if (b.kind === "embed") return { kind: "embed", ref: b.ref };
     if (b.kind === "toc" || b.kind === "children") return { kind: b.kind };
+    if (b.kind === "image") return { kind: "image", text: b.text ?? "", ref: b.ref };
     if (b.kind === "heading") out.level = b.level;
     if (b.marks?.length) out.marks = b.marks;
     if (b.mentions?.length) out.mentions = b.mentions;

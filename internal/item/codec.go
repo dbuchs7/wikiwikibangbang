@@ -29,7 +29,10 @@ import (
 //     (ADR-0042). Versions 1 to 5 are still read.
 //   - 7: the kind LabelsSet and the field labels, sealed content
 //     (ADR-0044). Versions 1 to 6 are still read.
-const CodecVersion = 7
+//   - 8: the kinds AttachmentAdded and AttachmentDeleted with the field
+//     attachment, sealed when it describes a file, and the block kind
+//     image (ADR-0045). Versions 1 to 7 are still read.
+const CodecVersion = 8
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
@@ -145,6 +148,7 @@ type wireEvent struct {
 	Comment     ID                    `json:"comment,omitempty"`
 	Text        string                `json:"text,omitempty"`
 	Labels      []string              `json:"labels,omitempty"`
+	Attachment  *Attachment           `json:"attachment,omitempty"`
 	Erased      bool                  `json:"erased,omitempty"`
 	// Sealed holds the encrypted content (wireContent) when a Sealer was
 	// used; the plaintext content fields are then empty.
@@ -154,13 +158,14 @@ type wireEvent struct {
 // wireContent is the part of an event that is sealed: everything
 // Event.erase removes.
 type wireContent struct {
-	Title  string                `json:"title,omitempty"`
-	Props  map[string]*wireValue `json:"props,omitempty"`
-	Value  *wireValue            `json:"value,omitempty"`
-	Body   *Doc                  `json:"body,omitempty"`
-	Raw    string                `json:"raw,omitempty"`
-	Text   string                `json:"text,omitempty"`
-	Labels []string              `json:"labels,omitempty"`
+	Title      string                `json:"title,omitempty"`
+	Props      map[string]*wireValue `json:"props,omitempty"`
+	Value      *wireValue            `json:"value,omitempty"`
+	Body       *Doc                  `json:"body,omitempty"`
+	Raw        string                `json:"raw,omitempty"`
+	Text       string                `json:"text,omitempty"`
+	Labels     []string              `json:"labels,omitempty"`
+	Attachment *Attachment           `json:"attachment,omitempty"`
 }
 
 func aad(w *wireEvent) []byte {
@@ -168,7 +173,7 @@ func aad(w *wireEvent) []byte {
 }
 
 func seal(w *wireEvent, sl Sealer) error {
-	c := wireContent{Title: w.Title, Props: w.Props, Value: w.Value, Body: w.Body, Text: w.Text, Labels: w.Labels}
+	c := wireContent{Title: w.Title, Props: w.Props, Value: w.Value, Body: w.Body, Text: w.Text, Labels: w.Labels, Attachment: w.Attachment}
 	if w.Origin != nil {
 		c.Raw = w.Origin.Raw
 		o := *w.Origin
@@ -183,7 +188,7 @@ func seal(w *wireEvent, sl Sealer) error {
 	if err != nil {
 		return err
 	}
-	w.Title, w.Props, w.Value, w.Body, w.Text, w.Labels, w.Sealed = "", nil, nil, nil, "", nil, ct
+	w.Title, w.Props, w.Value, w.Body, w.Text, w.Labels, w.Attachment, w.Sealed = "", nil, nil, nil, "", nil, nil, ct
 	return nil
 }
 
@@ -203,7 +208,7 @@ func unseal(w *wireEvent, sl Sealer) (bool, error) {
 	if err := dec.Decode(&c); err != nil {
 		return false, fmt.Errorf("sealed content: %w", err)
 	}
-	w.Title, w.Props, w.Value, w.Body, w.Text, w.Labels = c.Title, c.Props, c.Value, c.Body, c.Text, c.Labels
+	w.Title, w.Props, w.Value, w.Body, w.Text, w.Labels, w.Attachment = c.Title, c.Props, c.Value, c.Body, c.Text, c.Labels, c.Attachment
 	if w.Origin != nil {
 		o := *w.Origin
 		o.Raw = c.Raw
@@ -231,7 +236,7 @@ func toWire(e Event) (wireEvent, error) {
 		Transition: e.Transition, From: e.From, To: e.To, Body: e.Body, Relation: e.Relation,
 		Members: e.Members, Group: e.Group, Principal: e.Principal, SystemRole: e.SystemRole,
 		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed,
-		Comment: e.Comment, Text: e.Text, Labels: e.Labels, Erased: e.Erased,
+		Comment: e.Comment, Text: e.Text, Labels: e.Labels, Attachment: e.Attachment, Erased: e.Erased,
 	}
 	if e.Role != 0 {
 		name, ok := roleNames[e.Role]
@@ -269,7 +274,7 @@ func fromWire(w wireEvent) (Event, error) {
 		Transition: w.Transition, From: w.From, To: w.To, Body: w.Body, Relation: w.Relation,
 		Members: w.Members, Group: w.Group, Principal: w.Principal, SystemRole: w.SystemRole,
 		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed,
-		Comment: w.Comment, Text: w.Text, Labels: w.Labels, Erased: w.Erased,
+		Comment: w.Comment, Text: w.Text, Labels: w.Labels, Attachment: w.Attachment, Erased: w.Erased,
 	}
 	if w.Role != "" {
 		for r, name := range roleNames {

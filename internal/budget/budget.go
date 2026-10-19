@@ -50,6 +50,8 @@ type Budgets struct {
 	// LinkCheckLinks bounds the distinct web addresses one link check
 	// calls (ADR-0039).
 	LinkCheckLinks int
+	// AttachmentBytes is the largest file one upload stores (ADR-0045).
+	AttachmentBytes int64
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
@@ -65,6 +67,7 @@ func Default() Budgets {
 		LoginTracked:     100_000,
 		SSOPending:       10_000,
 		LinkCheckLinks:   500,
+		AttachmentBytes:  25 << 20,
 	}
 }
 

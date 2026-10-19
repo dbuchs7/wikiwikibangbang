@@ -187,7 +187,7 @@ func TestEveryFileIsBackedUpOrExcluded(t *testing.T) {
 	}
 	for _, e := range entries {
 		_, excluded := NotBackedUp[e.Name()]
-		if !excluded && !slices.Contains(BackupFiles, e.Name()) {
+		if !excluded && !slices.Contains(BackupFiles, e.Name()) && !slices.Contains(BackedUpDirs, e.Name()) {
 			t.Errorf("%s is neither backed up nor excluded on purpose", e.Name())
 		}
 	}

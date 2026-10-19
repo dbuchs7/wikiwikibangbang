@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -250,5 +251,54 @@ func TestRestoreRefusesWhatItShouldNot(t *testing.T) {
 		if _, err := Restore(bytes.NewReader(archive), testPass, filepath.Join(t.TempDir(), "r")); err == nil {
 			t.Errorf("%s was restored", name)
 		}
+	}
+}
+
+// Attachments' files travel with the backup, encrypted twice, and open
+// after a restore; a deleted attachment's file is not in it (ADR-0045).
+func TestBackupsHoldAttachments(t *testing.T) {
+	src := openDB(t, t.TempDir())
+	defer src.Close()
+	populate(t, src)
+	var page item.ID
+	src.Read(func(s *item.Store) { page = s.Find(item.Query{Space: "PLAT"})[0].ID })
+	store := func(content, name string) item.Attachment {
+		a, err := src.StoreAttachment(page, strings.NewReader(content), 1<<20)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a.Name = name
+		if err := src.Write(func(s *item.Store) error { a, err = s.AddAttachment("admin", page, a); return err }); err != nil {
+			t.Fatal(err)
+		}
+		return a
+	}
+	kept := store("the diagram", "diagram.png")
+	gone := store("deleted content", "old.txt")
+	if err := src.Write(func(s *item.Store) error { return s.DeleteAttachment("admin", page, gone.ID) }); err != nil {
+		t.Fatal(err)
+	}
+	data := backupOf(t, src)
+	if bytes.Contains(data, []byte("the diagram")) {
+		t.Fatal("an attachment is in the backup in the clear")
+	}
+	dir := filepath.Join(t.TempDir(), "restored")
+	m, err := Restore(bytes.NewReader(data), testPass, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Files) != len(storage.BackupFiles)+1 {
+		t.Fatalf("manifest %+v", m.Files)
+	}
+	dst := openDB(t, dir)
+	defer dst.Close()
+	r, err := dst.OpenAttachment(page, kept.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(r)
+	r.Close()
+	if err != nil || string(got) != "the diagram" {
+		t.Fatalf("restored attachment %q, %v", got, err)
 	}
 }

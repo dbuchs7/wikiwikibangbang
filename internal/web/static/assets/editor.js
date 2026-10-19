@@ -39,6 +39,8 @@ export const schema = new Schema({
     table: { group: "block", atom: true, selectable: true, attrs: { ...bid, text: { default: "\t\n\t" } }, toDOM: (n) => ["pre", { class: "pm-table" }, n.attrs.text] },
     toc: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-toc" }] },
     children: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-children" }] },
+    // An image attachment of the item (ADR-0045), with a plain caption.
+    image: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-image" }, ["figcaption", n.attrs.text]] },
     // Content an importer could not convert (ADR-0023), kept as it came and
     // shown as text; it cannot be created in the editor.
     unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, attrs: bid, toDOM: () => ["pre", { class: "pm-unsupported", title: t("editor.unsupported") }, 0] },
@@ -100,6 +102,7 @@ export function nodeFromBlock(b, embeds = []) {
   const id = b.id ?? null;
   if (b.kind === "table") return schema.nodes.table.create({ bid: id, text: b.text || "" });
   if (b.kind === "toc" || b.kind === "children") return schema.nodes[b.kind].create({ bid: id });
+  if (b.kind === "image") return schema.nodes.image.create({ bid: id, ref: b.ref, text: b.text || "" });
   if (b.kind === "embed") {
     const v = embeds.find((e) => e.ref === b.ref);
     return schema.nodes.embed.create({
@@ -155,6 +158,7 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
   if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
   if (node.type === schema.nodes.toc || node.type === schema.nodes.children) return { kind: node.type.name };
+  if (node.type === schema.nodes.image) return { kind: "image", text: node.attrs.text, ref: node.attrs.ref };
   let text = "";
   const marks = [];
   const mentions = new Set((node.attrs && node.attrs.mentions) || []);
@@ -331,13 +335,39 @@ function childrenView(node, childPages) {
   return { dom, ...own, update: (n) => n.type === node.type };
 }
 
+// imageView shows an image attachment; an editor edits its caption.
+function imageView(node, view, getPos, fileURL) {
+  const img = h("img", { src: fileURL ? fileURL(node.attrs.ref) : "", alt: node.attrs.text, loading: "lazy" });
+  const caption = h("figcaption");
+  const dom = h("figure", { class: "pm-image", contenteditable: "false" }, img, caption);
+  let shown = null;
+  const render = () => {
+    if (shown === node.attrs.text + view.editable) return;
+    shown = node.attrs.text + view.editable;
+    img.alt = node.attrs.text;
+    if (!view.editable) return caption.replaceChildren(node.attrs.text);
+    const input = h("input", { value: node.attrs.text, placeholder: t("editor.caption"), "aria-label": t("editor.caption") });
+    input.addEventListener("change", () => {
+      const pos = getPos();
+      if (pos !== undefined && !dom.classList.contains("pm-locked")) {
+        view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, text: input.value.replace(/[\r\n]+/g, " ") }));
+      } else render(shown = null);
+    });
+    caption.replaceChildren(input);
+  };
+  render();
+  return { dom, ...own, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
+}
+
 // createEditor mounts an editor for blocks and returns its element and a
 // function reading the blocks back. With editable false it is a viewer.
 // resolve(keyOrId) returns an item (for mentions and embeds) or throws;
 // childPages() the item's child pages as [{key, title}], for a list of
-// child pages. extra adds plugins, such as a live session's (live.js);
+// child pages. files, for an item's attachments (ADR-0045), has url(id),
+// where a file is served, and upload(file), which stores a file and returns
+// the attachment. extra adds plugins, such as a live session's (live.js);
 // viewProps adds editor view properties.
-export function createEditor({ blocks, embeds, editable, resolve, childPages, extra = [], viewProps = {} }) {
+export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {} }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
   const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
@@ -350,6 +380,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, ex
       table: tableView,
       toc: (node, v) => tocView(node, v, tocs),
       children: (node) => childrenView(node, childPages),
+      image: (node, v, getPos) => imageView(node, v, getPos, files?.url),
     },
     ...viewProps,
   });
@@ -374,9 +405,26 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, ex
     const kind = e.target.value;
     e.target.value = "";
     if (kind === "table") insertBlock(schema.nodes.table.create({ text: `${t("editor.heading", { n: 1 })}\t${t("editor.heading", { n: 2 })}\n\t` }));
+    else if (kind === "image") picker.click();
     else if (kind) insertBlock(schema.nodes[kind].create());
-  } }, [["", t("editor.insert")], ["table", t("editor.table")], ["toc", t("editor.toc")], ["children", t("editor.children")]]
+  } }, [["", t("editor.insert")], ["table", t("editor.table")], ["toc", t("editor.toc")], ["children", t("editor.children")],
+    files ? ["image", t("editor.image")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
+  // An image is uploaded as an attachment of the item, then shown.
+  const picker = h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp", hidden: true, "aria-label": t("editor.image") });
+  picker.addEventListener("change", async () => {
+    const file = picker.files[0];
+    picker.value = "";
+    if (!file) return;
+    status.textContent = "";
+    try {
+      const a = await files.upload(file);
+      if (!a.inline) throw new Error(t("editor.notAnImage"));
+      insertBlock(schema.nodes.image.create({ ref: a.id, text: a.name.replace(/\.[^.]*$/, "") }));
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  });
   const target = h("input", { class: "pm-target", placeholder: t("editor.target"), "aria-label": t("editor.targetLabel") });
   const status = h("span", { class: "error", role: "status" });
   const withTarget = (fn) => async () => {
@@ -396,6 +444,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, ex
   const toolbar = editable ? h("div", { class: "pm-toolbar", role: "toolbar" },
     kindSelect,
     insertSelect,
+    picker,
     h("button", { type: "button", title: t("editor.bold"), onclick: run(toggleMark(schema.marks.bold)) }, h("strong", { text: "B" })),
     h("button", { type: "button", title: t("editor.italic"), onclick: run(toggleMark(schema.marks.italic)) }, h("em", { text: "I" })),
     h("button", { type: "button", title: t("editor.code"), onclick: run(toggleMark(schema.marks.code)), text: "</>" }),

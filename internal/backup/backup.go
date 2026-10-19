@@ -1,8 +1,8 @@
 // Package backup writes and restores encrypted backups of a data directory
 // (ADR-0016, ADR-0034).
 //
-// A backup is a tar archive of the files storage.BackupFiles names, taken
-// from a consistent snapshot, followed by a manifest with their sizes and
+// A backup is a tar archive of the files storage.BackupFiles names and of
+// the attachments' files (ADR-0045), taken from a consistent snapshot, followed by a manifest with their sizes and
 // SHA-256 sums; the archive is encrypted with a key derived from a
 // passphrase. It holds the item keys and the account hashes, because a
 // backup without them could not be restored to a working instance; the
@@ -19,7 +19,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
@@ -92,7 +91,7 @@ func Write(w io.Writer, passphrase string, files []storage.SnapshotFile, build s
 }
 
 // Restore decrypts a backup into dir, which must not exist or be empty. It
-// takes only the files storage.BackupFiles names, checks each against the
+// takes only the files storage.BackedUpPath allows, checks each against the
 // manifest, and checks that the result opens as a data directory before it
 // moves it into place; on any error dir is left as it was.
 func Restore(r io.Reader, passphrase, dir string) (Manifest, error) {
@@ -141,13 +140,17 @@ func Restore(r io.Reader, passphrase, dir string) (Manifest, error) {
 			haveManifest = true
 			continue
 		}
-		if !slices.Contains(storage.BackupFiles, hdr.Name) {
+		if !storage.BackedUpPath(hdr.Name) {
 			return m, fmt.Errorf("backup: unexpected file %q", hdr.Name)
 		}
 		if _, dup := got[hdr.Name]; dup {
 			return m, fmt.Errorf("backup: %q appears twice", hdr.Name)
 		}
-		f, err := extract(tr, filepath.Join(stage, hdr.Name))
+		path := filepath.Join(stage, filepath.FromSlash(hdr.Name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			return m, err
+		}
+		f, err := extract(tr, path)
 		if err != nil {
 			return m, err
 		}

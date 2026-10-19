@@ -1,6 +1,6 @@
 // The UI shell (ADR-0009, ADR-0031): hash routes, one view per route, all
 // data through the HTTP API. Plain ES modules, no build step.
-import { api, get, post, put, del, download, ApiError } from "./api.js";
+import { api, get, post, put, del, download, upload, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { liveBody } from "./live.js";
@@ -96,10 +96,46 @@ function withTree(tree, ...content) {
 const childPagesOf = (item) => async () =>
   (await get(`/api/spaces/${encodeURIComponent(item.space)}/tree?parent=${item.id}`)).items;
 
+// filesOf serves and stores an item's attachments for its body (ADR-0045).
+const filesOf = (item) => ({
+  url: (id) => `/api/items/${item.id}/attachments/${id}`,
+  upload: (file) => upload("/api/items/" + item.id, file),
+});
+
 // readOnlyBody shows an item's body without editing it.
 function readOnlyBody(item, embeds) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
-  return createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item) }).element;
+  return createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item) }).element;
+}
+
+// sizeText shows a number of bytes for people.
+function sizeText(n) {
+  const units = ["B", "KB", "MB", "GB"];
+  let i = 0;
+  for (; n >= 1024 && i < units.length - 1; i++) n /= 1024;
+  return `${i ? n.toFixed(1) : n} ${units[i]}`;
+}
+
+// attachmentsSection lists an item's files (ADR-0045); on a live item more
+// can be uploaded and files deleted.
+function attachmentsSection(path, files, live) {
+  const status = h("div", { class: "status" });
+  const row = (a) => h("li", { class: "attachment" },
+    h("a", { href: `${path}/attachments/${a.id}`, text: a.name, download: a.inline ? null : a.name, target: a.inline ? "_blank" : null, rel: "noopener" }),
+    h("span", { class: "muted", text: ` · ${sizeText(a.size)} · ${person(a.author)} · ${when(a.created)}` }),
+    live ? h("button", { class: "link", text: t("common.delete"), onclick: () => confirm(t("att.deleteConfirm", { name: a.name }))
+      && action(() => del(`${path}/attachments/${a.id}`), status) }) : null);
+  const picker = live ? h("input", { type: "file", multiple: true, id: "upload", "aria-label": t("att.upload") }) : null;
+  if (picker) {
+    picker.addEventListener("change", () => action(async () => {
+      for (const file of picker.files) await upload(path, file);
+    }, status));
+  }
+  return h("section", { id: "attachments" },
+    h("h2", { text: t("att.title", { n: files.length }) }),
+    files.length ? h("ul", { class: "attachments" }, files.map(row)) : h("p", { class: "muted", text: t("att.none") }),
+    picker ? h("label", { class: "upload" }, h("span", { text: t("att.upload") }), picker) : null,
+    status);
 }
 
 async function action(fn, status) {
@@ -696,18 +732,19 @@ async function itemView(ref) {
   const show = screen();
   const { item } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
-  const [{ types }, history, out, inc, embeds, comments] = await Promise.all([
+  const [{ types }, history, out, inc, embeds, comments, { attachments }] = await Promise.all([
     get("/api/types"),
     get(path + "/history"),
     get(path + "/relations?direction=outgoing"),
     get(path + "/relations?direction=incoming"),
     get(path + "/embeds"),
     get(path + "/comments"),
+    get(path + "/attachments"),
   ]);
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
   const level = `/api/spaces/${encodeURIComponent(item.space)}/tree` + (item.parent ? "?parent=" + item.parent : "");
   const [, open, siblings] = await Promise.all([
-    learnNames([...history.events.map((e) => e.actor), ...comments.comments.map((c) => c.author)]),
+    learnNames([...history.events.map((e) => e.actor), ...comments.comments.map((c) => c.author), ...attachments.map((a) => a.author)]),
     ancestors(item),
     item.presence === "live" ? get(level) : { items: [] },
   ]);
@@ -769,6 +806,7 @@ async function itemView(ref) {
     type.fields.length ? h("section", {}, h("h2", { text: t("item.properties") }), props) : null,
     type.body ? bodyEditor(item, embeds.embeds, live) : null,
     relationsSection(out.relations, inc.relations, item.id),
+    attachmentsSection(path, attachments, live),
     commentsSection(path, comments, live),
     h("p", {}, reorder, actions),
     live ? newItemForm(item.space, types, item.id, t("item.newChild"), "new-child") : null,
@@ -784,7 +822,7 @@ function bodyEditor(item, embeds, live) {
   if (!live) {
     return h("section", { id: "body" }, h("h2", { text: t("item.body") }), readOnlyBody(item, embeds));
   }
-  const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item) });
+  const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item) });
   onLeave(session.close);
   return h("section", { id: "body" }, h("h2", { text: t("item.body") }), session.element);
 }

@@ -65,6 +65,9 @@ const (
 	Table    BlockKind = "table"
 	TOC      BlockKind = "toc"
 	Children BlockKind = "children"
+	// Image shows an image attachment of the item; Ref names the
+	// attachment and Text is its caption (ADR-0045).
+	Image BlockKind = "image"
 )
 
 // PanelTones are the tones of a panel block.
@@ -151,6 +154,9 @@ type Item struct {
 	Comments []Comment
 	// Labels are the item's labels, sorted and unique (ADR-0044).
 	Labels []string
+	// Attachments are the item's files in the order added, deleted ones
+	// without their description (ADR-0045).
+	Attachments []Attachment
 
 	created   int // sequence number of the creating event; orders items
 	trashedBy int // sequence number of the event that trashed it, or 0
@@ -225,6 +231,8 @@ const (
 	CommentAdded      EventKind = "CommentAdded"
 	CommentEdited     EventKind = "CommentEdited"
 	LabelsSet         EventKind = "LabelsSet"
+	AttachmentAdded   EventKind = "AttachmentAdded"
+	AttachmentDeleted EventKind = "AttachmentDeleted"
 	CommentDeleted    EventKind = "CommentDeleted"
 )
 
@@ -274,6 +282,7 @@ type Event struct {
 	Comment     ID           // CommentAdded, CommentEdited, CommentDeleted
 	Text        string       // CommentAdded, CommentEdited
 	Labels      []string     // LabelsSet: the item's labels after the event
+	Attachment  *Attachment  // AttachmentAdded; AttachmentDeleted: only its ID
 
 	// Erased is set on an event whose content (title, properties, body, raw
 	// source) was removed because its item was purged or redacted. The
@@ -287,7 +296,7 @@ type Event struct {
 // comment text included (ADR-0035).
 func (e Event) HasContent() bool {
 	switch e.Kind {
-	case ItemCreated, TitleSet, PropertySet, BodyCommitted, ItemImported, CommentAdded, CommentEdited, LabelsSet:
+	case ItemCreated, TitleSet, PropertySet, BodyCommitted, ItemImported, CommentAdded, CommentEdited, LabelsSet, AttachmentAdded:
 		return true
 	}
 	return false
@@ -301,6 +310,9 @@ func (e *Event) erase() {
 		return
 	}
 	e.Title, e.Props, e.Value, e.Text, e.Labels = "", nil, nil, "", nil
+	if e.Kind == AttachmentAdded {
+		e.Attachment = nil
+	}
 	if e.Kind == BodyCommitted {
 		e.Body = &Doc{}
 	}
@@ -318,6 +330,7 @@ func (it *Item) clone() Item {
 	c.Body = it.Body.clone()
 	c.Comments = slices.Clone(it.Comments)
 	c.Labels = slices.Clone(it.Labels)
+	c.Attachments = slices.Clone(it.Attachments)
 	if it.Origin != nil {
 		o := *it.Origin
 		c.Origin = &o

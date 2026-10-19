@@ -109,13 +109,13 @@ func toDoc(blocks []blockJSON, kept func(text string) bool) (item.Doc, error) {
 	for i, b := range blocks {
 		switch b.Kind {
 		case item.Paragraph, item.Heading, item.Embed, item.BulletItem, item.OrderedItem, item.Quote, item.CodeBlock,
-			item.TaskItem, item.Panel, item.Table, item.TOC, item.Children:
+			item.TaskItem, item.Panel, item.Table, item.TOC, item.Children, item.Image:
 		case item.Unsupported:
 			if kept == nil || !kept(b.Text) {
 				return d, badInput("block %d: unsupported blocks come only from imports", i+1)
 			}
 		default:
-			return d, badInput("block %d: kind must be paragraph, heading, bullet, ordered, quote, code, task, panel, table, toc, children or embed", i+1)
+			return d, badInput("block %d: kind must be paragraph, heading, bullet, ordered, quote, code, task, panel, table, toc, children, image or embed", i+1)
 		}
 		blk := item.Block{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone}
 		for _, m := range b.Marks {

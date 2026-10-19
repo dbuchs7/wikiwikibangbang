@@ -252,5 +252,13 @@ export default {
   "label.placeholder": "Label hinzufügen",
   "label.remove": "Label {label} entfernen",
   "label.noItems": "Nichts, was Sie lesen dürfen, trägt dieses Label.",
-  "label.more": "Erste Seite von {n} angezeigt."
+  "label.more": "Erste Seite von {n} angezeigt.",
+
+  "att.title": {"one": "Dateien ({n})", "other": "Dateien ({n})"},
+  "att.none": "Noch keine Dateien.",
+  "att.upload": "Dateien hochladen",
+  "att.deleteConfirm": "{name} löschen? Der Inhalt wird vernichtet und lässt sich nicht wiederherstellen.",
+  "editor.image": "Bild",
+  "editor.caption": "Bildunterschrift",
+  "editor.notAnImage": "Die Datei wurde angehängt, aber nur Bilder in PNG, JPEG, GIF und WebP werden in der Seite angezeigt."
 };

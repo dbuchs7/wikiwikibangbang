@@ -35,6 +35,20 @@ export const post = (p, b = {}) => api("POST", p, b);
 export const put = (p, b = {}) => api("PUT", p, b);
 export const del = (p) => api("DELETE", p);
 
+// upload sends a file as an attachment of an item (ADR-0045). The body is
+// the file itself, as application/octet-stream, a type a cross-site form
+// cannot send.
+export async function upload(itemPath, file) {
+  const res = await fetch(`${itemPath}/attachments?name=${encodeURIComponent(file.name)}`, {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/octet-stream" }, body: file,
+  });
+  let data = null;
+  try { data = await res.json(); } catch { /* not JSON */ }
+  if (!res.ok) throw new ApiError(res.status, (data && data.error) || res.statusText);
+  return data.attachment;
+}
+
 // download POSTs body and returns the response as a file: its contents and
 // the name the server suggests.
 export async function download(path, body) {
