@@ -36,8 +36,9 @@ function blockAt(doc, pos) {
 // liveBody joins the live session of an item and returns the editor
 // element and a close function. resolve(keyOrId) finds an item;
 // childPages() lists the item's child pages and files serves and stores
-// its attachments (editor.js).
-export function liveBody({ ref, embeds, resolve, childPages, files }) {
+// its attachments (editor.js); extra adds plugins and comment starts an
+// inline comment (anchors.js).
+export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], comment }) {
   const el = h("div", { class: "live" });
   const presence = h("p", { class: "muted live-presence", "aria-live": "polite" });
   const status = h("p", { class: "status live-status", role: "status" });
@@ -264,7 +265,7 @@ export function liveBody({ ref, embeds, resolve, childPages, files }) {
     });
     if (blocks.length === 0) blocks.push({ kind: "paragraph", text: "", id: newID() });
     if (!view) {
-      const ed = createEditor({ blocks, embeds, editable: e.editable, resolve, childPages, files, extra: [plugin] });
+      const ed = createEditor({ blocks, embeds, editable: e.editable, resolve, childPages, files, extra: [plugin, ...extra], comment });
       view = ed.view;
       el.insertBefore(ed.element, status);
       // Leaving the editor releases its blocks, after a moment: a click on

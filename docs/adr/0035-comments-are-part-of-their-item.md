@@ -1,7 +1,7 @@
 # ADR-0035: Comments are part of their item: events on the item, sealed with its key
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-10-19
 - **Deciders:** Project initiators (the maintainer chose comments as the next feature, 2026-10-19)
 - **Open question:** may viewers comment, or only those who may edit the item? This record starts with editors; testers' feedback decides.
@@ -36,7 +36,7 @@ Chosen option: **1**.
 - **API:** `GET /api/items/{ref}/comments` (paged, ADR-0015), `POST` to add, `PUT /api/items/{ref}/comments/{id}` to edit, `DELETE` to delete. A deleted comment is listed in its place without text. The MCP adapter (ADR-0012) offers `list_comments` and `add_comment`; editing and deleting are not offered to agents.
 - **UI:** a comment section on every item: the list, a field to add one, and edit and delete for one's own.
 
-**Implementation is Partial:** no replies, no notifications. Comments name their authors through `GET /api/users/names`, and search finds comment text, marking a hit whose snippet comes from a comment (ADR-0033).
+**Implementation has Landed:** replies, inline comments and resolving came with ADR-0047, notifications with ADR-0046. Comments name their authors through `GET /api/users/names`, and search finds comment text, marking a hit whose snippet comes from a comment (ADR-0033).
 
 ### Consequences
 

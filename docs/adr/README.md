@@ -47,7 +47,7 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0032](0032-prosemirror-rich-text-editor.md) | The rich-text editor is ProseMirror, vendored as one pre-built bundle | Accepted | Partial |
 | [0033](0033-full-text-search-by-scanning-the-live-state.md) | Full-text search scans the live state; there is no search index yet | Accepted | Partial |
 | [0034](0034-encrypted-backups-from-log-prefixes.md) | Backups are encrypted with a passphrase and cut from the logs while the server runs | Accepted | Landed |
-| [0035](0035-comments-are-part-of-their-item.md) | Comments are part of their item: events on the item, sealed with its key | Accepted | Partial |
+| [0035](0035-comments-are-part-of-their-item.md) | Comments are part of their item: events on the item, sealed with its key | Accepted | Landed |
 | [0036](0036-a-board-is-a-view-of-a-query.md) | A board is a view of a query, not a stored object | Accepted | Partial |
 | [0037](0037-trusted-reverse-proxies.md) | Forwarded headers count only from trusted reverse proxies | Accepted | Landed |
 | [0038](0038-container-starts-as-root-and-drops.md) | The container starts as root only to hand over the data directory, then drops to an unprivileged account | Accepted | Landed |
@@ -59,3 +59,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0044](0044-labels.md) | Labels are part of their item's content, set as a whole, counted per space | Accepted | Landed |
 | [0045](0045-attachments-encrypted-files-beside-the-log.md) | Attachments are encrypted files beside the event log, described by events of their item | Accepted | Landed |
 | [0046](0046-watching-and-notifications-from-the-log.md) | Watching items and spaces; notifications are read from the event log | Accepted | Partial |
+| [0047](0047-inline-comments-anchored-by-quoted-text.md) | Inline comments are anchored by the text they quote; threads take replies and are resolved | Accepted | Landed |

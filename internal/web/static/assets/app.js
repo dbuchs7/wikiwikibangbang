@@ -6,6 +6,7 @@ import { createEditor } from "./editor.js";
 import { liveBody } from "./live.js";
 import { pageTree, ancestors } from "./tree.js";
 import { renderDiff } from "./diff.js";
+import { commentPlugin } from "./anchors.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 
 const app = document.getElementById("app");
@@ -820,12 +821,13 @@ async function itemView(ref) {
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
   const level = `/api/spaces/${encodeURIComponent(item.space)}/tree` + (item.parent ? "?parent=" + item.parent : "");
   const [, open, siblings] = await Promise.all([
-    learnNames([...history.events.map((e) => e.actor), ...comments.comments.map((c) => c.author), ...attachments.map((a) => a.author)]),
+    learnNames([...history.events.map((e) => e.actor), ...comments.comments.flatMap((c) => c.resolvedBy ? [c.author, c.resolvedBy] : [c.author]), ...attachments.map((a) => a.author)]),
     ancestors(item),
     item.presence === "live" ? get(level) : { items: [] },
   ]);
   const status = h("div", { class: "status" });
   const live = item.presence === "live";
+  const threads = commentThreads(path, comments, live);
 
   // Moving up or down among the siblings: the keyboard's way to reorder,
   // besides dragging in the tree (ADR-0041).
@@ -881,10 +883,10 @@ async function itemView(ref) {
     status,
     transitions.length ? h("p", {}, t("item.transitions"), transitions) : null,
     type.fields.length ? h("section", {}, h("h2", { text: t("item.properties") }), props) : null,
-    type.body ? bodyEditor(item, embeds.embeds, live) : null,
+    type.body ? bodyEditor(item, embeds.embeds, live, threads) : null,
     relationsSection(out.relations, inc.relations, item.id),
     attachmentsSection(path, attachments, live),
-    commentsSection(path, comments, live),
+    threads.section,
     h("p", {}, reorder, actions),
     live ? newItemForm(item.space, types, item.id, t("item.newChild"), "new-child") : null,
     historySection(path, history.events, live),
@@ -893,13 +895,15 @@ async function itemView(ref) {
 
 // bodyEditor edits a live item's body in its live session (ADR-0010):
 // changes reach everyone at once and are saved when one leaves a block.
-// A trashed or erased item's body is only shown.
-function bodyEditor(item, embeds, live) {
+// A trashed or erased item's body is only shown. threads highlights the
+// passages commented on and starts inline comments (ADR-0047).
+function bodyEditor(item, embeds, live, threads) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!live) {
     return h("section", { id: "body" }, h("h2", { text: t("item.body") }), readOnlyBody(item, embeds));
   }
-  const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item) });
+  const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item),
+    extra: [threads.plugin], comment: threads.start });
   onLeave(session.close);
   return h("section", { id: "body" }, h("h2", { text: t("item.body") }), session.element);
 }
@@ -913,12 +917,23 @@ function relationsSection(out, inc, self) {
   );
 }
 
-// commentsSection lists an item's comments (ADR-0035). Text is inserted as
-// text (ADR-0014); one's own comments can be edited and deleted.
-function commentsSection(path, page, live) {
+// commentThreads shows an item's comments (ADR-0035) as threads: a first
+// comment, on the whole item or on a passage of its body, and the replies
+// to it (ADR-0047). Text is inserted as text (ADR-0014); one's own
+// comments can be edited and deleted, and a thread resolved and reopened.
+// It returns the section, a plugin highlighting the passages of the open
+// threads in the body, and start(anchor), which begins a comment on a
+// passage.
+function commentThreads(path, page, live) {
   const author = (c) => person(c.author);
+  const roots = page.comments.filter((c) => !c.reply);
+  const replies = new Map();
+  for (const c of page.comments.filter((c) => c.reply)) replies.set(c.reply, [...(replies.get(c.reply) || []), c]);
+  const anchored = roots.filter((c) => c.anchor && !c.deleted && !c.resolved);
+  const threadEls = new Map(); // root id -> its element
+
   const row = (c) => {
-    const li = h("li", { class: "comment" });
+    const li = h("li", { class: "comment", id: "comment-" + c.id });
     const head = h("div", { class: "muted" }, `${author(c)} · ${when(c.created)}`, c.edited ? t("comment.edited") : "");
     if (c.deleted) {
       li.append(head, h("p", { class: "muted", text: t("comment.deleted") }));
@@ -937,18 +952,90 @@ function commentsSection(path, page, live) {
       : null);
     return li;
   };
+
+  // reveal scrolls to a passage in the body and marks it for a moment.
+  const reveal = (id) => {
+    const marks = document.querySelectorAll(`.comment-anchor[data-comment="${CSS.escape(id)}"]`);
+    if (!marks.length) return;
+    marks[0].scrollIntoView({ block: "center" });
+    marks.forEach((m) => m.classList.add("comment-focus"));
+    setTimeout(() => marks.forEach((m) => m.classList.remove("comment-focus")), 1500);
+  };
+
+  const thread = (c) => {
+    const status = h("div", { class: "status" });
+    const quote = c.anchor && !c.deleted
+      ? h("blockquote", { class: "comment-quote" },
+        h("button", { type: "button", class: "link", text: c.anchor.quote, title: t("comment.showPassage"), onclick: () => reveal(c.id) }))
+      : null;
+    const gone = h("p", { class: "muted comment-gone", hidden: true, text: t("comment.passageGone") });
+    const answers = h("ul", { class: "comments replies" }, (replies.get(c.id) || []).map(row));
+    const replyForm = h("div");
+    const reply = () => {
+      replyForm.replaceChildren(form({ class: "comment-form" }, [
+        h("textarea", { name: "text", rows: 2, "aria-label": t("comment.replyLabel"), required: true }),
+        h("p", {}, h("button", { type: "submit", text: t("comment.reply") }),
+          h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => replyForm.replaceChildren() })),
+      ], async (data) => { await post(path + "/comments", { text: data.get("text"), reply: c.id }); route(); }));
+      replyForm.querySelector("textarea").focus();
+    };
+    const tools = live && !c.deleted
+      ? h("p", { class: "thread-tools" },
+        h("button", { class: "link", text: t("comment.reply"), onclick: reply }), " · ",
+        c.resolved
+          ? h("button", { class: "link", text: t("comment.reopen"), onclick: () => action(() => del(`${path}/comments/${c.id}/resolved`), status) })
+          : h("button", { class: "link", text: t("comment.resolve"), onclick: () => action(() => put(`${path}/comments/${c.id}/resolved`), status) }))
+      : null;
+    const el = h("li", { class: "thread" + (c.anchor ? " inline" : "") },
+      quote, gone, h("ul", { class: "comments" }, row(c)), answers,
+      c.resolved ? h("p", { class: "muted", text: t("comment.resolvedBy", { name: person(c.resolvedBy), when: when(c.resolvedAt) }) }) : null,
+      tools, replyForm, status);
+    threadEls.set(c.id, el);
+    return el;
+  };
+
+  const pending = h("div", { id: "inline-comment" });
+  const start = (anchor) => {
+    pending.replaceChildren(form({ class: "comment-form card" }, [
+      h("blockquote", { class: "comment-quote", text: anchor.quote }),
+      h("textarea", { name: "text", rows: 3, placeholder: t("comment.placeholder"), "aria-label": t("comment.inlineLabel"), required: true }),
+      h("p", {}, h("button", { type: "submit", text: t("comment.add") }),
+        h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => pending.replaceChildren() })),
+    ], async (data) => { await post(path + "/comments", { text: data.get("text"), anchor }); route(); }));
+    pending.scrollIntoView({ block: "nearest" });
+    pending.querySelector("textarea").focus();
+  };
+
+  const open = roots.filter((c) => !c.resolved), done = roots.filter((c) => c.resolved);
   const add = live
     ? form({ id: "add-comment", class: "comment-form" }, [
       h("textarea", { name: "text", rows: 3, placeholder: t("comment.placeholder"), "aria-label": t("comment.label"), required: true }),
       h("p", {}, h("button", { type: "submit", text: t("comment.add") })),
     ], async (data) => { await post(path + "/comments", { text: data.get("text") }); route(); })
     : null;
-  return h("section", { id: "comments" },
+  const section = h("section", { id: "comments" },
     h("h2", { text: t("comment.title", { n: page.total.value }) }),
-    page.comments.length ? h("ul", { class: "comments" }, page.comments.map(row)) : h("p", { class: "muted", text: t("comment.none") }),
+    pending,
+    open.length ? h("ul", { class: "threads" }, open.map(thread)) : h("p", { class: "muted", text: t("comment.none") }),
+    done.length ? h("details", { class: "resolved-threads" }, h("summary", { text: t("comment.resolvedThreads", { n: done.length }) }),
+      h("ul", { class: "threads" }, done.map(thread))) : null,
     page.next ? h("p", { class: "muted", text: t("comment.truncated", { n: page.comments.length }) }) : null,
     add,
   );
+
+  const plugin = commentPlugin({
+    threads: () => anchored,
+    // A thread whose passage is gone says so.
+    found: (ids) => anchored.forEach((c) => { const g = threadEls.get(c.id)?.querySelector(".comment-gone"); if (g) g.hidden = ids.has(c.id); }),
+    open: (id) => {
+      const el = threadEls.get(id);
+      if (!el) return;
+      el.scrollIntoView({ block: "nearest" });
+      el.classList.add("comment-focus");
+      setTimeout(() => el.classList.remove("comment-focus"), 1500);
+    },
+  });
+  return { section, plugin, start };
 }
 
 // historySection lists an item's history. A change of the body can be

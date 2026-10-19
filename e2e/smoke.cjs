@@ -329,6 +329,31 @@ function check(cond, msg) {
     await page.click("#labels .label-remove");
     await page.waitForFunction(() => document.querySelectorAll("#labels .label").length === 0);
 
+    step("inline comments: a comment on selected text highlights it, takes a reply and is resolved");
+    await page.click("#body .ProseMirror p");
+    await page.evaluate(() => {
+      const text = document.querySelector("#body .ProseMirror p").firstChild;
+      const at = text.data.indexOf("primary");
+      const range = document.createRange();
+      range.setStart(text, at);
+      range.setEnd(text, at + "primary".length);
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+    });
+    await page.waitForTimeout(100); // the editor reads the selection on selectionchange
+    await page.click("#comment-selection");
+    await page.fill("#inline-comment [name=text]", "Which host is the primary?");
+    await page.click("#inline-comment button[type=submit]");
+    await page.waitForSelector("#body .comment-anchor:text-is('primary')");
+    await page.waitForSelector(".thread.inline .comment-quote:has-text('primary')");
+    await page.click(".thread.inline button:has-text('Reply')");
+    await page.fill(".thread.inline [name=text]", "db1, see the table.");
+    await page.click(".thread.inline button[type=submit]");
+    await page.waitForSelector(".thread.inline .replies .comment-text:has-text('db1, see the table.')");
+    await page.click(".thread.inline button:has-text('Resolve')");
+    await page.waitForSelector(".resolved-threads summary:has-text('Resolved (1)')");
+    check(await page.locator("#body .comment-anchor").count() === 0, "a resolved thread's text is not highlighted");
+
     step("files: an upload is listed and downloads; an image goes into the body and shows after a reload");
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
     await page.setInputFiles("#upload", { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("<script>alert('file')</script>") });

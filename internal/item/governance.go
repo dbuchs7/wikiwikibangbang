@@ -64,6 +64,9 @@ func (it *Item) contentTexts() []string {
 	}
 	for _, c := range it.Comments {
 		texts = append(texts, c.Text)
+		if c.Anchor != nil {
+			texts = append(texts, c.Anchor.Prefix+c.Anchor.Quote+c.Anchor.Suffix)
+		}
 	}
 	texts = append(texts, it.Labels...)
 	for _, a := range it.Attachments {
@@ -79,6 +82,9 @@ func eventFingerprints(e Event) map[string]bool {
 	texts := append([]string{e.Title, e.Text}, e.Labels...)
 	if e.Attachment != nil {
 		texts = append(texts, e.Attachment.Name)
+	}
+	if e.Anchor != nil {
+		texts = append(texts, e.Anchor.Prefix+e.Anchor.Quote+e.Anchor.Suffix)
 	}
 	if s, ok := e.Value.(string); ok {
 		texts = append(texts, s)

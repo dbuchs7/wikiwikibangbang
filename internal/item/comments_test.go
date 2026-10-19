@@ -156,3 +156,86 @@ func TestErasureRemovesComments(t *testing.T) {
 		})
 	}
 }
+
+func TestInlineCommentsRepliesAndResolving(t *testing.T) {
+	s := permFixture(t)
+	anna, ben, pat := s.As("anna"), s.As("ben"), s.As("pat")
+	page := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	noErr(t, anna.CommitBody(page.ID, Doc{Blocks: []Block{{Kind: Paragraph, Text: "Stop the writers first."}}}))
+	at := &Anchor{Quote: "writers", Prefix: "Stop the ", Suffix: " first."}
+
+	root := mustComment(t)(anna.Comment(page.ID, NewComment{Text: "Which ones?", Anchor: at}))
+	at.Quote = "changed after the call"
+	if root.Anchor == nil || root.Anchor.Quote != "writers" || root.Reply != "" {
+		t.Fatalf("inline comment %+v", root)
+	}
+	if _, err := ben.Comment(page.ID, NewComment{Text: "me too", Reply: root.ID}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("a viewer replies: %v", err)
+	}
+	reply := mustComment(t)(pat.Comment(page.ID, NewComment{Text: "All of them.", Reply: root.ID}))
+	// Answering a reply answers the thread.
+	again := mustComment(t)(anna.Comment(page.ID, NewComment{Text: "Thanks.", Reply: reply.ID}))
+	if reply.Reply != root.ID || again.Reply != root.ID {
+		t.Fatalf("replies answer %s and %s, want %s", reply.Reply, again.Reply, root.ID)
+	}
+
+	if err := anna.ResolveComment(page.ID, reply.ID, true); !errors.Is(err, ErrValidation) {
+		t.Fatalf("a reply is resolved: %v", err)
+	}
+	if err := ben.ResolveComment(page.ID, root.ID, true); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("a viewer resolves: %v", err)
+	}
+	noErr(t, pat.ResolveComment(page.ID, root.ID, true))
+	noErr(t, pat.ResolveComment(page.ID, root.ID, true)) // twice is once
+	got, _ := anna.Comments(page.ID)
+	if c := got[0]; !c.Resolved || c.ResolvedBy != "pat" || c.ResolvedAt.IsZero() {
+		t.Fatalf("resolved thread %+v", c)
+	}
+	noErr(t, anna.ResolveComment(page.ID, root.ID, false))
+	got, _ = anna.Comments(page.ID)
+	if c := got[0]; c.Resolved || c.ResolvedBy != "" {
+		t.Fatalf("reopened thread %+v", c)
+	}
+
+	// Deleting the first comment hides its passage; the thread takes no
+	// more answers.
+	noErr(t, anna.DeleteComment(page.ID, root.ID))
+	got, _ = anna.Comments(page.ID)
+	if got[0].Anchor != nil {
+		t.Fatalf("a deleted comment keeps its passage: %+v", got[0])
+	}
+	if _, err := pat.Comment(page.ID, NewComment{Text: "late", Reply: reply.ID}); !errors.Is(err, ErrValidation) {
+		t.Fatalf("an answer to a deleted thread: %v", err)
+	}
+	if h := s.History(page.ID); !slices.ContainsFunc(h, func(e Event) bool { return e.Kind == CommentResolved }) ||
+		!slices.ContainsFunc(h, func(e Event) bool { return e.Kind == CommentReopened }) {
+		t.Fatal("the history does not show resolving and reopening")
+	}
+}
+
+func TestInlineCommentsAreValidated(t *testing.T) {
+	s := setup(t)
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	root := mustComment(t)(s.AddComment("anna", page.ID, "general"))
+	cases := map[string]NewComment{
+		"empty quote":         {Text: "x", Anchor: &Anchor{Quote: "  "}},
+		"reply with a quote":  {Text: "x", Reply: root.ID, Anchor: &Anchor{Quote: "a"}},
+		"reply to no comment": {Text: "x", Reply: "nope"},
+	}
+	for name, n := range cases {
+		if _, err := s.Comment("anna", page.ID, n); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+func TestInlineCommentTextIsGoverned(t *testing.T) {
+	s := setup(t)
+	noErr(t, s.GrantRole("root", "PLAT", "anna", Editor))
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	mustComment(t)(s.Comment("anna", page.ID, NewComment{Text: "see this", Anchor: &Anchor{Quote: "card 4111 1111 1111 1111"}}))
+	got, _ := s.Get(page.ID)
+	if !strings.Contains(strings.Join(got.Restriction.Read, ","), "anna") {
+		t.Fatalf("sensitive data in a quote does not restrict the item: %+v", got.Restriction)
+	}
+}

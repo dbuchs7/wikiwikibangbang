@@ -65,3 +65,40 @@ func TestCommentListingsArePaged(t *testing.T) {
 	}
 	w.bert.expect("GET", path+"?limit=0", "", http.StatusBadRequest)
 }
+
+func TestInlineCommentsThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Patch","properties":{"priority":"low"}}`, http.StatusCreated)
+	key := field(it, "item", "key").(string)
+	path := "/api/items/" + key + "/comments"
+
+	c := w.bert.expect("POST", path, `{"text":"Which hosts?","anchor":{"quote":"staging hosts","prefix":"on the ","suffix":"."}}`, http.StatusCreated)
+	id := field(c, "comment", "id").(string)
+	if field(c, "comment", "anchor", "quote") != "staging hosts" || field(c, "comment", "anchor", "prefix") != "on the " {
+		t.Fatalf("created %v", c)
+	}
+	r := w.bert.expect("POST", path, fmt.Sprintf(`{"text":"All of them.","reply":%q}`, id), http.StatusCreated)
+	if field(r, "comment", "reply") != id {
+		t.Fatalf("reply %v", r)
+	}
+	w.bert.expect("POST", path, `{"text":"x","anchor":{"quote":""}}`, http.StatusBadRequest)
+	w.bert.expect("POST", path, `{"text":"x","reply":"nope"}`, http.StatusNotFound)
+
+	w.vera.expect("PUT", path+"/"+id+"/resolved", "", http.StatusForbidden)
+	w.bert.expect("PUT", path+"/"+id+"/resolved", "", http.StatusNoContent)
+	first := w.vera.expect("GET", path, "", http.StatusOK)["comments"].([]any)[0].(map[string]any)
+	if first["resolved"] != true || first["resolvedBy"] != w.ids["bert"] || first["resolvedAt"] == nil {
+		t.Fatalf("resolved thread %v", first)
+	}
+	w.bert.expect("DELETE", path+"/"+id+"/resolved", "", http.StatusNoContent)
+	first = w.bert.expect("GET", path, "", http.StatusOK)["comments"].([]any)[0].(map[string]any)
+	if first["resolved"] != nil || first["resolvedAt"] != nil {
+		t.Fatalf("reopened thread %v", first)
+	}
+
+	// The history names the events without the passage.
+	hist := fmt.Sprint(w.bert.expect("GET", "/api/items/"+key+"/history", "", http.StatusOK))
+	if !strings.Contains(hist, "CommentResolved") || !strings.Contains(hist, "CommentReopened") || strings.Contains(hist, "staging hosts") {
+		t.Fatalf("history %s", hist)
+	}
+}
