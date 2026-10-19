@@ -33,6 +33,8 @@ The web UI embeds a bundle of these JavaScript packages, built from `internal/we
 | rope-sequence | 1.3.4 | MIT |
 | w3c-keyname | 2.2.8 | MIT |
 
+The web UI's stylesheet, `internal/web/static/assets/style.css`, adapts the palette, type, spacing and component look of the console of [pblumer/atlas](https://github.com/pblumer/atlas) (`api/web/app.css`), licensed under AGPL-3.0-only like this project. No atlas name, logo or font is included.
+
 The Go standard library and runtime are under the BSD-3-Clause license of the Go project.
 
 ## NOTICE of github.com/coreos/go-oidc/v3
