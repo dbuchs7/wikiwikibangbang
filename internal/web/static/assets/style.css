@@ -444,3 +444,9 @@ tr.overdue td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .avatar-20 { width: 20px; height: 20px; font-size: 9px; }
 .avatar-24 { width: 24px; height: 24px; font-size: 10px; }
 .comment-head, .who { display: inline-flex; align-items: center; gap: 6px; }
+/* Watching an item or a space: a black bell, filled while one watches,
+   outlined while one does not (ADR-0046). */
+button.watch-bell { display: inline-flex; align-items: center; justify-content: center; padding: 6px; min-width: 36px; min-height: 36px;
+  background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+button.watch-bell:hover { background: var(--row-hover); color: var(--text); border-color: var(--border-strong); }
+button.watch-bell svg { width: 20px; height: 20px; }
