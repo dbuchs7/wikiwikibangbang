@@ -1,0 +1,63 @@
+name: Test finding
+description: Something you noticed while testing a release — a bug, or something that felt wrong. Not for security findings.
+title: "[test] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing. One finding per issue, please. The [test guide](https://github.com/dbuchs7/wikiwikibangbang/blob/main/docs/testing/test-guide.md) says what to look at first.
+
+        **Security findings** (seeing or doing what your role should not allow, a script running from content, a password or token showing up) do not belong here: use private vulnerability reporting on the *Security* tab.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `wikiwikibangbang version`, or the container tag.
+      placeholder: wikiwikibangbang 0.1.0 go1.26.0 linux/amd64
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Editing together (live sessions, locks)
+        - Embedding and placing items
+        - Permissions and roles
+        - Backup and restore
+        - AI agent (MCP)
+        - Search
+        - Items, types, workflows
+        - Installation and startup
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      description: From a fresh server where you can. Which user, which role, what you clicked or typed.
+      placeholder: |
+        1. Signed in as an editor of PLAT
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Screenshots help. Do not include passwords, tokens or personal data.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Server log
+      description: The server's log lines around the moment, if any.
+      render: text

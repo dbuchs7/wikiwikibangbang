@@ -4,6 +4,8 @@ Knowledge and work in one model: wiki pages and issues as typed items of one dat
 
 > **Status: early prototype.** The binary stores items durably and serves an authenticated web UI and HTTP API. Nothing is ready for production use yet. The decisions so far are recorded in the [ADRs](docs/adr/README.md).
 
+Trying a release? The [test guide](docs/testing/test-guide.md) says what to look at first and how to report a finding.
+
 ## Run
 
 The product is one binary for Linux, macOS and Windows on amd64 and arm64, and 32-bit ARM Linux ([ADR-0024](docs/adr/0024-release-targets-and-container-image.md)). Download the archive for your platform from the releases page, unpack it and run:

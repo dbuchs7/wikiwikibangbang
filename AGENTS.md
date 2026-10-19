@@ -107,6 +107,7 @@ CLAUDE.md          pointer to this guide for Claude agents
 LICENSE            AGPL-3.0-only (ADR-0002)
 THIRD_PARTY_NOTICES.md licenses of the modules in the binary; shipped with every release
 README.md          what the project is and how to run it
+SECURITY.md        how to report a vulnerability privately
 go.mod             module github.com/dbuchs7/wikiwikibangbang
 .github/workflows/ CI (fmt, vet, race tests, cross-build, DCO), container image, release, settings drift
 .github/rulesets/  ruleset protecting main, source of truth for GitHub settings (ADR-0003)
@@ -136,6 +137,7 @@ internal/repoconfig/ tests keeping ruleset, CI workflow and release matrix consi
 internal/settingsdrift/ comparison of recorded and live GitHub settings (ADR-0003)
 e2e/               browser smoke test of the UI (Playwright; test tool only, not part of the build)
 docs/architecture/ the invariants with their checks
+docs/testing/      the guide for people testing a release; .github/ISSUE_TEMPLATE/ holds the matching report form
 docs/adr/          architecture decision records, index in README.md, consistency tests
 ```
 
