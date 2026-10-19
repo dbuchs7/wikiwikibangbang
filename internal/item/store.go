@@ -117,6 +117,8 @@ func (s *Store) record(actor string, e Event) error { return s.recordBatch(actor
 // journal, the batch is made durable first and applied only if that
 // succeeds: a change is never visible before it is on disk (ADR-0008).
 func (s *Store) recordBatch(actor string, events ...Event) error {
+	// Sensitive data restricts its item in the same batch (ADR-0040).
+	events = append(events, s.guard(actor, events)...)
 	first := len(s.log) + 1
 	// UTC without a monotonic reading: the value that survives the journal.
 	at := s.now().UTC()
@@ -124,7 +126,9 @@ func (s *Store) recordBatch(actor string, events ...Event) error {
 	for i, e := range events {
 		e.Seq = first + i
 		e.At = at
-		e.Actor = actor
+		if e.Actor == "" {
+			e.Actor = actor
+		}
 		if len(events) > 1 {
 			e.Batch = first
 		}

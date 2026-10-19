@@ -114,7 +114,15 @@ Only if the server runs with `WWBB_LINKCHECK=on`. Put links into a body, some wo
 - Does the list name the right items and the person who edited them last?
 - Is a page reported as broken that works in your browser? Say which one; some sites turn away automated checks.
 
-### 9. Everything else
+### 9. Governance (ADR-0040)
+
+Paste something that looks like a password (`password: Test1234!`), a card number or an IBAN into a page as one user, then open the page as another user of the space. Open *Governance* on the space's page as a space administrator.
+
+- Is the page hidden from the other user, and does it tell its author why?
+- Does the governance view show the finding masked, and can an administrator lift the restriction?
+- **Report** every harmless text that was flagged, and every secret that was not.
+
+### 10. Everything else
 
 Search, item history, relations, mentions (toolbar: *Mention*), formatting, the API at `/api/openapi.json`. Anything that surprises you is worth a report.
 

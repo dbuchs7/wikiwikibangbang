@@ -52,3 +52,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0037](0037-trusted-reverse-proxies.md) | Forwarded headers count only from trusted reverse proxies | Accepted | Landed |
 | [0038](0038-container-starts-as-root-and-drops.md) | The container starts as root only to hand over the data directory, then drops to an unprivileged account | Accepted | Landed |
 | [0039](0039-link-check-on-demand-public-addresses-only.md) | Web links are checked on demand, from public addresses only | Accepted | Landed |
+| [0040](0040-governance-checks-and-automatic-restriction.md) | Content governance: sensitive data restricts its item on save; staleness and plausibility are checked on demand | Accepted | Landed |
