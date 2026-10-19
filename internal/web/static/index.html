@@ -12,6 +12,13 @@
 </head>
 <body>
   <header class="top">
+    <button id="app-switcher" class="icon-btn grid" type="button" title="Modules" aria-label="Modules" aria-expanded="false" aria-controls="drawer" hidden>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+        <circle cx="5" cy="5" r="1.6"/><circle cx="12" cy="5" r="1.6"/><circle cx="19" cy="5" r="1.6"/>
+        <circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>
+        <circle cx="5" cy="19" r="1.6"/><circle cx="12" cy="19" r="1.6"/><circle cx="19" cy="19" r="1.6"/>
+      </svg>
+    </button>
     <a class="brand" href="#/">
       <picture>
         <source srcset="/assets/brand/logo-white.svg" media="(prefers-color-scheme: dark)">
@@ -20,6 +27,17 @@
     </a>
     <nav id="nav"></nav>
   </header>
+  <!-- The module switcher: a drawer from the left, opened by the nine dots. -->
+  <div id="scrim" hidden></div>
+  <aside id="drawer" hidden aria-label="Modules">
+    <div class="drawer-head">
+      <button id="drawer-close" class="icon-btn" type="button" title="Close" aria-label="Close">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+      </button>
+      <img src="/assets/brand/favicon.svg" alt="" width="20" height="20"> <b>wikiwikibangbang</b>
+    </div>
+    <nav id="drawer-apps" aria-label="Modules"></nav>
+  </aside>
   <main id="app"><p class="muted">Loading…</p></main>
   <footer id="footer" class="footer"></footer>
   <noscript>This application needs JavaScript.</noscript>
