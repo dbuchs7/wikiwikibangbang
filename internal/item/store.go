@@ -592,6 +592,8 @@ func (s *Store) apply(e Event) {
 		touch(s.purgeItems(e.Members...)...)
 	case ItemImported, ItemReleased:
 		s.applyImport(e, touch)
+	case CommentAdded, CommentEdited, CommentDeleted:
+		s.applyComment(e, touch)
 	default:
 		s.applyAccess(e, touch)
 	}
@@ -615,7 +617,7 @@ func (s *Store) purgeItems(ids ...ID) []ID {
 		}
 		it := s.items[id]
 		it.Presence, it.trashedBy = Purged, 0
-		it.Title, it.Properties, it.Body = "", Props{}, Doc{}
+		it.Title, it.Properties, it.Body, it.Comments = "", Props{}, Doc{}, nil
 		if it.Origin != nil {
 			o := *it.Origin
 			o.Raw = ""

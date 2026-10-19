@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -74,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":4,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":5,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -130,24 +131,26 @@ func (f fakeSealer) Open(id ID, ct, aad []byte) ([]byte, error) {
 // `go test ./internal/item -run PersistedFormat -update`.
 func TestPersistedFormatIsStable(t *testing.T) {
 	log := everyKindLog(t)
+	rich := richTextLog(t)
+	comments := commentLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range log {
+	for _, e := range slices.Concat(log, rich, comments) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
 		if !kinds[k] {
-			t.Errorf("the golden log has no %s event; extend everyKindLog", k)
+			t.Errorf("the golden logs have no %s event; extend everyKindLog or commentLog", k)
 		}
 	}
-	rich := richTextLog(t)
 	cases := []struct {
 		name string
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v3.golden.jsonl", nil, log},
-		{"events.v3.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v3.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v4.golden.jsonl", nil, log},
+		{"events.v4.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v4.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v4.comments.golden.jsonl", fakeSealer{}, comments},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -178,14 +181,34 @@ func TestPersistedFormatIsStable(t *testing.T) {
 }
 
 // TestOlderVersionsStillReplay: data directories written by earlier codec
-// versions — 1 (plaintext, nothing erased), 2 (sealed, erased) — still open
-// and rebuild the same state and history as today's log of the same
-// commands, including the content erased by the purges they contain.
+// versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
+// text) — still open and rebuild the same state and history as today's log
+// of the same commands, including the content erased by the purges they
+// contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
 	log := everyKindLog(t)
 	assertRebuilds(t, filepath.Join("testdata", "events.v1.golden.jsonl"), nil, log)
 	assertRebuilds(t, filepath.Join("testdata", "events.v2.golden.jsonl"), nil, log)
 	assertRebuilds(t, filepath.Join("testdata", "events.v2.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v3.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v3.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v3.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+}
+
+// commentLog adds, edits and deletes comments, then purges an item with a
+// comment, so the golden file pins sealed and erased comment text
+// (ADR-0035).
+func commentLog(t *testing.T) []Event {
+	s := setup(t)
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	c := mustComment(t)(s.AddComment("anna", page.ID, "Looks good"))
+	noErr(t, s.EditComment("anna", page.ID, c.ID, "Looks good to me"))
+	noErr(t, s.DeleteComment("anna", page.ID, mustComment(t)(s.AddComment("bert", page.ID, "typo")).ID))
+	old := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Old"}))
+	mustComment(t)(s.AddComment("anna", old.ID, "gone with the page"))
+	noErr(t, s.Trash("anna", old.ID))
+	noErr(t, s.Purge("anna", old.ID))
+	return s.Log()
 }
 
 // richTextLog commits bodies with every block kind and mark (ADR-0032).
@@ -333,7 +356,7 @@ var allEventKinds = []EventKind{
 	TypeDefined, SpaceCreated, ItemCreated, TitleSet, PropertySet, Transitioned, ItemMoved,
 	BodyCommitted, RelationAdded, RelationRemoved, ItemTrashed, ItemRestored, ItemPurged,
 	ItemRedacted, GroupMemberAdded, RoleGranted, SystemRoleGranted, RestrictionSet,
-	ItemImported, ItemReleased,
+	ItemImported, ItemReleased, CommentAdded, CommentEdited, CommentDeleted,
 }
 
 // everyKindLog runs commands that produce every event kind, deterministically.

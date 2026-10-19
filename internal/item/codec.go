@@ -19,7 +19,10 @@ import (
 //     erased (ADR-0026). Version 1 events are still read.
 //   - 3: body blocks may carry a heading level, marks, and the kinds bullet,
 //     ordered, quote and code (ADR-0032). Versions 1 and 2 are still read.
-const CodecVersion = 3
+//   - 4: comments: the kinds CommentAdded, CommentEdited and CommentDeleted
+//     and the fields comment and text; text is sealed content (ADR-0035).
+//     Versions 1 to 3 are still read.
+const CodecVersion = 4
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
@@ -131,6 +134,8 @@ type wireEvent struct {
 	Origin      *Origin               `json:"origin,omitempty"`
 	Key         string                `json:"key,omitempty"`
 	Managed     string                `json:"managed,omitempty"`
+	Comment     ID                    `json:"comment,omitempty"`
+	Text        string                `json:"text,omitempty"`
 	Erased      bool                  `json:"erased,omitempty"`
 	// Sealed holds the encrypted content (wireContent) when a Sealer was
 	// used; the plaintext content fields are then empty.
@@ -145,6 +150,7 @@ type wireContent struct {
 	Value *wireValue            `json:"value,omitempty"`
 	Body  *Doc                  `json:"body,omitempty"`
 	Raw   string                `json:"raw,omitempty"`
+	Text  string                `json:"text,omitempty"`
 }
 
 func aad(w *wireEvent) []byte {
@@ -152,7 +158,7 @@ func aad(w *wireEvent) []byte {
 }
 
 func seal(w *wireEvent, sl Sealer) error {
-	c := wireContent{Title: w.Title, Props: w.Props, Value: w.Value, Body: w.Body}
+	c := wireContent{Title: w.Title, Props: w.Props, Value: w.Value, Body: w.Body, Text: w.Text}
 	if w.Origin != nil {
 		c.Raw = w.Origin.Raw
 		o := *w.Origin
@@ -167,7 +173,7 @@ func seal(w *wireEvent, sl Sealer) error {
 	if err != nil {
 		return err
 	}
-	w.Title, w.Props, w.Value, w.Body, w.Sealed = "", nil, nil, nil, ct
+	w.Title, w.Props, w.Value, w.Body, w.Text, w.Sealed = "", nil, nil, nil, "", ct
 	return nil
 }
 
@@ -187,7 +193,7 @@ func unseal(w *wireEvent, sl Sealer) (bool, error) {
 	if err := dec.Decode(&c); err != nil {
 		return false, fmt.Errorf("sealed content: %w", err)
 	}
-	w.Title, w.Props, w.Value, w.Body = c.Title, c.Props, c.Value, c.Body
+	w.Title, w.Props, w.Value, w.Body, w.Text = c.Title, c.Props, c.Value, c.Body, c.Text
 	if w.Origin != nil {
 		o := *w.Origin
 		o.Raw = c.Raw
@@ -215,7 +221,7 @@ func toWire(e Event) (wireEvent, error) {
 		Transition: e.Transition, From: e.From, To: e.To, Body: e.Body, Relation: e.Relation,
 		Members: e.Members, Group: e.Group, Principal: e.Principal, SystemRole: e.SystemRole,
 		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed,
-		Erased: e.Erased,
+		Comment: e.Comment, Text: e.Text, Erased: e.Erased,
 	}
 	if e.Role != 0 {
 		name, ok := roleNames[e.Role]
@@ -253,7 +259,7 @@ func fromWire(w wireEvent) (Event, error) {
 		Transition: w.Transition, From: w.From, To: w.To, Body: w.Body, Relation: w.Relation,
 		Members: w.Members, Group: w.Group, Principal: w.Principal, SystemRole: w.SystemRole,
 		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed,
-		Erased: w.Erased,
+		Comment: w.Comment, Text: w.Text, Erased: w.Erased,
 	}
 	if w.Role != "" {
 		for r, name := range roleNames {

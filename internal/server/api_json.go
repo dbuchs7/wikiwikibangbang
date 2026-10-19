@@ -213,10 +213,13 @@ type eventJSON struct {
 	Space      string         `json:"space,omitempty"`
 	Parent     item.ID        `json:"parent,omitempty"`
 	Reason     string         `json:"reason,omitempty"`
+	// Comment names the comment of a comment event; its text is never part
+	// of the history, so a deleted comment stays hidden (ADR-0035).
+	Comment item.ID `json:"comment,omitempty"`
 }
 
 func toEventJSON(e item.Event) eventJSON {
 	return eventJSON{Seq: e.Seq, At: e.At, Actor: e.Actor, Kind: e.Kind, Item: e.Item, Erased: e.Erased,
 		Title: e.Title, Field: e.Field, Value: e.Value, Transition: e.Transition, From: e.From, To: e.To,
-		Space: e.Space, Parent: e.Parent, Reason: e.Reason}
+		Space: e.Space, Parent: e.Parent, Reason: e.Reason, Comment: e.Comment}
 }

@@ -93,7 +93,14 @@ Ask it to summarise a space, create tasks from notes, or finish a task. It acts 
 - Did the agent do what you asked, and only that?
 - With a read token, does it explain that it may not write?
 
-### 6. Everything else
+### 6. Comments (ADR-0035)
+
+Every item has a comment section below its relations. Editors write comments; viewers read them.
+
+- Write, edit and delete a comment. Does a deleted comment disappear for everyone, and does the history keep only that something changed?
+- **The open question:** should viewers be allowed to comment, or is commenting rightly tied to the right to edit the item?
+
+### 7. Everything else
 
 Search, item history, relations, mentions (toolbar: *Mention*), formatting, the API at `/api/openapi.json`. Anything that surprises you is worth a report.
 
