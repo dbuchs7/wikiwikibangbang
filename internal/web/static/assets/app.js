@@ -51,10 +51,15 @@ function withTree(tree, ...content) {
   return h("div", { class: "with-tree" }, tree, h("div", { class: "with-tree-main" }, ...content));
 }
 
-// readOnlyBody shows a body without editing it.
-function readOnlyBody(blocks, embeds) {
+// childPagesOf lists an item's child pages for a list of child pages in
+// its body (ADR-0042).
+const childPagesOf = (item) => async () =>
+  (await get(`/api/spaces/${encodeURIComponent(item.space)}/tree?parent=${item.id}`)).items;
+
+// readOnlyBody shows an item's body without editing it.
+function readOnlyBody(item, embeds) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
-  return createEditor({ blocks, embeds, editable: false, resolve }).element;
+  return createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item) }).element;
 }
 
 async function action(fn, status) {
@@ -328,7 +333,7 @@ async function spaceView(key) {
     const [{ item }, { embeds }] = await Promise.all([get("/api/items/" + top.items[0].id), get(`/api/items/${top.items[0].id}/embeds`)]);
     home = h("section", { id: "home", class: "card" },
       h("h2", {}, link("#/item/" + encodeURIComponent(item.key), item.title || item.key)),
-      item.body.length ? readOnlyBody(item.body, embeds) : h("p", { class: "muted", text: t("space.homeEmpty") }));
+      item.body.length ? readOnlyBody(item, embeds) : h("p", { class: "muted", text: t("space.homeEmpty") }));
   }
   const rows = h("tbody");
   const more = h("div");
@@ -732,10 +737,9 @@ async function itemView(ref) {
 function bodyEditor(item, embeds, live) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!live) {
-    return h("section", { id: "body" }, h("h2", { text: t("item.body") }),
-      createEditor({ blocks: item.body, embeds, editable: false, resolve }).element);
+    return h("section", { id: "body" }, h("h2", { text: t("item.body") }), readOnlyBody(item, embeds));
   }
-  const session = liveBody({ ref: item.id, embeds, resolve });
+  const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item) });
   onLeave(session.close);
   return h("section", { id: "body" }, h("h2", { text: t("item.body") }), session.element);
 }

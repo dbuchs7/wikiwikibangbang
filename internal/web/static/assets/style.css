@@ -269,3 +269,42 @@ span.tree-toggle { cursor: default; }
   .tree-box { position: static; max-height: none; }
 }
 .tree-toggle:hover { background: none; color: var(--text); }
+
+/* Block kinds of ADR-0042. */
+.pm-task { display: flex; align-items: baseline; gap: 6px; margin: 2px 0; }
+.pm-task-box { flex: none; }
+.pm-task-box input { margin: 0; }
+.pm-task-text { flex: 1; min-width: 0; }
+.pm-task[data-checked="true"] .pm-task-text { color: var(--muted); text-decoration: line-through; }
+.pm-panel {
+  --tone: var(--accent); --tone-soft: var(--accent-soft);
+  margin: 8px 0; padding: 8px 12px; border-left: 4px solid var(--tone); border-radius: 4px; background: var(--tone-soft);
+}
+.pm-panel[data-tone="note"] { --tone: #8250df; --tone-soft: #f3eefc; }
+.pm-panel[data-tone="warning"] { --tone: #bf8700; --tone-soft: #fff8e1; }
+.pm-panel[data-tone="tip"] { --tone: #1a7f37; --tone-soft: #e9f6ec; }
+.pm-panel[data-tone="error"] { --tone: var(--danger); --tone-soft: var(--danger-soft); }
+@media (prefers-color-scheme: dark) {
+  .pm-panel[data-tone="note"] { --tone: #a371f7; --tone-soft: #2a1f3d; }
+  .pm-panel[data-tone="warning"] { --tone: #d29922; --tone-soft: #3a2e10; }
+  .pm-panel[data-tone="tip"] { --tone: #3fb950; --tone-soft: #13301c; }
+}
+/* Consecutive panels of one tone read as one box. */
+.pm-panel[data-tone="info"] + .pm-panel[data-tone="info"],
+.pm-panel[data-tone="note"] + .pm-panel[data-tone="note"],
+.pm-panel[data-tone="warning"] + .pm-panel[data-tone="warning"],
+.pm-panel[data-tone="tip"] + .pm-panel[data-tone="tip"],
+.pm-panel[data-tone="error"] + .pm-panel[data-tone="error"] { margin-top: -8px; border-top-left-radius: 0; border-top-right-radius: 0; }
+.pm-table { margin: 8px 0; overflow-x: auto; }
+.pm-table table { border-collapse: collapse; min-width: 50%; }
+.pm-table th, .pm-table td { border: 1px solid var(--border-strong); padding: 4px 8px; text-align: left; vertical-align: top; }
+.pm-table th { background: var(--bg); font-weight: 600; }
+.pm-table input { width: 100%; min-width: 6em; border: 0; padding: 2px; background: transparent; font: inherit; color: inherit; }
+.pm-table-tools button.link { margin-right: 10px; font-size: 12px; }
+.pm-toc, .pm-children { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.pm-box-title { margin: 0 0 4px; font-weight: 600; }
+.pm-toc ul, .pm-children ul { margin: 0; padding-left: 18px; }
+.pm-toc button.link { padding: 0; margin: 0; font-weight: normal; }
+.pm-toc-2 { margin-left: 14px; }
+.pm-toc-3 { margin-left: 28px; }
+.pm-table.ProseMirror-selectednode, .pm-toc.ProseMirror-selectednode, .pm-children.ProseMirror-selectednode { outline: 2px solid var(--accent); }

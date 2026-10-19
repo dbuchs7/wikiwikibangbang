@@ -224,5 +224,24 @@ export default {
   "space.homeEmpty": "This page is empty.",
   "item.moveUp": "Move up",
   "item.moveDown": "Move down",
-  "item.newChild": "New child page"
+  "item.newChild": "New child page",
+
+  "editor.task": "Task",
+  "editor.taskDone": "Done",
+  "editor.panelInfo": "Info panel",
+  "editor.panelNote": "Note panel",
+  "editor.panelWarning": "Warning panel",
+  "editor.panelTip": "Tip panel",
+  "editor.panelError": "Error panel",
+  "editor.insert": "Insert…",
+  "editor.table": "Table",
+  "editor.toc": "Contents",
+  "editor.tocEmpty": "No headings yet.",
+  "editor.children": "Child pages",
+  "editor.childrenNone": "No child pages.",
+  "editor.cell": "Row {row}, column {col}",
+  "editor.addRow": "+ Row",
+  "editor.addColumn": "+ Column",
+  "editor.removeRow": "− Row",
+  "editor.removeColumn": "− Column"
 };

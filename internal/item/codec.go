@@ -24,7 +24,10 @@ import (
 //     Versions 1 to 3 are still read.
 //   - 5: ItemMoved may carry order, the new order of the siblings
 //     (ADR-0041). Versions 1 to 4 are still read.
-const CodecVersion = 5
+//   - 6: body blocks may be tasks, panels, tables, tables of contents and
+//     lists of child pages, with the block fields Checked and Tone
+//     (ADR-0042). Versions 1 to 5 are still read.
+const CodecVersion = 6
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

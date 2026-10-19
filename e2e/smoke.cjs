@@ -265,6 +265,36 @@ function check(cond, msg) {
     await page.dragAndDrop(".tree .tree-row:has(a:text-is('Install'))", ".tree .tree-row:has(a:text-is('Upgrade'))", { targetPosition: { x: 40, y: 1 } });
     await page.waitForFunction(() => [...document.querySelectorAll(".tree li.open > ul > li > .tree-row a")].map((a) => a.textContent).join(",") === "Install,Upgrade");
 
+    step("blocks: a task, a warning panel, a table and a table of contents survive a reload");
+    await page.click(".tree a:has-text('Install')");
+    await page.waitForSelector(".tree a.current:has-text('Install')");
+    await page.waitForSelector("#body .ProseMirror");
+    await page.locator("#body .ProseMirror").click();
+    await page.keyboard.type("Prepare");
+    await page.selectOption("#body .pm-toolbar select", "heading:2");
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("[] Check the backups");
+    await page.waitForSelector("#body .pm-task");
+    await page.check("#body .pm-task input[type=checkbox]");
+    await page.click("#body .pm-task-text"); // back into the text: the checkbox took the focus
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter"); // an empty task ends the list
+    await page.keyboard.type("Writers must be stopped.");
+    await page.selectOption("#body .pm-toolbar select", "panel:warning");
+    await page.selectOption("#body .pm-toolbar select >> nth=1", "table");
+    await page.fill("#body .pm-table tr:nth-child(2) td:first-child input", "db1");
+    await page.press("#body .pm-table tr:nth-child(2) td:first-child input", "Tab");
+    await page.selectOption("#body .pm-toolbar select >> nth=1", "toc");
+    await page.click("#body h2"); // leave the editor: its blocks are released and saved
+    await page.waitForSelector(".live[data-pending='0']");
+    await page.reload();
+    await page.waitForSelector("#body .pm-task[data-checked='true']:has-text('Check the backups')");
+    await page.waitForSelector("#body .pm-panel[data-tone='warning']:has-text('Writers must be stopped.')");
+    check(await page.inputValue("#body .pm-table tr:nth-child(2) td:first-child input") === "db1", "the table cell kept its text");
+    await page.waitForSelector("#body .pm-toc button:has-text('Prepare')");
+
     step("links: the link check page says when checking is off");
     await page.click("#nav >> text=Spaces");
     await page.click("a:has-text('Platform')");

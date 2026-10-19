@@ -14,7 +14,7 @@ const site = "acme.atlassian.example"
 
 // sample is a small but realistic snapshot: a Jira project with custom
 // fields, a workflow, a sub-task and an issue link, and a Confluence space
-// with a page tree, a Jira macro, a page link, an info macro and a read
+// with a page tree, a Jira macro, a page link, a gallery macro and a read
 // restriction. Both use the key PLAT and land in the same space.
 func sample() Snapshot {
 	workflow := SrcWorkflow{
@@ -58,7 +58,7 @@ func sample() Snapshot {
 		Spaces: []SrcSpace{{Key: "PLAT", Name: "Platform"}},
 		Pages: []SrcPage{
 			{ID: "2002", Space: "PLAT", Title: "Postmortem", Parent: "2001", Version: "1",
-				Body: `<p>See <ac:link><ri:page ri:content-title="Runbook"/></ac:link>.</p><ac:structured-macro ac:name="info"><ac:rich-text-body><p>n</p></ac:rich-text-body></ac:structured-macro>`},
+				Body: `<p>See <ac:link><ri:page ri:content-title="Runbook"/></ac:link>.</p><ac:structured-macro ac:name="gallery"><ac:rich-text-body><p>n</p></ac:rich-text-body></ac:structured-macro>`},
 			{ID: "2001", Space: "PLAT", Title: "Runbook", Version: "1",
 				Body:          `<h1>Runbook</h1><ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">PLAT-12</ac:parameter></ac:structured-macro><p>Next: <ac:link><ri:page ri:content-title="Postmortem"/></ac:link></p>`,
 				ReadAllowList: []string{"acc-anna", "acc-ghost"}},
@@ -112,7 +112,7 @@ func TestDryRunWritesNothingAndReports(t *testing.T) {
 	if rep.Created != 5 || rep.Updated != 0 {
 		t.Fatalf("dry-run counts: %+v", rep)
 	}
-	for _, want := range []string{"Legacy Script", "acc-ghost", "info", "jira_title"} {
+	for _, want := range []string{"Legacy Script", "acc-ghost", "gallery", "jira_title"} {
 		if !hasProblem(rep, want) {
 			t.Errorf("report misses a problem about %q: %+v", want, rep.Problems)
 		}
@@ -167,7 +167,7 @@ func TestImportMapsJiraAndConfluence(t *testing.T) {
 		t.Fatalf("runbook body = %+v", runbook.Body)
 	}
 	if post.Body.Blocks[1].Kind != item.Unsupported {
-		t.Fatalf("info macro must be kept as unsupported: %+v", post.Body)
+		t.Fatalf("an unknown macro must be kept as unsupported: %+v", post.Body)
 	}
 	// Restrictions: mapped users and a placeholder for the unmapped one —
 	// never wider than in the source.

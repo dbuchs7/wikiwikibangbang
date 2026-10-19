@@ -1,10 +1,12 @@
 // The rich-text editor (ADR-0032): ProseMirror with a schema that is exactly
 // the item model's block document — paragraphs, headings (levels 1 to 3),
-// bullet and ordered list items, quotes, code blocks and embeds; bold,
-// italic, code, link and mention marks. Nothing outside the schema survives
-// paste or input, so the editor cannot produce markup the model refuses.
+// bullet and ordered list items, quotes, code blocks and embeds; tasks,
+// panels, tables, tables of contents and lists of child pages (ADR-0042);
+// bold, italic, code, link and mention marks. Nothing outside the schema
+// survives paste or input, so the editor cannot produce markup the model
+// refuses.
 import {
-  Schema, EditorState, EditorView, keymap, baseKeymap, toggleMark, setBlockType,
+  Schema, EditorState, EditorView, Plugin, keymap, baseKeymap, toggleMark, setBlockType,
   splitBlockAs, chainCommands, history, undo, redo, inputRules, textblockTypeInputRule,
 } from "../vendor/prosemirror.js";
 import { h, safeHref } from "./dom.js";
@@ -30,6 +32,13 @@ export const schema = new Schema({
     ordered: { group: "block", content: "inline*", attrs: textAttrs, parseDOM: [{ tag: "ol > li" }], toDOM: () => ["div", { class: "pm-ordered" }, 0] },
     quote: { group: "block", content: "inline*", attrs: textAttrs, parseDOM: [{ tag: "blockquote" }], toDOM: () => ["blockquote", 0] },
     code_block: { group: "block", content: "text*", marks: "", code: true, defining: true, attrs: bid, parseDOM: [{ tag: "pre", preserveWhitespace: "full" }], toDOM: () => ["pre", ["code", 0]] },
+    // ADR-0042. A task's checkbox and a table's cells are drawn by node
+    // views (createEditor); toDOM is what a copy carries.
+    task: { group: "block", content: "inline*", attrs: { ...textAttrs, checked: { default: false } }, toDOM: (n) => ["div", { class: "pm-task", "data-checked": String(n.attrs.checked) }, 0] },
+    panel: { group: "block", content: "inline*", attrs: { ...textAttrs, tone: { default: "info" } }, toDOM: (n) => ["div", { class: "pm-panel", "data-tone": n.attrs.tone }, 0] },
+    table: { group: "block", atom: true, selectable: true, attrs: { ...bid, text: { default: "\t\n\t" } }, toDOM: (n) => ["pre", { class: "pm-table" }, n.attrs.text] },
+    toc: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-toc" }] },
+    children: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-children" }] },
     // Content an importer could not convert (ADR-0023), kept as it came and
     // shown as text; it cannot be created in the editor.
     unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, attrs: bid, toDOM: () => ["pre", { class: "pm-unsupported", title: t("editor.unsupported") }, 0] },
@@ -89,6 +98,8 @@ export function docFromBlocks(blocks, embeds = []) {
 // its session ID.
 export function nodeFromBlock(b, embeds = []) {
   const id = b.id ?? null;
+  if (b.kind === "table") return schema.nodes.table.create({ bid: id, text: b.text || "" });
+  if (b.kind === "toc" || b.kind === "children") return schema.nodes[b.kind].create({ bid: id });
   if (b.kind === "embed") {
     const v = embeds.find((e) => e.ref === b.ref);
     return schema.nodes.embed.create({
@@ -102,6 +113,8 @@ export function nodeFromBlock(b, embeds = []) {
   const plain = type === schema.nodes.code_block || type === schema.nodes.unsupported;
   const attrs = plain ? { bid: id } : { bid: id, mentions: b.mentions || [] };
   if (type === schema.nodes.heading) attrs.level = b.level || 1;
+  if (type === schema.nodes.task) attrs.checked = Boolean(b.checked);
+  if (type === schema.nodes.panel) attrs.tone = b.tone || "info";
   return type.create(attrs, inlineContent(b.text || "", plain ? [] : b.marks || []));
 }
 
@@ -140,6 +153,8 @@ export function blocksFromDoc(doc) {
 // blockFromNode is the model block of one editor node.
 export function blockFromNode(node) {
   if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
+  if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
+  if (node.type === schema.nodes.toc || node.type === schema.nodes.children) return { kind: node.type.name };
   let text = "";
   const marks = [];
   const mentions = new Set((node.attrs && node.attrs.mentions) || []);
@@ -164,18 +179,24 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.heading) b.level = node.attrs.level;
   if (marks.length) b.marks = marks;
   if (mentions.size) b.mentions = [...mentions];
+  if (node.type === schema.nodes.task && node.attrs.checked) b.checked = true;
+  if (node.type === schema.nodes.panel) b.tone = node.attrs.tone;
   return b;
 }
 
 // --- the editor -----------------------------------------------------------------
 
+// Blocks that continue on Enter: list items, tasks (a new one unchecked)
+// and panels (in the same tone).
+const continued = () => [schema.nodes.bullet, schema.nodes.ordered, schema.nodes.task, schema.nodes.panel];
+
 const listItem = (state, dispatch) => {
   const { $from, empty } = state.selection;
   const node = $from.parent;
-  if (!empty || (node.type !== schema.nodes.bullet && node.type !== schema.nodes.ordered)) return false;
+  if (!empty || !continued().includes(node.type)) return false;
   // Enter on an empty item ends the list; otherwise the next item keeps the kind.
   if (node.content.size === 0) return setBlockType(schema.nodes.paragraph)(state, dispatch);
-  return splitBlockAs((n) => ({ type: n.type }))(state, dispatch);
+  return splitBlockAs((n) => ({ type: n.type, attrs: n.type === schema.nodes.panel ? { tone: n.attrs.tone } : {} }))(state, dispatch);
 };
 
 function plugins() {
@@ -188,6 +209,8 @@ function plugins() {
         block(schema.nodes.ordered)(/^1[.)]\s$/),
         block(schema.nodes.quote)(/^>\s$/),
         block(schema.nodes.code_block)(/^```$/),
+        block(schema.nodes.task)(/^\[\s?\]\s$/),
+        block(schema.nodes.task, { checked: true })(/^\[x\]\s$/i),
       ],
     }),
     history(),
@@ -200,28 +223,160 @@ function plugins() {
   ];
 }
 
+// --- node views (ADR-0042) -----------------------------------------------------
+
+// A node view's own controls are not editor content: the editor neither
+// handles their events nor reads their changes as edits.
+const own = { stopEvent: () => true, ignoreMutation: () => true };
+
+// taskView draws a task's checkbox; ticking it changes the task.
+function taskView(node, view, getPos) {
+  const box = h("input", { type: "checkbox", "aria-label": t("editor.taskDone") });
+  const text = h("span", { class: "pm-task-text" });
+  const dom = h("div", { class: "pm-task" }, h("span", { class: "pm-task-box", contenteditable: "false" }, box), text);
+  const show = () => {
+    box.checked = node.attrs.checked;
+    box.disabled = !view.editable;
+    dom.dataset.checked = String(node.attrs.checked);
+  };
+  box.addEventListener("change", () => {
+    const pos = getPos();
+    if (pos !== undefined) view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, checked: box.checked }));
+    show(); // a refused change (someone else holds the task) shows as it is
+  });
+  show();
+  return {
+    dom, contentDOM: text,
+    update: (n) => { if (n.type !== node.type) return false; node = n; show(); return true; },
+    stopEvent: (ev) => ev.target === box,
+    ignoreMutation: (m) => m.type === "attributes" && (m.target === box || m.target === dom),
+  };
+}
+
+const rowsOf = (text) => text.split("\n").map((r) => r.split("\t"));
+const textOf = (rows) => rows.map((r) => r.join("\t")).join("\n");
+
+// tableView draws a table; an editor edits its cells in place and adds or
+// removes rows and columns. Cells are plain text: tabs and line breaks
+// typed into a cell become spaces.
+function tableView(node, view, getPos) {
+  const dom = h("div", { class: "pm-table", contenteditable: "false" });
+  let shown = null;
+  const commit = (rows) => {
+    const pos = getPos();
+    if (pos === undefined || dom.classList.contains("pm-locked")) return render(true);
+    view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, text: textOf(rows) }));
+  };
+  const render = (force) => {
+    const edit = view.editable;
+    if (!force && shown === node.attrs.text + edit) return;
+    shown = node.attrs.text + edit;
+    const rows = rowsOf(node.attrs.text);
+    const cell = (c, i, j) => {
+      const tag = i === 0 ? "th" : "td";
+      if (!edit) return h(tag, { text: c });
+      const input = h("input", { value: c, "aria-label": t("editor.cell", { row: i + 1, col: j + 1 }) });
+      input.addEventListener("change", () => {
+        const next = rowsOf(node.attrs.text);
+        next[i][j] = input.value.replace(/[\t\r\n]/g, " ");
+        commit(next);
+      });
+      return h(tag, {}, input);
+    };
+    const table = h("table", {}, rows.map((r, i) => h("tr", {}, r.map((c, j) => cell(c, i, j)))));
+    const change = (fn) => () => { const next = rowsOf(node.attrs.text); fn(next); commit(next); };
+    const tools = edit ? h("div", { class: "pm-table-tools" },
+      h("button", { type: "button", class: "link", text: t("editor.addRow"), onclick: change((rs) => rs.push(rs[0].map(() => ""))) }),
+      h("button", { type: "button", class: "link", text: t("editor.addColumn"), onclick: change((rs) => rs.forEach((r) => r.push(""))) }),
+      rows.length > 1 ? h("button", { type: "button", class: "link", text: t("editor.removeRow"), onclick: change((rs) => rs.pop()) }) : null,
+      rows[0].length > 1 ? h("button", { type: "button", class: "link", text: t("editor.removeColumn"), onclick: change((rs) => rs.forEach((r) => r.pop())) }) : null,
+    ) : null;
+    dom.replaceChildren(table, tools);
+  };
+  render();
+  return { dom, ...own, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
+}
+
+// tocView lists the body's headings; a click scrolls to one. tocs holds
+// the refresh functions of an editor's tables of contents, which a plugin
+// calls after every change of the document.
+function tocView(node, view, tocs) {
+  const dom = h("nav", { class: "pm-toc", contenteditable: "false", "aria-label": t("editor.toc") });
+  const refresh = () => {
+    const heads = [];
+    view.state.doc.forEach((n, offset) => {
+      if (n.type === schema.nodes.heading && n.textContent.trim()) heads.push({ level: n.attrs.level, text: n.textContent, offset });
+    });
+    dom.replaceChildren(h("p", { class: "pm-box-title", text: t("editor.toc") }), heads.length
+      ? h("ul", {}, heads.map((x) => h("li", { class: "pm-toc-" + x.level }, h("button", { type: "button", class: "link", text: x.text,
+        onclick: () => view.nodeDOM(x.offset)?.scrollIntoView({ block: "start" }) }))))
+      : h("p", { class: "muted", text: t("editor.tocEmpty") }));
+  };
+  tocs.add(refresh);
+  refresh();
+  return { dom, ...own, update: (n) => n.type === node.type, destroy: () => tocs.delete(refresh) };
+}
+
+// childrenView lists the child pages of the item, from childPages().
+function childrenView(node, childPages) {
+  const dom = h("nav", { class: "pm-children", contenteditable: "false", "aria-label": t("editor.children") },
+    h("p", { class: "pm-box-title", text: t("editor.children") }));
+  const list = h("div", {}, h("p", { class: "muted", text: "…" }));
+  dom.append(list);
+  Promise.resolve(childPages ? childPages() : []).then((kids) => {
+    list.replaceChildren(kids.length
+      ? h("ul", {}, kids.map((c) => h("li", {}, h("a", { href: "#/item/" + encodeURIComponent(c.key), text: c.title || c.key }))))
+      : h("p", { class: "muted", text: t("editor.childrenNone") }));
+  }).catch(() => list.replaceChildren(h("p", { class: "muted", text: t("editor.childrenNone") })));
+  return { dom, ...own, update: (n) => n.type === node.type };
+}
+
 // createEditor mounts an editor for blocks and returns its element and a
 // function reading the blocks back. With editable false it is a viewer.
-// resolve(keyOrId) returns an item (for mentions and embeds) or throws.
-// extra adds plugins, such as a live session's (live.js); viewProps adds
-// editor view properties.
-export function createEditor({ blocks, embeds, editable, resolve, extra = [], viewProps = {} }) {
+// resolve(keyOrId) returns an item (for mentions and embeds) or throws;
+// childPages() the item's child pages as [{key, title}], for a list of
+// child pages. extra adds plugins, such as a live session's (live.js);
+// viewProps adds editor view properties.
+export function createEditor({ blocks, embeds, editable, resolve, childPages, extra = [], viewProps = {} }) {
   const mount = h("div", { class: "pm-editor" });
+  const tocs = new Set();
+  const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
   const view = new EditorView(mount, {
-    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...plugins()] }),
+    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...plugins(), tocPlugin] }),
     editable: () => editable,
     attributes: { "aria-label": t("editor.body"), role: "textbox", "aria-multiline": "true" },
+    nodeViews: {
+      task: taskView,
+      table: tableView,
+      toc: (node, v) => tocView(node, v, tocs),
+      children: (node) => childrenView(node, childPages),
+    },
     ...viewProps,
   });
   const run = (cmd) => () => { cmd(view.state, view.dispatch); view.focus(); };
   const kindSelect = h("select", { "aria-label": t("editor.blockKind"), onchange: (e) => {
-    const [kind, level] = e.target.value.split(":");
-    const attrs = kind === "heading" ? { level: Number(level) } : null;
+    const [kind, arg] = e.target.value.split(":");
+    const attrs = kind === "heading" ? { level: Number(arg) } : kind === "panel" ? { tone: arg } : null;
     run(setBlockType(schema.nodes[kind], attrs))();
   } }, [
     ["paragraph", t("editor.paragraph")], ["heading:1", t("editor.heading", { n: 1 })], ["heading:2", t("editor.heading", { n: 2 })], ["heading:3", t("editor.heading", { n: 3 })],
-    ["bullet", t("editor.bullet")], ["ordered", t("editor.ordered")], ["quote", t("editor.quote")], ["code_block", t("editor.codeBlock")],
+    ["bullet", t("editor.bullet")], ["ordered", t("editor.ordered")], ["task", t("editor.task")], ["quote", t("editor.quote")], ["code_block", t("editor.codeBlock")],
+    ["panel:info", t("editor.panelInfo")], ["panel:note", t("editor.panelNote")], ["panel:warning", t("editor.panelWarning")],
+    ["panel:tip", t("editor.panelTip")], ["panel:error", t("editor.panelError")],
   ].map(([v, label]) => h("option", { value: v, text: label })));
+  // insertBlock puts a block after the one the cursor is in.
+  const insertBlock = (node) => {
+    const { $to } = view.state.selection;
+    view.dispatch(view.state.tr.insert($to.depth >= 1 ? $to.after(1) : $to.pos, node));
+    view.focus();
+  };
+  const insertSelect = h("select", { "aria-label": t("editor.insert"), onchange: (e) => {
+    const kind = e.target.value;
+    e.target.value = "";
+    if (kind === "table") insertBlock(schema.nodes.table.create({ text: `${t("editor.heading", { n: 1 })}\t${t("editor.heading", { n: 2 })}\n\t` }));
+    else if (kind) insertBlock(schema.nodes[kind].create());
+  } }, [["", t("editor.insert")], ["table", t("editor.table")], ["toc", t("editor.toc")], ["children", t("editor.children")]]
+    .map(([v, label]) => h("option", { value: v, text: label })));
   const target = h("input", { class: "pm-target", placeholder: t("editor.target"), "aria-label": t("editor.targetLabel") });
   const status = h("span", { class: "error", role: "status" });
   const withTarget = (fn) => async () => {
@@ -240,6 +395,7 @@ export function createEditor({ blocks, embeds, editable, resolve, extra = [], vi
   };
   const toolbar = editable ? h("div", { class: "pm-toolbar", role: "toolbar" },
     kindSelect,
+    insertSelect,
     h("button", { type: "button", title: t("editor.bold"), onclick: run(toggleMark(schema.marks.bold)) }, h("strong", { text: "B" })),
     h("button", { type: "button", title: t("editor.italic"), onclick: run(toggleMark(schema.marks.italic)) }, h("em", { text: "I" })),
     h("button", { type: "button", title: t("editor.code"), onclick: run(toggleMark(schema.marks.code)), text: "</>" }),

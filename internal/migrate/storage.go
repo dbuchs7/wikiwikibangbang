@@ -35,7 +35,9 @@ var (
 // ConvertStorage converts a Confluence storage-format body into a block
 // document (ADR-0023). Headings and paragraphs become blocks, list items
 // become paragraphs, page links become mentions, Jira issue macros become
-// embeds, and everything else becomes an Unsupported block with the
+// embeds; info, note, warning and tip macros become panels, task lists
+// tasks, tables tables, and the toc and children macros their blocks
+// (ADR-0042); everything else becomes an Unsupported block with the
 // original markup. It returns problems for links it could not resolve and
 // for markup it could not parse; it never fails.
 func ConvertStorage(body, space string, r Resolver) (item.Doc, []string) {
@@ -57,7 +59,11 @@ type converter struct {
 
 	cur   *item.Block      // block being filled with text, or nil
 	lists []item.BlockKind // enclosing lists, innermost last (ADR-0032)
+	tone  string           // the tone of the enclosing panel macro, or "" (ADR-0042)
 }
+
+// panelTones maps Confluence's panel macros to panel tones (ADR-0042).
+var panelTones = map[string]string{"info": "info", "note": "note", "warning": "warning", "tip": "tip"}
 
 func name(n xml.Name) string {
 	if n.Space != "" {
@@ -78,6 +84,9 @@ func attr(se xml.StartElement, space, local string) string {
 func (c *converter) open(kind item.BlockKind) {
 	c.flush()
 	c.cur = &item.Block{Kind: kind}
+	if kind == item.Paragraph && c.tone != "" {
+		c.cur.Kind, c.cur.Tone = item.Panel, c.tone
+	}
 }
 
 func (c *converter) text(s string) {
@@ -190,6 +199,18 @@ func (c *converter) element(se xml.StartElement, start int) error {
 		return c.link()
 	case n == "ac:structured-macro" && attr(se, "ac", "name") == "jira":
 		return c.jiraMacro()
+	case n == "ac:structured-macro" && panelTones[attr(se, "ac", "name")] != "" && c.tone == "":
+		return c.panelMacro(panelTones[attr(se, "ac", "name")])
+	case n == "ac:structured-macro" && attr(se, "ac", "name") == "toc":
+		c.emit(item.Block{Kind: item.TOC})
+		return c.dec.Skip()
+	case n == "ac:structured-macro" && attr(se, "ac", "name") == "children":
+		c.emit(item.Block{Kind: item.Children})
+		return c.dec.Skip()
+	case n == "ac:task-list":
+		return c.taskList()
+	case n == "table":
+		return c.table()
 	case n == "br":
 		c.text("\n")
 		return c.children()
@@ -273,4 +294,153 @@ func (c *converter) jiraMacro() error {
 	c.problem("Jira issue %s is not imported; kept as text", key)
 	c.emit(item.Block{Kind: item.Paragraph, Text: "[Jira issue " + key + "]"})
 	return nil
+}
+
+// panelMacro turns the paragraphs of an info, note, warning or tip macro
+// into panel blocks of that tone; its parameters (a title) are dropped.
+func (c *converter) panelMacro(tone string) error {
+	c.flush()
+	for {
+		tok, err := c.dec.Token()
+		if err != nil {
+			return err
+		}
+		switch t := tok.(type) {
+		case xml.EndElement:
+			return nil
+		case xml.StartElement:
+			if name(t.Name) != "ac:rich-text-body" {
+				if err := c.dec.Skip(); err != nil {
+					return err
+				}
+				continue
+			}
+			c.tone = tone
+			err := c.children()
+			c.flush()
+			c.tone = ""
+			if err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// taskList turns <ac:task> elements into task blocks, checked when their
+// status is "complete".
+func (c *converter) taskList() error {
+	c.flush()
+	checked := false
+	for depth := 1; depth > 0; {
+		tok, err := c.dec.Token()
+		if err != nil {
+			return err
+		}
+		switch t := tok.(type) {
+		case xml.EndElement:
+			depth--
+		case xml.StartElement:
+			switch name(t.Name) {
+			case "ac:task":
+				checked = false
+				depth++
+			case "ac:task-status":
+				var status string
+				if err := c.dec.DecodeElement(&status, &t); err != nil {
+					return err
+				}
+				checked = strings.TrimSpace(status) == "complete"
+			case "ac:task-body":
+				c.open(item.TaskItem)
+				c.cur.Checked = checked
+				err := c.children()
+				c.flush()
+				if err != nil {
+					return err
+				}
+			default:
+				if err := c.dec.Skip(); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// table turns an HTML table into a table block: one row per <tr>, the text
+// of each cell, rows padded to the widest. Merged cells, formatting and
+// links inside cells are not kept.
+func (c *converter) table() error {
+	c.flush()
+	var rows [][]string
+	for depth := 1; depth > 0; {
+		tok, err := c.dec.Token()
+		if err != nil {
+			return err
+		}
+		switch t := tok.(type) {
+		case xml.EndElement:
+			depth--
+		case xml.StartElement:
+			switch name(t.Name) {
+			case "tr":
+				rows = append(rows, nil)
+				depth++
+			case "th", "td":
+				text, err := c.cellText()
+				if err != nil {
+					return err
+				}
+				if len(rows) == 0 {
+					rows = append(rows, nil)
+				}
+				rows[len(rows)-1] = append(rows[len(rows)-1], text)
+			case "tbody", "thead", "tfoot":
+				depth++
+			default:
+				if err := c.dec.Skip(); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	cols := 0
+	for _, r := range rows {
+		cols = max(cols, len(r))
+	}
+	if cols == 0 {
+		return nil
+	}
+	lines := make([]string, len(rows))
+	for i, r := range rows {
+		for len(r) < cols {
+			r = append(r, "")
+		}
+		lines[i] = strings.Join(r, "\t")
+	}
+	c.emit(item.Block{Kind: item.Table, Text: strings.Join(lines, "\n")})
+	return nil
+}
+
+// cellText reads a cell's text, its paragraphs joined by spaces; tabs and
+// line breaks, which separate cells and rows, become spaces.
+func (c *converter) cellText() (string, error) {
+	var b strings.Builder
+	for depth := 1; depth > 0; {
+		tok, err := c.dec.Token()
+		if err != nil {
+			return "", err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+			b.WriteString(" ")
+		case xml.EndElement:
+			depth--
+		case xml.CharData:
+			b.WriteString(string(t))
+		}
+	}
+	return strings.Join(strings.FieldsFunc(b.String(), func(r rune) bool { return r == ' ' || r == '\t' || r == '\n' || r == '\r' }), " "), nil
 }
