@@ -86,6 +86,8 @@ The repository settings on GitHub are compared with `.github/repository-settings
 GITHUB_TOKEN=… go run ./cmd/settingscheck -repo dbuchs7/wikiwikibangbang   # exit 1 on drift
 ```
 
+The default token cannot read the merge settings or the ruleset's bypass list. The workflow therefore uses the secret `SETTINGS_READ_TOKEN` (read-only, this repository, *Administration: read*) when it exists, and then runs with `-strict`, which also fails on a value it cannot read. Creating and renewing that token is the maintainer's task, never an agent's.
+
 The ADR tests in `docs/adr` enforce file names, headings, front matter, the status rules (`Landed` requires `Accepted`; an `Open question` needs a `Question checked` month no older than a year) and that the index in `docs/adr/README.md` matches the records. A failing ADR test is fixed in the record or the index, never by loosening the test.
 
 When a command is added (linters, end-to-end tests, a `Makefile` target), add it here and to CI in the same pull request.
