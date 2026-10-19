@@ -34,7 +34,9 @@ type Problem struct {
 // issues and pages.
 type Report struct {
 	Created, Updated, Unchanged int
-	Problems                    []Problem
+	// Granted counts the roles the run gave (Mapping.Grants).
+	Granted  int
+	Problems []Problem
 }
 
 type engine struct {
@@ -63,6 +65,7 @@ func Run(s *item.Store, snap Snapshot, m Mapping, opt Options) (Report, error) {
 	e := &engine{s: s, snap: snap, m: m, opt: opt, status: map[string]string{}, skipType: map[string]bool{}}
 	e.rep.Problems = slices.Clone(m.Notes)
 	e.ensureSpaces()
+	e.grantRoles()
 	e.ensureTypes()
 	issues, pages := e.orderedIssues(), e.orderedPages()
 	for _, is := range issues {
@@ -307,10 +310,54 @@ func fieldDef(td item.TypeDef, name string) item.FieldDef {
 }
 
 func (e *engine) principal(account string) string {
+	if group, ok := strings.CutPrefix(account, "group:"); ok {
+		if g, ok := e.m.Groups[group]; ok {
+			return g
+		}
+		return "external:" + account
+	}
 	if p, ok := e.m.Users[account]; ok {
 		return p
 	}
 	return "external:" + account
+}
+
+// targetSpaces are the spaces this snapshot writes to.
+func (e *engine) targetSpaces() []string {
+	var out []string
+	add := func(src string) {
+		if t := e.m.Spaces[src]; t != "" && !slices.Contains(out, t) {
+			out = append(out, t)
+		}
+	}
+	for _, p := range e.snap.Projects {
+		add("jira:" + p.Key)
+	}
+	for _, sp := range e.snap.Spaces {
+		add("confluence:" + sp.Key)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// grantRoles gives the mapping's roles in every target space. A principal
+// that already holds the role or a higher one there keeps it.
+func (e *engine) grantRoles() {
+	for _, space := range e.targetSpaces() {
+		if !e.s.HasSpace(space) {
+			continue // creating it failed; reported there
+		}
+		for _, g := range e.m.Grants {
+			if e.s.GrantedRole(space, g.Principal) >= g.Role {
+				continue
+			}
+			if err := e.s.GrantRole(e.opt.Actor, space, g.Principal, g.Role); err != nil {
+				e.problem("space "+space, "role for %s not granted: %v", g.Principal, err)
+				continue
+			}
+			e.rep.Granted++
+		}
+	}
 }
 
 func (e *engine) convert(kind item.FieldKind, v any) (any, error) {
@@ -439,6 +486,13 @@ func (e *engine) pageContent(p SrcPage) {
 	}
 	e.commitBody(ref, it, doc)
 
+	reported := map[string]bool{}
+	for _, a := range append(slices.Clone(p.ReadAllowList), p.EditAllowList...) {
+		if group, ok := strings.CutPrefix(a, "group:"); ok && e.m.Groups[group] == "" && !reported[group] {
+			reported[group] = true
+			e.problem(ref, "its restriction names the group %q, which is not mapped; members of the group lose access until it is", group)
+		}
+	}
 	want := item.Restriction{Read: e.principals(p.ReadAllowList), Edit: e.principals(p.EditAllowList)}
 	if !reflect.DeepEqual(it.Restriction, want) {
 		if err := e.s.Restrict(e.opt.Actor, it.ID, want); err != nil {

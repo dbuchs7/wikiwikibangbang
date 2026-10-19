@@ -126,7 +126,7 @@ The maintainer chose Atlassian Cloud through its REST APIs as the first source. 
 3. **The token stays on the site.** Only paths of the site are followed; an absolute or scheme-relative next link is refused, and plain http is accepted only for the local machine.
 4. **Pages under a folder or another non-page parent** are placed at the top of the space and reported.
 5. **Not verified against a live site.** The endpoints and field names follow Atlassian's published models as mirrored in an open-source client library, since Atlassian's documentation could not be reached while building. The tests use a fake site; the first import against a real site is the check, and an unexpected answer restricts and reports rather than opens.
-6. Still not built: comments, attachments, labels, page history, and mapping groups.
+6. Still not built: comments, attachments, labels and page history. (Groups: see "Roles and groups" below.)
 
 ## Jira Cloud reader (2026-10-19)
 
@@ -139,6 +139,14 @@ The maintainer chose Atlassian Cloud through its REST APIs as the first source. 
 5. **Parents outside the import.** An issue whose parent (an epic in another project) is not read is placed at the top of its space and reported, instead of being refused.
 6. **"Removed in the source" looks only at what a run read.** A run that reads only some projects or spaces no longer reports the items of the others as removed.
 7. Not verified against a live site, as for the Confluence reader; the models of the same open-source client library were the reference.
+
+## Roles and groups (2026-10-19)
+
+An imported space had no roles: only system administrators could see it. Copying the source's permissions was considered and not taken as the default. Source groups often grant product access to a whole organisation (copying them would widen access, against the rule that an import never shows more than the source did); Confluence's per-space permissions and Jira's project roles map onto three space roles only with loss; group members arrive as account IDs without e-mail addresses; and the APIs that list members need administrative rights that were not verified. The import therefore takes the roles from the person running it:
+
+1. **`-grant principal=role`**, repeatable: a role (viewer, editor, space-admin) for a local account or `@group` in every space the import writes to. A run only adds: a principal that already holds the role or a higher one directly keeps it, so roles changed by space administrators survive the next run, and a re-run grants nothing.
+2. **`-groups file`**: maps source groups to local groups. A page restriction naming a mapped group names the local group; an unmapped one stays a placeholder no one holds and is reported once per page. Members of local groups are managed locally; the import adds none.
+3. Not built: proposing roles and group mappings from the source's space permissions and project roles in a dry run, for a person to review.
 
 ## Pros and cons of the options
 

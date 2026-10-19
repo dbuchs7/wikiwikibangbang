@@ -21,8 +21,21 @@ type Mapping struct {
 	PageType string
 	// Users maps source account IDs to principals.
 	Users map[string]string
+	// Groups maps source group names to local groups ("@name"). A source
+	// group that is not mapped becomes a placeholder no one holds.
+	Groups map[string]string
+	// Grants are roles given in every space the import writes to. They are
+	// only added: a run never lowers or removes a role, so roles that space
+	// administrators changed after an import survive the next one.
+	Grants []Grant
 	// Notes are the problems found while deriving the mapping.
 	Notes []Problem
+}
+
+// Grant is a role for a principal or "@group".
+type Grant struct {
+	Principal string
+	Role      item.Role
 }
 
 // TypeMap maps one issue type.
