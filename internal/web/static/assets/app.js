@@ -321,8 +321,9 @@ function renderNav() {
     if (n.unread) bell.textContent = t("nav.notificationsUnread", { n: n.unread >= 100 ? "99+" : n.unread });
     bell.classList.toggle("unread", n.unread > 0);
   }).catch(() => {});
+  // The spaces are reached through the logo and the module switcher; the
+  // page tree navigates within a space (ADR-0041).
   mount(nav,
-    link("#/", t("nav.spaces")),
     search,
     bell,
     me.admin ? link("#/admin", t("nav.admin")) : null,

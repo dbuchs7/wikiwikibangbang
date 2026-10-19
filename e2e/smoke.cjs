@@ -72,7 +72,7 @@ function check(cond, msg) {
     if (process.env.BACKUP_OUT) require("fs").writeFileSync(process.env.BACKUP_OUT, saved);
 
     step("create an item with a hostile title");
-    await page.click("#nav >> text=Spaces");
+    await page.click("a.brand");
     await page.click("a:has-text('Platform')");
     await page.fill("#new-item [name=title]", hostile);
     await page.selectOption("#new-item [name='p:priority']", "high");
@@ -229,7 +229,7 @@ function check(cond, msg) {
     await page.waitForSelector("#governance-overview td:has-text('PLAT')");
 
     step("board: columns are the workflow's states; dragging a card performs the transition");
-    await page.click("#nav >> text=Spaces");
+    await page.click("a.brand");
     await page.click("a:has-text('Platform')");
     await page.click("a:has-text('Board: task')");
     await page.waitForSelector(".board");
@@ -243,7 +243,7 @@ function check(cond, msg) {
     check(await page.locator(`${column("open")} .card-item`).count() === 0, "the open column is empty");
 
     step("page tree: child pages, reordered by button and by dragging");
-    await page.click("#nav >> text=Spaces");
+    await page.click("a.brand");
     await page.click("a:has-text('Platform')");
     await page.waitForSelector("#home h2:has-text('PLAT-1'), #home h2 a");
     await page.click(".tree a:has-text('Runbook')");
@@ -346,13 +346,13 @@ function check(cond, msg) {
     check(await page.locator("#attachments li").count() === 2, "both files are listed");
 
     step("links: the link check page says when checking is off");
-    await page.click("#nav >> text=Spaces");
+    await page.click("a.brand");
     await page.click("a:has-text('Platform')");
     await page.click("a:has-text('Link check')");
     await page.waitForSelector("#linkcheck >> text=switched off");
 
     step("governance: the check of a space lists its three kinds of findings");
-    await page.click("#nav >> text=Spaces");
+    await page.click("a.brand");
     await page.click("a:has-text('Platform')");
     await page.click("main a:has-text('Governance')");
     await page.waitForSelector("#governance h2:has-text('Sensitive data')");
@@ -368,7 +368,7 @@ function check(cond, msg) {
 
     step("language: German on request, kept across sign-ins");
     await page.selectOption("#language [name=language]", "de");
-    await page.waitForSelector("nav >> text=Bereiche");
+    await page.waitForSelector("#nav-notifications >> text=Benachrichtigungen");
     check(await page.getAttribute("html", "lang") === "de", "the document is marked German");
     check((await page.textContent("#password h2")) === "Passwort ändern", "the account page is German");
     // A German browser does not override bert's own earlier choice (English,
@@ -381,10 +381,10 @@ function check(cond, msg) {
     await bertDe.fill("#login [name=username]", "bert");
     await bertDe.fill("#login [name=password]", "bert's password");
     await bertDe.click("#login button[type=submit]");
-    await bertDe.waitForSelector("nav >> text=Spaces");
+    await bertDe.waitForSelector("#nav-notifications >> text=Notifications");
     await german.close();
     await page.selectOption("#language [name=language]", "en");
-    await page.waitForSelector("nav >> text=Spaces");
+    await page.waitForSelector("#nav-notifications >> text=Notifications");
 
     step("log out, log in as bert, read the item");
     await page.click("text=Log out");
