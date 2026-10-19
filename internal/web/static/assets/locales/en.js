@@ -243,5 +243,10 @@ export default {
   "editor.addRow": "+ Row",
   "editor.addColumn": "+ Column",
   "editor.removeRow": "− Row",
-  "editor.removeColumn": "− Column"
+  "editor.removeColumn": "− Column",
+
+  "version.changes": "Changes",
+  "version.title": "Changes of {when} by {who}",
+  "version.noChanges": "The body did not change.",
+  "version.restore": "Restore this version"
 };

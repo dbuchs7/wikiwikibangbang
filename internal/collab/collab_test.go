@@ -346,6 +346,30 @@ func TestAChangeOutsideTheSessionResetsIt(t *testing.T) {
 	}
 }
 
+// A body written outside an idle session, by a commit or a restored
+// version, reaches the session when someone joins: the joiner and those
+// already in it see the stored body.
+func TestJoiningAnIdleSessionTakesTheStoredBody(t *testing.T) {
+	f := newFixture(t, "one")
+	vera := f.join("vera")
+	f.store.body = item.Doc{Blocks: []item.Block{para("restored")}}
+	anna := f.join("anna")
+	if snap := anna.last(Snapshot); len(snap.Blocks) != 1 || snap.Blocks[0].Block.Text != "restored" {
+		t.Fatalf("joiner sees %+v", snap)
+	}
+	if snap := vera.last(Snapshot); snap.Blocks[0].Block.Text != "restored" {
+		t.Fatalf("the one already in sees %+v", snap)
+	}
+	// A busy session keeps its work; its next commit resets it.
+	id := anna.ids()[0]
+	noErr(t, anna.apply(Op{Op: "set", ID: id, Block: para("typing")}))
+	f.store.body = item.Doc{Blocks: []item.Block{para("elsewhere")}}
+	bert := f.join("bert")
+	if snap := bert.last(Snapshot); snap.Blocks[0].Block.Text != "typing" {
+		t.Fatalf("a busy session was reset on join: %+v", snap)
+	}
+}
+
 func TestErasureAndLostAccessEndTheSession(t *testing.T) {
 	f := newFixture(t, "secret")
 	anna, vera := f.join("anna"), f.join("vera")

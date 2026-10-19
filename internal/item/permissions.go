@@ -354,6 +354,38 @@ func (x *Session) History(id ID) ([]Event, error) {
 	return out, nil
 }
 
+// BodyAt returns the body a readable item had after its BodyCommitted
+// event seq (ADR-0043). An erased version is gone (ADR-0026).
+func (x *Session) BodyAt(id ID, seq int) (Event, error) {
+	if _, err := x.readable(id); err != nil {
+		return Event{}, err
+	}
+	for _, e := range x.s.History(id) {
+		if e.Seq != seq || e.Item != id || e.Kind != BodyCommitted {
+			continue
+		}
+		if e.Erased || e.Body == nil {
+			return Event{}, notFound("version %d of item %s was erased", seq, id)
+		}
+		e.Body = ptrTo(e.Body.clone())
+		return e, nil
+	}
+	return Event{}, notFound("body version %d of item %s", seq, id)
+}
+
+// RestoreBody commits the body an editable item had after its
+// BodyCommitted event seq as its new body; the current one stays in the
+// history (ADR-0043).
+func (x *Session) RestoreBody(id ID, seq int) error {
+	v, err := x.BodyAt(id, seq)
+	if err != nil {
+		return err
+	}
+	return x.CommitBody(id, *v.Body)
+}
+
+func ptrTo[T any](v T) *T { return &v }
+
 // Relations returns the relations of a readable item whose other end is
 // readable too.
 func (x *Session) Relations(id ID, dir Direction) ([]Relation, error) {
