@@ -41,6 +41,7 @@ export default {
   "login.title": "Log in",
   "login.with": "Log in with {name}",
 
+  "search.inComment": "In a comment: {text}",
   "search.none": "Nothing found among the items you may read.",
   "search.results": { "one": "{n} result for “{q}”", "other": "{n} results for “{q}”" },
   "search.title": "Search",

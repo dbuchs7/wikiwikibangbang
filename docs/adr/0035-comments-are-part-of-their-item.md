@@ -36,7 +36,7 @@ Chosen option: **1**.
 - **API:** `GET /api/items/{ref}/comments` (paged, ADR-0015), `POST` to add, `PUT /api/items/{ref}/comments/{id}` to edit, `DELETE` to delete. A deleted comment is listed in its place without text. The MCP adapter (ADR-0012) offers `list_comments` and `add_comment`; editing and deleting are not offered to agents.
 - **UI:** a comment section on every item: the list, a field to add one, and edit and delete for one's own.
 
-**Implementation is Partial:** comments show the author's user ID, as the history does, because non-administrators have no way to look up names yet (ADR-0031); search does not find comment text (ADR-0033); no replies, no notifications.
+**Implementation is Partial:** no replies, no notifications. Comments name their authors through `GET /api/users/names`, and search finds comment text, marking a hit whose snippet comes from a comment (ADR-0033).
 
 ### Consequences
 

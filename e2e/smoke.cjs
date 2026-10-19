@@ -180,6 +180,7 @@ function check(cond, msg) {
     const authors = await page.$$eval("table.history tr", (rows) => rows
       .filter((r) => r.children[2]?.textContent === "BodyCommitted").map((r) => r.children[1].textContent));
     check(new Set(authors).size >= 2, "each person's change is a version in their name");
+    check(authors.includes("bert") && authors.includes("you"), "the history names people, not IDs: " + authors.join(", "));
 
     step("the mention relates the items");
     await page.click(".pm-mention");
@@ -194,6 +195,9 @@ function check(cond, msg) {
     await page.waitForSelector(".hits li");
     check((await page.textContent(".hits li a")) === "PLAT-2", "the runbook is the hit");
     check((await page.textContent(".hits .snippet")).includes("<script>alert('body')</script>"), "the snippet shows the script as text");
+    await page.fill("nav input[name=q]", "staging hosts");
+    await page.press("nav input[name=q]", "Enter");
+    await page.waitForSelector(".hits .snippet:has-text('In a comment: Patched on the staging hosts.')");
     await page.fill("nav input[name=q]", "zzzz-nothing");
     await page.press("nav input[name=q]", "Enter");
     await page.waitForSelector("text=Nothing found");
@@ -290,6 +294,7 @@ function check(cond, msg) {
     await page.waitForSelector("text=state: done");
     check(await page.$("text=Administration") === null, "bert sees no administration");
     check((await page.textContent(".comment-text")) === "Patched on the staging hosts.", "bert reads the comment");
+    check((await page.textContent(".comment .muted")).startsWith("admin · "), "the comment names its author");
     check(await page.$(".comment button:has-text('Edit')") === null, "bert cannot edit admin's comment");
 
     check(problems.length === 0, problems.join("; "));

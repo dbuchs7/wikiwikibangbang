@@ -209,3 +209,25 @@ func BenchmarkSearch(b *testing.B) {
 		}
 	}
 }
+
+func TestSearchFindsCommentsButNotDeletedOnes(t *testing.T) {
+	s, items := searchFixture(t)
+	anna := s.As("anna")
+	c, err := anna.AddComment(items["decision"].ID, "We agreed on the quorum rule.")
+	noErr(t, err)
+	hits := must(s.As("ben").Search("quorum", Query{}))
+	if len(hits) != 1 || hits[0].Item.Key != "PLAT-3" || hits[0].Comment != c.ID || hits[0].Snippet != "We agreed on the quorum rule." {
+		t.Fatalf("hits %+v", hits)
+	}
+	// A body match is preferred as the snippet.
+	_, err = anna.AddComment(items["runbook"].ID, "replica lag was high")
+	noErr(t, err)
+	hits = must(s.As("ben").Search("replica", Query{}))
+	if len(hits) != 1 || hits[0].Comment != "" || hits[0].Snippet != "Then check the Replica lag." {
+		t.Fatalf("hits %+v", hits)
+	}
+	noErr(t, anna.DeleteComment(items["decision"].ID, c.ID))
+	if got := must(s.As("ben").Search("quorum", Query{})); len(got) != 0 {
+		t.Fatalf("a deleted comment is found: %v", hitKeys(got))
+	}
+}

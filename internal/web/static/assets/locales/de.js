@@ -39,6 +39,7 @@ export default {
   "login.title": "Anmelden",
   "login.with": "Anmelden mit {name}",
 
+  "search.inComment": "In einem Kommentar: {text}",
   "search.none": "Unter den Einträgen, die Sie lesen dürfen, wurde nichts gefunden.",
   "search.results": { "one": "{n} Treffer für «{q}»", "other": "{n} Treffer für «{q}»" },
   "search.title": "Suche",

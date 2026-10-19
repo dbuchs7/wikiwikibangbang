@@ -20,9 +20,13 @@ type Hit struct {
 	Item  Item
 	Score int
 	// Snippet is the start of the first body block that matches, or the
-	// part around the match in a long block; empty when only the title, key
-	// or properties matched.
+	// part around the match in a long block; failing that, of the first
+	// comment that matches; empty when only the title, key or properties
+	// matched.
 	Snippet string
+	// Comment is the comment the snippet comes from, or empty when it
+	// comes from the body (ADR-0035).
+	Comment ID
 }
 
 // Search returns the readable items in which every term of text occurs,
@@ -122,6 +126,7 @@ type region struct {
 	start, end int
 	score      int // what a term found here adds
 	block      int // body block index, or -1
+	comment    int // comment index, or -1
 }
 
 // matcher folds one item after another into the same buffer.
@@ -130,31 +135,35 @@ type matcher struct {
 	regions []region
 }
 
-func (m *matcher) add(text string, score, block int) {
+func (m *matcher) add(text string, score, block, comment int) {
 	start := len(m.buf)
 	m.buf = appendFold(m.buf, text)
-	m.regions = append(m.regions, region{start, len(m.buf), score, block})
+	m.regions = append(m.regions, region{start, len(m.buf), score, block, comment})
 }
 
 func (m *matcher) match(it *Item, terms []string, wholeKey string) (Hit, bool) {
 	m.buf, m.regions = m.buf[:0], m.regions[:0]
-	m.add(it.Title, scoreTitle, -1)
-	m.add(it.Key, 0, -1)
+	m.add(it.Title, scoreTitle, -1, -1)
+	m.add(it.Key, 0, -1, -1)
 	for i, b := range it.Body.Blocks {
-		m.add(b.Text, scoreOther, i)
+		m.add(b.Text, scoreOther, i, -1)
 	}
 	for _, v := range it.Properties {
 		if s, ok := v.(string); ok {
-			m.add(s, scoreOther, -1)
+			m.add(s, scoreOther, -1, -1)
 		}
+	}
+	// A deleted comment's text is already empty, so it cannot match.
+	for i, c := range it.Comments {
+		m.add(c.Text, scoreOther, -1, i)
 	}
 	h := Hit{}
 	if it.Key == wholeKey {
 		h.Score += scoreKey
 	}
-	snippetBlock := -1
+	snippetBlock, snippetComment := -1, -1
 	for _, t := range terms {
-		found, inBody, inProps := false, false, false
+		found, inBody, inProps, inComments := false, false, false, false
 		for _, r := range m.regions {
 			if !bytes.Contains(m.buf[r.start:r.end], []byte(t)) {
 				continue
@@ -169,6 +178,14 @@ func (m *matcher) match(it *Item, terms []string, wholeKey string) (Hit, bool) {
 				if snippetBlock < 0 {
 					snippetBlock = r.block
 				}
+			case r.comment >= 0:
+				if !inComments {
+					h.Score += r.score
+					inComments = true
+				}
+				if snippetComment < 0 {
+					snippetComment = r.comment
+				}
 			case r.score == scoreOther:
 				if !inProps {
 					h.Score += r.score
@@ -182,9 +199,13 @@ func (m *matcher) match(it *Item, terms []string, wholeKey string) (Hit, bool) {
 			return Hit{}, false
 		}
 	}
-	if snippetBlock >= 0 {
+	switch {
+	case snippetBlock >= 0:
 		text := it.Body.Blocks[snippetBlock].Text
 		h.Snippet = snippet(text, fold(text), terms)
+	case snippetComment >= 0:
+		c := it.Comments[snippetComment]
+		h.Snippet, h.Comment = snippet(c.Text, fold(c.Text), terms), c.ID
 	}
 	h.Item = it.clone()
 	return h, true

@@ -343,6 +343,20 @@ func (a *Accounts) SetLanguage(id UserID, language string) error {
 	return a.record(event{Kind: languageSet, User: id, Language: language})
 }
 
+// Usernames returns the usernames of the given IDs; unknown IDs are left
+// out.
+func (a *Accounts) Usernames(ids []UserID) map[UserID]string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	out := make(map[UserID]string, len(ids))
+	for _, id := range ids {
+		if u, ok := a.users[id]; ok {
+			out[id] = u.Username
+		}
+	}
+	return out
+}
+
 // Language is the UI language a user chose, or empty.
 func (a *Accounts) Language(id UserID) string {
 	a.mu.Lock()

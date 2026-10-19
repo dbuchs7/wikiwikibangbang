@@ -250,3 +250,17 @@ func TestLanguageThroughTheAPI(t *testing.T) {
 	w.bert.expect("PUT", "/api/me/language", `{"language":"fr"}`, http.StatusBadRequest)
 	w.bert.expect("PUT", "/api/me/language", `{"language":""}`, http.StatusNoContent)
 }
+
+func TestUserNamesForAnyoneSignedIn(t *testing.T) {
+	w := newWorld(t)
+	got := w.carla.expect("GET", "/api/users/names?id="+w.ids["bert"]+"&id="+w.ids["vera"]+"&id=nobody", "", http.StatusOK)
+	names := got["names"].(map[string]any)
+	if names[w.ids["bert"]] != "bert" || names[w.ids["vera"]] != "vera" || len(names) != 2 {
+		t.Fatalf("names %v", names)
+	}
+	if rec := (&client{t: t, h: w.carla.h}).do("GET", "/api/users/names?id="+w.ids["bert"], ""); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous: %d", rec.Code)
+	}
+	many := strings.Repeat("&id=x", budget.Get().PageItems+1)
+	w.carla.expect("GET", "/api/users/names?"+many[1:], "", http.StatusBadRequest)
+}

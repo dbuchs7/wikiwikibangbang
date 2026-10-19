@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/web"
 	"net"
@@ -29,6 +30,7 @@ func authRoutes(d Deps) []Route {
 		{Method: http.MethodPost, Pattern: "/api/tokens", Summary: "Create an API token; the secret is returned once", Handler: http.HandlerFunc(h.createToken)},
 		{Method: http.MethodDelete, Pattern: "/api/tokens/{id}", Summary: "Revoke one of one's own API tokens", Handler: http.HandlerFunc(h.revokeToken)},
 		{Method: http.MethodGet, Pattern: "/api/users", Summary: "List accounts (administrators)", Handler: http.HandlerFunc(h.listUsers)},
+		{Method: http.MethodGet, Pattern: "/api/users/names", Summary: "Usernames of the user IDs given as id parameters, for showing authors", Handler: http.HandlerFunc(h.userNames)},
 		{Method: http.MethodPost, Pattern: "/api/users", Summary: "Create an account (administrators)", Handler: http.HandlerFunc(h.createUser)},
 		{Method: http.MethodPost, Pattern: "/api/backup", Summary: "Download an encrypted backup of the data directory (administrators; passphrase in the body)", Handler: http.HandlerFunc(h.backup)},
 	}
@@ -285,4 +287,25 @@ func (h authHandlers) setLanguage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// userNames resolves user IDs to usernames for anyone signed in, so the UI
+// can show who wrote or changed something instead of an ID. IDs are random
+// and appear only in what the caller may read, so this reveals the names
+// of people whose work the caller sees, and cannot list the accounts.
+func (h authHandlers) userNames(w http.ResponseWriter, r *http.Request) {
+	raw := r.URL.Query()["id"]
+	if max := budget.Get().PageItems; len(raw) > max {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("at most %d ids per request", max))
+		return
+	}
+	ids := make([]auth.UserID, len(raw))
+	for i, id := range raw {
+		ids[i] = auth.UserID(id)
+	}
+	names := map[auth.UserID]string{}
+	for id, name := range h.d.DB.Accounts.Usernames(ids) {
+		names[id] = name
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"names": names})
 }
