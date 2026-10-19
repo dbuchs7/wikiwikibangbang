@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"net"
 	"net/http"
 	"strconv"
@@ -121,7 +122,25 @@ func (h authHandlers) me(w http.ResponseWriter, r *http.Request) {
 		"via":   p.Via,
 		"scope": p.Scope,
 		"admin": h.isAdmin(p),
+		// The running build, for the UI's footer. Only signed-in callers
+		// learn it; an anonymous one cannot probe for a vulnerable version.
+		"version":  buildinfo.Get().Version,
+		"revision": shortRevision(buildinfo.Get()),
 	})
+}
+
+// shortRevision is the commit the binary was built from, shortened, or
+// empty when the build carries none (a container image is built without
+// the repository's history).
+func shortRevision(in buildinfo.Info) string {
+	r := in.Revision
+	if len(r) > 12 {
+		r = r[:12]
+	}
+	if r != "" && in.Modified {
+		r += "+dirty"
+	}
+	return r
 }
 
 func (h authHandlers) setPassword(w http.ResponseWriter, r *http.Request) {

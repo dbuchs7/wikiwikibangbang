@@ -56,6 +56,15 @@ async function action(fn, status) {
 
 // --- navigation ------------------------------------------------------------
 
+// renderFooter names the running build for signed-in users, e.g.
+// "wikiwikibangbang 0.0.0-dev+858fd3a90746".
+function renderFooter() {
+  const footer = document.getElementById("footer");
+  if (!me || !me.version) return footer.replaceChildren();
+  const rev = me.revision && !me.version.includes(me.revision.slice(0, 12)) ? ` (${me.revision})` : "";
+  footer.replaceChildren(`wikiwikibangbang ${me.version}${rev}`);
+}
+
 function renderNav() {
   if (!me) {
     nav.replaceChildren();
@@ -107,6 +116,7 @@ async function route() {
       }
     }
     renderNav();
+    renderFooter();
     if (!me) return loginView();
     const [, section, arg, arg2] = hash.split("/").map(decodeURIComponent);
     switch (section) {
