@@ -324,9 +324,11 @@ async function linksView(key) {
       status,
       report.finished && !report.running
         ? (report.broken.length
-          ? h("table", {}, h("thead", {}, h("tr", {}, ["Item", "Link", "Problem", "Responsible"].map((c) => h("th", { text: c })))),
+          ? h("table", { class: "links" }, h("thead", {}, h("tr", {}, ["Used in", "Link", "Problem", "Responsible"].map((c) => h("th", { text: c })))),
             h("tbody", {}, report.broken.map((b) => h("tr", {},
-              h("td", {}, link("#/item/" + encodeURIComponent(b.key), b.key), " ", h("span", { class: "muted", text: b.title })),
+              // The item the link is used in, and where in its body.
+              h("td", {}, link("#/item/" + encodeURIComponent(b.key), b.title || b.key),
+                h("div", { class: "muted", text: `${b.key} · block ${b.block + 1}` })),
               h("td", { class: "href", text: b.href }),
               h("td", { text: b.problem }),
               h("td", { text: b.responsible ? who(b.responsible) : "—" }),

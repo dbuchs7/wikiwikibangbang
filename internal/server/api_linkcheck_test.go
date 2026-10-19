@@ -75,7 +75,7 @@ func TestLinkCheckThroughTheAPI(t *testing.T) {
 		t.Fatalf("broken %v, want the one link that answers 404", broken)
 	}
 	b := broken[0].(map[string]any)
-	if b["href"] != srv.URL+"/gone" || b["status"] != 404.0 || b["responsible"] != w.ids["bert"] || b["key"] != field(it, "item", "key") {
+	if b["href"] != srv.URL+"/gone" || b["status"] != 404.0 || b["responsible"] != w.ids["bert"] || b["key"] != field(it, "item", "key") || b["title"] != "Runbook" || b["block"] != 1.0 {
 		t.Fatalf("broken link %v", b)
 	}
 
