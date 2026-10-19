@@ -228,6 +228,14 @@ function check(cond, msg) {
     await page.click("a:has-text('Link check')");
     await page.waitForSelector("#linkcheck >> text=switched off");
 
+    step("governance: the check of a space lists its three kinds of findings");
+    await page.click("text=Spaces");
+    await page.click("a:has-text('Platform')");
+    await page.click("a:has-text('Governance')");
+    await page.waitForSelector("#governance h2:has-text('Sensitive data')");
+    await page.waitForSelector("#governance h2:has-text('Not changed')");
+    await page.waitForSelector("#governance h2:has-text('Implausible')");
+
     step("account: token");
     await page.click("nav a[href='#/account']");
     await page.fill("#new-token [name=name]", "ci");

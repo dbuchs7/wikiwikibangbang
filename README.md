@@ -33,6 +33,8 @@ Behind a reverse proxy that terminates TLS, set `WWBB_TRUSTED_PROXIES` to the pr
 
 `WWBB_LINKCHECK=on` lets space administrators check the web links of a space ([ADR-0039](docs/adr/0039-link-check-on-demand-public-addresses-only.md)): the server calls each linked address and lists the broken ones with whoever last edited the item. It is off by default, and it never calls an address in a private or local network.
 
+Content governance ([ADR-0040](docs/adr/0040-governance-checks-and-automatic-restriction.md)) is always on: saving content that holds a password, a private key, an access token, an IBAN or a card number restricts the item to whoever saved it, until a space administrator lifts the restriction under *Governance*, which also lists items unchanged for a year and formal contradictions.
+
 AI agents use the API through the Model Context Protocol ([ADR-0012](docs/adr/0012-mcp-adapter-over-http-api.md)), with exactly the rights of the credential they are given: remotely at `POST /mcp` with a bearer token, or locally as a stdio server — `WWBB_TOKEN=<API token> ./wikiwikibangbang mcp -url http://localhost:8080`. A token of scope `read` gives an agent that can only read.
 
 Resource budgets ([ADR-0015](docs/adr/0015-resource-budgets-and-paged-listings.md)) — request body size, page size, search query size, live editing sessions, tracked logins — have defaults in [`internal/budget`](internal/budget/budget.go) and are changed with `WWBB_BUDGET_<NAME>`, e.g. `WWBB_BUDGET_PAGE_ITEMS=200`. A value that is not a positive number is logged and ignored; the server starts with the default.

@@ -257,6 +257,9 @@ func runCollab(ctx context.Context, hub *collab.Hub, tick <-chan time.Time) {
 			return
 		case <-tick:
 			hub.Tick()
+			// A commit in a live session may have restricted its item
+			// (ADR-0040); participants who may no longer read it leave.
+			hub.Revalidate()
 		}
 	}
 }

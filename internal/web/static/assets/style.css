@@ -199,6 +199,9 @@ table.history td { font-size: 13px; }
 .card-title { margin: 2px 0 4px; overflow-wrap: anywhere; }
 .card-actions { font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
 
+/* ---------- Governance (ADR-0040) ---------- */
+input.days { width: 6rem; padding: 4px 8px; }
+
 /* ---------- Link check (ADR-0039) ---------- */
 td.href { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; }
 

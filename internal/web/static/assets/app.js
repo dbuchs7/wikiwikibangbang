@@ -118,11 +118,12 @@ async function route() {
     renderNav();
     renderFooter();
     if (!me) return loginView();
-    const [, section, arg, arg2] = hash.split("/").map(decodeURIComponent);
+    const [, section, arg, arg2] = hash.split("?")[0].split("/").map(decodeURIComponent);
     switch (section) {
       case "space": return await spaceView(arg);
       case "board": return await boardView(arg, arg2);
       case "links": return await linksView(arg);
+      case "governance": return await governanceView(arg);
       case "item": return await itemView(arg);
       case "search": return await searchView(arg || "");
       case "account": return await accountView();
@@ -228,7 +229,7 @@ async function spaceView(key) {
   show(
     h("p", {}, link("#/", "Spaces"), " / " + key),
     h("h1", { text: key }),
-    h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, "Link check")].flatMap((b, i) => i ? [" · ", b] : [b])),
+    h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, "Link check"), link(`#/governance/${encodeURIComponent(key)}`, "Governance")].flatMap((b, i) => i ? [" · ", b] : [b])),
     h("p", { class: "muted", text: `${first.total.value} items` }),
     h("table", {}, h("thead", {}, h("tr", {}, ["Key", "Title", "Type", "State"].map((c) => h("th", { text: c })))), rows),
     more,
@@ -296,6 +297,54 @@ async function boardView(key, typeName) {
     page.next ? h("p", { class: "notice", text: `This board shows the first ${items.length} items.` }) : null,
     status,
     h("div", { class: "board" }, type.workflow.states.map(column)),
+  );
+}
+
+// --- governance --------------------------------------------------------------
+
+// governanceView checks a space (ADR-0040): sensitive data, shown masked;
+// items not changed for a while; formal contradictions. Each finding names
+// who is to act. Saving sensitive data has already restricted the item to
+// its author; an administrator lifts that here after checking.
+async function governanceView(key) {
+  const show = screen();
+  const days = Number(new URLSearchParams(location.hash.split("?")[1] || "").get("staleDays")) || 365;
+  const rep = await get(`/api/spaces/${encodeURIComponent(key)}/governance?staleDays=${days}`);
+  const status = h("div", { class: "status" });
+  const who = (id) => !id ? "—" : id === me.user.id ? "you" : id;
+  const itemCell = (f) => h("td", {}, link("#/item/" + encodeURIComponent(f.key), f.title || f.key), h("div", { class: "muted", text: f.key }));
+  const lift = async (f) => {
+    const { item } = await get("/api/items/" + f.item);
+    await put(`/api/items/${f.item}/restriction`, { read: [], edit: item.restriction?.edit || [] });
+  };
+  const table = (cols, rows) => rows.length
+    ? h("table", {}, h("thead", {}, h("tr", {}, cols.map((c) => h("th", { text: c })))), h("tbody", {}, rows))
+    : h("p", { class: "muted", text: "Nothing found." });
+  const daysInput = h("input", { type: "number", min: 1, max: 3650, value: days, "aria-label": "Days", class: "days" });
+  show(
+    h("p", {}, link("#/", "Spaces"), " / ", link("#/space/" + encodeURIComponent(key), key), " / governance"),
+    h("h1", { text: `${key} · governance` }),
+    h("section", { id: "governance" },
+      h("p", {}, h("button", { text: "Check again", onclick: () => {
+        location.hash = `#/governance/${encodeURIComponent(key)}?staleDays=${Number(daysInput.value) || 365}`;
+        route();
+      } }), " Not changed for ", daysInput, " days or more."),
+      status,
+      h("h2", { text: `Sensitive data (${rep.sensitive.length})` }),
+      h("p", { class: "muted", text: "Saving new sensitive data restricts the item to whoever saved it; space administrators still read it." }),
+      table(["Item", "Where", "What", "Responsible", "Access"], rep.sensitive.map((f) => h("tr", {},
+        itemCell(f), h("td", { text: f.where }), h("td", {}, h("div", { text: f.kind }), h("code", { text: f.masked })),
+        h("td", { text: who(f.responsible) }),
+        h("td", {}, f.restricted
+          ? [h("span", { text: "restricted " }), h("button", { class: "link", text: "Lift", onclick: () => action(() => lift(f), status) })]
+          : "open to the space")))),
+      h("h2", { text: `Not changed for ${rep.staleDays} days (${rep.stale.length})` }),
+      table(["Item", "Last change", "Responsible"], rep.stale.map((f) => h("tr", {},
+        itemCell(f), h("td", { text: when(f.lastChange) }), h("td", { text: who(f.responsible) })))),
+      h("h2", { text: `Implausible (${rep.implausible.length})` }),
+      table(["Item", "Problem", "Responsible"], rep.implausible.map((f) => h("tr", {},
+        itemCell(f), h("td", { text: f.problem }), h("td", { text: who(f.responsible) })))),
+    ),
   );
 }
 
@@ -452,9 +501,12 @@ async function itemView(ref) {
         h("button", { class: "danger", text: "Delete for good", onclick: () => confirm("Delete for good? The content cannot be recovered.") && action(() => post(path + "/purge"), status) })]
       : [];
 
+  const lastRestriction = history.events.filter((e) => e.kind === "RestrictionSet").pop();
+  const guarded = item.restriction?.read?.length && lastRestriction?.actor === "governance";
   show(
     h("p", {}, link("#/", "Spaces"), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
     title,
+    guarded ? h("p", { class: "notice", text: "Restricted automatically: this item seems to contain sensitive data, such as a password. Only its author and the space administrators can read it until an administrator lifts the restriction under Governance." }) : null,
     h("p", { class: "muted" }, `${item.type} · ${item.presence}`, item.state ? ` · state: ${item.state}` : "", ` · version ${item.version}`),
     status,
     transitions.length ? h("p", {}, "Transitions: ", transitions) : null,
