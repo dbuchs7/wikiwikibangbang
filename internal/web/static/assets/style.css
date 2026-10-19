@@ -367,6 +367,10 @@ label.upload { display: inline-flex; align-items: center; gap: 8px; }
 
 /* Watching and notifications (ADR-0046). */
 #nav > a.unread { color: var(--accent); font-weight: 600; }
+/* The notification bell and its count. */
+#nav > a.bell { position: relative; display: inline-flex; align-items: center; padding: 6px 8px; }
+#nav > a.bell .count { position: absolute; top: 0; right: -2px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--danger); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
 ul.notifications { list-style: none; padding: 0; margin: 0 0 10px; }
 ul.notifications li { padding: 6px 0; border-bottom: 1px solid var(--border); }
 ul.notifications li.unread { font-weight: 600; }
@@ -406,3 +410,10 @@ tr.overdue td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .task-actions { white-space: nowrap; }
 .actions-row { display: flex; flex-wrap: wrap; gap: 8px; }
 #relations form.inline input { width: auto; }
+/* On a phone the navigation takes its own row below the logo, the search
+   a full line of it. */
+@media (max-width: 640px) {
+  #nav { flex-basis: 100%; padding-bottom: 6px; }
+  #nav .search { flex: 1 1 100%; margin: 0 0 4px; }
+  #nav > a, #nav > button.link { min-height: 40px; }
+}
