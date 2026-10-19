@@ -27,6 +27,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
+	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
 	"github.com/dbuchs7/wikiwikibangbang/internal/mcp"
 	"github.com/dbuchs7/wikiwikibangbang/internal/privdrop"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
@@ -169,6 +170,17 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		log.Info("trusting forwarded headers", "proxies", strings.Join(names, ","))
 	}
 
+	var links *server.LinkChecks
+	switch v := os.Getenv("WWBB_LINKCHECK"); v {
+	case "", "off":
+	case "on":
+		links = server.NewLinkChecks(linkcheck.New(linkcheck.Options{}))
+		log.Info("link checking is on; space administrators may start a check of public web addresses")
+	default:
+		log.Error("WWBB_LINKCHECK is unusable", "value", v, "want", "on or off")
+		return 1
+	}
+
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Error("cannot listen", "addr", *addr, "err", err)
@@ -188,7 +200,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	go func() { runCollab(liveCtx, live, time.NewTicker(collabTick).C); close(liveDone) }()
 	// Runs before the data directory closes: open drafts are committed.
 	defer func() { stopLive(); <-liveDone }()
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: provider, Collab: live})
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: provider, Collab: live, LinkCheck: links})
 	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.Handler(routes, db.Accounts)), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1

@@ -66,9 +66,12 @@ func (c *client) login(username, password string) {
 	}
 }
 
-func setupAuth(t *testing.T) (http.Handler, Deps) {
+func setupAuth(t *testing.T, opts ...func(*Deps)) (http.Handler, Deps) {
 	t.Helper()
 	d := testDeps(t)
+	for _, o := range opts {
+		o(&d)
+	}
 	if _, err := d.DB.EnsureAdmin("admin", adminPassword); err != nil {
 		t.Fatal(err)
 	}

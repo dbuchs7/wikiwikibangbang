@@ -222,6 +222,12 @@ function check(cond, msg) {
     await page.waitForSelector(`${column("done")} .card-item:has-text('PLAT-2')`);
     check(await page.locator(`${column("open")} .card-item`).count() === 0, "the open column is empty");
 
+    step("links: the link check page says when checking is off");
+    await page.click("text=Spaces");
+    await page.click("a:has-text('Platform')");
+    await page.click("a:has-text('Link check')");
+    await page.waitForSelector("#linkcheck >> text=switched off");
+
     step("account: token");
     await page.click("nav a[href='#/account']");
     await page.fill("#new-token [name=name]", "ci");

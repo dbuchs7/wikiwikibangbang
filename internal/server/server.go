@@ -67,6 +67,9 @@ type Deps struct {
 	// Metrics is the metric registry (ADR-0016); Routes creates one when
 	// it is nil.
 	Metrics *metrics.Metrics
+	// LinkCheck runs link checks (ADR-0039); nil means link checking is
+	// switched off.
+	LinkCheck *LinkChecks
 }
 
 // MetricsPath serves the operational metrics. It is the only path a token

@@ -21,9 +21,9 @@ type world struct {
 	deps                     Deps
 }
 
-func newWorld(t *testing.T) world {
+func newWorld(t *testing.T, opts ...func(*Deps)) world {
 	t.Helper()
-	h, d := setupAuth(t)
+	h, d := setupAuth(t, opts...)
 	w := world{admin: &client{t: t, h: h}, ids: map[string]string{}, db: d.DB, deps: d}
 	w.admin.login("admin", adminPassword)
 	w.admin.expect("POST", "/api/types", `{"name":"task","body":true,"fields":[
