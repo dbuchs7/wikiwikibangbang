@@ -312,6 +312,24 @@ function labelChrome() {
   close.setAttribute("aria-label", t("common.close"));
 }
 
+// bellIcon draws a bell, as SVG: h() makes HTML elements only.
+function bellIcon() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "20");
+  svg.setAttribute("height", "20");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", "M12 3a6 6 0 0 0-6 6v3.6L4.3 15.4A1 1 0 0 0 5.2 17h13.6a1 1 0 0 0 .9-1.6L18 12.6V9a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0");
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "2");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  return svg;
+}
+
 function renderNav() {
   labelChrome();
   if (!me) {
@@ -325,9 +343,18 @@ function renderNav() {
     if (q) location.hash = "#/search/" + encodeURIComponent(q);
   } }, h("input", { name: "q", type: "search", placeholder: t("nav.search"), "aria-label": t("nav.search"), value: current }));
   // The unread count arrives after the navigation is drawn (ADR-0046).
-  const bell = h("a", { href: "#/notifications", id: "nav-notifications", text: t("nav.notifications") });
+  // A bell with the number of unread notifications; its name says it in
+  // words, for screen readers and as a tooltip.
+  const count = h("span", { class: "count", hidden: true });
+  const bell = h("a", { href: "#/notifications", id: "nav-notifications", class: "bell", title: t("nav.notifications"), "aria-label": t("nav.notifications") },
+    bellIcon(), count);
   get("/api/notifications?limit=1").then((n) => {
-    if (n.unread) bell.textContent = t("nav.notificationsUnread", { n: n.unread >= 100 ? "99+" : n.unread });
+    const shown = n.unread >= 100 ? "99+" : String(n.unread);
+    count.textContent = shown;
+    count.hidden = !n.unread;
+    const name = n.unread ? t("nav.notificationsUnread", { n: shown }) : t("nav.notifications");
+    bell.title = name;
+    bell.setAttribute("aria-label", name);
     bell.classList.toggle("unread", n.unread > 0);
   }).catch(() => {});
   // The spaces are reached through the logo and the module switcher; the

@@ -477,7 +477,7 @@ function check(cond, msg) {
 
     step("language: German on request, kept across sign-ins");
     await page.selectOption("#language [name=language]", "de");
-    await page.waitForSelector("#nav-notifications >> text=Benachrichtigungen");
+    await page.waitForSelector("#nav-notifications[aria-label^='Benachrichtigungen']");
     check(await page.getAttribute("html", "lang") === "de", "the document is marked German");
     check((await page.textContent("#password h2")) === "Passwort ändern", "the account page is German");
     // A German browser does not override bert's own earlier choice (English,
@@ -490,10 +490,10 @@ function check(cond, msg) {
     await bertDe.fill("#login [name=username]", "bert");
     await bertDe.fill("#login [name=password]", "bert's password");
     await bertDe.click("#login button[type=submit]");
-    await bertDe.waitForSelector("#nav-notifications >> text=Notifications");
+    await bertDe.waitForSelector("#nav-notifications[aria-label^='Notifications']");
     await german.close();
     await page.selectOption("#language [name=language]", "en");
-    await page.waitForSelector("#nav-notifications >> text=Notifications");
+    await page.waitForSelector("#nav-notifications[aria-label^='Notifications']");
 
     step("log out, log in as bert, read the item");
     await page.click("text=Log out");
@@ -525,10 +525,10 @@ function check(cond, msg) {
     check(renamed === 200, "admin renames the item: " + renamed);
     await adminCtx.close();
     await page.reload();
-    await page.waitForSelector("#nav-notifications:has-text('Notifications (1)')");
+    await page.waitForSelector("#nav-notifications[aria-label='Notifications (1)'] .count:text-is('1')");
     await page.click("#nav-notifications");
     await page.waitForSelector("#notifications li.unread:has-text('admin renamed PLAT-1 Renamed by admin')");
-    await page.waitForSelector("#nav-notifications:text-is('Notifications')"); // seen now
+    await page.waitForSelector("#nav-notifications[aria-label='Notifications'] .count[hidden]", { state: "attached" }); // seen now
     await page.waitForSelector("#watches a:has-text('PLAT-1')");
 
     check(problems.length === 0, problems.join("; "));
