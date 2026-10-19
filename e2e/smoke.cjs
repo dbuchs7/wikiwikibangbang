@@ -296,16 +296,26 @@ function check(cond, msg) {
     await page.waitForSelector("#body .pm-toc button:has-text('Prepare')");
 
     step("versions: the changes of a body show word by word, and an earlier body comes back");
-    await page.click("#version ~ table button:has-text('Changes') >> nth=0"); // the newest change first
-    await page.waitForSelector("#version .diff");
-    check(await page.locator("#version .diff-add, #version .diff-change").count() > 0, "the newest change adds something");
-    await page.click("#version ~ table button:has-text('Changes') >> nth=-1"); // the first change of the body
+    // Two versions written through the API, so their content does not
+    // depend on when the live editor saved.
+    await page.click(".tree a:has-text('Upgrade')");
+    await page.waitForSelector(".tree a.current:has-text('Upgrade')");
+    await page.evaluate(async () => {
+      const key = decodeURIComponent(location.hash.split("/").pop());
+      const put = (blocks) => fetch(`/api/items/${key}/body`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ blocks }) });
+      await put([{ kind: "paragraph", text: "Upgrade the primary first." }]);
+      await put([{ kind: "paragraph", text: "Upgrade the replicas first." }, { kind: "task", text: "Check the version" }]);
+    });
+    await page.reload();
+    await page.waitForSelector("#body .pm-task");
+    await page.click("#version ~ table button:has-text('Changes') >> nth=0"); // the newest change
+    await page.waitForSelector("#version .diff-change ins:has-text('replicas')");
+    await page.waitForSelector("#version .diff-add:has-text('Check the version')");
+    await page.click("#version ~ table button:has-text('Changes') >> nth=1"); // the one before
     await page.waitForSelector("#version h3");
-    await page.waitForTimeout(1600); // the editor has released its blocks by now
     await page.click("#version button:has-text('Restore this version')");
-    // The first save happened before the table was inserted; which other
-    // blocks it held depends on timing.
-    await page.waitForFunction(() => !document.querySelector("#body .pm-table"));
+    await page.waitForSelector("#body .ProseMirror:has-text('Upgrade the primary first.')");
+    check(await page.locator("#body .pm-task").count() === 0, "the restored body is the earlier one");
 
     step("links: the link check page says when checking is off");
     await page.click("#nav >> text=Spaces");
