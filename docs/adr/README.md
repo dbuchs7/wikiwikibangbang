@@ -48,3 +48,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0033](0033-full-text-search-by-scanning-the-live-state.md) | Full-text search scans the live state; there is no search index yet | Accepted | Partial |
 | [0034](0034-encrypted-backups-from-log-prefixes.md) | Backups are encrypted with a passphrase and cut from the logs while the server runs | Accepted | Landed |
 | [0035](0035-comments-are-part-of-their-item.md) | Comments are part of their item: events on the item, sealed with its key | Accepted | Partial |
+| [0036](0036-a-board-is-a-view-of-a-query.md) | A board is a view of a query, not a stored object | Accepted | Partial |

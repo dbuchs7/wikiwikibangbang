@@ -108,9 +108,10 @@ async function route() {
     }
     renderNav();
     if (!me) return loginView();
-    const [, section, arg] = hash.split("/").map(decodeURIComponent);
+    const [, section, arg, arg2] = hash.split("/").map(decodeURIComponent);
     switch (section) {
       case "space": return await spaceView(arg);
+      case "board": return await boardView(arg, arg2);
       case "item": return await itemView(arg);
       case "search": return await searchView(arg || "");
       case "account": return await accountView();
@@ -211,13 +212,79 @@ async function spaceView(key) {
     }
   };
   addRows(first);
+  const boards = types.filter((t) => t.workflow)
+    .map((t) => link(`#/board/${encodeURIComponent(key)}/${encodeURIComponent(t.name)}`, "Board: " + t.name));
   show(
     h("p", {}, link("#/", "Spaces"), " / " + key),
     h("h1", { text: key }),
+    boards.length ? h("p", {}, boards.flatMap((b, i) => i ? [" · ", b] : [b])) : null,
     h("p", { class: "muted", text: `${first.total.value} items` }),
     h("table", {}, h("thead", {}, h("tr", {}, ["Key", "Title", "Type", "State"].map((c) => h("th", { text: c })))), rows),
     more,
     newItemForm(key, types),
+  );
+}
+
+// --- board -------------------------------------------------------------------
+
+// boardMax bounds the cards one board loads; a larger board says so.
+const boardMax = 2000;
+
+// boardView shows the items of one type in a space as columns, one per
+// workflow state (ADR-0036). A card moves only by a workflow transition:
+// with the buttons on the card, or by dragging it to a column that exactly
+// one of its transitions leads to.
+async function boardView(key, typeName) {
+  const show = screen();
+  const { types } = await get("/api/types");
+  const type = types.find((t) => t.name === typeName);
+  if (!type || !type.workflow) throw new Error(`type ${typeName} has no workflow`);
+  const base = `/api/items?space=${encodeURIComponent(key)}&type=${encodeURIComponent(typeName)}&limit=100`;
+  let page = await get(base);
+  const items = [...page.items];
+  while (page.next && items.length < boardMax) {
+    page = await get(`${base}&after=${encodeURIComponent(page.next)}`);
+    items.push(...page.items);
+  }
+  const status = h("div", { class: "status" });
+  const transitionsFrom = (state) => type.workflow.transitions.filter((t) => t.from.includes(state));
+  const perform = (it, name) => action(() => post(`/api/items/${it.id}/transitions`, { name }), status);
+
+  const card = (it) => h("li", { class: "card-item", draggable: "true", "data-id": it.id,
+    ondragstart: (ev) => { ev.dataTransfer.setData("text/plain", it.id); ev.dataTransfer.effectAllowed = "move"; } },
+  link("#/item/" + encodeURIComponent(it.key), it.key),
+  h("div", { class: "card-title", text: it.title }),
+  h("div", { class: "card-actions" }, transitionsFrom(it.state).map((t) =>
+    h("button", { class: "link", text: `${t.name} → ${t.to}`, onclick: () => perform(it, t.name) }))),
+  );
+
+  const byID = new Map(items.map((it) => [it.id, it]));
+  const column = (state) => {
+    const cards = items.filter((it) => it.state === state);
+    const col = h("section", { class: "board-column", "data-state": state,
+      ondragover: (ev) => { ev.preventDefault(); col.classList.add("drop"); },
+      ondragleave: () => col.classList.remove("drop"),
+      ondrop: (ev) => {
+        ev.preventDefault();
+        col.classList.remove("drop");
+        const it = byID.get(ev.dataTransfer.getData("text/plain"));
+        if (!it || it.state === state) return;
+        const to = transitionsFrom(it.state).filter((t) => t.to === state);
+        if (to.length === 1) return perform(it, to[0].name);
+        status.replaceChildren(h("p", { class: "error", text: to.length
+          ? `Several transitions lead from ${it.state} to ${state}; use the buttons on the card.`
+          : `No transition leads from ${it.state} to ${state}.` }));
+      } },
+    h("h2", {}, state, h("span", { class: "muted", text: ` ${cards.length}` })),
+    h("ul", { class: "board-cards" }, cards.map(card)));
+    return col;
+  };
+  show(
+    h("p", {}, link("#/", "Spaces"), " / ", link("#/space/" + encodeURIComponent(key), key), ` / board: ${typeName}`),
+    h("h1", { text: `${key} · ${typeName}` }),
+    page.next ? h("p", { class: "notice", text: `This board shows the first ${items.length} items.` }) : null,
+    status,
+    h("div", { class: "board" }, type.workflow.states.map(column)),
   );
 }
 

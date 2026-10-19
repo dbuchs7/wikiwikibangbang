@@ -100,7 +100,14 @@ Every item has a comment section below its relations. Editors write comments; vi
 - Write, edit and delete a comment. Does a deleted comment disappear for everyone, and does the history keep only that something changed?
 - **The open question:** should viewers be allowed to comment, or is commenting rightly tied to the right to edit the item?
 
-### 7. Everything else
+### 7. Boards (ADR-0036)
+
+On a space's page, *Board: task* shows the space's tasks as columns, one per workflow state. Move a card with its buttons or by dragging it to another column.
+
+- Is it clear why a card cannot be dropped on some columns?
+- **The open question:** is creation order enough, or do you need to order cards by hand, filter them, or see several states in one column?
+
+### 8. Everything else
 
 Search, item history, relations, mentions (toolbar: *Mention*), formatting, the API at `/api/openapi.json`. Anything that surprises you is worth a report.
 
