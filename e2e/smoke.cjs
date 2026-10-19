@@ -480,10 +480,14 @@ function check(cond, msg) {
     check(/wwbb_[0-9a-f]{64}/.test(await page.textContent("code")), "the token secret is shown once");
 
     step("account: a profile picture replaces the initials in the header, and goes again");
-    check((await page.textContent("#account-button .avatar")) === "A", "without a picture the header shows the initials");
+    check((await page.getAttribute("#account-button .avatar", "data-initials")) === "A", "without a picture the header shows the initials");
     await page.setInputFiles("#avatar-file", { name: "me.png", mimeType: "image/png",
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
     await page.waitForSelector("#account-button .avatar img");
+    await page.goto(base + "/#/item/PLAT-1"); // the picture also shows beside one's comments and changes
+    await page.waitForSelector(".comment .comment-head .avatar img");
+    await page.waitForSelector("table.history .who .avatar img");
+    await page.goto(base + "/#/account");
     await page.click("#avatar button:has-text('Remove the picture')");
     await page.waitForSelector("#account-button .avatar:not(:has(img))");
 
@@ -521,6 +525,7 @@ function check(cond, msg) {
     check((await page.textContent(".comment-text")) === "Patched on the staging hosts.", "bert reads the comment");
     check((await page.textContent(".comment .muted")).startsWith("admin · "), "the comment names its author");
     check(await page.$(".comment button:has-text('Edit')") === null, "bert cannot edit admin's comment");
+    check(!(await page.textContent(".comment")).includes("null"), "another's comment shows no stray text");
 
     step("watching: bert watches the item, admin renames it, bert is told");
     await page.click("#watch:has-text('Watch')");

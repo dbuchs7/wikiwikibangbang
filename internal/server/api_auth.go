@@ -30,7 +30,7 @@ func authRoutes(d Deps) []Route {
 		{Method: http.MethodPost, Pattern: "/api/tokens", Summary: "Create an API token; the secret is returned once", Handler: http.HandlerFunc(h.createToken)},
 		{Method: http.MethodDelete, Pattern: "/api/tokens/{id}", Summary: "Revoke one of one's own API tokens", Handler: http.HandlerFunc(h.revokeToken)},
 		{Method: http.MethodGet, Pattern: "/api/users", Summary: "List accounts (administrators and space administrators)", Handler: http.HandlerFunc(h.listUsers)},
-		{Method: http.MethodGet, Pattern: "/api/users/names", Summary: "Usernames of the user IDs given as id parameters, for showing authors", Handler: http.HandlerFunc(h.userNames)},
+		{Method: http.MethodGet, Pattern: "/api/users/names", Summary: "Usernames of the user IDs given as id parameters, for showing authors, and which of them have a profile picture", Handler: http.HandlerFunc(h.userNames)},
 		{Method: http.MethodPost, Pattern: "/api/users", Summary: "Create an account (administrators)", Handler: http.HandlerFunc(h.createUser)},
 		{Method: http.MethodPost, Pattern: "/api/backup", Summary: "Download an encrypted backup of the data directory (administrators; passphrase in the body)", Handler: http.HandlerFunc(h.backup)},
 	}
@@ -316,10 +316,16 @@ func (h authHandlers) userNames(w http.ResponseWriter, r *http.Request) {
 		ids[i] = auth.UserID(id)
 	}
 	names := map[auth.UserID]string{}
+	// avatars names the content of the profile pictures of those who have
+	// one (ADR-0050), so the UI shows them beside the names.
+	avatars := map[auth.UserID]string{}
 	for id, name := range h.d.DB.Accounts.Usernames(ids) {
 		names[id] = name
+		if tag := h.avatarTagOf(id); tag != "" {
+			avatars[id] = tag
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"names": names})
+	writeJSON(w, http.StatusOK, map[string]any{"names": names, "avatars": avatars})
 }
 
 func (h authHandlers) avatarTagOf(id auth.UserID) string {

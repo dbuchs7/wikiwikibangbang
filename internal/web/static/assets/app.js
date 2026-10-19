@@ -218,8 +218,10 @@ async function action(fn, status) {
 // --- people ------------------------------------------------------------------
 
 // names caches usernames by user ID, so a view shows who did something
-// instead of an ID (ADR-0031, ADR-0035).
+// instead of an ID (ADR-0031, ADR-0035); avatars the content tags of their
+// profile pictures (ADR-0050).
 const names = new Map();
+const avatars = new Map();
 
 // learnNames looks up the usernames of the IDs not yet known, in one
 // request. IDs that are no user (such as "governance") stay as they are.
@@ -229,7 +231,10 @@ async function learnNames(ids) {
   for (let i = 0; i < missing.length; i += 100) {
     const chunk = missing.slice(i, i + 100);
     const res = await get("/api/users/names?" + chunk.map((id) => "id=" + encodeURIComponent(id)).join("&"));
-    for (const id of chunk) names.set(id, res.names[id] ?? id);
+    for (const id of chunk) {
+      names.set(id, res.names[id] ?? id);
+      avatars.set(id, res.avatars?.[id] || "");
+    }
   }
 }
 
@@ -238,6 +243,13 @@ function person(id) {
   if (!id) return "—";
   if (me && id === me.user.id) return t("common.you");
   return names.get(id) ?? id;
+}
+
+// face is a person's profile picture, or initials, for lists of who did
+// what; learnNames must have seen the ID.
+function face(id, size = 24) {
+  const tag = me && id === me.user.id ? me.avatar : avatars.get(id);
+  return avatar(id, names.get(id) ?? id, tag, size);
 }
 
 // --- navigation ------------------------------------------------------------
@@ -372,13 +384,15 @@ function renderNav() {
 // fetched when it changes.
 function avatar(id, name, tag, size = 32) {
   const initials = (name || "?").split(/[\s._@-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+  // The initials are drawn by CSS from an attribute, so they are no part
+  // of the text beside them, which names the person.
   const box = h("span", { class: `avatar avatar-${size}`, "aria-hidden": "true" });
   if (tag) {
     const img = h("img", { src: `/api/users/${encodeURIComponent(id)}/avatar?v=${encodeURIComponent(tag)}`, alt: "", width: size, height: size });
-    img.addEventListener("error", () => box.replaceChildren(initials));
+    img.addEventListener("error", () => { img.remove(); box.dataset.initials = initials; });
     box.append(img);
   } else {
-    box.textContent = initials;
+    box.dataset.initials = initials;
   }
   return box;
 }
@@ -1326,7 +1340,7 @@ function commentThreads(path, page, live) {
 
   const row = (c) => {
     const li = h("li", { class: "comment", id: "comment-" + c.id });
-    const head = h("div", { class: "muted" }, `${author(c)} · ${when(c.created)}`, c.edited ? t("comment.edited") : "");
+    const head = h("div", { class: "muted comment-head" }, face(c.author), `${author(c)} · ${when(c.created)}`, c.edited ? t("comment.edited") : "");
     if (c.deleted) {
       li.append(head, h("p", { class: "muted", text: t("comment.deleted") }));
       return li;
@@ -1341,7 +1355,7 @@ function commentThreads(path, page, live) {
       ? h("p", {},
         h("button", { class: "link", text: t("common.edit"), onclick: edit }), " · ",
         h("button", { class: "link", text: t("common.delete"), onclick: () => confirm(t("comment.deleteConfirm")) && action(() => del(`${path}/comments/${c.id}`), status) }))
-      : null);
+      : ""); // append() would write a null out as the word "null"
     return li;
   };
 
@@ -1462,7 +1476,7 @@ function historySection(path, events, live) {
     shown,
     h("table", { class: "history" }, events.slice().reverse().map((e) => h("tr", {},
       h("td", { text: when(e.at) }),
-      h("td", { text: person(e.actor) }),
+      h("td", {}, h("span", { class: "who" }, face(e.actor, 20), person(e.actor))),
       h("td", { text: e.kind }),
       h("td", {}, details(e)),
     ))),

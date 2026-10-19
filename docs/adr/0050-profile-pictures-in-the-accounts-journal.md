@@ -37,4 +37,4 @@ Chosen option: **1**. Option 2 is right for files of any size, but a picture sca
 - Good: no new storage path; backups carry the pictures.
 - Bad: *Log out* and *Administration* are one click further away. Sessions end by themselves; administrators reach the administration also through the module switcher.
 - Bad: every change of a picture grows the accounts journal by the picture; replacing it daily for years would be noticeable. A compaction of the accounts journal would remove superseded pictures; there is none yet.
-- Neutral: the pictures are shown only in the header and on the account page so far; showing them next to authors of comments and history is a later step.
+- Neutral: the pictures show in the header, on the account page, beside the authors of comments and beside each change in an item's history; `GET /api/users/names` names the pictures of the users it names (`avatars`), so a list asks for them in the request it makes anyway. Initials are drawn by CSS from an attribute, so they are no part of the name's text.
