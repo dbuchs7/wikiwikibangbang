@@ -308,3 +308,22 @@ span.tree-toggle { cursor: default; }
 .pm-toc-2 { margin-left: 14px; }
 .pm-toc-3 { margin-left: 28px; }
 .pm-table.ProseMirror-selectednode, .pm-toc.ProseMirror-selectednode, .pm-children.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+
+/* Comparing versions of a body (ADR-0043). */
+.diff { font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.diff-row { padding: 2px 10px; white-space: pre-wrap; word-break: break-word; }
+.diff-row::before { display: inline-block; width: 1.2em; color: var(--muted); }
+.diff-same { color: var(--muted); }
+.diff-same::before { content: " "; }
+.diff-add { background: #e6f4ea; }
+.diff-add::before { content: "+"; }
+.diff-del { background: var(--danger-soft); text-decoration: line-through; }
+.diff-del::before { content: "−"; }
+.diff-change::before { content: "~"; }
+.diff ins { background: #c7ebd1; text-decoration: none; }
+.diff del { background: #f6c9c4; }
+@media (prefers-color-scheme: dark) {
+  .diff-add { background: #13301c; }
+  .diff ins { background: #1f4d2c; }
+  .diff del { background: #5a221d; }
+}

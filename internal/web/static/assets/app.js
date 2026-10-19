@@ -5,6 +5,7 @@ import { h, mount, when } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { liveBody } from "./live.js";
 import { pageTree, ancestors } from "./tree.js";
+import { renderDiff } from "./diff.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 
 const app = document.getElementById("app");
@@ -727,7 +728,7 @@ async function itemView(ref) {
     commentsSection(path, comments, live),
     h("p", {}, reorder, actions),
     live ? newItemForm(item.space, types, item.id, t("item.newChild"), "new-child") : null,
-    historySection(history.events),
+    historySection(path, history.events, live),
   ));
 }
 
@@ -791,14 +792,41 @@ function commentsSection(path, page, live) {
   );
 }
 
-function historySection(events) {
+// historySection lists an item's history. A change of the body can be
+// compared with the body before it and, on a live item, restored
+// (ADR-0043).
+function historySection(path, events, live) {
+  const shown = h("div", { id: "version" });
+  const bodies = events.filter((e) => e.kind === "BodyCommitted" && !e.erased);
+  const version = async (seq) => (await get(`${path}/versions/${seq}`)).body;
+  const compare = async (e) => {
+    const i = bodies.indexOf(e);
+    const [before, after] = await Promise.all([i > 0 ? version(bodies[i - 1].seq) : [], version(e.seq)]);
+    mount(shown, h("section", { class: "card" },
+      h("h3", { text: t("version.title", { when: when(e.at), who: person(e.actor) }) }),
+      renderDiff(before, after),
+      h("p", {},
+        // No confirmation: restoring is undone by restoring the version before.
+        live ? h("button", { text: t("version.restore"), onclick: () => action(() => post(`${path}/versions/${e.seq}/restore`), shown) }) : null,
+        h("button", { class: "link", text: t("common.close"), onclick: () => shown.replaceChildren() })),
+    ));
+    shown.scrollIntoView({ block: "nearest" });
+  };
+  const details = (e) => {
+    if (e.erased) return t("history.erased");
+    if (e.kind === "BodyCommitted") {
+      return h("button", { class: "link", text: t("version.changes"), onclick: () => compare(e).catch((err) => mount(shown, errorBox(err))) });
+    }
+    return [e.title, e.field && `${e.field} = ${JSON.stringify(e.value ?? null)}`, e.to, e.comment && t("history.comment", { id: e.comment.slice(0, 8) })].filter(Boolean).join(" ");
+  };
   return h("section", {},
     h("h2", { text: t("history.title") }),
+    shown,
     h("table", { class: "history" }, events.slice().reverse().map((e) => h("tr", {},
       h("td", { text: when(e.at) }),
       h("td", { text: person(e.actor) }),
       h("td", { text: e.kind }),
-      h("td", { text: e.erased ? t("history.erased") : [e.title, e.field && `${e.field} = ${JSON.stringify(e.value ?? null)}`, e.to, e.comment && t("history.comment", { id: e.comment.slice(0, 8) })].filter(Boolean).join(" ") }),
+      h("td", {}, details(e)),
     ))),
   );
 }

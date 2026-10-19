@@ -51,6 +51,8 @@ func itemRoutes(d Deps) []Route {
 		{Method: post, Pattern: "/api/items/{ref}/embedded", Summary: "Create an item embedded at the end of this item's body", Handler: http.HandlerFunc(h.createEmbedded)},
 		{Method: get, Pattern: "/api/items/{ref}/embeds", Summary: "How the body's embeds render", Handler: http.HandlerFunc(h.embeds)},
 		{Method: get, Pattern: "/api/items/{ref}/history", Summary: "The item's history", Handler: http.HandlerFunc(h.history)},
+		{Method: get, Pattern: "/api/items/{ref}/versions/{seq}", Summary: "The body as a BodyCommitted event of the history left it", Handler: http.HandlerFunc(h.version)},
+		{Method: post, Pattern: "/api/items/{ref}/versions/{seq}/restore", Summary: "Make an earlier body the current one; the current one stays in the history", Handler: http.HandlerFunc(h.restoreVersion)},
 		{Method: get, Pattern: "/api/items/{ref}/relations", Summary: "Relations at one end of the item (direction=outgoing|incoming)", Handler: http.HandlerFunc(h.relations)},
 		{Method: put, Pattern: "/api/items/{ref}/restriction", Summary: "Narrow who may read or edit the item and its subtree", Handler: http.HandlerFunc(h.restrict)},
 		{Method: post, Pattern: "/api/items/{ref}/trash", Summary: "Move the item and its subtree to the trash", Handler: http.HandlerFunc(h.trash)},
@@ -644,6 +646,54 @@ func (h itemHandlers) history(w http.ResponseWriter, r *http.Request) {
 		}
 		return map[string]any{"events": out}, err
 	})
+}
+
+// versionSeq reads the {seq} of a version route.
+func versionSeq(r *http.Request) (int, error) {
+	seq, err := strconv.Atoi(r.PathValue("seq"))
+	if err != nil || seq < 1 {
+		return 0, badInput("version must be the sequence number of a BodyCommitted event")
+	}
+	return seq, nil
+}
+
+// version answers one earlier body of an item (ADR-0043).
+func (h itemHandlers) version(w http.ResponseWriter, r *http.Request) {
+	h.read(w, r, func(x *item.Session) (any, error) {
+		it, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		seq, err := versionSeq(r)
+		if err != nil {
+			return nil, err
+		}
+		v, err := x.BodyAt(it.ID, seq)
+		if err != nil {
+			return nil, err
+		}
+		body := []blockJSON{}
+		for _, b := range v.Body.Blocks {
+			body = append(body, toBlockJSON(b))
+		}
+		return map[string]any{"seq": v.Seq, "at": v.At, "actor": v.Actor, "body": body}, nil
+	})
+}
+
+// restoreVersion makes an earlier body the current one (ADR-0043).
+func (h itemHandlers) restoreVersion(w http.ResponseWriter, r *http.Request) {
+	seq, err := versionSeq(r)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	// As for a commit: a body being edited live is not replaced under the
+	// people editing it.
+	if id, err := h.resolveID(r); err == nil && h.d.Collab != nil && h.d.Collab.Busy(id) {
+		writeError(w, http.StatusConflict, "the body is being edited in a live session; try again when it is saved")
+		return
+	}
+	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.RestoreBody(it.ID, seq) })
 }
 
 func (h itemHandlers) relations(w http.ResponseWriter, r *http.Request) {

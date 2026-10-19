@@ -214,6 +214,14 @@ func (h *Hub) Join(id item.ID, principal, name string) (*Sub, error) {
 		s = &session{id: id, clients: map[string]*client{}}
 		s.load(doc)
 		h.sessions[id] = s
+	} else if !s.busy() {
+		// The body may have been written outside the session since, by a
+		// commit or a restored version (ADR-0043). An idle session takes
+		// the stored body, and its clients with it; a busy one is reset
+		// by its next commit instead (ErrDiverged).
+		if doc, err := h.b.Body(id); err == nil && !reflect.DeepEqual(normal(doc), normal(s.committed)) {
+			h.reset(s, doc)
+		}
 	}
 	if len(s.clients) >= budget.Get().LiveClients {
 		return nil, ErrBusy
@@ -710,6 +718,11 @@ func (h *Hub) Busy(id item.ID) bool {
 	if s == nil {
 		return false
 	}
+	return s.busy()
+}
+
+// busy reports whether someone holds a block or a draft is unsaved.
+func (s *session) busy() bool {
 	return slices.ContainsFunc(s.blocks, func(b *sblock) bool { return b.holder != nil || !reflect.DeepEqual(b.draft, b.stable) })
 }
 

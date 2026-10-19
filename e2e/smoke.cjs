@@ -295,6 +295,17 @@ function check(cond, msg) {
     check(await page.inputValue("#body .pm-table tr:nth-child(2) td:first-child input") === "db1", "the table cell kept its text");
     await page.waitForSelector("#body .pm-toc button:has-text('Prepare')");
 
+    step("versions: the changes of a body show word by word, and an earlier body comes back");
+    await page.click("#version ~ table button:has-text('Changes') >> nth=0"); // the newest change first
+    await page.waitForSelector("#version .diff");
+    check(await page.locator("#version .diff-add, #version .diff-change").count() > 0, "the newest change adds something");
+    await page.click("#version ~ table button:has-text('Changes') >> nth=-1"); // the first change of the body
+    await page.waitForSelector("#version h3");
+    await page.waitForTimeout(1600); // the editor has released its blocks by now
+    await page.click("#version button:has-text('Restore this version')");
+    await page.waitForFunction(() => !document.querySelector("#body .pm-table"));
+    check(await page.locator("#body .pm-task").count() === 0, "the restored body is the first one");
+
     step("links: the link check page says when checking is off");
     await page.click("#nav >> text=Spaces");
     await page.click("a:has-text('Platform')");

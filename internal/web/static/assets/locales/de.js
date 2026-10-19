@@ -241,5 +241,10 @@ export default {
   "editor.addRow": "+ Zeile",
   "editor.addColumn": "+ Spalte",
   "editor.removeRow": "− Zeile",
-  "editor.removeColumn": "− Spalte"
+  "editor.removeColumn": "− Spalte",
+
+  "version.changes": "Änderungen",
+  "version.title": "Änderungen vom {when} durch {who}",
+  "version.noChanges": "Der Inhalt hat sich nicht geändert.",
+  "version.restore": "Diese Fassung wiederherstellen"
 };
