@@ -54,7 +54,7 @@ func (h oidcHandlers) login(w http.ResponseWriter, r *http.Request) {
 	// SameSite=Lax, not Strict: the provider's redirect back is a
 	// cross-site navigation, and a Strict cookie would not be sent with it.
 	http.SetCookie(w, &http.Cookie{Name: stateCookie, Value: state, Path: "/api/oidc/", MaxAge: int(sso.FlowLifetime.Seconds()),
-		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil})
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: isSecure(r)})
 	http.Redirect(w, r, authURL, http.StatusFound)
 }
 
@@ -73,7 +73,7 @@ func (h oidcHandlers) callback(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "single sign-on is not configured")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: stateCookie, Value: "", Path: "/api/oidc/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: r.TLS != nil})
+	http.SetCookie(w, &http.Cookie{Name: stateCookie, Value: "", Path: "/api/oidc/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: isSecure(r)})
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {
 		h.fail(w, r, "provider: "+e, nil)

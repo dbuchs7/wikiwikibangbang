@@ -33,7 +33,7 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, secret string) {
 	http.SetCookie(w, &http.Cookie{
 		Name: SessionCookie, Value: secret, Path: "/",
 		MaxAge: int(auth.SessionLifetime.Seconds()), HttpOnly: true,
-		SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil,
+		SameSite: http.SameSiteStrictMode, Secure: isSecure(r),
 	})
 }
 
@@ -104,7 +104,7 @@ func (h authHandlers) logout(w http.ResponseWriter, r *http.Request) {
 		h.d.DB.Accounts.Logout(p.Session)
 		h.record(audit.Entry{Event: audit.Logout, Actor: string(p.User), Addr: clientAddr(r)})
 	}
-	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil})
+	http.SetCookie(w, &http.Cookie{Name: SessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: isSecure(r)})
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -136,6 +136,19 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	defer ticker.Stop()
 	go expireAudit(ctx, db, log, ticker.C)
 
+	proxies, err := server.ParseTrustedProxies(os.Getenv("WWBB_TRUSTED_PROXIES"))
+	if err != nil {
+		log.Error("WWBB_TRUSTED_PROXIES is unusable", "err", err)
+		return 1
+	}
+	if len(proxies) > 0 {
+		names := make([]string, len(proxies))
+		for i, p := range proxies {
+			names[i] = p.String()
+		}
+		log.Info("trusting forwarded headers", "proxies", strings.Join(names, ","))
+	}
+
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Error("cannot listen", "addr", *addr, "err", err)
@@ -156,7 +169,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	// Runs before the data directory closes: open drafts are committed.
 	defer func() { stopLive(); <-liveDone }()
 	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: provider, Collab: live})
-	if err := server.Serve(ctx, ln, server.Handler(routes, db.Accounts), log); err != nil {
+	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.Handler(routes, db.Accounts)), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
 	}
