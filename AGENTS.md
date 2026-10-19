@@ -8,7 +8,7 @@ Operational guide for AI coding agents working on wikiwikibangbang. This file fo
 
 ## What this project is
 
-wikiwikibangbang is an open-source application written in **Go** that unifies **knowledge** (wiki pages, page tree, versions, comments — the Confluence domain) and **work** (issues, fields, workflows, boards, queries — the Jira domain) in **one data model**.
+wikiwikibangbang is an open-source application written in **Go** that unifies **knowledge** (wiki pages, page tree, versions, comments) and **work** (issues, fields, workflows, boards, queries) in **one data model**.
 
 The core idea is recorded in [ADR-0001](docs/adr/0001-unified-item-data-model.md): every piece of user-generated content is a typed **item** with properties, an optional document body, an optional workflow and typed relations. Pages and issues are item *types*, not separate systems.
 
@@ -38,6 +38,10 @@ English is the project language. This is binding for everything committed to the
 - the default locale and source strings of the user interface (translations are added through i18n, never hard-coded).
 
 **Agents write in English regardless of the language of the request.** A contributor may ask in German or any other language; the conversation with that person may follow their language, but every artifact that lands in the repository is English. If you find non-English content in the repository, translate it in a separate commit rather than mixing languages in one file.
+
+## Other products are named only for import
+
+Confluence and Jira are named only where the subject is importing from them: the import and sync engine ([ADR-0023](docs/adr/0023-import-and-sync-from-jira-and-confluence.md)), its readers and mappings, and their documentation and tests. Everywhere else — code, documentation, ADRs, the UI, commit messages, pull requests, release notes — describe the product in its own terms (wiki pages, issues, comments, workflows, boards), never by comparison with another product. This is the maintainer's decision of 2026-10-19; ADRs accepted before it keep their wording as recorded.
 
 ## The invariants (do not break these)
 
