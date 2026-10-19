@@ -261,6 +261,22 @@ func TestSingleSignOnConfiguration(t *testing.T) {
 	}
 }
 
+func TestTrustedProxiesConfiguration(t *testing.T) {
+	t.Setenv("WWBB_ADMIN_PASSWORD", "a given password!")
+	t.Setenv("WWBB_TRUSTED_PROXIES", "0.0.0.0/0")
+	code, _, errOut := runCmd(t, context.Background(), "serve", "-addr", freeAddr(t), "-data-dir", t.TempDir())
+	if code != 1 || !strings.Contains(errOut, "WWBB_TRUSTED_PROXIES is unusable") {
+		t.Errorf("trusting everyone: exit %d, stderr %q", code, errOut)
+	}
+	t.Setenv("WWBB_TRUSTED_PROXIES", "172.17.0.1, 10.0.0.0/8")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	code, _, errOut = runCmd(t, ctx, "serve", "-addr", freeAddr(t), "-data-dir", t.TempDir())
+	if code != 0 || !strings.Contains(errOut, "trusting forwarded headers") || !strings.Contains(errOut, "172.17.0.1/32,10.0.0.0/8") {
+		t.Errorf("valid list: exit %d, stderr %q", code, errOut)
+	}
+}
+
 func TestAuditExpiryRunsOnEveryTick(t *testing.T) {
 	db, _, err := storage.Open(t.TempDir())
 	if err != nil {
