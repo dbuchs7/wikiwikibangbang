@@ -22,6 +22,8 @@ curl -b cookies http://localhost:8080/api/me
 
 Single sign-on with an OpenID Connect provider ([ADR-0030](docs/adr/0030-openid-connect-single-sign-on.md)) is enabled by `WWBB_OIDC_ISSUER`, `WWBB_OIDC_CLIENT_ID`, `WWBB_OIDC_CLIENT_SECRET`, `WWBB_OIDC_REDIRECT_URL` (`https://<host>/api/oidc/callback`) and optionally `WWBB_OIDC_NAME`. New users get an account without roles; an administrator grants them.
 
+AI agents use the API through the Model Context Protocol ([ADR-0012](docs/adr/0012-mcp-adapter-over-http-api.md)), with exactly the rights of the credential they are given: remotely at `POST /mcp` with a bearer token, or locally as a stdio server — `WWBB_TOKEN=<API token> ./wikiwikibangbang mcp -url http://localhost:8080`. A token of scope `read` gives an agent that can only read.
+
 Resource budgets ([ADR-0015](docs/adr/0015-resource-budgets-and-paged-listings.md)) — request body size, page size, search query size, live editing sessions, tracked logins — have defaults in [`internal/budget`](internal/budget/budget.go) and are changed with `WWBB_BUDGET_<NAME>`, e.g. `WWBB_BUDGET_PAGE_ITEMS=200`. A value that is not a positive number is logged and ignored; the server starts with the default.
 
 Items, types and spaces are managed through the item API ([ADR-0028](docs/adr/0028-item-api.md)); `GET /api/openapi.json` lists every operation:

@@ -116,6 +116,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, authRoutes(d)...)
 	routes = append(routes, oidcRoutes(d)...)
 	routes = append(routes, itemRoutes(d)...)
+	routes = append(routes, mcpRoutes()...)
 	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
 		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}
@@ -179,7 +180,9 @@ func Handler(routes []Route, accounts *auth.Accounts) http.Handler {
 	for _, rt := range routes {
 		mux.Handle(rt.Method+" "+rt.Pattern, gate(rt.Access, rt.Handler))
 	}
-	return securityHeaders(principals(accounts, mux))
+	var h http.Handler
+	h = securityHeaders(principals(accounts, withSelf(&h, mux)))
+	return h
 }
 
 func gate(a Access, h http.Handler) http.Handler {
@@ -192,7 +195,10 @@ func gate(a Access, h http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}
-		if p.Scope == auth.ScopeRead && r.Method != http.MethodGet && r.Method != http.MethodHead {
+		// The MCP endpoint is posted to even by a reading agent; each tool
+		// call it makes passes this gate on its own (ADR-0012).
+		mcpCall := r.Method == http.MethodPost && r.URL.Path == MCPPath
+		if p.Scope == auth.ScopeRead && r.Method != http.MethodGet && r.Method != http.MethodHead && !mcpCall {
 			writeError(w, http.StatusForbidden, "this token may only read")
 			return
 		}

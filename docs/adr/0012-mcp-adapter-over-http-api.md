@@ -1,7 +1,7 @@
 # ADR-0012: An MCP server as an adapter over the HTTP API, acting as its caller
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 
@@ -39,6 +39,19 @@ Chosen option: **3.**
 - **Positive:** agents can do exactly what their caller can; no second permission model; every change in history shows the human or token behind it.
 - **Negative / trade-offs accepted:** every tool costs an HTTP round trip; tools are limited to what the public API offers.
 - **Follow-ups / risks to watch:** decide which API routes are deliberately not offered as tools (e.g. permission changes, deletions) and record why; mark agent-originated changes in the item history.
+
+## Implementation notes (2026-10-19)
+
+Built in `internal/mcp`, the `POST /mcp` route of `internal/server` and the `mcp` command of the binary:
+
+- **Protocol:** `initialize` (versions 2025-06-18, 2025-03-26, 2024-11-05), `ping`, `tools/list`, `tools/call`; notifications get no answer; batches are refused. A refusal of the API is a tool result marked `isError` with the API's message, so the agent reads the reason.
+- **HTTP transport:** each tool call is a request to the server's own handler, in process — through principal resolution, the access gate and the route table, exactly like a request from outside — carrying only the caller's `Authorization` and `Cookie` headers. The inner request starts without the outer request's context values, so its principal comes from those headers alone. `/mcp` requires `application/json` like every JSON body (CSRF) and is bounded by the request-body budget (ADR-0015).
+- **Read tokens:** the gate lets a read-scoped token post to `/mcp`; every tool call it makes is judged by the gate again, so writes are still refused.
+- **stdio transport:** `wikiwikibangbang mcp -url <server>` with the API token in `WWBB_TOKEN` (an environment variable, not a flag, so it does not show in the process list); one message per line.
+- **Tools offered (15):** reading spaces, types, items, search, history, relations and embeds; creating items, setting title and properties, transitions, committing a body, adding relations.
+- **Not offered, on purpose** (the follow-up above): moving, trashing, restoring, purging and redacting items, restrictions and removing relations — they change who sees what or destroy content, which stays a person's decision; administration of types, spaces, roles, groups, users and backups; credentials. The list is in `internal/mcp/tools.go`.
+
+Still open: agent-originated changes are not marked in the item history; they are attributed to the caller like any other request.
 
 ## Pros and cons of the options
 

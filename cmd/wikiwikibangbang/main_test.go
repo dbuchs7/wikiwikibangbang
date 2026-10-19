@@ -434,3 +434,39 @@ func TestApplyBudgets(t *testing.T) {
 		}
 	}
 }
+
+// The mcp command relays tool calls to the server with the token from the
+// environment, and refuses to start without one.
+func TestMCPStdio(t *testing.T) {
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		w.Write([]byte(`{"spaces":[{"key":"PLAT"}]}`))
+	}))
+	defer srv.Close()
+	old := stdin
+	t.Cleanup(func() { stdin = old })
+
+	t.Setenv("WWBB_TOKEN", "")
+	var out, errOut bytes.Buffer
+	if code := run(context.Background(), []string{"mcp", "-url", srv.URL}, &out, &errOut); code != 2 || !strings.Contains(errOut.String(), "WWBB_TOKEN") {
+		t.Fatalf("without a token: exit %d, %s", code, errOut.String())
+	}
+
+	t.Setenv("WWBB_TOKEN", "wwbb_test")
+	stdin = strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_spaces","arguments":{}}}` + "\n")
+	out.Reset()
+	if code := run(context.Background(), []string{"mcp", "-url", srv.URL}, &out, &errOut); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	if auth != "Bearer wwbb_test" || !strings.Contains(out.String(), `PLAT`) || !strings.Contains(out.String(), `"isError":false`) {
+		t.Fatalf("auth %q, output %s", auth, out.String())
+	}
+	stdin = strings.NewReader(strings.Repeat("x", 1<<20))
+	if code := run(context.Background(), []string{"mcp", "-url", srv.URL}, &out, &errOut); code != 1 {
+		t.Fatalf("an oversized line: exit %d", code)
+	}
+	if code := run(context.Background(), []string{"mcp", "-nope"}, &out, &errOut); code != 2 {
+		t.Fatalf("a bad flag: exit %d", code)
+	}
+}
