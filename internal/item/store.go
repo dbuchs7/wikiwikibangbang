@@ -35,6 +35,10 @@ type Store struct {
 
 	bySource map[string]ID // Origin.key() -> imported item
 
+	// order is the sibling order a placement set (ADR-0041): space and
+	// parent -> children; children it does not list follow, oldest first.
+	order map[string][]ID
+
 	journal Journal
 }
 
@@ -75,6 +79,7 @@ func NewStore(opts ...Option) *Store {
 		touching: map[ID][]int{},
 
 		groups:     map[string]map[string]bool{},
+		order:      map[string][]ID{},
 		spaceRoles: map[string]map[string]Role{},
 		sysRoles:   map[string]map[string]bool{},
 
@@ -309,6 +314,76 @@ func (s *Store) Transition(actor string, id ID, name string) error {
 // whole subtree, because a parent and its children share a space; the moved
 // items get new keys and their old keys keep resolving (D2, D5).
 func (s *Store) Move(actor string, id ID, toSpace string, newParent ID) error {
+	if err := s.checkMove(id, toSpace, newParent); err != nil {
+		return err
+	}
+	return s.record(actor, Event{Kind: ItemMoved, Item: id, Space: toSpace, Parent: newParent})
+}
+
+// Place moves an item and its subtree like Move and puts it among the
+// children of its new parent (or the top of the space): before the sibling
+// before, or last when before is empty (ADR-0041).
+func (s *Store) Place(actor string, id ID, toSpace string, newParent, before ID) error {
+	if err := s.checkMove(id, toSpace, newParent); err != nil {
+		return err
+	}
+	var order []ID
+	for _, c := range s.Children(toSpace, newParent) {
+		if c.ID == before {
+			order = append(order, id)
+		}
+		if c.ID != id {
+			order = append(order, c.ID)
+		}
+	}
+	if before == "" {
+		order = append(order, id)
+	} else if before == id || !slices.Contains(order, id) {
+		return invalid("%s is not another child of the target", before)
+	}
+	return s.record(actor, Event{Kind: ItemMoved, Item: id, Space: toSpace, Parent: newParent, Order: order})
+}
+
+func orderKey(space string, parent ID) string { return space + "\x00" + string(parent) }
+
+// Children returns the live children of an item, or the live items at the
+// top of a space when parent is empty, in their sibling order (ADR-0041).
+func (s *Store) Children(space string, parent ID) []Item {
+	var out []Item
+	for _, it := range s.items {
+		if it.Presence == Live && it.Space == space && it.Parent == parent {
+			out = append(out, it.clone())
+		}
+	}
+	s.sortSiblings(space, parent, out)
+	return out
+}
+
+// sortSiblings orders items by the placed order, unplaced ones after it,
+// oldest first.
+func (s *Store) sortSiblings(space string, parent ID, items []Item) {
+	pos := map[ID]int{}
+	for i, id := range s.order[orderKey(space, parent)] {
+		pos[id] = i
+	}
+	rank := func(it Item) (int, int) {
+		if p, ok := pos[it.ID]; ok {
+			return 0, p
+		}
+		return 1, it.created
+	}
+	slices.SortFunc(items, func(a, b Item) int {
+		ga, ra := rank(a)
+		gb, rb := rank(b)
+		if ga != gb {
+			return ga - gb
+		}
+		return ra - rb
+	})
+}
+
+// checkMove validates a move of id to the given space and parent.
+func (s *Store) checkMove(id ID, toSpace string, newParent ID) error {
 	if _, err := s.live(id); err != nil {
 		return err
 	}
@@ -327,7 +402,7 @@ func (s *Store) Move(actor string, id ID, toSpace string, newParent ID) error {
 			return invalid("cannot move an item below itself")
 		}
 	}
-	return s.record(actor, Event{Kind: ItemMoved, Item: id, Space: toSpace, Parent: newParent})
+	return nil
 }
 
 // CommitBody commits a new version of an item's body.
@@ -554,6 +629,9 @@ func (s *Store) apply(e Event) {
 			}
 		}
 		touch(moved...)
+		if e.Order != nil {
+			s.order[orderKey(e.Space, e.Parent)] = slices.Clone(e.Order)
+		}
 	case BodyCommitted:
 		it := s.items[e.Item]
 		touch(it.ID)

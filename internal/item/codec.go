@@ -22,7 +22,9 @@ import (
 //   - 4: comments: the kinds CommentAdded, CommentEdited and CommentDeleted
 //     and the fields comment and text; text is sealed content (ADR-0035).
 //     Versions 1 to 3 are still read.
-const CodecVersion = 4
+//   - 5: ItemMoved may carry order, the new order of the siblings
+//     (ADR-0041). Versions 1 to 4 are still read.
+const CodecVersion = 5
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
@@ -115,6 +117,7 @@ type wireEvent struct {
 	TypeName    string                `json:"typeName,omitempty"`
 	TypeVersion int                   `json:"typeVersion,omitempty"`
 	Parent      ID                    `json:"parent,omitempty"`
+	Order       []ID                  `json:"order,omitempty"`
 	Title       string                `json:"title,omitempty"`
 	Props       map[string]*wireValue `json:"props,omitempty"`
 	Field       string                `json:"field,omitempty"`
@@ -217,7 +220,7 @@ func toWire(e Event) (wireEvent, error) {
 	w := wireEvent{
 		V: CodecVersion, Seq: e.Seq, At: e.At, Actor: e.Actor, Kind: e.Kind, Item: e.Item, Batch: e.Batch,
 		TypeDef: e.TypeDef, Space: e.Space, SpaceName: e.SpaceName, TypeName: e.TypeName,
-		TypeVersion: e.TypeVersion, Parent: e.Parent, Title: e.Title, Field: e.Field,
+		TypeVersion: e.TypeVersion, Parent: e.Parent, Order: e.Order, Title: e.Title, Field: e.Field,
 		Transition: e.Transition, From: e.From, To: e.To, Body: e.Body, Relation: e.Relation,
 		Members: e.Members, Group: e.Group, Principal: e.Principal, SystemRole: e.SystemRole,
 		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed,
@@ -255,7 +258,7 @@ func fromWire(w wireEvent) (Event, error) {
 	e := Event{
 		Seq: w.Seq, At: w.At, Actor: w.Actor, Kind: w.Kind, Item: w.Item, Batch: w.Batch,
 		TypeDef: w.TypeDef, Space: w.Space, SpaceName: w.SpaceName, TypeName: w.TypeName,
-		TypeVersion: w.TypeVersion, Parent: w.Parent, Title: w.Title, Field: w.Field,
+		TypeVersion: w.TypeVersion, Parent: w.Parent, Order: w.Order, Title: w.Title, Field: w.Field,
 		Transition: w.Transition, From: w.From, To: w.To, Body: w.Body, Relation: w.Relation,
 		Members: w.Members, Group: w.Group, Principal: w.Principal, SystemRole: w.SystemRole,
 		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed,

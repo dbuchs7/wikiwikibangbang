@@ -211,5 +211,16 @@ export default {
   "live.lost": "Verbindung unterbrochen; neuer Verbindungsversuch…",
   "live.present": "Gerade in diesem Inhalt: {names}",
   "live.reloading": "{error} – der Inhalt wird neu geladen.",
-  "live.saving": "Wird gespeichert…"
+  "live.saving": "Wird gespeichert…",
+
+  "tree.title": "Seiten",
+  "tree.empty": "Noch keine Seiten.",
+  "tree.expand": "{title} aufklappen",
+  "tree.collapse": "{title} zuklappen",
+  "space.allItems": "Alle Einträge",
+  "space.noPages": "Dieser Bereich hat noch keine Seiten.",
+  "space.homeEmpty": "Diese Seite ist leer.",
+  "item.moveUp": "Nach oben",
+  "item.moveDown": "Nach unten",
+  "item.newChild": "Neue Unterseite"
 };

@@ -242,6 +242,29 @@ function check(cond, msg) {
     await page.waitForSelector(`${column("done")} .card-item:has-text('PLAT-2')`);
     check(await page.locator(`${column("open")} .card-item`).count() === 0, "the open column is empty");
 
+    step("page tree: child pages, reordered by button and by dragging");
+    await page.click("#nav >> text=Spaces");
+    await page.click("a:has-text('Platform')");
+    await page.waitForSelector("#home h2:has-text('PLAT-1'), #home h2 a");
+    await page.click(".tree a:has-text('Runbook')");
+    await page.waitForSelector(".tree a.current:has-text('Runbook')");
+    for (const title of ["Install", "Upgrade"]) {
+      await page.fill("#new-child [name=title]", title);
+      await page.selectOption("#new-child [name='p:priority']", "low");
+      await page.click("#new-child button[type=submit]");
+      await page.waitForSelector(`.tree a.current:has-text('${title}')`); // the tree opens down to the new page
+      await page.click(".tree a:has-text('Runbook')");
+      await page.waitForSelector(".tree a.current:has-text('Runbook')");
+    }
+    const children = () => page.locator(".tree li.open > ul > li > .tree-row a").allTextContents();
+    check((await children()).join(",") === "Install,Upgrade", "children in the order made: " + (await children()));
+    await page.click(".tree a:has-text('Upgrade')");
+    await page.waitForSelector(".tree a.current:has-text('Upgrade')");
+    await page.click("button:has-text('Move up')");
+    await page.waitForFunction(() => [...document.querySelectorAll(".tree li.open > ul > li > .tree-row a")].map((a) => a.textContent).join(",") === "Upgrade,Install");
+    await page.dragAndDrop(".tree .tree-row:has(a:text-is('Install'))", ".tree .tree-row:has(a:text-is('Upgrade'))", { targetPosition: { x: 40, y: 1 } });
+    await page.waitForFunction(() => [...document.querySelectorAll(".tree li.open > ul > li > .tree-row a")].map((a) => a.textContent).join(",") === "Install,Upgrade");
+
     step("links: the link check page says when checking is off");
     await page.click("#nav >> text=Spaces");
     await page.click("a:has-text('Platform')");

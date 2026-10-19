@@ -227,15 +227,19 @@ type Event struct {
 	TypeName    string   // ItemCreated
 	TypeVersion int      // ItemCreated
 	Parent      ID       // ItemCreated, ItemMoved
-	Title       string   // ItemCreated, TitleSet
-	Props       Props    // ItemCreated
-	Field       string   // PropertySet
-	Value       any      // PropertySet
-	Transition  string   // Transitioned
-	From, To    string   // Transitioned
-	Body        *Doc     // BodyCommitted
-	Relation    *Relation
-	Members     []ID // ItemTrashed, ItemRestored, ItemPurged: every item affected
+	// Order is the new order of the children of Parent (or the top of
+	// Space) after an ItemMoved that placed the item (ADR-0041); nil keeps
+	// the order.
+	Order      []ID
+	Title      string // ItemCreated, TitleSet
+	Props      Props  // ItemCreated
+	Field      string // PropertySet
+	Value      any    // PropertySet
+	Transition string // Transitioned
+	From, To   string // Transitioned
+	Body       *Doc   // BodyCommitted
+	Relation   *Relation
+	Members    []ID // ItemTrashed, ItemRestored, ItemPurged: every item affected
 
 	Group       string       // GroupMemberAdded
 	Principal   string       // GroupMemberAdded, RoleGranted, SystemRoleGranted

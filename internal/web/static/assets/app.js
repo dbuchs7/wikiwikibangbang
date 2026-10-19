@@ -4,6 +4,7 @@ import { api, get, post, put, del, download, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
 import { createEditor } from "./editor.js";
 import { liveBody } from "./live.js";
+import { pageTree, ancestors } from "./tree.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 
 const app = document.getElementById("app");
@@ -43,6 +44,17 @@ function field(label, input) {
 
 function link(href, text) {
   return h("a", { href, text });
+}
+
+// withTree lays a space's page tree beside a view's content.
+function withTree(tree, ...content) {
+  return h("div", { class: "with-tree" }, tree, h("div", { class: "with-tree-main" }, ...content));
+}
+
+// readOnlyBody shows a body without editing it.
+function readOnlyBody(blocks, embeds) {
+  const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
+  return createEditor({ blocks, embeds, editable: false, resolve }).element;
 }
 
 async function action(fn, status) {
@@ -304,7 +316,20 @@ async function homeView() {
 
 async function spaceView(key) {
   const show = screen();
-  const [{ types }, first] = await Promise.all([get("/api/types"), get(`/api/items?space=${encodeURIComponent(key)}&limit=100`)]);
+  const [{ types }, first, top] = await Promise.all([
+    get("/api/types"),
+    get(`/api/items?space=${encodeURIComponent(key)}&limit=100`),
+    get(`/api/spaces/${encodeURIComponent(key)}/tree?limit=1`),
+  ]);
+  const status = h("div", { class: "status" });
+  // The space's home is its first page at the top of the tree.
+  let home = h("p", { class: "muted", text: t("space.noPages") });
+  if (top.items.length) {
+    const [{ item }, { embeds }] = await Promise.all([get("/api/items/" + top.items[0].id), get(`/api/items/${top.items[0].id}/embeds`)]);
+    home = h("section", { id: "home", class: "card" },
+      h("h2", {}, link("#/item/" + encodeURIComponent(item.key), item.title || item.key)),
+      item.body.length ? readOnlyBody(item.body, embeds) : h("p", { class: "muted", text: t("space.homeEmpty") }));
+  }
   const rows = h("tbody");
   const more = h("div");
   const addRows = (page) => {
@@ -324,15 +349,19 @@ async function spaceView(key) {
   addRows(first);
   const boards = types.filter((ty) => ty.workflow)
     .map((ty) => link(`#/board/${encodeURIComponent(key)}/${encodeURIComponent(ty.name)}`, t("space.board", { type: ty.name })));
-  show(
+  const tree = pageTree({ space: key, onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
+  show(withTree(tree,
     h("p", {}, link("#/", t("nav.spaces")), " / " + key),
     h("h1", { text: key }),
     h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance"))].flatMap((b, i) => i ? [" · ", b] : [b])),
+    status,
+    home,
+    h("h2", { text: t("space.allItems") }),
     h("p", { class: "muted", text: t("space.items", { n: first.total.value }) }),
     h("table", {}, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type"), t("col.state")].map((c) => h("th", { text: c })))), rows),
     more,
     newItemForm(key, types),
-  );
+  ));
 }
 
 // --- board -------------------------------------------------------------------
@@ -581,18 +610,20 @@ function readProperty(f, el) {
   return v;
 }
 
-function newItemForm(space, types) {
+// newItemForm creates an item in a space, below parent if one is given;
+// "page" is preselected when the type exists.
+function newItemForm(space, types, parent = "", heading = t("item.new"), id = "new-item") {
   if (types.length === 0) return null;
   const fields = h("div");
-  const typeSelect = h("select", { name: "type" }, types.map((ty) => h("option", { value: ty.name, text: ty.name })));
+  const typeSelect = h("select", { name: "type" }, types.map((ty) => h("option", { value: ty.name, text: ty.name, selected: ty.name === "page" })));
   const showFields = () => {
     const ty = types.find((x) => x.name === typeSelect.value);
     fields.replaceChildren(...ty.fields.map((f) => field(f.name + (f.required ? " *" : ""), propertyInput(f))));
   };
   typeSelect.addEventListener("change", showFields);
   showFields();
-  const f = form({ class: "card", id: "new-item" }, [
-    h("h2", { text: t("item.new") }),
+  const f = form({ class: "card", id }, [
+    h("h2", { text: heading }),
     field(t("col.type"), typeSelect),
     field(t("col.title"), h("input", { name: "title", required: true })),
     fields,
@@ -604,7 +635,7 @@ function newItemForm(space, types) {
       const v = readProperty(fd, f.querySelector(`[name="p:${CSS.escape(fd.name)}"]`));
       if (v !== null) properties[fd.name] = v;
     }
-    const { item } = await post("/api/items", { space, type: ty.name, title: f.querySelector("[name=title]").value, properties });
+    const { item } = await post("/api/items", { space, type: ty.name, parent, title: f.querySelector("[name=title]").value, properties });
     location.hash = "#/item/" + encodeURIComponent(item.key);
   });
   return f;
@@ -625,9 +656,25 @@ async function itemView(ref) {
     get(path + "/comments"),
   ]);
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
-  await learnNames([...history.events.map((e) => e.actor), ...comments.comments.map((c) => c.author)]);
+  const level = `/api/spaces/${encodeURIComponent(item.space)}/tree` + (item.parent ? "?parent=" + item.parent : "");
+  const [, open, siblings] = await Promise.all([
+    learnNames([...history.events.map((e) => e.actor), ...comments.comments.map((c) => c.author)]),
+    ancestors(item),
+    item.presence === "live" ? get(level) : { items: [] },
+  ]);
   const status = h("div", { class: "status" });
   const live = item.presence === "live";
+
+  // Moving up or down among the siblings: the keyboard's way to reorder,
+  // besides dragging in the tree (ADR-0041).
+  const at = siblings.items.findIndex((n) => n.id === item.id);
+  const place = (before) => action(() => post(path + "/move", { space: item.space, parent: item.parent || "", before }), status);
+  const reorder = [];
+  if (live && at > 0) reorder.push(h("button", { text: t("item.moveUp"), onclick: () => place(siblings.items[at - 1].id) }));
+  if (live && at >= 0 && (at + 1 < siblings.items.length)) {
+    const after = siblings.items[at + 2];
+    if (after || !siblings.next) reorder.push(h("button", { text: t("item.moveDown"), onclick: () => place(after ? after.id : "") }));
+  }
 
   const title = live
     ? form({ class: "inline", id: "title" }, [
@@ -660,7 +707,9 @@ async function itemView(ref) {
 
   const lastRestriction = history.events.filter((e) => e.kind === "RestrictionSet").pop();
   const guarded = item.restriction?.read?.length && lastRestriction?.actor === "governance";
-  show(
+  // The tree opens down to the page and shows the page's own children.
+  const tree = pageTree({ space: item.space, current: item.id, open: [...open, item.id], onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
+  show(withTree(tree,
     h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
     title,
     guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
@@ -671,9 +720,10 @@ async function itemView(ref) {
     type.body ? bodyEditor(item, embeds.embeds, live) : null,
     relationsSection(out.relations, inc.relations, item.id),
     commentsSection(path, comments, live),
-    h("p", {}, actions),
+    h("p", {}, reorder, actions),
+    live ? newItemForm(item.space, types, item.id, t("item.newChild"), "new-child") : null,
     historySection(history.events),
-  );
+  ));
 }
 
 // bodyEditor edits a live item's body in its live session (ADR-0010):
