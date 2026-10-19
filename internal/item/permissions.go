@@ -425,6 +425,8 @@ func (x *Session) Create(n NewItem) (Item, error) {
 	if err := x.canCreateIn(n.Space, n.Parent); err != nil {
 		return Item{}, err
 	}
+	// A person watches what they create (ADR-0046).
+	n.Watch = true
 	return x.s.Create(x.who, n)
 }
 
@@ -433,6 +435,7 @@ func (x *Session) CreateEmbedded(host ID, n NewItem) (Item, error) {
 	if _, err := x.editable(host); err != nil {
 		return Item{}, err
 	}
+	n.Watch = true
 	return x.s.CreateEmbedded(x.who, host, n)
 }
 

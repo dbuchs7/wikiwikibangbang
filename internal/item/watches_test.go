@@ -95,3 +95,39 @@ func TestWatchersAreToldWhatOthersChange(t *testing.T) {
 		t.Error("an outsider has watches")
 	}
 }
+
+func TestCreatorsWatchWhatTheyCreate(t *testing.T) {
+	s := permFixture(t)
+	anna, ben := s.As("anna"), s.As("ben")
+	noErr(t, s.GrantRole("root", "PLAT", "ben", Editor))
+	page := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	if !anna.Watching(page.ID) || ben.Watching(page.ID) {
+		t.Fatalf("the creator watches %v, another %v", anna.Watching(page.ID), ben.Watching(page.ID))
+	}
+	// The watch is no change of the page.
+	if h, _ := anna.History(page.ID); len(h) != 1 || h[0].Kind != ItemCreated {
+		t.Fatalf("history %v", h)
+	}
+	if got, _ := anna.Notifications(0, 10); len(got) != 0 {
+		t.Fatalf("one's own creation is news: %v", kinds(got))
+	}
+	noErr(t, ben.SetTitle(page.ID, "Runbook v2"))
+	if got, _ := anna.Notifications(0, 10); !slices.Equal(kinds(got), []string{"TitleSet:Runbook v2"}) {
+		t.Fatalf("notifications %v", kinds(got))
+	}
+
+	inline := mustItem(t)(ben.CreateEmbedded(page.ID, NewItem{Type: "page", Title: "Inline"}))
+	if !ben.Watching(inline.ID) || ben.Watching(page.ID) {
+		t.Fatal("the creator of an inline item watches it, and only it")
+	}
+
+	// Stopping is for good; the store alone does not watch for anyone.
+	noErr(t, anna.Watch(page.ID, false))
+	if anna.Watching(page.ID) {
+		t.Fatal("still watching")
+	}
+	plain := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Plain"}))
+	if anna.Watching(plain.ID) {
+		t.Fatal("a create without Watch watches")
+	}
+}

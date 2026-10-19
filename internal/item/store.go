@@ -187,6 +187,17 @@ type NewItem struct {
 	Parent     ID
 	Title      string
 	Properties Props
+	// Watch makes the creator watch the new item (ADR-0046), recorded in
+	// the same batch as its creation.
+	Watch bool
+}
+
+// watchOnCreate is the event of a creator's watch of a new item, if asked.
+func watchOnCreate(actor string, n NewItem, created Event) []Event {
+	if !n.Watch || strings.TrimSpace(actor) == "" {
+		return nil
+	}
+	return []Event{{Kind: Watched, Item: created.Item, Principal: actor}}
 }
 
 // Create creates an item and returns it.
@@ -195,7 +206,7 @@ func (s *Store) Create(actor string, n NewItem) (Item, error) {
 	if err != nil {
 		return Item{}, err
 	}
-	if err := s.record(actor, e); err != nil {
+	if err := s.recordBatch(actor, append([]Event{e}, watchOnCreate(actor, n, e)...)...); err != nil {
 		return Item{}, err
 	}
 	return s.items[e.Item].clone(), nil
@@ -260,7 +271,8 @@ func (s *Store) CreateEmbedded(actor string, host ID, n NewItem) (Item, error) {
 	}
 	body := h.Body.clone()
 	body.Blocks = append(body.Blocks, Block{Kind: Embed, Ref: created.Item})
-	if err := s.recordBatch(actor, created, Event{Kind: BodyCommitted, Item: host, Body: &body}); err != nil {
+	events := append([]Event{created, {Kind: BodyCommitted, Item: host, Body: &body}}, watchOnCreate(actor, n, created)...)
+	if err := s.recordBatch(actor, events...); err != nil {
 		return Item{}, err
 	}
 	return s.items[created.Item].clone(), nil

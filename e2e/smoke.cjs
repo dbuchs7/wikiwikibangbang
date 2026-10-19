@@ -81,6 +81,7 @@ function check(cond, msg) {
     await page.waitForSelector("#title");
     check(await page.inputValue("#title [name=title]") === hostile, "the title shows as typed");
     check(page.url().endsWith("#/item/PLAT-1"), "the item is addressed by key");
+    await page.waitForSelector("#watch:has-text('Stop watching')"); // its creator watches it
 
     step("edit property, transition");
     await page.fill("[name='p:estimate']", "2.5");
