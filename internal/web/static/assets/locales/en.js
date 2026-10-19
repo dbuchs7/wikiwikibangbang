@@ -213,5 +213,16 @@ export default {
   "live.lost": "Connection lost; reconnecting…",
   "live.present": "In this body now: {names}",
   "live.reloading": "{error} — reloading the body.",
-  "live.saving": "Saving…"
+  "live.saving": "Saving…",
+
+  "tree.title": "Pages",
+  "tree.empty": "No pages yet.",
+  "tree.expand": "Expand {title}",
+  "tree.collapse": "Collapse {title}",
+  "space.allItems": "All items",
+  "space.noPages": "This space has no pages yet.",
+  "space.homeEmpty": "This page is empty.",
+  "item.moveUp": "Move up",
+  "item.moveDown": "Move down",
+  "item.newChild": "New child page"
 };

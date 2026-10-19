@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":5,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":6,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -133,8 +133,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	log := everyKindLog(t)
 	rich := richTextLog(t)
 	comments := commentLog(t)
+	tree := treeLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments) {
+	for _, e := range slices.Concat(log, rich, comments, tree) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -147,10 +148,11 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v4.golden.jsonl", nil, log},
-		{"events.v4.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v4.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v4.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v5.golden.jsonl", nil, log},
+		{"events.v5.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v5.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v5.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v5.tree.golden.jsonl", fakeSealer{}, tree},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -182,7 +184,7 @@ func TestPersistedFormatIsStable(t *testing.T) {
 
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
-// text) — still open and rebuild the same state and history as today's log
+// text), 4 (comments) — still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -193,6 +195,22 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v3.golden.jsonl"), nil, log)
 	assertRebuilds(t, filepath.Join("testdata", "events.v3.sealed.golden.jsonl"), fakeSealer{}, log)
 	assertRebuilds(t, filepath.Join("testdata", "events.v3.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v4.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v4.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v4.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v4.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+}
+
+// treeLog places pages among their siblings (ADR-0041), so the golden file
+// pins the order an ItemMoved carries.
+func treeLog(t *testing.T) []Event {
+	s := setup(t)
+	home := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Home"}))
+	a := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "A", Parent: home.ID}))
+	b := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "B", Parent: home.ID}))
+	noErr(t, s.Place("anna", b.ID, "PLAT", home.ID, a.ID))
+	noErr(t, s.Move("anna", a.ID, "PLAT", ""))
+	return s.Log()
 }
 
 // commentLog adds, edits and deletes comments, then purges an item with a

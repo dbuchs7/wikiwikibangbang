@@ -39,6 +39,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: get, Pattern: "/api/audit", Summary: "The security audit trail, newest first, paged (administrators)", Handler: http.HandlerFunc(h.listAudit)},
 
 		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged", Handler: http.HandlerFunc(h.findItems)},
+		{Method: get, Pattern: "/api/spaces/{space}/tree", Summary: "The readable children of an item (parent) or the top of a space, in sibling order, paged", Handler: http.HandlerFunc(h.tree)},
 		{Method: get, Pattern: "/api/search", Summary: "Full-text search over readable items (q; space, type, state), best first, paged", Handler: http.HandlerFunc(h.searchItems)},
 		{Method: post, Pattern: "/api/items", Summary: "Create an item", Handler: http.HandlerFunc(h.createItem)},
 		{Method: get, Pattern: "/api/items/{ref}", Summary: "Get an item by ID or key", Handler: http.HandlerFunc(h.getItem)},
@@ -46,7 +47,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: put, Pattern: "/api/items/{ref}/properties/{field}", Summary: "Set a property; null unsets it", Handler: http.HandlerFunc(h.setProperty)},
 		{Method: post, Pattern: "/api/items/{ref}/transitions", Summary: "Perform a workflow transition", Handler: http.HandlerFunc(h.transition)},
 		{Method: put, Pattern: "/api/items/{ref}/body", Summary: "Commit a new version of the body", Handler: http.HandlerFunc(h.commitBody)},
-		{Method: post, Pattern: "/api/items/{ref}/move", Summary: "Move the item and its subtree", Handler: http.HandlerFunc(h.move)},
+		{Method: post, Pattern: "/api/items/{ref}/move", Summary: "Move the item and its subtree; with before, also place it among its new siblings", Handler: http.HandlerFunc(h.move)},
 		{Method: post, Pattern: "/api/items/{ref}/embedded", Summary: "Create an item embedded at the end of this item's body", Handler: http.HandlerFunc(h.createEmbedded)},
 		{Method: get, Pattern: "/api/items/{ref}/embeds", Summary: "How the body's embeds render", Handler: http.HandlerFunc(h.embeds)},
 		{Method: get, Pattern: "/api/items/{ref}/history", Summary: "The item's history", Handler: http.HandlerFunc(h.history)},
@@ -529,10 +530,68 @@ func (h itemHandlers) move(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Space  string  `json:"space"`
 		Parent item.ID `json:"parent"`
+		// Before places the item before this sibling (ID or key), or last
+		// when empty (ADR-0041); absent, the sibling order is kept.
+		Before *string `json:"before"`
 	}
 	if decode(w, r, &req) {
-		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.Move(it.ID, req.Space, req.Parent) })
+		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
+			if req.Before == nil {
+				return x.Move(it.ID, req.Space, req.Parent)
+			}
+			var before item.ID
+			if *req.Before != "" {
+				b, err := resolveItem(x, *req.Before)
+				if err != nil {
+					return err
+				}
+				before = b.ID
+			}
+			return x.Place(it.ID, req.Space, req.Parent, before)
+		})
 	}
+}
+
+// treeNodeJSON is one entry of a page tree.
+type treeNodeJSON struct {
+	ID          item.ID `json:"id"`
+	Key         string  `json:"key"`
+	Title       string  `json:"title"`
+	Type        string  `json:"type"`
+	HasChildren bool    `json:"hasChildren"`
+}
+
+// tree lists one level of a space's page tree (ADR-0041).
+func (h itemHandlers) tree(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, ok := parseLimit(w, q)
+	if !ok {
+		return
+	}
+	h.read(w, r, func(x *item.Session) (any, error) {
+		var parent item.ID
+		if ref := q.Get("parent"); ref != "" {
+			p, err := resolveItem(x, ref)
+			if err != nil {
+				return nil, err
+			}
+			parent = p.ID
+		}
+		nodes, err := x.Tree(r.PathValue("space"), parent)
+		if err != nil {
+			return nil, err
+		}
+		page, res, err := paged(nodes, func(n item.TreeNode) item.ID { return n.Item.ID }, item.ID(q.Get("after")), limit)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]treeNodeJSON, len(page))
+		for i, n := range page {
+			out[i] = treeNodeJSON{ID: n.Item.ID, Key: n.Item.Key, Title: n.Item.Title, Type: n.Item.Type, HasChildren: n.HasChildren}
+		}
+		res["items"] = out
+		return res, nil
+	})
 }
 
 func (h itemHandlers) createEmbedded(w http.ResponseWriter, r *http.Request) {

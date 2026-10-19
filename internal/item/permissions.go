@@ -461,6 +461,61 @@ func (x *Session) Move(id ID, toSpace string, newParent ID) error {
 	return x.s.Move(x.who, id, toSpace, newParent)
 }
 
+// Place moves an item like Move and puts it before a readable sibling, or
+// last (ADR-0041). Siblings the principal may not read keep their places
+// relative to each other.
+func (x *Session) Place(id ID, toSpace string, newParent, before ID) error {
+	if err := x.editableAll(id); err != nil {
+		return err
+	}
+	if err := x.canCreateIn(toSpace, newParent); err != nil {
+		return err
+	}
+	if before != "" {
+		if _, err := x.readable(before); err != nil {
+			return err
+		}
+	}
+	return x.s.Place(x.who, id, toSpace, newParent, before)
+}
+
+// TreeNode is one readable child in a page tree.
+type TreeNode struct {
+	Item        Item
+	HasChildren bool // it has readable live children
+}
+
+// Tree returns the readable children of an item, or the readable items at
+// the top of a space when parent is empty, in sibling order, each with
+// whether it has readable children itself (ADR-0041).
+func (x *Session) Tree(space string, parent ID) ([]TreeNode, error) {
+	if !x.s.HasSpace(space) {
+		return nil, notFound("space %q", space)
+	}
+	if parent != "" {
+		p, err := x.readable(parent)
+		if err != nil {
+			return nil, err
+		}
+		if p.Space != space {
+			return nil, notFound("item %s in space %s", parent, space)
+		}
+	}
+	parents := map[ID]bool{}
+	for _, it := range x.s.items {
+		if it.Presence == Live && it.Space == space && it.Parent != "" && x.s.canRead(x.who, it) {
+			parents[it.Parent] = true
+		}
+	}
+	var out []TreeNode
+	for _, it := range x.s.Children(space, parent) {
+		if x.s.canRead(x.who, x.s.items[it.ID]) {
+			out = append(out, TreeNode{Item: it, HasChildren: parents[it.ID]})
+		}
+	}
+	return out, nil
+}
+
 // AddRelation relates an editable item to a readable one.
 func (x *Session) AddRelation(typ string, from, to ID) error {
 	if _, err := x.editable(from); err != nil {
