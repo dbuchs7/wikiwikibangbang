@@ -45,6 +45,11 @@ func TestProfilePictures(t *testing.T) {
 		t.Fatal("/api/me names no picture")
 	}
 
+	names := w.vera.expect("GET", "/api/users/names?id="+w.ids["bert"]+"&id="+w.ids["vera"], "", http.StatusOK)
+	if avatars := names["avatars"].(map[string]any); avatars[w.ids["bert"]] != tag || len(avatars) != 1 {
+		t.Fatalf("names name the pictures %v", avatars)
+	}
+
 	got := w.vera.do("GET", "/api/users/"+w.ids["bert"]+"/avatar", "")
 	if got.Code != http.StatusOK || !bytes.Equal(got.Body.Bytes(), png) || got.Header().Get("Content-Type") != "image/png" ||
 		got.Header().Get("X-Content-Type-Options") != "nosniff" || got.Header().Get("Content-Security-Policy") == "" {
