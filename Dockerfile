@@ -39,7 +39,7 @@ RUN mkdir -p /out/data
 
 # ---------------------------------------------------------------------------
 
-# The nonroot variant runs as uid/gid 65532.
+# The nonroot variant provides uid/gid 65532, the account the server runs as.
 FROM gcr.io/distroless/static-debian12:nonroot AS runtime
 
 COPY --from=build /out/wikiwikibangbang /wikiwikibangbang
@@ -51,7 +51,13 @@ COPY --from=build --chown=65532:65532 /out/data /data
 
 EXPOSE 8080
 VOLUME ["/data"]
-USER 65532:65532
+# The process starts as root only to hand a mounted /data to uid 65532 (a
+# directory created on the host belongs to root); it gives root up before
+# it opens anything (ADR-0038). Running the image as 65532 directly, e.g.
+# with Kubernetes' runAsUser, skips that step; WWBB_RUN_AS may name another
+# account, e.g. the NAS user who should own the files.
+USER 0:0
+ENV WWBB_RUN_AS=65532:65532
 
 # The image has no shell or curl; the binary probes itself.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

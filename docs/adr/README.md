@@ -50,3 +50,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0035](0035-comments-are-part-of-their-item.md) | Comments are part of their item: events on the item, sealed with its key | Accepted | Partial |
 | [0036](0036-a-board-is-a-view-of-a-query.md) | A board is a view of a query, not a stored object | Accepted | Partial |
 | [0037](0037-trusted-reverse-proxies.md) | Forwarded headers count only from trusted reverse proxies | Accepted | Landed |
+| [0038](0038-container-starts-as-root-and-drops.md) | The container starts as root only to hand over the data directory, then drops to an unprivileged account | Accepted | Landed |

@@ -28,6 +28,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/mcp"
+	"github.com/dbuchs7/wikiwikibangbang/internal/privdrop"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
@@ -112,6 +113,25 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	log.Info("starting", "build", buildinfo.Get().String())
 	applyBudgets(os.Getenv, log)
+
+	// Started as root with WWBB_RUN_AS set (the container image does,
+	// ADR-0038), the server hands the data directory to that account and
+	// gives root up before it opens anything.
+	if v := os.Getenv("WWBB_RUN_AS"); v != "" {
+		to, err := privdrop.Parse(v)
+		if err != nil {
+			log.Error("WWBB_RUN_AS is unusable", "err", err)
+			return 1
+		}
+		dropped, err := privdrop.Drop(*dataDir, to)
+		if err != nil {
+			log.Error("cannot give up root", "err", err)
+			return 1
+		}
+		if dropped {
+			log.Info("gave up root", "uid", to.UID, "gid", to.GID, "data-dir", *dataDir)
+		}
+	}
 
 	db, rec, err := storage.OpenWith(*dataDir, storage.Options{Log: log})
 	if err != nil {
