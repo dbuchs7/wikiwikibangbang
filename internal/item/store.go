@@ -190,6 +190,37 @@ type NewItem struct {
 	// Watch makes the creator watch the new item (ADR-0046), recorded in
 	// the same batch as its creation.
 	Watch bool
+	// Body, if given, is the new item's first body, committed in the same
+	// batch: an item is never left empty because its body was refused.
+	// It cannot show images yet, for the item has no files.
+	Body *Doc
+}
+
+// firstBody validates the body given with a new item and returns its
+// commit, as CommitBody would for an item without a body.
+func (s *Store) firstBody(created Event, d Doc) (Event, error) {
+	if td, _ := s.latest(created.TypeName); !td.Body {
+		return Event{}, invalid("type %q has no body", td.Name)
+	}
+	for i, b := range d.Blocks {
+		if b.Kind == Image {
+			return Event{}, wrapf(invalid("an image shows a file of the item; add it after creating the item"), "block %d", i+1)
+		}
+		if err := checkBlock(b, created.Item); err != nil {
+			return Event{}, wrapf(err, "block %d", i+1)
+		}
+	}
+	for _, r := range d.refs() {
+		target, ok := s.items[r.To]
+		if !ok {
+			return Event{}, notFound("referenced item %s", r.To)
+		}
+		if target.Presence != Live {
+			return Event{}, invalid("item %s is %s and cannot be newly referenced", target.Key, target.Presence)
+		}
+	}
+	body := d.clone()
+	return Event{Kind: BodyCommitted, Item: created.Item, Body: &body}, nil
 }
 
 // watchOnCreate is the event of a creator's watch of a new item, if asked.
@@ -206,7 +237,15 @@ func (s *Store) Create(actor string, n NewItem) (Item, error) {
 	if err != nil {
 		return Item{}, err
 	}
-	if err := s.recordBatch(actor, append([]Event{e}, watchOnCreate(actor, n, e)...)...); err != nil {
+	events := []Event{e}
+	if n.Body != nil {
+		body, err := s.firstBody(e, *n.Body)
+		if err != nil {
+			return Item{}, err
+		}
+		events = append(events, body)
+	}
+	if err := s.recordBatch(actor, append(events, watchOnCreate(actor, n, e)...)...); err != nil {
 		return Item{}, err
 	}
 	return s.items[e.Item].clone(), nil
@@ -263,6 +302,9 @@ func (s *Store) CreateEmbedded(actor string, host ID, n NewItem) (Item, error) {
 	}
 	if n.Parent != "" {
 		return Item{}, invalid("an inline item's parent is its host")
+	}
+	if n.Body != nil {
+		return Item{}, invalid("an inline item gets its body after it is created")
 	}
 	n.Space, n.Parent = h.Space, host
 	created, err := s.prepareCreate(n)

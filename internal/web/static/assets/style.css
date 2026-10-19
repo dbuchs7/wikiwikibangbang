@@ -387,3 +387,8 @@ a.button { display: inline-block; }
 label.check { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
 #nav-new { white-space: nowrap; }
 details.card > summary { cursor: pointer; font-weight: 600; }
+/* Copyable settings (the MCP page). */
+.copyable { display: flex; gap: 8px; align-items: flex-start; }
+.copyable .snippet { flex: 1; margin: 0; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+  font-family: var(--font-mono); font-size: 0.85em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.tools li { margin: 4px 0; }

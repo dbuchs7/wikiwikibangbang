@@ -414,3 +414,40 @@ func TestListingsForTheAPI(t *testing.T) {
 		t.Fatalf("unknown key: %v", err)
 	}
 }
+
+func TestAnItemIsCreatedWithItsBody(t *testing.T) {
+	s := setup(t)
+	other := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Other"}))
+	body := &Doc{Blocks: []Block{{Kind: Heading, Level: 1, Text: "Summary"}, {Kind: Embed, Ref: other.ID}}}
+	before := len(s.Log())
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook", Body: body}))
+	if len(page.Body.Blocks) != 2 || page.Version != 2 {
+		t.Fatalf("created %+v", page)
+	}
+	log := s.Log()[before:]
+	if len(log) != 2 || log[0].Batch == 0 || log[0].Batch != log[1].Batch || log[1].Kind != BodyCommitted {
+		t.Fatalf("creation and body are not one batch: %+v", log)
+	}
+	body.Blocks[0].Text = "changed after the call"
+	if got, _ := s.Get(page.ID); got.Body.Blocks[0].Text != "Summary" {
+		t.Fatal("the stored body shares the caller's")
+	}
+
+	refused := map[string]NewItem{
+		"an image":         {Space: "PLAT", Type: "page", Title: "x", Body: &Doc{Blocks: []Block{{Kind: Image, Ref: "0123456789abcdef0123456789abcdef"}}}},
+		"a missing item":   {Space: "PLAT", Type: "page", Title: "x", Body: &Doc{Blocks: []Block{{Kind: Embed, Ref: "nope"}}}},
+		"an invalid block": {Space: "PLAT", Type: "page", Title: "x", Body: &Doc{Blocks: []Block{{Kind: "nope"}}}},
+	}
+	for name, n := range refused {
+		count := len(s.Log())
+		if _, err := s.Create("anna", n); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+		if len(s.Log()) != count {
+			t.Errorf("%s: an item was created without its body", name)
+		}
+	}
+	if _, err := s.CreateEmbedded("anna", page.ID, NewItem{Type: "page", Title: "x", Body: &Doc{}}); err == nil {
+		t.Error("an inline item takes a body")
+	}
+}
