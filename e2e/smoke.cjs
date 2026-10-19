@@ -205,6 +205,20 @@ function check(cond, msg) {
     check(await page.locator(".hits li").count() === 1, "the search results stay");
     await page.unroute("**/api/items/PLAT-1");
 
+    step("board: columns are the workflow's states; dragging a card performs the transition");
+    await page.click("text=Spaces");
+    await page.click("a:has-text('Platform')");
+    await page.click("a:has-text('Board: task')");
+    await page.waitForSelector(".board");
+    const column = (state) => `.board-column[data-state='${state}']`;
+    check(await page.locator(".board-column").count() === 2, "one column per state");
+    check(await page.locator(`${column("done")} .card-item:has-text('PLAT-1')`).count() === 1, "the finished task is done");
+    check(await page.locator(`${column("open")} .card-item:has-text('PLAT-2')`).count() === 1, "the runbook is open");
+    check((await page.textContent(`${column("done")} .card-item:has-text('PLAT-1')`)).includes(hostile), "a card's title shows as text");
+    await page.dragAndDrop(`${column("open")} .card-item:has-text('PLAT-2')`, column("done"));
+    await page.waitForSelector(`${column("done")} .card-item:has-text('PLAT-2')`);
+    check(await page.locator(`${column("open")} .card-item`).count() === 0, "the open column is empty");
+
     step("account: token");
     await page.click("nav a[href='#/account']");
     await page.fill("#new-token [name=name]", "ci");
