@@ -120,6 +120,8 @@ The settings are configured on GitHub:
 - The ruleset `protect-main` was imported from [`.github/rulesets/protect-main.json`](../../.github/rulesets/protect-main.json). Read back through the REST API (`/repos/{owner}/{repo}/rulesets/{id}`), it matches the file rule for rule, and `/rules/branches/main` lists all five rules as active on `main`.
 - GitHub stores three parameters the file does not set: `required_reviewers: []`, `do_not_enforce_on_create: false` and `require_extra_approval_for_unattributed_changes: true`. The first two change nothing. The effect of the third on pull requests with agent commits is to be observed; if it blocks merges, it goes into the file and this record.
 
+A direct push to `main` from the maintainer's clone was rejected by the ruleset.
+
 The ruleset only allows squash merges into `main`, whatever the general merge settings allow.
 
 ## Links
