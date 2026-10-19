@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
@@ -19,34 +20,31 @@ import (
 // importActor is recorded as the author of everything an import writes.
 const importActor = "import"
 
-// importCmd imports spaces of a Confluence Cloud site into a data directory
-// (ADR-0023). It opens the data directory itself, so the server must be
+// importCmd imports Confluence spaces and Jira projects of an Atlassian
+// Cloud site into a data directory (ADR-0023), in one run, so page links to
+// issues resolve. It opens the data directory itself, so the server must be
 // stopped; a re-run updates what changed and creates nothing twice. The
 // source credentials come from the environment, never from flags, which
 // would show in the process list and the shell history.
 func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := newFlags("import", stderr)
-	from := fs.String("from", "", `the source; only "confluence-cloud" so far`)
+	from := fs.String("from", "", `the source; only "atlassian-cloud" so far`)
 	site := fs.String("site", "", "the source site, e.g. https://example.atlassian.net")
-	spaces := fs.String("spaces", "", "comma-separated keys of the spaces to import")
+	spaces := fs.String("spaces", "", "comma-separated keys of the Confluence spaces to import")
+	projects := fs.String("projects", "", "comma-separated keys of the Jira projects to import")
 	dataDir := fs.String("data-dir", defaultDataDir, "directory holding the event log; the server must be stopped")
 	usersFile := fs.String("users", "", `file mapping source account IDs to local usernames, one "accountId username" per line`)
 	dryRun := fs.Bool("dry-run", false, "report what the import would do without writing anything")
 	if err := fs.Parse(args); err != nil {
 		return parseFailed(err)
 	}
-	if *from != "confluence-cloud" {
-		fmt.Fprintln(stderr, `import: -from must be "confluence-cloud"`)
+	if *from != "atlassian-cloud" {
+		fmt.Fprintln(stderr, `import: -from must be "atlassian-cloud"`)
 		return 2
 	}
-	var keys []string
-	for k := range strings.SplitSeq(*spaces, ",") {
-		if k = strings.TrimSpace(k); k != "" {
-			keys = append(keys, k)
-		}
-	}
-	if *site == "" || len(keys) == 0 {
-		fmt.Fprintln(stderr, "import: -site and -spaces are required")
+	spaceKeys, projectKeys := keyList(*spaces), keyList(*projects)
+	if *site == "" || len(spaceKeys)+len(projectKeys) == 0 {
+		fmt.Fprintln(stderr, "import: -site and at least one of -spaces and -projects are required")
 		return 2
 	}
 	if err := checkSite(*site); err != nil {
@@ -79,8 +77,7 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		return 1
 	}
 
-	src := migrate.ConfluenceCloud{Site: *site, Email: email, Token: token}
-	snap, problems, err := src.Read(ctx, keys)
+	snap, problems, err := readCloud(ctx, *site, email, token, spaceKeys, projectKeys)
 	if err != nil {
 		fmt.Fprintln(stderr, "import:", err)
 		return 1
@@ -99,7 +96,7 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if *dryRun {
 		what = "dry run, nothing written"
 	}
-	fmt.Fprintf(stdout, "%s: %d pages created, %d updated, %d unchanged\n", what, rep.Created, rep.Updated, rep.Unchanged)
+	fmt.Fprintf(stdout, "%s: %d pages and issues created, %d updated, %d unchanged\n", what, rep.Created, rep.Updated, rep.Unchanged)
 	all := append(problems, rep.Problems...)
 	if len(all) > 0 {
 		fmt.Fprintf(stdout, "%d problems:\n", len(all))
@@ -108,6 +105,44 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintf(stdout, "  %s: %s\n", p.Source, p.Message)
 	}
 	return 0
+}
+
+// readCloud reads the spaces and projects into one snapshot.
+func readCloud(ctx context.Context, site, email, token string, spaces, projects []string) (migrate.Snapshot, []migrate.Problem, error) {
+	var snap migrate.Snapshot
+	var problems []migrate.Problem
+	if len(spaces) > 0 {
+		var err error
+		snap, problems, err = migrate.ConfluenceCloud{Site: site, Email: email, Token: token}.Read(ctx, spaces)
+		if err != nil {
+			return snap, problems, err
+		}
+	}
+	if len(projects) > 0 {
+		jira, more, err := migrate.JiraCloud{Site: site, Email: email, Token: token}.Read(ctx, projects)
+		problems = append(problems, more...)
+		if err != nil {
+			return snap, problems, err
+		}
+		snap.Instance = jira.Instance
+		snap.Projects, snap.IssueTypes, snap.Issues = jira.Projects, jira.IssueTypes, jira.Issues
+		for _, u := range jira.Users {
+			if !slices.ContainsFunc(snap.Users, func(v migrate.SrcUser) bool { return v.ID == u.ID }) {
+				snap.Users = append(snap.Users, u)
+			}
+		}
+	}
+	return snap, problems, nil
+}
+
+func keyList(s string) []string {
+	var keys []string
+	for k := range strings.SplitSeq(s, ",") {
+		if k = strings.TrimSpace(k); k != "" {
+			keys = append(keys, k)
+		}
+	}
+	return keys
 }
 
 // checkSite refuses a site the token would travel to in the clear: plain

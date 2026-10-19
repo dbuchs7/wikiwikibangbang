@@ -37,7 +37,7 @@ var classified = map[string]string{
 	"internal/mcp/client.go:maxAnswer": "the same bound, where the adapter reads",
 	"internal/migrate.maxSourceAnswer": "the import reading an answer of the source site (ADR-0023), " +
 		"not a caller's input to this server; it guards the import against a source that misbehaves",
-	"internal/migrate/confluence_cloud.go:maxSourceAnswer": "the same bound, where the import reads (ADR-0023)",
+	"internal/migrate/cloud.go:maxSourceAnswer": "the same bound, where the import reads (ADR-0023)",
 }
 
 // TestNoCeilingWithoutAName keeps the budgets complete (ADR-0015). Every

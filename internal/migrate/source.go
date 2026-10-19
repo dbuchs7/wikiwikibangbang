@@ -4,8 +4,9 @@
 // Run writes the result through the validated store commands, in two passes,
 // idempotently, optionally as a dry run or as a one-way sync.
 //
-// The readers are not part of this package yet: which source comes first is
-// an open question of ADR-0023. The Snapshot is the seam they will plug into.
+// The readers for Atlassian Cloud (ConfluenceCloud, JiraCloud) produce a
+// Snapshot through the REST APIs; readers for other sources plug into the
+// same seam.
 package migrate
 
 // Snapshot is the canonical source model of one Atlassian site.

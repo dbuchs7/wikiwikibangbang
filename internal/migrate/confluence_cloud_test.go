@@ -170,7 +170,7 @@ func TestConfluenceCloudRefusesForeignLinks(t *testing.T) {
 	f, c := newFakeConfluence(t)
 	f.pages = f.pages[:3]
 	// A next link to another host would carry the token elsewhere.
-	r := cloudReader{c: c}
+	r := cloudReader{site: cloudSite{label: "confluence cloud", email: c.Email, token: c.Token, client: c.Client}}
 	for _, link := range []string{"https://evil.example/wiki/api/v2/pages", "//evil.example/wiki/api/v2/pages", "wiki/api/v2/pages"} {
 		if err := r.get(context.Background(), link, &struct{}{}); err == nil || !strings.Contains(err.Error(), "unexpected link") {
 			t.Errorf("%s: %v", link, err)

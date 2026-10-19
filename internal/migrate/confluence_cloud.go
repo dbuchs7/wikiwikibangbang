@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // ConfluenceCloud reads spaces and pages from a Confluence Cloud site
@@ -32,15 +30,6 @@ type ConfluenceCloud struct {
 	Client *http.Client
 }
 
-// pageLimit is the page size the reader asks for; the API caps it.
-const pageLimit = 250
-
-// maxSourceAnswer bounds one answer of the source site the import reads.
-const maxSourceAnswer = 64 << 20
-
-// cloudRetries bounds how often a rate-limited request is retried.
-const cloudRetries = 3
-
 // unreadableRestriction is the placeholder account a page is restricted to
 // when its restriction cannot be read.
 const unreadableRestriction = "restriction-unreadable"
@@ -49,11 +38,11 @@ const unreadableRestriction = "restriction-unreadable"
 // (a page whose restriction is unreadable, a page under a non-page parent)
 // are returned with the snapshot.
 func (c ConfluenceCloud) Read(ctx context.Context, spaceKeys []string) (Snapshot, []Problem, error) {
-	base, err := url.Parse(strings.TrimRight(c.Site, "/"))
-	if err != nil || base.Scheme != "https" && base.Scheme != "http" || base.Host == "" {
-		return Snapshot{}, nil, fmt.Errorf("confluence cloud: %q is not a site address", c.Site)
+	base, err := siteURL("confluence cloud", c.Site)
+	if err != nil {
+		return Snapshot{}, nil, err
 	}
-	r := cloudReader{c: c, base: base}
+	r := cloudReader{site: cloudSite{label: "confluence cloud", base: base, email: c.Email, token: c.Token, client: c.Client}}
 	snap := Snapshot{Instance: base.Host}
 	if len(spaceKeys) == 0 {
 		return snap, nil, errors.New("confluence cloud: name at least one space")
@@ -109,9 +98,12 @@ func (c ConfluenceCloud) Read(ctx context.Context, spaceKeys []string) (Snapshot
 }
 
 type cloudReader struct {
-	c        ConfluenceCloud
-	base     *url.URL
+	site     cloudSite
 	problems []Problem
+}
+
+func (r *cloudReader) get(ctx context.Context, path string, v any) error {
+	return r.site.do(ctx, http.MethodGet, path, nil, v)
 }
 
 type cloudPage struct {
@@ -217,69 +209,4 @@ func (r *cloudReader) restriction(ctx context.Context, pageID, op, ref string) (
 
 func (r *cloudReader) problem(source, format string, args ...any) {
 	r.problems = append(r.problems, Problem{Source: source, Message: fmt.Sprintf(format, args...)})
-}
-
-// statusError is an answer other than 200.
-type statusError struct {
-	code int
-	body string
-}
-
-func (e statusError) Error() string { return fmt.Sprintf("status %d: %s", e.code, e.body) }
-
-// get fetches a path of the site (an absolute path, as the API's next links
-// are) and decodes the JSON answer. A rate-limited request is retried after
-// the delay the site asks for.
-func (r *cloudReader) get(ctx context.Context, path string, v any) error {
-	ref, err := url.Parse(path)
-	// Only paths of the site are followed: an absolute or scheme-relative
-	// link ("//other.example/…") would send the token to another host.
-	if err != nil || ref.IsAbs() || ref.Host != "" || !strings.HasPrefix(ref.Path, "/") {
-		return fmt.Errorf("confluence cloud: unexpected link %q", path)
-	}
-	target := r.base.ResolveReference(ref)
-	client := r.c.Client
-	if client == nil {
-		client = http.DefaultClient
-	}
-	for attempt := 0; ; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
-		if err != nil {
-			return err
-		}
-		req.SetBasicAuth(r.c.Email, r.c.Token)
-		req.Header.Set("Accept", "application/json")
-		res, err := client.Do(req)
-		if err != nil {
-			return fmt.Errorf("confluence cloud: %w", err)
-		}
-		body, err := io.ReadAll(io.LimitReader(res.Body, maxSourceAnswer))
-		res.Body.Close()
-		if err != nil {
-			return fmt.Errorf("confluence cloud: reading %s: %w", target.Path, err)
-		}
-		if res.StatusCode == http.StatusTooManyRequests && attempt < cloudRetries {
-			delay := time.Second << attempt
-			if s, err := strconv.Atoi(res.Header.Get("Retry-After")); err == nil && s >= 0 && s <= 60 {
-				delay = time.Duration(s) * time.Second
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(delay):
-			}
-			continue
-		}
-		if res.StatusCode != http.StatusOK {
-			msg := strings.TrimSpace(string(body))
-			if len(msg) > 200 {
-				msg = msg[:200]
-			}
-			return fmt.Errorf("confluence cloud: GET %s: %w", target.Path, statusError{res.StatusCode, msg})
-		}
-		if err := json.Unmarshal(body, v); err != nil {
-			return fmt.Errorf("confluence cloud: GET %s: %w", target.Path, err)
-		}
-		return nil
-	}
 }
