@@ -13,7 +13,7 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 
 | No. | Title | Status | Implementation |
 |---|---|---|---|
-| [0001](0001-unified-item-data-model.md) | Unified item data model for knowledge and work | Accepted | Not started |
+| [0001](0001-unified-item-data-model.md) | Unified item data model for knowledge and work | Accepted | Partial |
 | [0002](0002-license-agpl-3.0-only.md) | License the project under AGPL-3.0-only | Accepted | Landed |
 | [0003](0003-repository-governance-settings.md) | Repository governance settings for main | Accepted | Landed |
 | [0004](0004-go-without-cgo.md) | Go as implementation language, without CGO | Accepted | Landed |
@@ -27,15 +27,15 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0012](0012-mcp-adapter-over-http-api.md) | An MCP server as an adapter over the HTTP API, acting as its caller | Accepted | Not started |
 | [0013](0013-authentication-and-security-boundary.md) | Authentication is required by default, behind one principal boundary | Accepted | Partial |
 | [0014](0014-closed-renderer-for-user-content.md) | User content is rendered by one closed renderer, never as raw HTML | Accepted | Partial |
-| [0015](0015-resource-budgets-and-paged-listings.md) | One place names every resource budget, and a capped listing answers with a page | Accepted | Not started |
+| [0015](0015-resource-budgets-and-paged-listings.md) | One place names every resource budget, and a capped listing answers with a page | Accepted | Partial |
 | [0016](0016-metrics-and-backup.md) | Operational metrics behind authentication, and an allowlisted backup | Accepted | Landed |
 | [0017](0017-internationalisation-via-message-catalogue.md) | The UI is translated through a message catalogue, with English as source | Accepted | Not started |
 | [0018](0018-pull-request-level-dco-sign-off.md) | The DCO sign-off may be given once per pull request | Accepted | Partial |
 | [0019](0019-dco-enforcement-suspended.md) | DCO enforcement is suspended until the maintainer switches it on | Accepted | Landed |
-| [0020](0020-embedding-and-containment-are-independent.md) | Embedding shows an item, containment places it — the two stay independent | Accepted | Not started |
+| [0020](0020-embedding-and-containment-are-independent.md) | Embedding shows an item, containment places it — the two stay independent | Accepted | Partial |
 | [0021](0021-deletion-only-when-unreferenced.md) | Deletion only when unreferenced, then trash, then purge | Accepted | Partial |
-| [0022](0022-permission-model.md) | Space roles, narrowing restrictions, and a logged erasure role | Accepted | Not started |
-| [0023](0023-import-and-sync-from-jira-and-confluence.md) | Import from Jira and Confluence through one engine — snapshot import and one-way sync, never two masters | Accepted | Not started |
+| [0022](0022-permission-model.md) | Space roles, narrowing restrictions, and a logged erasure role | Accepted | Partial |
+| [0023](0023-import-and-sync-from-jira-and-confluence.md) | Import from Jira and Confluence through one engine — snapshot import and one-way sync, never two masters | Accepted | Partial |
 | [0024](0024-release-targets-and-container-image.md) | One binary for every common platform, and a distroless container image | Accepted | Partial |
 | [0025](0025-event-log-file-and-in-memory-state.md) | The event log is one file of checksummed batch records; state is folded in memory until it outgrows it | Accepted | Partial |
 | [0026](0026-crypto-shredding-of-item-content.md) | Item content is encrypted with a key per item; purge and redaction destroy the key | Accepted | Partial |

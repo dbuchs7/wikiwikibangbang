@@ -1,7 +1,7 @@
 # ADR-0020: Embedding shows an item, containment places it — the two stay independent
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
 - **Open question:** Do users understand the difference between "this task lives here" and "this task is shown here" when the page renders both the same way, or does the UI need a visible distinction from the first release?
