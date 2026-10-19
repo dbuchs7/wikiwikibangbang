@@ -34,8 +34,7 @@ func TestConvertStorage(t *testing.T) {
 		`<p>See&nbsp;<strong>the</strong> <ac:link><ri:page ri:content-title="Runbook" ri:space-key="PLAT"/></ac:link>, ask <ac:link><ri:user ri:account-id="acc-1"/></ac:link>.</p>` +
 		`<ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">PLAT-7</ac:parameter></ac:structured-macro>` +
 		`<ul><li>first</li><li>second</li></ul>` +
-		`<ac:structured-macro ac:name="info"><ac:rich-text-body><p>Note</p></ac:rich-text-body></ac:structured-macro>` +
-		`<table><tr><td>a</td></tr></table>` +
+		`<ac:structured-macro ac:name="gallery"><ac:rich-text-body><p>Note</p></ac:rich-text-body></ac:structured-macro>` +
 		`<p>Missing <ac:link><ri:page ri:content-title="Gone" ri:space-key="PLAT"/></ac:link> and <ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">PLAT-99</ac:parameter></ac:structured-macro></p>`
 
 	doc, problems := ConvertStorage(src, "PLAT", r)
@@ -49,8 +48,7 @@ func TestConvertStorage(t *testing.T) {
 		"embed::issue-7:",
 		"bullet:first::",
 		"bullet:second::",
-		`unsupported:<ac:structured-macro ac:name="info"><ac:rich-text-body><p>Note</p></ac:rich-text-body></ac:structured-macro>::`,
-		"unsupported:<table><tr><td>a</td></tr></table>::",
+		`unsupported:<ac:structured-macro ac:name="gallery"><ac:rich-text-body><p>Note</p></ac:rich-text-body></ac:structured-macro>::`,
 		"paragraph:Missing Gone and::",
 		"paragraph:[Jira issue PLAT-99]::",
 	}
@@ -59,6 +57,40 @@ func TestConvertStorage(t *testing.T) {
 	}
 	if len(problems) != 2 || !strings.Contains(problems[0], "Gone") || !strings.Contains(problems[1], "PLAT-99") {
 		t.Fatalf("problems = %q", problems)
+	}
+}
+
+// The macros and elements of ADR-0042 become their blocks.
+func TestConvertStoragePanelsTasksTablesAndMacros(t *testing.T) {
+	src := `<ac:structured-macro ac:name="toc"><ac:parameter ac:name="maxLevel">2</ac:parameter></ac:structured-macro>` +
+		`<ac:structured-macro ac:name="warning"><ac:parameter ac:name="title">Careful</ac:parameter><ac:rich-text-body><p>Stop the <strong>writers</strong>.</p><p>Then restore.</p></ac:rich-text-body></ac:structured-macro>` +
+		`<ac:task-list><ac:task><ac:task-id>1</ac:task-id><ac:task-status>complete</ac:task-status><ac:task-body>Back up</ac:task-body></ac:task>` +
+		`<ac:task><ac:task-id>2</ac:task-id><ac:task-status>incomplete</ac:task-status><ac:task-body>Ask <ac:link><ri:user ri:account-id="acc-1"/></ac:link></ac:task-body></ac:task></ac:task-list>` +
+		`<table><colgroup><col/></colgroup><tbody><tr><th><p>Host</p></th><th>Role</th></tr><tr><td><p>db1</p><p>eu	w</p></td></tr></tbody></table>` +
+		`<p>After</p>` +
+		`<ac:structured-macro ac:name="children"/>`
+	doc, problems := ConvertStorage(src, "PLAT", fakeResolver{users: map[string]string{"acc-1": "anna"}})
+	got := []string{}
+	for _, b := range doc.Blocks {
+		got = append(got, fmt.Sprintf("%s|%s|%s|%v", b.Kind, b.Text, b.Tone, b.Checked))
+	}
+	want := []string{
+		"toc|||false",
+		"panel|Stop the writers.|warning|false",
+		"panel|Then restore.|warning|false",
+		"task|Back up||true",
+		"task|Ask @anna||false",
+		"table|Host\tRole\ndb1 eu w\t||false",
+		"paragraph|After||false",
+		"children|||false",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") || len(problems) != 0 {
+		t.Fatalf("blocks:\n%s\nwant:\n%s\nproblems %q", strings.Join(got, "\n"), strings.Join(want, "\n"), problems)
+	}
+	for i, b := range doc.Blocks {
+		if err := item.CheckBlock(b, "self"); err != nil {
+			t.Errorf("block %d is not valid: %v", i, err)
+		}
 	}
 }
 

@@ -53,7 +53,22 @@ const (
 	OrderedItem BlockKind = "ordered"
 	Quote       BlockKind = "quote"
 	CodeBlock   BlockKind = "code"
+	// Block kinds of ADR-0042. A task is a checklist item (Checked); a
+	// panel is a highlighted note with a Tone; consecutive tasks and panels
+	// of one tone render as one list or box. A table holds its cells in
+	// Text, rows separated by newlines and cells by tabs, the first row
+	// being the header, so search and governance read it like any text. A
+	// table of contents and a list of child pages hold nothing: they are
+	// computed when shown.
+	TaskItem BlockKind = "task"
+	Panel    BlockKind = "panel"
+	Table    BlockKind = "table"
+	TOC      BlockKind = "toc"
+	Children BlockKind = "children"
 )
+
+// PanelTones are the tones of a panel block.
+var PanelTones = []string{"info", "note", "warning", "tip", "error"}
 
 // MarkType is an inline format over a range of a block's text (ADR-0032).
 type MarkType string
@@ -87,6 +102,9 @@ type Block struct {
 	// Level is a heading's level, 1 to 3; 0 reads as 1 (ADR-0032).
 	Level int    `json:",omitempty"`
 	Marks []Mark `json:",omitempty"`
+	// Checked is whether a task is done; Tone is a panel's tone (ADR-0042).
+	Checked bool   `json:",omitempty"`
+	Tone    string `json:",omitempty"`
 }
 
 // Doc is a structured document body (ADR-0001: a block document, not HTML

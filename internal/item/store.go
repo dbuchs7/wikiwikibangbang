@@ -932,7 +932,7 @@ func CheckBlock(b Block, self ID) error { return checkBlock(b, self) }
 // checkBlock validates one block of a body (ADR-0001, ADR-0032).
 func checkBlock(b Block, self ID) error {
 	switch b.Kind {
-	case Paragraph, Heading, Unsupported, BulletItem, OrderedItem, Quote, CodeBlock:
+	case Paragraph, Heading, Unsupported, BulletItem, OrderedItem, Quote, CodeBlock, TaskItem, Panel:
 	case Embed:
 		if b.Ref == "" || b.Ref == self {
 			return invalid("an embed needs a reference to another item")
@@ -940,13 +940,30 @@ func checkBlock(b Block, self ID) error {
 		if len(b.Marks) > 0 || b.Text != "" {
 			return invalid("an embed has no text")
 		}
+	case Table:
+		if err := checkTable(b.Text); err != nil {
+			return err
+		}
+	case TOC, Children:
+		if b.Text != "" || len(b.Marks) > 0 || len(b.Mentions) > 0 {
+			return invalid("a %s block has no text", b.Kind)
+		}
 	default:
 		return invalid("unknown block kind %q", b.Kind)
+	}
+	if b.Kind != Embed && b.Ref != "" {
+		return invalid("only an embed has a reference")
+	}
+	if b.Checked && b.Kind != TaskItem {
+		return invalid("only a task is checked")
+	}
+	if (b.Kind == Panel) != slices.Contains(PanelTones, b.Tone) {
+		return invalid("tone %q: a panel has one of %s, other blocks none", b.Tone, strings.Join(PanelTones, ", "))
 	}
 	if b.Kind != Heading && b.Level != 0 || b.Level < 0 || b.Level > 3 {
 		return invalid("level %d: only headings have a level, 1 to 3", b.Level)
 	}
-	if len(b.Marks) > 0 && (b.Kind == CodeBlock || b.Kind == Unsupported) {
+	if len(b.Marks) > 0 && (b.Kind == CodeBlock || b.Kind == Unsupported || b.Kind == Table) {
 		return invalid("a %s block has no formatting", b.Kind)
 	}
 	n := utf8.RuneCountInString(b.Text)
@@ -969,6 +986,22 @@ func checkBlock(b Block, self ID) error {
 			}
 		default:
 			return invalid("unknown mark %q", m.Type)
+		}
+	}
+	return nil
+}
+
+// checkTable validates a table's text: at least one row, every row with
+// the same number of cells (ADR-0042).
+func checkTable(text string) error {
+	if text == "" {
+		return invalid("a table has at least one row")
+	}
+	rows := strings.Split(text, "\n")
+	cols := strings.Count(rows[0], "\t") + 1
+	for i, r := range rows {
+		if n := strings.Count(r, "\t") + 1; n != cols {
+			return invalid("table row %d has %d cells, the first has %d", i+1, n, cols)
 		}
 	}
 	return nil

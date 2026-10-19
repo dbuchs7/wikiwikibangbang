@@ -222,5 +222,24 @@ export default {
   "space.homeEmpty": "Diese Seite ist leer.",
   "item.moveUp": "Nach oben",
   "item.moveDown": "Nach unten",
-  "item.newChild": "Neue Unterseite"
+  "item.newChild": "Neue Unterseite",
+
+  "editor.task": "Aufgabe",
+  "editor.taskDone": "Erledigt",
+  "editor.panelInfo": "Infobox",
+  "editor.panelNote": "Hinweisbox",
+  "editor.panelWarning": "Warnbox",
+  "editor.panelTip": "Tippbox",
+  "editor.panelError": "Fehlerbox",
+  "editor.insert": "Einfügen…",
+  "editor.table": "Tabelle",
+  "editor.toc": "Inhalt",
+  "editor.tocEmpty": "Noch keine Überschriften.",
+  "editor.children": "Unterseiten",
+  "editor.childrenNone": "Keine Unterseiten.",
+  "editor.cell": "Zeile {row}, Spalte {col}",
+  "editor.addRow": "+ Zeile",
+  "editor.addColumn": "+ Spalte",
+  "editor.removeRow": "− Zeile",
+  "editor.removeColumn": "− Spalte"
 };

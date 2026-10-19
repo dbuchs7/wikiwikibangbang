@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":6,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":7,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -134,8 +134,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	rich := richTextLog(t)
 	comments := commentLog(t)
 	tree := treeLog(t)
+	blocks := blockKindsLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments, tree) {
+	for _, e := range slices.Concat(log, rich, comments, tree, blocks) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -148,11 +149,12 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v5.golden.jsonl", nil, log},
-		{"events.v5.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v5.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v5.comments.golden.jsonl", fakeSealer{}, comments},
-		{"events.v5.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v6.golden.jsonl", nil, log},
+		{"events.v6.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v6.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v6.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v6.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v6.blocks.golden.jsonl", fakeSealer{}, blocks},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -184,7 +186,7 @@ func TestPersistedFormatIsStable(t *testing.T) {
 
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
-// text), 4 (comments) — still open and rebuild the same state and history as today's log
+// text), 4 (comments), 5 (sibling order) — still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -199,6 +201,26 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v4.sealed.golden.jsonl"), fakeSealer{}, log)
 	assertRebuilds(t, filepath.Join("testdata", "events.v4.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v4.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v5.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v5.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v5.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v5.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v5.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+}
+
+// blockKindsLog commits a body with every block kind of ADR-0042.
+func blockKindsLog(t *testing.T) []Event {
+	s := setup(t)
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	noErr(t, s.CommitBody("anna", page.ID, Doc{Blocks: []Block{
+		{Kind: TOC},
+		{Kind: TaskItem, Text: "Back up", Checked: true},
+		{Kind: TaskItem, Text: "Restore", Marks: []Mark{{Type: MarkBold, Start: 0, End: 7}}},
+		{Kind: Panel, Tone: "warning", Text: "Stop the writers first."},
+		{Kind: Table, Text: "Host\tRole\ndb1\tprimary"},
+		{Kind: Children},
+	}}))
+	return s.Log()
 }
 
 // treeLog places pages among their siblings (ADR-0041), so the golden file
