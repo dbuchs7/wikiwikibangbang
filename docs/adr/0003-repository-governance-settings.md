@@ -124,9 +124,17 @@ A direct push to `main` from the maintainer's clone was rejected by the ruleset.
 
 The ruleset only allows squash merges into `main`, whatever the general merge settings allow.
 
+## Amendment (2026-10-19): drift check
+
+The follow-up "drift check" is built. The general settings above are now also recorded as data, in [`.github/repository-settings.json`](../../.github/repository-settings.json), with the field names of the REST API. Like the ruleset file, it is the source of truth: a change goes into the file by pull request first and is then applied on GitHub.
+
+The workflow [`settings-drift.yml`](../../.github/workflows/settings-drift.yml) runs `cmd/settingscheck` once a day and on demand. It compares both files with what the REST API reports and fails on any difference, including a ruleset on GitHub that no file records. The comparison is one-sided: values GitHub adds on its own (ids, defaults such as `required_reviewers`) are ignored, because the file states only what the project decides. A value the token may not read is reported as a warning, not as drift. The workflow is not a required check, because a pull request that changes the files is merged before the settings are applied.
+
+Run with the session token of a maintainer, the check found no drift on 2026-10-19. Whether the workflow's default `GITHUB_TOKEN` can read every value (the open question) is answered by its first run: values it cannot read appear as warnings.
+
 ## Links
 
 - amended by [ADR-0018](0018-pull-request-level-dco-sign-off.md)
 - relates to [ADR-0002](0002-license-agpl-3.0-only.md) (license, DCO)
 - [AGENTS.md](../../AGENTS.md), section "DCO sign-off: only humans sign"
-- [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/rulesets/protect-main.json`](../../.github/rulesets/protect-main.json)
+- [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml), [`.github/rulesets/protect-main.json`](../../.github/rulesets/protect-main.json), [`.github/repository-settings.json`](../../.github/repository-settings.json), [`.github/workflows/settings-drift.yml`](../../.github/workflows/settings-drift.yml)

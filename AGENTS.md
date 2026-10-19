@@ -80,6 +80,12 @@ On pull requests CI also runs the DCO check over the proposed commits. Run it lo
 go run ./cmd/dcocheck origin/main HEAD
 ```
 
+The repository settings on GitHub are compared with `.github/repository-settings.json` and `.github/rulesets/*.json` once a day by the `Settings drift` workflow ([ADR-0003](docs/adr/0003-repository-governance-settings.md)). A change to a setting goes into those files by pull request first and is applied on GitHub after the merge. Run the comparison locally with:
+
+```bash
+GITHUB_TOKEN=… go run ./cmd/settingscheck -repo dbuchs7/wikiwikibangbang   # exit 1 on drift
+```
+
 The ADR tests in `docs/adr` enforce file names, headings, front matter, the status rules (`Landed` requires `Accepted`; an `Open question` needs a `Question checked` month no older than a year) and that the index in `docs/adr/README.md` matches the records. A failing ADR test is fixed in the record or the index, never by loosening the test.
 
 When a command is added (linters, end-to-end tests, a `Makefile` target), add it here and to CI in the same pull request.
@@ -95,11 +101,13 @@ LICENSE            AGPL-3.0-only (ADR-0002)
 THIRD_PARTY_NOTICES.md licenses of the modules in the binary; shipped with every release
 README.md          what the project is and how to run it
 go.mod             module github.com/dbuchs7/wikiwikibangbang
-.github/workflows/ CI (fmt, vet, race tests, cross-build, DCO), container image, release
+.github/workflows/ CI (fmt, vet, race tests, cross-build, DCO), container image, release, settings drift
 .github/rulesets/  ruleset protecting main, source of truth for GitHub settings (ADR-0003)
+.github/repository-settings.json  general GitHub settings (merge methods, default branch), checked daily for drift (ADR-0003)
 Dockerfile         container image: distroless, nonroot, multi-arch (ADR-0024)
 cmd/wikiwikibangbang/ the product's single binary: serve, check, healthcheck, version (ADR-0024)
 cmd/dcocheck/      CLI that checks DCO sign-offs over a git range
+cmd/settingscheck/ CLI that compares the GitHub settings with the recorded files (ADR-0003)
 internal/audit/    security audit trail, persisted in audit.wal (ADR-0029)
 internal/auth/     accounts, password hashing, sessions, API tokens, login throttle (ADR-0027)
 internal/buildinfo/ version stamped at build time
@@ -116,6 +124,7 @@ internal/dco/      DCO sign-off rules (humans only), with tests
 internal/item/     prototype of the unified item model (ADR-0001), event-sourced, versioned event codec
 internal/migrate/  prototype of the Jira/Confluence import engine (ADR-0023)
 internal/repoconfig/ tests keeping ruleset, CI workflow and release matrix consistent
+internal/settingsdrift/ comparison of recorded and live GitHub settings (ADR-0003)
 e2e/               browser smoke test of the UI (Playwright; test tool only, not part of the build)
 docs/architecture/ the invariants with their checks
 docs/adr/          architecture decision records, index in README.md, consistency tests
