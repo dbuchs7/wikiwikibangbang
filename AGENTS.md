@@ -18,6 +18,8 @@ The core idea is recorded in [ADR-0001](docs/adr/0001-unified-item-data-model.md
 
 **Content never reaches disk in plaintext** (ADR-0026). Anything a user can type into an item is content: if you add such a field to an event, it belongs in `item.Event.erase` and in the sealed part of the codec (`wireContent`), and `internal/storage` must show it does not appear in the event file. `keys.wal` is as precious as `events.wal`: without it all content is lost.
 
+**Every resource budget lives in `internal/budget`** (ADR-0015). A new bound on what a caller can make the server hold — a size, a count, a number of sessions — is a field of `budget.Budgets`, read with `budget.Get()`, never a constant in the package that uses it. A bound that is not a budget (a security policy, a file-format limit) is classified with its reason in `internal/budget/registry_test.go`; the test fails on any `max…` constant or reading ceiling that is neither.
+
 **Every route is authenticated unless it says otherwise** (ADR-0011, ADR-0027). Declare `Access: Public` only for what an anonymous caller may see, and add it to `publicAPI` in the server tests, and add the route to the table in `internal/server`, never to a mux directly. Handlers reach the item store only through `storage.DB.Read`/`Write`. Never log or audit a password, session or token secret — the generated first-administrator password is the one deliberate exception. A security-relevant action records an `audit.Entry` after it succeeded.
 
 **UI code never turns a string into markup or code** (ADR-0014, ADR-0031). Create elements with `h()` from `internal/web/static/assets/dom.js`; `TestNoMarkupFromStrings` forbids `innerHTML` and its relatives. A UI change that adds a flow extends `e2e/smoke.cjs`.
@@ -112,6 +114,7 @@ cmd/dcocheck/      CLI that checks DCO sign-offs over a git range
 cmd/settingscheck/ CLI that compares the GitHub settings with the recorded files (ADR-0003)
 internal/audit/    security audit trail, persisted in audit.wal (ADR-0029)
 internal/auth/     accounts, password hashing, sessions, API tokens, login throttle (ADR-0027)
+internal/budget/   every resource budget in one struct, set from WWBB_BUDGET_* (ADR-0015)
 internal/buildinfo/ version stamped at build time
 internal/storage/  data directory: recovers the item store, journals every command, per-item keys (ADR-0025, ADR-0026)
 internal/wal/      append-only log file: checksummed records, fsync, crash recovery, directory lock

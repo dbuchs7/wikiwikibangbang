@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
@@ -103,6 +104,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	log.Info("starting", "build", buildinfo.Get().String())
+	applyBudgets(os.Getenv, log)
 
 	db, rec, err := storage.OpenWith(*dataDir, storage.Options{Log: log})
 	if err != nil {
@@ -152,6 +154,20 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// applyBudgets puts the resource budgets from the environment in force
+// (ADR-0015). A value that cannot be used is logged and leaves the default;
+// it never stops the server.
+func applyBudgets(getenv func(string) string, log *slog.Logger) {
+	b, problems := budget.FromEnv(getenv)
+	for _, p := range problems {
+		log.Warn("ignoring a budget", "problem", p)
+	}
+	if changed := b.Changed(); len(changed) > 0 {
+		log.Info("budgets changed from their defaults", "budgets", strings.Join(changed, " "))
+	}
+	budget.Set(b)
 }
 
 // ensureAdmin creates the first administrator on the first start (ADR-0013):

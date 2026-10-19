@@ -17,6 +17,8 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 )
 
 // Config names the provider and this application's registration there.
@@ -42,10 +44,6 @@ type Identity struct {
 
 // FlowLifetime bounds how long a started login may take.
 const FlowLifetime = 10 * time.Minute
-
-// maxPending bounds the memory unfinished logins can use; a variable only so
-// the test of the bound need not start ten thousand logins.
-var maxPending = 10_000
 
 var (
 	ErrUnknownState = errors.New("sso: unknown or expired login")
@@ -146,7 +144,7 @@ func (p *Provider) Begin(ctx context.Context) (authURL, state string, err error)
 			delete(p.pending, k)
 		}
 	}
-	if len(p.pending) >= maxPending {
+	if len(p.pending) >= budget.Get().SSOPending {
 		return "", "", fmt.Errorf("sso: too many logins in progress")
 	}
 	state, nonce, verifier := random(), random(), oauth2.GenerateVerifier()

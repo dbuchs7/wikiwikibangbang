@@ -19,6 +19,7 @@ import (
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
@@ -410,5 +411,26 @@ func TestRestore(t *testing.T) {
 	}
 	if code, _, _ := runCmd(t, context.Background(), "restore", "-data-dir", target); code != 2 {
 		t.Errorf("without -from: exit %d", code)
+	}
+}
+
+// A budget from the environment is put in force, a bad one is logged and
+// ignored, and neither stops the server (ADR-0015).
+func TestApplyBudgets(t *testing.T) {
+	t.Cleanup(func() { budget.Set(budget.Default()) })
+	var logs bytes.Buffer
+	applyBudgets(func(k string) string {
+		return map[string]string{
+			"WWBB_BUDGET_PAGE_ITEMS":    "42",
+			"WWBB_BUDGET_LIVE_SESSIONS": "lots",
+		}[k]
+	}, slog.New(slog.NewTextHandler(&logs, nil)))
+	if got := budget.Get(); got.PageItems != 42 || got.LiveSessions != budget.Default().LiveSessions {
+		t.Fatalf("budgets in force: %+v", got)
+	}
+	for _, want := range []string{"WWBB_BUDGET_LIVE_SESSIONS", "keeping the default", "WWBB_BUDGET_PAGE_ITEMS=42"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("log lacks %q:\n%s", want, logs.String())
+		}
 	}
 }

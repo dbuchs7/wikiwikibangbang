@@ -25,14 +25,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
-// Budgets (ADR-0015).
+// The session, participant and block budgets are in internal/budget
+// (ADR-0015).
 const (
-	MaxSessions = 1000
-	MaxClients  = 50   // per session
-	MaxBlocks   = 5000 // per session
 	// LockTTL is how long a lock lasts without an operation by its holder.
 	LockTTL = 60 * time.Second
 	// buffer is the events a client may fall behind before it is dropped.
@@ -205,7 +204,7 @@ func (h *Hub) Join(id item.ID, principal, name string) (*Sub, error) {
 	}
 	s := h.sessions[id]
 	if s == nil {
-		if len(h.sessions) >= MaxSessions {
+		if len(h.sessions) >= budget.Get().LiveSessions {
 			return nil, ErrBusy
 		}
 		doc, err := h.b.Body(id)
@@ -216,7 +215,7 @@ func (h *Hub) Join(id item.ID, principal, name string) (*Sub, error) {
 		s.load(doc)
 		h.sessions[id] = s
 	}
-	if len(s.clients) >= MaxClients {
+	if len(s.clients) >= budget.Get().LiveClients {
 		return nil, ErrBusy
 	}
 	c := &client{id: newID(), principal: principal, name: name, ch: make(chan Event, buffer)}
@@ -557,7 +556,7 @@ func (h *Hub) Apply(id item.ID, clientID, principal string, ops []Op) error {
 			if !clientIDRE.MatchString(op.ID) || find(op.ID) >= 0 {
 				return fmt.Errorf("%w: operation %d: block ID %q is malformed or taken", ErrInvalid, n+1, op.ID)
 			}
-			if len(work) >= MaxBlocks {
+			if len(work) >= budget.Get().LiveBlocks {
 				return ErrBusy
 			}
 			pos := 0

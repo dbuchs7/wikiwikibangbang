@@ -10,13 +10,11 @@ import (
 	"strings"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 )
 
 // SessionCookie carries a login session (ADR-0027).
 const SessionCookie = "wwbb_session"
-
-// MaxRequestBody bounds a JSON request body (ADR-0015).
-const MaxRequestBody = 64 << 10
 
 type principalKey struct{}
 
@@ -78,7 +76,7 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) error {
 	if err != nil || mt != "application/json" {
 		return errUnsupportedMedia
 	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxRequestBody))
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, budget.Get().RequestBody))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
 		return err
