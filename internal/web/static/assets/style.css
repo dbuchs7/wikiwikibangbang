@@ -327,3 +327,18 @@ span.tree-toggle { cursor: default; }
   .diff ins { background: #1f4d2c; }
   .diff del { background: #5a221d; }
 }
+
+/* Labels (ADR-0044). */
+.labels { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 10px; }
+.label {
+  display: inline-flex; align-items: center; gap: 2px; padding: 1px 8px; border-radius: 999px;
+  background: var(--accent-soft); font-size: 12px; line-height: 20px;
+}
+.label a { color: var(--accent); }
+.label-remove {
+  margin: 0; padding: 0 2px; min-width: 0; border: 0; background: none; color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer;
+}
+.label-remove:hover { background: none; color: var(--danger); }
+.label-count { color: var(--muted); font-size: 12px; }
+.label-add { display: inline-flex; margin: 0; }
+.label-add input { padding: 2px 8px; font-size: 12px; border-radius: 999px; }

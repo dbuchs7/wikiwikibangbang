@@ -49,6 +49,7 @@ func (x *Session) Search(text string, q Query) ([]Hit, error) {
 			(q.Space != "" && it.Space != q.Space) ||
 			(q.State != "" && it.State != q.State) ||
 			(q.Parent != "" && it.Parent != q.Parent) ||
+			(q.Label != "" && !slices.Contains(it.Labels, q.Label)) ||
 			!x.s.canRead(x.who, it) {
 			continue
 		}

@@ -44,6 +44,8 @@ func itemRoutes(d Deps) []Route {
 		{Method: post, Pattern: "/api/items", Summary: "Create an item", Handler: http.HandlerFunc(h.createItem)},
 		{Method: get, Pattern: "/api/items/{ref}", Summary: "Get an item by ID or key", Handler: http.HandlerFunc(h.getItem)},
 		{Method: put, Pattern: "/api/items/{ref}/title", Summary: "Set the title", Handler: http.HandlerFunc(h.setTitle)},
+		{Method: put, Pattern: "/api/items/{ref}/labels", Summary: "Replace the labels", Handler: http.HandlerFunc(h.setLabels)},
+		{Method: get, Pattern: "/api/labels", Summary: "The labels of readable items with how many carry each (space), most used first", Handler: http.HandlerFunc(h.listLabels)},
 		{Method: put, Pattern: "/api/items/{ref}/properties/{field}", Summary: "Set a property; null unsets it", Handler: http.HandlerFunc(h.setProperty)},
 		{Method: post, Pattern: "/api/items/{ref}/transitions", Summary: "Perform a workflow transition", Handler: http.HandlerFunc(h.transition)},
 		{Method: put, Pattern: "/api/items/{ref}/body", Summary: "Commit a new version of the body", Handler: http.HandlerFunc(h.commitBody)},
@@ -315,7 +317,7 @@ func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")),
-		IncludeDeleted: q.Get("deleted") == "true"}
+		IncludeDeleted: q.Get("deleted") == "true", Label: q.Get("label")}
 	h.read(w, r, func(x *item.Session) (any, error) {
 		all := x.Find(query)
 		page, res, err := paged(all, func(it item.Item) item.ID { return it.ID }, item.ID(q.Get("after")), limit)
@@ -338,7 +340,7 @@ func (h itemHandlers) searchItems(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state")}
+	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Label: q.Get("label")}
 	h.read(w, r, func(x *item.Session) (any, error) {
 		start := time.Now()
 		all, err := x.Search(q.Get("q"), query)
@@ -552,6 +554,30 @@ func (h itemHandlers) move(w http.ResponseWriter, r *http.Request) {
 			return x.Place(it.ID, req.Space, req.Parent, before)
 		})
 	}
+}
+
+// setLabels replaces an item's labels (ADR-0044).
+func (h itemHandlers) setLabels(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Labels []string `json:"labels"`
+	}
+	if decode(w, r, &req) {
+		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error { return x.SetLabels(it.ID, req.Labels) })
+	}
+}
+
+// listLabels counts the labels of the readable items (ADR-0044).
+func (h itemHandlers) listLabels(w http.ResponseWriter, r *http.Request) {
+	h.read(w, r, func(x *item.Session) (any, error) {
+		all := x.Labels(r.URL.Query().Get("space"))
+		out := []map[string]any{}
+		// The most used labels, as many as a page holds; the total says
+		// how many there are (ADR-0015).
+		for _, l := range all[:min(len(all), budget.Get().PageItems)] {
+			out = append(out, map[string]any{"label": l.Label, "count": l.Count})
+		}
+		return map[string]any{"labels": out, "total": map[string]any{"value": len(all), "exact": true}}, nil
+	})
 }
 
 // treeNodeJSON is one entry of a page tree.

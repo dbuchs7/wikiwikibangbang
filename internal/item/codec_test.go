@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":7,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":8,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -135,8 +135,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	comments := commentLog(t)
 	tree := treeLog(t)
 	blocks := blockKindsLog(t)
+	labels := labelLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments, tree, blocks) {
+	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -149,12 +150,13 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v6.golden.jsonl", nil, log},
-		{"events.v6.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v6.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v6.comments.golden.jsonl", fakeSealer{}, comments},
-		{"events.v6.tree.golden.jsonl", fakeSealer{}, tree},
-		{"events.v6.blocks.golden.jsonl", fakeSealer{}, blocks},
+		{"events.v7.golden.jsonl", nil, log},
+		{"events.v7.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v7.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v7.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v7.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v7.blocks.golden.jsonl", fakeSealer{}, blocks},
+		{"events.v7.labels.golden.jsonl", fakeSealer{}, labels},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -186,7 +188,7 @@ func TestPersistedFormatIsStable(t *testing.T) {
 
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
-// text), 4 (comments), 5 (sibling order) — still open and rebuild the same state and history as today's log
+// text), 4 (comments), 5 (sibling order), 6 (block kinds) — still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -206,6 +208,25 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v5.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v5.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v5.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v6.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v6.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v6.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v6.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v6.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v6.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
+}
+
+// labelLog labels items, then purges one, so the golden file pins sealed
+// and erased labels (ADR-0044).
+func labelLog(t *testing.T) []Event {
+	s := setup(t)
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	noErr(t, s.SetLabels("anna", page.ID, []string{"Ops", "backup"}))
+	old := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Old"}))
+	noErr(t, s.SetLabels("anna", old.ID, []string{"secret-project"}))
+	noErr(t, s.Trash("anna", old.ID))
+	noErr(t, s.Purge("anna", old.ID))
+	return s.Log()
 }
 
 // blockKindsLog commits a body with every block kind of ADR-0042.
@@ -396,7 +417,7 @@ var allEventKinds = []EventKind{
 	TypeDefined, SpaceCreated, ItemCreated, TitleSet, PropertySet, Transitioned, ItemMoved,
 	BodyCommitted, RelationAdded, RelationRemoved, ItemTrashed, ItemRestored, ItemPurged,
 	ItemRedacted, GroupMemberAdded, RoleGranted, SystemRoleGranted, RestrictionSet,
-	ItemImported, ItemReleased, CommentAdded, CommentEdited, CommentDeleted,
+	ItemImported, ItemReleased, CommentAdded, CommentEdited, CommentDeleted, LabelsSet,
 }
 
 // everyKindLog runs commands that produce every event kind, deterministically.

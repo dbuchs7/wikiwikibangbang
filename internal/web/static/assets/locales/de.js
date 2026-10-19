@@ -246,5 +246,11 @@ export default {
   "version.changes": "Änderungen",
   "version.title": "Änderungen vom {when} durch {who}",
   "version.noChanges": "Der Inhalt hat sich nicht geändert.",
-  "version.restore": "Diese Fassung wiederherstellen"
+  "version.restore": "Diese Fassung wiederherstellen",
+
+  "label.title": "Labels",
+  "label.placeholder": "Label hinzufügen",
+  "label.remove": "Label {label} entfernen",
+  "label.noItems": "Nichts, was Sie lesen dürfen, trägt dieses Label.",
+  "label.more": "Erste Seite von {n} angezeigt."
 };
