@@ -3,6 +3,7 @@ package migrate
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
@@ -105,5 +106,29 @@ func Derive(snap Snapshot) Mapping {
 		m.Users[u.ID] = "external:" + u.ID
 		note("user "+u.ID, "%q has no e-mail address; mapped to placeholder principal %q", u.Name, "external:"+u.ID)
 	}
+	return m
+}
+
+// MapAccounts maps source accounts to local principals, overriding what
+// Derive proposed for them, and drops Derive's notes about those accounts.
+// A source that hides e-mail addresses (as Confluence Cloud does by default)
+// is mapped this way, from a list people write.
+func (m Mapping) MapAccounts(local map[string]string) Mapping {
+	if len(local) == 0 {
+		return m
+	}
+	users := make(map[string]string, len(m.Users)+len(local))
+	for k, v := range m.Users {
+		users[k] = v
+	}
+	for k, v := range local {
+		users[k] = v
+	}
+	m.Users = users
+	m.Notes = slices.DeleteFunc(slices.Clone(m.Notes), func(p Problem) bool {
+		id, ok := strings.CutPrefix(p.Source, "user ")
+		_, mapped := local[id]
+		return ok && mapped
+	})
 	return m
 }

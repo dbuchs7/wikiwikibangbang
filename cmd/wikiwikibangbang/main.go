@@ -4,6 +4,7 @@
 //
 //	wikiwikibangbang serve [-addr :8080] [-data-dir data]
 //	wikiwikibangbang check [-data-dir data]
+//	wikiwikibangbang import -from SOURCE -site URL -spaces KEY,... [-data-dir data]
 //	wikiwikibangbang healthcheck [-url http://127.0.0.1:8080/healthz]
 //	wikiwikibangbang version
 package main
@@ -49,6 +50,7 @@ Commands:
   serve        run the server
   check        verify a data directory without changing it
   restore      restore a backup into a new data directory
+  import       import spaces from another product (ADR-0023)
   healthcheck  exit 0 if a running server answers its liveness probe
   mcp          serve the MCP tools of a running server on stdin and stdout
   version      print the version
@@ -74,6 +76,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return check(args, stdout, stderr)
 	case "restore":
 		return restore(args, stdout, stderr)
+	case "import":
+		return importCmd(ctx, args, stdout, stderr)
 	case "healthcheck":
 		return healthcheck(ctx, args, stderr)
 	case "mcp":

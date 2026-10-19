@@ -19,11 +19,12 @@ var otherProducts = regexp.MustCompile(`(?i)confluence|jira`)
 // named only for import").
 func namingAllowed(path, line string) bool {
 	switch {
-	// The import engine, the item model's import, and the golden logs,
-	// which record an imported item.
+	// The import engine, the item model's import, the golden logs, which
+	// record an imported item, and the import command.
 	case strings.HasPrefix(path, "internal/migrate/"),
 		path == "internal/item/import.go", path == "internal/item/import_test.go",
-		strings.HasPrefix(path, "internal/item/testdata/"):
+		strings.HasPrefix(path, "internal/item/testdata/"),
+		path == "cmd/wikiwikibangbang/import.go", path == "cmd/wikiwikibangbang/import_test.go":
 		return true
 	// The import record itself, and ADRs accepted before the rule
 	// (2026-10-19), which keep their wording.

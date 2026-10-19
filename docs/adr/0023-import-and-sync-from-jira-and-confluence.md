@@ -4,7 +4,7 @@
 - **Implementation:** Partial
 - **Date:** 2026-10-17
 - **Deciders:** Project initiators; accepted by the maintainer 2026-10-17
-- **Open question:** Which sources come first — Atlassian Cloud through its REST APIs, Data Center/Server through its APIs, or offline export files — and how much history (changelogs, page versions) must an import carry to be accepted by users?
+- **Open question:** How much history (changelogs, page versions) must an import carry to be accepted by users? (Which source comes first was answered by the maintainer on 2026-10-19: Atlassian Cloud through its REST APIs, Confluence first.)
 - **Question checked:** 2026-10
 
 ## Context and problem statement
@@ -95,8 +95,8 @@ Every run can be a **dry run** that writes nothing and produces a report: counts
   - Provenance and raw source add storage per imported item.
 - **Follow-ups / risks to watch:**
   - The data model changes listed above (provenance, key preservation, sync marker, raw retention, imported history) — to be prototyped in `internal/item` before acceptance.
-  - Which source to support first (open question); a corpus of anonymised sample exports for golden-file tests of the converters.
-  - Assumption to verify: Atlassian Cloud may not expose users' e-mail addresses, depending on their privacy settings, which affects user mapping. Not verified.
+  - A corpus of anonymised sample exports for golden-file tests of the converters.
+  - Assumption to verify: Atlassian Cloud may not expose users' e-mail addresses, depending on their privacy settings, which affects user mapping. Not verified; the Confluence Cloud reader does not rely on them (see below).
   - Assumption to verify: the support horizon of Atlassian's Data Center products changes the urgency of export-file readers. Not verified.
   - Crypto-shredding (ADR-0008) also applies to retained raw source.
 
@@ -116,6 +116,17 @@ Found while prototyping:
 6. **Removed in the source** is reported, never deleted (D8): a person decides to trash.
 7. **The dry run copies the store by replaying its log.** Correct, but its cost grows with the log; snapshots from ADR-0008 will be needed.
 8. Not yet built: readers, imported history (changelogs, page versions), attachments, comments, labels.
+
+## Confluence Cloud reader (2026-10-19)
+
+The maintainer chose Atlassian Cloud through its REST APIs as the first source. `internal/migrate/confluence_cloud.go` reads spaces and pages with their storage format through API v2 (`/wiki/api/v2/spaces`, `/wiki/api/v2/pages`, following the `_links.next` cursor) and page restrictions through API v1 (`/wiki/rest/api/content/{id}/restriction/byOperation/{read|update}`), and produces the Confluence part of a `Snapshot`. The command `wikiwikibangbang import -from confluence-cloud` runs it against a stopped server's data directory, with the account's e-mail address and API token from the environment.
+
+1. **Restrictions fail closed.** A restriction that cannot be read (an answer other than 200, after retrying rate limits) or has an unexpected form restricts the page to a placeholder no one holds, and the report says so. A group in a restriction becomes a placeholder too: its members lose access until groups are mapped. An import never shows a page to more people than the source did.
+2. **Accounts are mapped by a list.** The reader sees account IDs only; the command maps them to local accounts by a file of `accountId username` lines. A username without a local account stops the import, since a placeholder would lock its owner out silently. Unmapped accounts become placeholders, as before.
+3. **The token stays on the site.** Only paths of the site are followed; an absolute or scheme-relative next link is refused, and plain http is accepted only for the local machine.
+4. **Pages under a folder or another non-page parent** are placed at the top of the space and reported.
+5. **Not verified against a live site.** The endpoints and field names follow Atlassian's published models as mirrored in an open-source client library, since Atlassian's documentation could not be reached while building. The tests use a fake site; the first import against a real site is the check, and an unexpected answer restricts and reports rather than opens.
+6. Still not built: the Jira Cloud reader, comments, attachments, labels, page history, and mapping groups.
 
 ## Pros and cons of the options
 
