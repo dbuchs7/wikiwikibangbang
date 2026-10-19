@@ -19,3 +19,8 @@ func FS() fs.FS {
 	}
 	return sub
 }
+
+// Languages are the UI languages, each a catalogue in
+// static/assets/locales (ADR-0017). The first is the source language and
+// the fallback for a missing translation.
+var Languages = []string{"en", "de"}

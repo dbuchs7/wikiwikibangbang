@@ -2,9 +2,12 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
+	"github.com/dbuchs7/wikiwikibangbang/internal/web"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
@@ -21,6 +24,7 @@ func authRoutes(d Deps) []Route {
 		{Method: http.MethodPost, Pattern: "/api/logout", Summary: "End the current session", Handler: http.HandlerFunc(h.logout)},
 		{Method: http.MethodGet, Pattern: "/api/me", Summary: "The authenticated principal", Handler: http.HandlerFunc(h.me)},
 		{Method: http.MethodPut, Pattern: "/api/me/password", Summary: "Change one's own password", Handler: http.HandlerFunc(h.setPassword)},
+		{Method: http.MethodPut, Pattern: "/api/me/language", Summary: "Choose one's UI language (one of the web UI's languages, or empty)", Handler: http.HandlerFunc(h.setLanguage)},
 		{Method: http.MethodGet, Pattern: "/api/tokens", Summary: "List one's own API tokens", Handler: http.HandlerFunc(h.listTokens)},
 		{Method: http.MethodPost, Pattern: "/api/tokens", Summary: "Create an API token; the secret is returned once", Handler: http.HandlerFunc(h.createToken)},
 		{Method: http.MethodDelete, Pattern: "/api/tokens/{id}", Summary: "Revoke one of one's own API tokens", Handler: http.HandlerFunc(h.revokeToken)},
@@ -122,6 +126,10 @@ func (h authHandlers) me(w http.ResponseWriter, r *http.Request) {
 		"via":   p.Via,
 		"scope": p.Scope,
 		"admin": h.isAdmin(p),
+		// The UI language the user chose (ADR-0017), or empty: the UI
+		// then suggests the browser's language once.
+		"language":  h.d.DB.Accounts.Language(p.User),
+		"languages": web.Languages,
 		// The running build, for the UI's footer. Only signed-in callers
 		// learn it; an anonymous one cannot probe for a vulnerable version.
 		"version":  buildinfo.Get().Version,
@@ -257,4 +265,24 @@ func (h authHandlers) createUser(w http.ResponseWriter, r *http.Request) {
 		h.record(audit.Entry{Event: audit.UserCreated, Actor: string(p.User), Addr: clientAddr(r), Subject: string(u.ID), Detail: map[string]string{"username": u.Username}})
 		writeJSON(w, http.StatusCreated, map[string]userJSON{"user": {ID: u.ID, Username: u.Username}})
 	}
+}
+
+func (h authHandlers) setLanguage(w http.ResponseWriter, r *http.Request) {
+	p, _ := PrincipalFrom(r.Context())
+	var req struct {
+		Language string `json:"language"`
+	}
+	if err := readJSON(w, r, &req); err != nil {
+		badRequest(w, err)
+		return
+	}
+	if req.Language != "" && !slices.Contains(web.Languages, req.Language) {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("language must be one of %v, or empty", web.Languages))
+		return
+	}
+	if err := h.d.DB.Accounts.SetLanguage(p.User, req.Language); err != nil {
+		writeError(w, http.StatusInternalServerError, "language not saved")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

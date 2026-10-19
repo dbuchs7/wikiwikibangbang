@@ -24,6 +24,8 @@ The core idea is recorded in [ADR-0001](docs/adr/0001-unified-item-data-model.md
 
 **The MCP adapter only calls the public API** (ADR-0012). A tool is one HTTP request with the caller's credential, never an internal call; the adapter holds no credential of its own. Offering a new route as a tool is a decision: destructive, permission-changing and credential routes are deliberately not offered, and `internal/mcp/tools.go` says so.
 
+**Every user-visible UI string comes from the catalogue** (ADR-0017). Write `t("area.key", { name })` and add the key to `internal/web/static/assets/locales/en.js`, the source; add the German text to `de.js` in the same change, in Swiss spelling (ss, never ß). Keys are literals so the tests can find them. Content (titles, type, field and state names) is not translated.
+
 **UI code never turns a string into markup or code** (ADR-0014, ADR-0031). Create elements with `h()` from `internal/web/static/assets/dom.js`; `TestNoMarkupFromStrings` forbids `innerHTML` and its relatives. A UI change that adds a flow extends `e2e/smoke.cjs`.
 
 **The product ships as one binary** (ADR-0009, ADR-0024): pure Go, no CGO, web assets embedded with `go:embed`, cross-compiled for every release platform. Never add anything that breaks this — a runtime file the binary needs next to it, a C dependency, a CDN asset, a second executable.
