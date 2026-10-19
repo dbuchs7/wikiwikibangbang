@@ -41,7 +41,7 @@ English is the project language. This is binding for everything committed to the
 
 ## Other products are named only for import
 
-Confluence and Jira are named only where the subject is importing from them: the import and sync engine ([ADR-0023](docs/adr/0023-import-and-sync-from-jira-and-confluence.md)), its readers and mappings, and their documentation and tests. Everywhere else — code, documentation, ADRs, the UI, commit messages, pull requests, release notes — describe the product in its own terms (wiki pages, issues, comments, workflows, boards), never by comparison with another product. This is the maintainer's decision of 2026-10-19; ADRs accepted before it keep their wording as recorded.
+Confluence and Jira are named only where the subject is importing from them: the import and sync engine ([ADR-0023](docs/adr/0023-import-and-sync-from-jira-and-confluence.md)), its readers and mappings, and their documentation and tests. Everywhere else — code, documentation, ADRs, the UI, commit messages, pull requests, release notes — describe the product in its own terms (wiki pages, issues, comments, workflows, boards), never by comparison with another product. This is the maintainer's decision of 2026-10-19; ADRs accepted before it keep their wording as recorded. `TestOtherProductsAreNamedOnlyForImport` in `internal/repoconfig` enforces it on every text file; a line about import passes when it refers to ADR-0023.
 
 ## The invariants (do not break these)
 
