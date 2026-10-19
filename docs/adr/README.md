@@ -15,7 +15,7 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 |---|---|---|---|
 | [0001](0001-unified-item-data-model.md) | Unified item data model for knowledge and work | Accepted | Not started |
 | [0002](0002-license-agpl-3.0-only.md) | License the project under AGPL-3.0-only | Accepted | Landed |
-| [0003](0003-repository-governance-settings.md) | Repository governance settings for main | Accepted | Not started |
+| [0003](0003-repository-governance-settings.md) | Repository governance settings for main | Accepted | Landed |
 | [0004](0004-go-without-cgo.md) | Go as implementation language, without CGO | Accepted | Landed |
 | [0005](0005-test-driven-development.md) | Test-driven development as the default workflow | Accepted | Landed |
 | [0006](0006-decision-record-states-and-open-questions.md) | A decision record has two states, and its open questions expire | Accepted | Landed |

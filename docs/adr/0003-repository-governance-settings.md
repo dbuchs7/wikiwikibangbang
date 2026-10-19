@@ -1,7 +1,7 @@
 # ADR-0003: Repository governance settings for main
 
 - **Status:** Accepted
-- **Implementation:** Not started
+- **Implementation:** Landed
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators
 - **Open question:** Can a scheduled CI job read the live ruleset with the default `GITHUB_TOKEN`, so drift between `.github/rulesets/protect-main.json` and GitHub is detected automatically, or does it need a separate token with administration read access?
@@ -110,6 +110,16 @@ Strongest form: full infrastructure as code — the tool applies the settings an
 - *Settings → General → Pull Requests → Allow squash merging → Default commit message* is **"Pull request title and description"**.
 
 Everything else above stands.
+
+## Applied (2026-10-19)
+
+The settings are configured on GitHub:
+
+- The default branch is `main`, and *Automatically delete head branches* is on.
+- The ruleset `protect-main` was imported from [`.github/rulesets/protect-main.json`](../../.github/rulesets/protect-main.json). Read back through the REST API (`/repos/{owner}/{repo}/rulesets/{id}`), it matches the file rule for rule, and `/rules/branches/main` lists all five rules as active on `main`.
+- GitHub stores three parameters the file does not set: `required_reviewers: []`, `do_not_enforce_on_create: false` and `require_extra_approval_for_unattributed_changes: true`. The first two change nothing. The effect of the third on pull requests with agent commits is to be observed; if it blocks merges, it goes into the file and this record.
+
+The ruleset only allows squash merges into `main`, whatever the general merge settings allow.
 
 ## Links
 
