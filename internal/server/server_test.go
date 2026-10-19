@@ -64,6 +64,10 @@ func TestPublicRoutes(t *testing.T) {
 		{"/assets/app.js", "200", "javascript", "/api/me"},
 		{"/assets/style.css", "200", "text/css", "color-scheme"},
 		{"/vendor/prosemirror.js", "200", "javascript", "EditorView"},
+		{"/favicon.ico", "200", "image/", ""},
+		{"/assets/brand/favicon.svg", "200", "image/svg+xml", "prefers-color-scheme"},
+		{"/assets/brand/logo-black.svg", "200", "image/svg+xml", "<title>wikiwikibangbang</title>"},
+		{"/assets/brand/apple-touch-icon.png", "200", "image/png", ""},
 		{"/vendor/prosemirror.LICENSE.txt", "200", "text/plain", "MIT"},
 	}
 	for _, c := range cases {

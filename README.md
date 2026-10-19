@@ -1,5 +1,10 @@
 # wikiwikibangbang
 
+<picture>
+  <source srcset="docs/brand/svg/wwbb-horizontal-white.svg" media="(prefers-color-scheme: dark)">
+  <img src="docs/brand/svg/wwbb-horizontal-black.svg" alt="wikiwikibangbang" width="360">
+</picture>
+
 Knowledge and work in one model: wiki pages and issues as typed items of one data model, in one open-source application written in Go ([ADR-0001](docs/adr/0001-unified-item-data-model.md)).
 
 > **Status: early prototype.** The binary stores items durably and serves an authenticated web UI and HTTP API. Nothing is ready for production use yet. The decisions so far are recorded in the [ADRs](docs/adr/README.md).
