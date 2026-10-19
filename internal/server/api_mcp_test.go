@@ -60,6 +60,12 @@ func TestMCPToolsActAsTheCaller(t *testing.T) {
 	if text, _ = w.bert.tool("get_item", `{"ref":"`+key+`"}`); !strings.Contains(text, `"done"`) {
 		t.Fatalf("get_item after the transition: %s", text)
 	}
+	if text, isErr = w.bert.tool("add_comment", `{"ref":"`+key+`","text":"Finished by an agent"}`); isErr {
+		t.Fatalf("add_comment: %s", text)
+	}
+	if text, _ = w.vera.tool("list_comments", `{"ref":"`+key+`"}`); !strings.Contains(text, "Finished by an agent") || !strings.Contains(text, w.ids["bert"]) {
+		t.Fatalf("list_comments: %s", text)
+	}
 
 	// A viewer's agent may read and is refused the write, with the reason.
 	if text, isErr = w.vera.tool("get_item", `{"ref":"`+key+`"}`); isErr {
@@ -128,7 +134,7 @@ func TestMCPIsAuthenticatedAndBounded(t *testing.T) {
 // Even an administrator's agent cannot reach what is not offered as a tool.
 func TestMCPOffersNoDestructiveTool(t *testing.T) {
 	w := newWorld(t)
-	for _, name := range []string{"purge_item", "trash_item", "redact_item", "set_restriction", "grant_role", "create_token"} {
+	for _, name := range []string{"purge_item", "trash_item", "redact_item", "set_restriction", "grant_role", "create_token", "edit_comment", "delete_comment"} {
 		out := w.admin.rpc(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + name + `","arguments":{}}}`)
 		if out["error"] == nil {
 			t.Errorf("%s is offered: %v", name, out)

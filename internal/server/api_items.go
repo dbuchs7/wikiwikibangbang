@@ -59,6 +59,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: post, Pattern: "/api/relations", Summary: "Add a typed relation", Handler: http.HandlerFunc(h.addRelation)},
 		{Method: del, Pattern: "/api/relations/{id}", Summary: "Remove a relation", Handler: http.HandlerFunc(h.removeRelation)},
 	}
+	routes = append(routes, commentRoutes(h)...)
 	return append(routes, liveRoutes(h)...)
 }
 

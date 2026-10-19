@@ -55,8 +55,9 @@ var (
 
 // tools are the API routes offered to agents (ADR-0012). Not offered, on
 // purpose: moving, trashing, restoring, purging and redacting items, item
-// restrictions and removing relations (they change who sees what, or
-// destroy content, and are a person's decision); administration of types,
+// restrictions, removing relations, and editing or deleting comments (they
+// change who sees what, or destroy content, and are a person's decision;
+// ADR-0035); administration of types,
 // spaces, roles, groups, users and backups; and everything about
 // credentials. An agent with an administrator's token still cannot reach
 // them through this adapter.
@@ -113,6 +114,10 @@ var tools = []tool{
 			{"from", str, inBody, true, "The source item's ID."},
 			{"to", str, inBody, true, "The target item's ID."},
 		}},
+	{Name: "list_comments", Description: "The item's comments, oldest first, paged. A deleted comment is listed without text.",
+		Method: "GET", Path: "/api/items/{ref}/comments", Params: append([]param{refParam}, paging...)},
+	{Name: "add_comment", Description: "Comment on an item, in plain text. Needs the right to edit the item.",
+		Method: "POST", Path: "/api/items/{ref}/comments", Params: []param{refParam, {"text", str, inBody, true, "The comment, plain text."}}},
 }
 
 func find(name string) *tool {

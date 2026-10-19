@@ -155,6 +155,8 @@ func TestEachToolIsOneAPIRequest(t *testing.T) {
 		{"transition", `{"ref":"PLAT-1","name":"finish"}`, call{"POST", "/api/items/PLAT-1/transitions", `{"name":"finish"}`}},
 		{"commit_body", `{"ref":"PLAT-1","blocks":[{"kind":"paragraph","text":"hi"}]}`, call{"PUT", "/api/items/PLAT-1/body", `{"blocks":[{"kind":"paragraph","text":"hi"}]}`}},
 		{"add_relation", `{"type":"blocks","from":"a","to":"b"}`, call{"POST", "/api/relations", `{"from":"a","to":"b","type":"blocks"}`}},
+		{"list_comments", `{"ref":"PLAT-1","limit":10}`, call{"GET", "/api/items/PLAT-1/comments?limit=10", ""}},
+		{"add_comment", `{"ref":"PLAT-1","text":"Done, see the log."}`, call{"POST", "/api/items/PLAT-1/comments", `{"text":"Done, see the log."}`}},
 	} {
 		api := &fakeAPI{body: `{"ok":true}`}
 		r := result(t, handle(t, api, toolCall(tc.tool, tc.args)))

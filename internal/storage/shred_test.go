@@ -22,7 +22,8 @@ func readFile(t *testing.T, dir, name string) []byte {
 	return data
 }
 
-// secretItem creates an item whose title, property and body hold the secret.
+// secretItem creates an item whose title, property, body and comment hold
+// the secret.
 func secretItem(t *testing.T, s *item.Store) item.Item {
 	t.Helper()
 	noErr(t, s.DefineType("admin", item.TypeDef{Name: "page", Body: true, Fields: []item.FieldDef{{Name: "note", Kind: item.KindText}}}))
@@ -30,6 +31,8 @@ func secretItem(t *testing.T, s *item.Store) item.Item {
 	it, err := s.Create("anna", item.NewItem{Space: "PLAT", Type: "page", Title: "Runbook " + secret, Properties: item.Props{"note": secret}})
 	noErr(t, err)
 	noErr(t, s.CommitBody("anna", it.ID, item.Doc{Blocks: []item.Block{{Kind: item.Paragraph, Text: "body " + secret}}}))
+	_, err = s.AddComment("anna", it.ID, "comment "+secret)
+	noErr(t, err)
 	return it
 }
 
@@ -91,11 +94,11 @@ func TestErasureDestroysTheKey(t *testing.T) {
 
 			db, rec := mustOpen(t, dir)
 			defer db.Close()
-			if rec.Erased != 2 {
-				t.Errorf("recovered %d erased events, want 2 (the create and the body)", rec.Erased)
+			if rec.Erased != 3 {
+				t.Errorf("recovered %d erased events, want 3 (the create, the body and the comment)", rec.Erased)
 			}
 			for _, e := range db.Store.History(it.ID) {
-				if strings.Contains(fmt.Sprintf("%s %+v", e.Title, e.Body), secret) || e.Props["note"] != nil {
+				if strings.Contains(fmt.Sprintf("%s %+v %s", e.Title, e.Body, e.Text), secret) || e.Props["note"] != nil {
 					t.Errorf("event %d still shows content after a restart", e.Seq)
 				}
 			}

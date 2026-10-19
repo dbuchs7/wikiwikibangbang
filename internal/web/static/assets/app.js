@@ -284,12 +284,13 @@ async function itemView(ref) {
   const show = screen();
   const { item } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
-  const [{ types }, history, out, inc, embeds] = await Promise.all([
+  const [{ types }, history, out, inc, embeds, comments] = await Promise.all([
     get("/api/types"),
     get(path + "/history"),
     get(path + "/relations?direction=outgoing"),
     get(path + "/relations?direction=incoming"),
     get(path + "/embeds"),
+    get(path + "/comments"),
   ]);
   const type = types.find((t) => t.name === item.type) || { fields: [], workflow: null, body: false };
   const status = h("div", { class: "status" });
@@ -333,6 +334,7 @@ async function itemView(ref) {
     type.fields.length ? h("section", {}, h("h2", { text: "Properties" }), props) : null,
     type.body ? bodyEditor(item, embeds.embeds, live) : null,
     relationsSection(out.relations, inc.relations, item.id),
+    commentsSection(path, comments, live),
     h("p", {}, actions),
     historySection(history.events),
   );
@@ -361,6 +363,44 @@ function relationsSection(out, inc, self) {
   );
 }
 
+// commentsSection lists an item's comments (ADR-0035). Text is inserted as
+// text (ADR-0014); one's own comments can be edited and deleted.
+function commentsSection(path, page, live) {
+  const author = (c) => c.author === me.user.id ? "you" : c.author;
+  const row = (c) => {
+    const li = h("li", { class: "comment" });
+    const head = h("div", { class: "muted" }, `${author(c)} · ${when(c.created)}`, c.edited ? " · edited" : "");
+    if (c.deleted) {
+      li.append(head, h("p", { class: "muted", text: "(comment deleted)" }));
+      return li;
+    }
+    const mine = live && c.author === me.user.id;
+    const status = h("div", { class: "status" });
+    const edit = () => li.replaceChildren(head, form({ class: "comment-form" }, [
+      h("textarea", { name: "text", rows: 3, "aria-label": "Edit comment", value: c.text }),
+      h("p", {}, h("button", { type: "submit", text: "Save comment" }), h("button", { type: "button", class: "link", text: "Cancel", onclick: () => route() })),
+    ], async (data) => { await put(`${path}/comments/${c.id}`, { text: data.get("text") }); route(); }));
+    li.append(head, h("p", { class: "comment-text", text: c.text }), status, mine
+      ? h("p", {},
+        h("button", { class: "link", text: "Edit", onclick: edit }), " · ",
+        h("button", { class: "link", text: "Delete", onclick: () => confirm("Delete this comment?") && action(() => del(`${path}/comments/${c.id}`), status) }))
+      : null);
+    return li;
+  };
+  const add = live
+    ? form({ id: "add-comment", class: "comment-form" }, [
+      h("textarea", { name: "text", rows: 3, placeholder: "Write a comment", "aria-label": "Comment", required: true }),
+      h("p", {}, h("button", { type: "submit", text: "Add comment" })),
+    ], async (data) => { await post(path + "/comments", { text: data.get("text") }); route(); })
+    : null;
+  return h("section", { id: "comments" },
+    h("h2", { text: `Comments (${page.total.value})` }),
+    page.comments.length ? h("ul", { class: "comments" }, page.comments.map(row)) : h("p", { class: "muted", text: "No comments yet." }),
+    page.next ? h("p", { class: "muted", text: `Showing the first ${page.comments.length}.` }) : null,
+    add,
+  );
+}
+
 function historySection(events) {
   return h("section", {},
     h("h2", { text: "History" }),
@@ -368,7 +408,7 @@ function historySection(events) {
       h("td", { text: when(e.at) }),
       h("td", { text: e.actor }),
       h("td", { text: e.kind }),
-      h("td", { text: e.erased ? "(content erased)" : [e.title, e.field && `${e.field} = ${JSON.stringify(e.value ?? null)}`, e.to].filter(Boolean).join(" ") }),
+      h("td", { text: e.erased ? "(content erased)" : [e.title, e.field && `${e.field} = ${JSON.stringify(e.value ?? null)}`, e.to, e.comment && `comment ${e.comment.slice(0, 8)}`].filter(Boolean).join(" ") }),
     ))),
   );
 }

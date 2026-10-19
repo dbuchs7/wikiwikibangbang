@@ -86,6 +86,17 @@ function check(cond, msg) {
     await page.click("button:has-text('finish')");
     await page.waitForSelector("text=state: done");
 
+    step("comments: add one with markup, which shows as text, then edit it");
+    await page.fill("#add-comment [name=text]", hostile);
+    await page.click("#add-comment button[type=submit]");
+    await page.waitForSelector("#comments h2:has-text('Comments (1)')");
+    check((await page.textContent(".comment-text")) === hostile, "the comment shows as typed");
+    await page.click(".comment button:has-text('Edit')");
+    await page.fill(".comment [name=text]", "Patched on the staging hosts.");
+    await page.click(".comment button:has-text('Save comment')");
+    await page.waitForSelector(".comment-text:has-text('Patched on the staging hosts.')");
+    check((await page.textContent(".comment .muted")).includes("you") && (await page.textContent(".comment .muted")).includes("edited"), "own, edited comment");
+
     step("rich text: a second item with formatting, a list, a mention and an embed");
     await page.click("a:has-text('PLAT')");
     await page.fill("#new-item [name=title]", "Runbook");
@@ -211,6 +222,8 @@ function check(cond, msg) {
     await page.click("a:has-text('PLAT-1')");
     await page.waitForSelector("text=state: done");
     check(await page.$("text=Administration") === null, "bert sees no administration");
+    check((await page.textContent(".comment-text")) === "Patched on the staging hosts.", "bert reads the comment");
+    check(await page.$(".comment button:has-text('Edit')") === null, "bert cannot edit admin's comment");
 
     check(problems.length === 0, problems.join("; "));
     console.log("ok");

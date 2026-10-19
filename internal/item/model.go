@@ -129,6 +129,8 @@ type Item struct {
 	Origin *Origin
 	// Managed is the tag of the one-way sync that owns the item, or empty.
 	Managed string
+	// Comments are the item's comments in the order written (ADR-0035).
+	Comments []Comment
 
 	created   int // sequence number of the creating event; orders items
 	trashedBy int // sequence number of the event that trashed it, or 0
@@ -200,6 +202,9 @@ const (
 	RestrictionSet    EventKind = "RestrictionSet"
 	ItemImported      EventKind = "ItemImported"
 	ItemReleased      EventKind = "ItemReleased"
+	CommentAdded      EventKind = "CommentAdded"
+	CommentEdited     EventKind = "CommentEdited"
+	CommentDeleted    EventKind = "CommentDeleted"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -241,6 +246,8 @@ type Event struct {
 	Origin      *Origin      // ItemImported
 	Key         string       // ItemImported: the source key to keep, if free
 	Managed     string       // ItemImported, ItemReleased
+	Comment     ID           // CommentAdded, CommentEdited, CommentDeleted
+	Text        string       // CommentAdded, CommentEdited
 
 	// Erased is set on an event whose content (title, properties, body, raw
 	// source) was removed because its item was purged or redacted. The
@@ -250,10 +257,11 @@ type Event struct {
 }
 
 // HasContent reports whether the event carries user content of its item:
-// the fields that purge and redaction must make unrecoverable (ADR-0026).
+// the fields that purge and redaction must make unrecoverable (ADR-0026),
+// comment text included (ADR-0035).
 func (e Event) HasContent() bool {
 	switch e.Kind {
-	case ItemCreated, TitleSet, PropertySet, BodyCommitted, ItemImported:
+	case ItemCreated, TitleSet, PropertySet, BodyCommitted, ItemImported, CommentAdded, CommentEdited:
 		return true
 	}
 	return false
@@ -266,7 +274,7 @@ func (e *Event) erase() {
 	if !e.HasContent() {
 		return
 	}
-	e.Title, e.Props, e.Value = "", nil, nil
+	e.Title, e.Props, e.Value, e.Text = "", nil, nil, ""
 	if e.Kind == BodyCommitted {
 		e.Body = &Doc{}
 	}
@@ -282,6 +290,7 @@ func (it *Item) clone() Item {
 	c := *it
 	c.Properties = maps.Clone(it.Properties)
 	c.Body = it.Body.clone()
+	c.Comments = slices.Clone(it.Comments)
 	if it.Origin != nil {
 		o := *it.Origin
 		c.Origin = &o
