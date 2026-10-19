@@ -381,3 +381,16 @@ func TestTheAPISaysWhatTheCallerMayDo(t *testing.T) {
 		t.Errorf("me %v", me)
 	}
 }
+
+func TestAnItemIsCreatedWithItsBodyThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Patch","properties":{"priority":"low"},`+
+		`"body":[{"kind":"heading","level":1,"text":"Steps"},{"kind":"paragraph","text":"Stop the writers.","marks":[{"type":"bold","start":0,"end":4}]}]}`, http.StatusCreated)
+	if body := field(it, "item", "body").([]any); len(body) != 2 {
+		t.Fatalf("created %v", it)
+	}
+	w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"x","properties":{"priority":"low"},"body":[{"kind":"unsupported","text":"x"}]}`, http.StatusBadRequest)
+	if n := field(w.bert.expect("GET", "/api/items?space=PLAT", "", http.StatusOK), "total", "value"); n != 1.0 {
+		t.Fatalf("a refused body left an item: %v items", n)
+	}
+}

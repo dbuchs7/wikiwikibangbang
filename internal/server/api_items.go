@@ -427,11 +427,24 @@ type newItemJSON struct {
 	Parent     item.ID                    `json:"parent"`
 	Title      string                     `json:"title"`
 	Properties map[string]json.RawMessage `json:"properties"`
+	// Body is the item's first body, saved with it.
+	Body []blockJSON `json:"body"`
 }
 
 func (n newItemJSON) toNewItem(s *item.Store) (item.NewItem, error) {
 	props, err := coerceProps(s.Type(n.Type), n.Properties)
-	return item.NewItem{Space: n.Space, Type: n.Type, Parent: n.Parent, Title: n.Title, Properties: props}, err
+	if err != nil {
+		return item.NewItem{}, err
+	}
+	out := item.NewItem{Space: n.Space, Type: n.Type, Parent: n.Parent, Title: n.Title, Properties: props}
+	if n.Body != nil {
+		doc, err := toDoc(n.Body, nil)
+		if err != nil {
+			return item.NewItem{}, err
+		}
+		out.Body = &doc
+	}
+	return out, nil
 }
 
 func (h itemHandlers) createItem(w http.ResponseWriter, r *http.Request) {

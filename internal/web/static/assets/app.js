@@ -260,6 +260,7 @@ const modules = [
   { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"] },
   { id: "new", name: "nav.new", href: "#/new", match: ["new"] },
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks"] },
+  { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"] },
   { id: "notifications", name: "nav.notifications", href: "#/notifications", match: ["notifications"] },
   { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"] },
   { id: "account", name: "nav.account", href: "#/account", match: ["account"] },
@@ -404,6 +405,7 @@ async function route() {
       case "notifications": return await notificationsView();
       case "search": return await searchView(arg || "");
       case "account": return await accountView();
+      case "mcp": return await mcpView();
       case "admin": return await adminView();
       default: return await homeView();
     }
@@ -575,6 +577,8 @@ async function newView(params) {
   show(
     h("h1", { text: t("new.title") }),
     pageCard,
+    h("section", { class: "card" }, h("h2", { text: t("new.withAssistant") }), h("p", { text: t("new.withAssistantText") }),
+      link("#/mcp", t("new.withAssistantLink"), "button secondary")),
     me.admin ? setupCard(types) : null,
     me.admin ? newSpaceForm(spaces.length === 0) : null,
     me.admin ? h("p", { class: "muted" }, t("new.moreAdmin"), " ", link("#/admin", t("nav.admin"))) : null,
@@ -1267,7 +1271,73 @@ async function accountView() {
         secret.replaceChildren(h("p", { class: "notice" }, t("account.copy"), h("code", { text: res.secret })));
       }),
       secret,
+      h("p", { class: "muted" }, t("account.mcpHint"), " ", link("#/mcp", t("nav.mcp"))),
     ),
+  );
+}
+
+// --- AI assistants (MCP) --------------------------------------------------------
+
+// mcpView explains how to let an AI assistant read and write through the
+// Model Context Protocol (ADR-0012): the endpoint, a token made here, the
+// settings for common clients and the tools the assistant gets. The
+// assistant acts with the token's rights, and its changes carry the
+// token's owner as author.
+async function mcpView() {
+  const show = screen();
+  const endpoint = location.origin + "/mcp";
+  const listed = await api("POST", "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }).catch(() => null);
+  const tools = listed?.result?.tools || [];
+  const token = "<TOKEN>";
+  const snippets = (tok) => [
+    [t("mcp.claudeCode"), `claude mcp add --transport http wikiwikibangbang ${endpoint} --header "Authorization: Bearer ${tok}"`],
+    [t("mcp.json"), JSON.stringify({ mcpServers: { wikiwikibangbang: { type: "http", url: endpoint, headers: { Authorization: `Bearer ${tok}` } } } }, null, 2)],
+    [t("mcp.stdio"), `WWBB_TOKEN=${tok} wikiwikibangbang mcp -url ${location.origin}`],
+  ];
+  const copyable = (text) => {
+    const pre = h("pre", { class: "snippet", text });
+    const button = h("button", { type: "button", class: "secondary", text: t("mcp.copy"), onclick: async () => {
+      try {
+        await navigator.clipboard.writeText(pre.textContent);
+        button.textContent = t("mcp.copied");
+      } catch {
+        button.textContent = t("mcp.copyFailed");
+      }
+    } });
+    return h("div", { class: "copyable" }, pre, button);
+  };
+  const setup = h("div", { id: "mcp-setup" });
+  const fill = (tok) => setup.replaceChildren(...snippets(tok).map(([label, text]) => h("section", {}, h("h3", { text: label }), copyable(text))));
+  fill(token);
+  show(
+    h("h1", { text: t("mcp.title") }),
+    h("p", { text: t("mcp.intro") }),
+    h("section", { class: "card" },
+      h("h2", { text: t("mcp.step1") }),
+      h("p", { class: "muted", text: t("mcp.endpoint") }),
+      copyable(endpoint)),
+    h("section", { class: "card" },
+      h("h2", { text: t("mcp.step2") }),
+      h("p", { class: "muted", text: t("mcp.tokenNote") }),
+      form({ id: "mcp-token" }, [
+        field(t("field.name"), h("input", { name: "name", required: true, value: t("mcp.tokenName") })),
+        field(t("account.scope"), h("select", { name: "scope" },
+          h("option", { value: "full", text: t("mcp.scopeFull") }), h("option", { value: "read", text: t("mcp.scopeRead") }))),
+        field(t("account.days"), h("input", { name: "days", type: "number", min: 1, max: 366, value: 30 })),
+        h("button", { type: "submit", class: "primary", text: t("account.createToken") }),
+      ], async (data, status) => {
+        const res = await post("/api/tokens", { name: data.get("name"), scope: data.get("scope"), days: Number(data.get("days")) });
+        fill(res.secret);
+        status.replaceChildren(h("p", { class: "notice", text: t("mcp.tokenMade") }));
+      }),
+      h("p", { class: "muted" }, t("mcp.tokensAt"), " ", link("#/account", t("nav.account")))),
+    h("section", { class: "card" },
+      h("h2", { text: t("mcp.step3") }),
+      setup),
+    h("section", { class: "card" },
+      h("h2", { text: t("mcp.tools", { n: tools.length }) }),
+      h("p", { class: "muted", text: t("mcp.toolsNote") }),
+      h("ul", { class: "list tools" }, tools.map((tool) => h("li", {}, h("code", { text: tool.name }), " — ", (tool.description || "").split(". ")[0])))),
   );
 }
 

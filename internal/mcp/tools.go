@@ -45,6 +45,17 @@ type tool struct {
 	Params            []param
 }
 
+// blockFormat describes the body format to agents, so they can write a
+// page without reading one first.
+const blockFormat = "A body is a list of blocks, each an object with kind and text. Kinds: paragraph, " +
+	"heading (level 1-3), bullet and ordered (one block per list item), task (checked true or false), quote, code, " +
+	"panel (tone info, note, warning, tip or error), table (text holds rows separated by \\n and cells by \\t; the first row " +
+	"is the header), toc and children (no text: a table of contents and a list of child pages), embed (ref: an item ID). " +
+	"Inline formats are marks over the text, counted in Unicode code points: " +
+	"{\"type\": \"bold\"|\"italic\"|\"code\"|\"link\" (with href)|\"mention\" (with ref, an item ID), \"start\": 0, \"end\": 5}. " +
+	"Example: [{\"kind\":\"heading\",\"level\":1,\"text\":\"Runbook\"},{\"kind\":\"paragraph\",\"text\":\"Stop the writers first.\"," +
+	"\"marks\":[{\"type\":\"bold\",\"start\":0,\"end\":4}]},{\"kind\":\"bullet\",\"text\":\"db1\"},{\"kind\":\"bullet\",\"text\":\"db2\"}]."
+
 var (
 	refParam = param{"ref", str, inPath, true, "The item's ID or key, e.g. PLAT-12."}
 	paging   = []param{
@@ -89,14 +100,24 @@ var tools = []tool{
 		Params: []param{refParam, {"direction", str, inQuery, false, "outgoing (default) or incoming."}}},
 	{Name: "get_embeds", Description: "How the items embedded in the body render; unreadable ones show as restricted.",
 		Method: "GET", Path: "/api/items/{ref}/embeds", Params: []param{refParam}},
-	{Name: "create_item", Description: "Create an item. Required fields of its type must be given in properties.",
+	{Name: "create_item", Description: "Create an item, e.g. a page, with its body in the same step. Required fields of its type " +
+		"must be given in properties. Read list_types first for the types and list_spaces for where you may write. " + blockFormat,
 		Method: "POST", Path: "/api/items", Params: []param{
 			{"space", str, inBody, true, "The space key."},
-			{"type", str, inBody, true, "The type name."},
+			{"type", str, inBody, true, "The type name, e.g. page."},
 			{"title", str, inBody, true, "The title."},
-			{"parent", str, inBody, false, "The ID of the item to place it under."},
+			{"parent", str, inBody, false, "The ID of the item to place it under, e.g. a parent page."},
 			{"properties", object, inBody, false, "Field values by field name."},
+			{"body", array, inBody, false, "The item's first body, as blocks; only for types with a body."},
 		}},
+	{Name: "get_tree", Description: "The pages of a space in their order, one level at a time: the top of the space, or the children of parent. " +
+		"Each entry says whether it has children.",
+		Method: "GET", Path: "/api/spaces/{space}/tree", Params: append([]param{
+			{"space", str, inPath, true, "The space key."},
+			{"parent", str, inQuery, false, "The ID of the page whose children to list; absent for the top of the space."},
+		}, paging...)},
+	{Name: "set_labels", Description: "Replace an item's labels, e.g. [\"runbook\", \"ops\"]: lower case words, digits and dashes.",
+		Method: "PUT", Path: "/api/items/{ref}/labels", Params: []param{refParam, {"labels", array, inBody, true, "All labels the item carries afterwards."}}},
 	{Name: "set_title", Description: "Change an item's title.", Method: "PUT", Path: "/api/items/{ref}/title",
 		Params: []param{refParam, {"title", str, inBody, true, "The new title."}}},
 	{Name: "set_property", Description: "Set one property of an item; null unsets it. State changes go through transition.",
@@ -107,8 +128,8 @@ var tools = []tool{
 		}},
 	{Name: "transition", Description: "Perform a workflow transition, e.g. finish.", Method: "POST", Path: "/api/items/{ref}/transitions",
 		Params: []param{refParam, {"name", str, inBody, true, "The transition's name."}}},
-	{Name: "commit_body", Description: "Replace the item's body with a new version, as blocks in the format get_item returns. " +
-		"Refused while people edit it in a live session.",
+	{Name: "commit_body", Description: "Replace the item's body with a new version; the earlier one stays in the history. " +
+		"Refused while people edit it in a live session. To add to a body, read it with get_item and send it back extended. " + blockFormat,
 		Method: "PUT", Path: "/api/items/{ref}/body", Params: []param{refParam, {"blocks", array, inBody, true, "The body's blocks."}}},
 	{Name: "add_relation", Description: "Relate two items with a typed relation, e.g. blocks or implements.",
 		Method: "POST", Path: "/api/relations", Params: []param{

@@ -51,6 +51,9 @@ Built in `internal/mcp`, the `POST /mcp` route of `internal/server` and the `mcp
 - **Tools offered (15):** reading spaces, types, items, search, history, relations and embeds; creating items, setting title and properties, transitions, committing a body, adding relations.
 - **Not offered, on purpose** (the follow-up above): moving, trashing, restoring, purging and redacting items, restrictions and removing relations — they change who sees what or destroy content, which stays a person's decision; administration of types, spaces, roles, groups, users and backups; credentials. The list is in `internal/mcp/tools.go`.
 
+- **Adding content (2026-10-19):** `create_item` takes the item's first `body` and the API saves both in one batch, so an agent never leaves an empty page behind when its body is refused; the tool descriptions of `create_item` and `commit_body` spell out the block format with an example, so an agent can write a page without reading one first. `get_tree` walks the page tree and `set_labels` labels a page; `add_comment` takes an anchor and a reply (ADR-0047). That makes 18 tools.
+- **Finding it (2026-10-19):** the UI has a page *AI assistants (MCP)* in the module switcher, linked from *Create* and the account page. It shows the endpoint, makes a token for the assistant, fills it into the settings for Claude Code, for clients configured with JSON and for the stdio adapter, and lists the tools the server offers, read from `tools/list` with the viewer's session.
+
 Still open: agent-originated changes are not marked in the item history; they are attributed to the caller like any other request.
 
 ## Pros and cons of the options

@@ -217,7 +217,7 @@ function check(cond, msg) {
     await page.click("#app-switcher");
     await page.waitForSelector("#drawer:not([hidden])");
     const modules = (await page.locator("#drawer-apps a").allTextContents()).join(",");
-    check(modules === "Spaces,Create,Tasks,Notifications,Governance,Account,Administration", "the modules of an administrator: " + modules);
+    check(modules === "Spaces,Create,Tasks,AI assistants (MCP),Notifications,Governance,Account,Administration", "the modules of an administrator: " + modules);
     await page.keyboard.press("Escape");
     await page.waitForSelector("#drawer", { state: "hidden" });
     await page.click("#app-switcher");
@@ -400,6 +400,25 @@ function check(cond, msg) {
     await page.waitForSelector("#governance h2:has-text('Sensitive data')");
     await page.waitForSelector("#governance h2:has-text('Not changed')");
     await page.waitForSelector("#governance h2:has-text('Implausible')");
+
+    step("AI assistants: a token made on the MCP page lets an assistant write a page with its content");
+    await page.click("#app-switcher");
+    await page.click("#drawer-apps a:has-text('AI assistants (MCP)')");
+    await page.waitForSelector(".tools li:has-text('create_item')");
+    await page.click("#mcp-token button[type=submit]");
+    await page.waitForSelector("#mcp-setup pre:has-text('Bearer wwbb_')");
+    const mcpToken = (await page.textContent("#mcp-setup pre")).match(/Bearer (wwbb_\S+?)"/)[1];
+    const made = await page.evaluate(async (tok) => {
+      const call = async (body) => (await fetch("/mcp", { method: "POST", credentials: "omit",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok }, body: JSON.stringify(body) })).json();
+      await call({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "e2e", version: "1" } } });
+      const res = await call({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "create_item", arguments: {
+        space: "PLAT", type: "task", title: "Written by an assistant", properties: { priority: "low" },
+        body: [{ kind: "heading", level: 1, text: "Summary" }, { kind: "paragraph", text: "Made through MCP." }] } } });
+      return JSON.parse(res.result.content[0].text).item.key;
+    }, mcpToken);
+    await page.goto(base + "/#/item/" + made);
+    await page.waitForSelector("#body .ProseMirror:has-text('Made through MCP.')");
 
     step("account: token");
     await page.click("nav a[href='#/account']");
