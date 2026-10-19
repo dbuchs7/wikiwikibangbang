@@ -1,0 +1,111 @@
+# Test guide
+
+wikiwikibangbang is an early prototype. This guide is for people who try a release and report what they find. It says what to look at first, because a few open questions in the ADRs can only be answered by people using the product, and how to report a finding so it can be acted on.
+
+**Do not put real or confidential data into a test installation.** The prototype makes no promise that a later version reads today's data directory.
+
+## Start a server
+
+From a release archive (Linux shown; macOS and Windows work the same way):
+
+```bash
+tar xzf wikiwikibangbang_<version>_linux_amd64.tar.gz
+cd wikiwikibangbang_<version>_linux_amd64
+WWBB_ADMIN_PASSWORD='a long password of your own' ./wikiwikibangbang serve -addr :8080
+```
+
+Or as a container:
+
+```bash
+docker run -p 8080:8080 -v wwbb-data:/data \
+  -e WWBB_ADMIN_PASSWORD='a long password of your own' ghcr.io/dbuchs7/wikiwikibangbang:<version>
+```
+
+Open <http://localhost:8080> and sign in as `admin`. `./wikiwikibangbang version` prints the version to quote in a report.
+
+## Set up a playground
+
+As `admin`, under **Administration**:
+
+1. Create a space, e.g. key `PLAT`, name `Platform`.
+2. Define a type. A small one to start with:
+
+   ```json
+   {"name": "task", "body": true,
+    "fields": [{"name": "priority", "kind": "enum", "required": true, "values": ["low", "high"]},
+               {"name": "estimate", "kind": "number"}],
+    "workflow": {"initial": "open", "states": ["open", "done"],
+                 "transitions": [{"name": "finish", "from": ["open"], "to": "done"}]}}
+   ```
+
+3. Create two or three users and give them roles in the space: `editor` (may change items) and `viewer` (may only read).
+
+Use a second browser, or a private window, to be signed in as two people at once.
+
+## What to look at first
+
+Each area names the question it helps answer. A report that says "this felt wrong, because …" is as useful as a bug.
+
+### 1. Editing together (ADR-0010)
+
+Two people open the same item and type into its body at the same time. A paragraph one person is editing is locked for the other until they leave it.
+
+- Is it clear who is in the document and which paragraph is locked?
+- When you want to type into a paragraph someone else holds, is it obvious what to do?
+- **The open question:** is "one person per paragraph" acceptable for how you work, or do you need several people typing in the same paragraph?
+
+### 2. Showing versus containing (ADR-0020)
+
+An item's body can **embed** another item (toolbar: *Embed*, with the other item's key). An item embedded in a page is not necessarily *in* that page: where an item lives (its place in the tree) and where it is shown are independent.
+
+- Embed an item that lives elsewhere, and create one from inside a page. Can you tell the two apart?
+- Remove an embed: did you expect the item to be gone? (It is not; it stays where it lives.)
+- **The open question:** do you understand the difference between "lives here" and "is shown here", or does the page need to show it more clearly?
+
+### 3. Permissions (ADR-0022)
+
+- Sign in as a viewer: you can read but not change. Is that clear before you try?
+- Sign in as someone without a role: items of the space must not appear anywhere — not in search, not as embeds, not in relations. An embed you may not read shows as "restricted" without its title. **Anything that reveals an item you should not see is a security finding; report it privately (see below).**
+
+### 4. Backup and restore (ADR-0034)
+
+1. **Administration → Backup**: choose a passphrase and download the backup.
+2. Stop the server and restore into a new directory:
+
+   ```bash
+   WWBB_BACKUP_PASSPHRASE='the passphrase' ./wikiwikibangbang restore -from backup.wwbb -data-dir restored
+   ./wikiwikibangbang check -data-dir restored
+   ./wikiwikibangbang serve -data-dir restored
+   ```
+
+3. Is everything there — items, bodies, history, users?
+
+### 5. An AI agent (ADR-0012)
+
+Create an API token under your account (scope `read` for an agent that may only read) and connect an MCP client, e.g. Claude Code:
+
+```bash
+claude mcp add wikiwikibangbang --env WWBB_TOKEN=<token> -- ./wikiwikibangbang mcp -url http://localhost:8080
+```
+
+Ask it to summarise a space, create tasks from notes, or finish a task. It acts with exactly your rights; moving, trashing and deleting items is deliberately not offered to agents.
+
+- Did the agent do what you asked, and only that?
+- With a read token, does it explain that it may not write?
+
+### 6. Everything else
+
+Search, item history, relations, mentions (toolbar: *Mention*), formatting, the API at `/api/openapi.json`. Anything that surprises you is worth a report.
+
+## Report a finding
+
+Open an issue with the **Test finding** template: <https://github.com/dbuchs7/wikiwikibangbang/issues/new/choose>. One finding per issue. The template asks for:
+
+- the version (`wikiwikibangbang version`) and the platform or container;
+- the steps, starting from a fresh server where you can;
+- what you expected, and what happened instead;
+- the server's log lines around the moment, if any.
+
+**Security findings** — something you can see or do that your role should not allow, a script that runs from content, a password or token that shows up somewhere — are **not** reported as public issues. Use GitHub's private vulnerability reporting on the repository's *Security* tab instead, as [SECURITY.md](../../SECURITY.md) describes.
+
+Write reports in English if you can; a report in another language is better than none.
