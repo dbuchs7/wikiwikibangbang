@@ -4,8 +4,6 @@
 - **Implementation:** Landed
 - **Date:** 2026-10-16
 - **Deciders:** Project initiators
-- **Open question:** Can a scheduled CI job read the live ruleset with the default `GITHUB_TOKEN`, so drift between `.github/rulesets/protect-main.json` and GitHub is detected automatically, or does it need a separate token with administration read access?
-- **Question checked:** 2026-10
 
 ## Context and problem statement
 
@@ -131,6 +129,22 @@ The follow-up "drift check" is built. The general settings above are now also re
 The workflow [`settings-drift.yml`](../../.github/workflows/settings-drift.yml) runs `cmd/settingscheck` once a day and on demand. It compares both files with what the REST API reports and fails on any difference, including a ruleset on GitHub that no file records. The comparison is one-sided: values GitHub adds on its own (ids, defaults such as `required_reviewers`) are ignored, because the file states only what the project decides. A value the token may not read is reported as a warning, not as drift. The workflow is not a required check, because a pull request that changes the files is merged before the settings are applied.
 
 Run with the session token of a maintainer, the check found no drift on 2026-10-19. Whether the workflow's default `GITHUB_TOKEN` can read every value (the open question) is answered by its first run: values it cannot read appear as warnings.
+
+## Amendment (2026-10-19): a read token for the drift check
+
+This answers the former open question, whether a scheduled job can read the live settings with the default `GITHUB_TOKEN`. The first run of the drift check (workflow run 39197777188) shows that it can read only part of them:
+
+| Readable with the default token | Not readable |
+|---|---|
+| `default_branch`; the ruleset's name, target, enforcement, conditions and all rules with their parameters | `allow_merge_commit`, `allow_squash_merge`, `allow_rebase_merge`, `squash_merge_commit_title`, `squash_merge_commit_message`, `delete_branch_on_merge`; the ruleset's `bypass_actors` |
+
+The values it cannot read are those that matter most: a wrong merge setting blocked every merge on 2026-10-19, and an actor added to the bypass list would lift the protection without changing a single rule. Therefore:
+
+- The workflow reads the settings with the secret `SETTINGS_READ_TOKEN` when it exists: a fine-grained personal access token, limited to this repository, with the repository permission *Administration: read* and nothing else. It is expected to read every value; the first run with it confirms or refutes that.
+- With that secret the check runs with `-strict`: a value it cannot read fails the run. An expired token fails as well, because the API then refuses the requests. A token that silently loses coverage therefore shows up as a red run instead of a warning nobody reads.
+- Without the secret the workflow falls back to the default token and only warns, as before.
+
+This adds the long-lived token that option 4 was rejected for, but a narrower one: read-only, one repository, one permission. It is the maintainer's to create, to store under *Settings → Secrets and variables → Actions*, and to renew before it expires.
 
 ## Links
 

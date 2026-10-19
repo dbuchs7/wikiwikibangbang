@@ -234,3 +234,34 @@ func TestRecordedFilesAreReadable(t *testing.T) {
 		}
 	}
 }
+
+// With -strict an unreadable value fails the run: once the workflow has a
+// token that may read everything, a value it cannot read means the token
+// lost a permission or expired in part, and that must not pass silently.
+func TestStrictFailsOnUnreadableSetting(t *testing.T) {
+	cfg := fixture(t, settingsFile, rulesetFile)
+	cfg.Actions = true
+	cfg.Strict = true
+	routes := defaultRoutes()
+	routes["/repos/owner/repo"] = `{"default_branch": "main"}`
+	code, out, _ := runCheck(t, cfg, routes)
+	if code != 1 {
+		t.Fatalf("exit %d, want 1; output:\n%s", code, out)
+	}
+	for _, want := range []string{
+		"::error title=Repository setting not readable::settings.allow_merge_commit",
+		"the token cannot read every recorded value",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestStrictPassesWhenEverythingIsReadable(t *testing.T) {
+	cfg := fixture(t, settingsFile, rulesetFile)
+	cfg.Strict = true
+	if code, out, _ := runCheck(t, cfg, defaultRoutes()); code != 0 {
+		t.Fatalf("exit %d, want 0; output:\n%s", code, out)
+	}
+}

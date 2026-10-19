@@ -11,10 +11,13 @@
 //
 // GITHUB_TOKEN, if set, authenticates the requests. A value the token may
 // not read is reported as unverifiable: a warning, not a failure, so a run
-// shows which settings the token can vouch for.
+// shows which settings the token can vouch for. The workflow's default token
+// cannot read the merge settings or a ruleset's bypass list; a token with
+// "Administration: read" can. With -strict an unreadable value fails the
+// run, for use with such a token.
 //
-// Exit status: 0 without drift, 1 with drift, 2 when the check could not
-// run.
+// Exit status: 0 without drift, 1 with drift (or, with -strict, with an
+// unreadable value), 2 when the check could not run.
 package main
 
 import (
@@ -41,9 +44,10 @@ func main() {
 	flag.StringVar(&cfg.API, "api", "https://api.github.com", "base URL of the GitHub REST API")
 	flag.StringVar(&cfg.SettingsFile, "settings", ".github/repository-settings.json", "file with the general repository settings")
 	flag.StringVar(&cfg.RulesetDir, "rulesets", ".github/rulesets", "directory with one JSON file per ruleset")
+	flag.BoolVar(&cfg.Strict, "strict", false, "fail when the token cannot read a recorded value")
 	flag.Parse()
 	if cfg.Repo == "" || flag.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: settingscheck -repo owner/name [-api URL] [-settings FILE] [-rulesets DIR]")
+		fmt.Fprintln(os.Stderr, "usage: settingscheck -repo owner/name [-strict] [-api URL] [-settings FILE] [-rulesets DIR]")
 		os.Exit(2)
 	}
 	os.Exit(run(cfg, http.DefaultClient, os.Stdout))
@@ -54,6 +58,7 @@ type config struct {
 	SettingsFile     string
 	RulesetDir       string
 	Actions          bool // emit GitHub Actions annotations
+	Strict           bool // an unverifiable value fails the run
 }
 
 // run performs the check and returns the exit status.
@@ -71,14 +76,21 @@ func run(cfg config, client *http.Client, out io.Writer) int {
 		if !cfg.Actions {
 			continue
 		}
-		if f.Kind == settingsdrift.Drift {
+		switch {
+		case f.Kind == settingsdrift.Drift:
 			fmt.Fprintf(out, "::error title=Repository settings drift (ADR-0003)::%s: %s\n", f.Path, f.Detail)
-		} else {
+		case cfg.Strict:
+			fmt.Fprintf(out, "::error title=Repository setting not readable::%s: %s\n", f.Path, f.Detail)
+		default:
 			fmt.Fprintf(out, "::warning title=Repository setting not readable::%s: %s\n", f.Path, f.Detail)
 		}
 	}
 	if settingsdrift.HasDrift(findings) {
 		fmt.Fprintln(out, "settingscheck: GitHub differs from the files; apply the files or change them by pull request (ADR-0003)")
+		return 1
+	}
+	if cfg.Strict && len(findings) > 0 {
+		fmt.Fprintln(out, "settingscheck: the token cannot read every recorded value; check its permissions and expiry")
 		return 1
 	}
 	fmt.Fprintf(out, "settingscheck: no drift in %s\n", cfg.Repo)

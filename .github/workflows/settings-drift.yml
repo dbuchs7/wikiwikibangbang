@@ -26,9 +26,15 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # Values the default token may not read are reported as warnings, not
-      # failures; the run shows which settings it could verify.
+      # The default token cannot read the merge settings or the ruleset's
+      # bypass list (first run, 2026-10-19). SETTINGS_READ_TOKEN is a
+      # fine-grained token limited to this repository with "Administration:
+      # read", expected to read every value; -strict then turns an
+      # unreadable one into a failure, so an expired or weakened token shows
+      # up as a red run. Without the secret the job falls back to the default
+      # token and only warns.
       - name: compare settings and rulesets with GitHub
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: go run ./cmd/settingscheck -repo "$GITHUB_REPOSITORY"
+          GITHUB_TOKEN: ${{ secrets.SETTINGS_READ_TOKEN || github.token }}
+          STRICT: ${{ secrets.SETTINGS_READ_TOKEN != '' }}
+        run: go run ./cmd/settingscheck -repo "$GITHUB_REPOSITORY" -strict="$STRICT"
