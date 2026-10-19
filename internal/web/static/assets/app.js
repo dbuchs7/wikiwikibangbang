@@ -47,6 +47,45 @@ function link(href, text) {
   return h("a", { href, text });
 }
 
+// --- labels (ADR-0044) ----------------------------------------------------------
+
+function labelChip(label, onRemove) {
+  return h("span", { class: "label" },
+    h("a", { href: "#/label/" + encodeURIComponent(label), text: label }),
+    onRemove ? h("button", { type: "button", class: "label-remove", title: t("label.remove", { label }), "aria-label": t("label.remove", { label }), text: "×", onclick: onRemove }) : null);
+}
+
+// labelsLine shows an item's labels; on a live item they can be added and
+// removed.
+function labelsLine(path, item, live, status) {
+  const set = (labels) => action(() => put(path + "/labels", { labels }), status);
+  const chips = item.labels.map((l) => labelChip(l, live ? () => set(item.labels.filter((x) => x !== l)) : null));
+  const add = live ? form({ class: "label-add" }, [
+    h("input", { name: "label", placeholder: t("label.placeholder"), "aria-label": t("label.placeholder"), size: 14 }),
+  ], async (data) => {
+    const l = String(data.get("label") || "").trim();
+    if (l) await set([...item.labels, l]);
+  }) : null;
+  if (!chips.length && !add) return null;
+  return h("div", { class: "labels", id: "labels" }, chips, add);
+}
+
+// labelView lists the readable items that carry a label.
+async function labelView(label) {
+  const show = screen();
+  const page = await get("/api/items?label=" + encodeURIComponent(label));
+  show(
+    h("p", {}, link("#/", t("nav.spaces")), " / " + t("label.title")),
+    h("h1", {}, labelChip(label)),
+    page.items.length
+      ? h("table", { id: "labelled" }, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type")].map((c) => h("th", { text: c })))),
+        h("tbody", {}, page.items.map((it) => h("tr", {},
+          h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)), h("td", { text: it.title }), h("td", { text: it.type })))))
+      : h("p", { class: "muted", text: t("label.noItems") }),
+    page.next ? h("p", { class: "muted", text: t("label.more", { n: page.total.value }) }) : null,
+  );
+}
+
 // withTree lays a space's page tree beside a view's content.
 function withTree(tree, ...content) {
   return h("div", { class: "with-tree" }, tree, h("div", { class: "with-tree-main" }, ...content));
@@ -114,7 +153,7 @@ function renderFooter() {
 // modules are offered behind the nine dots, as in the atlas console. match
 // names the route sections that belong to a module, for its highlight.
 const modules = [
-  { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search"] },
+  { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"] },
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks"] },
   { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"] },
 ];
@@ -229,6 +268,7 @@ async function route() {
       case "links": return await linksView(arg);
       case "governance": return arg ? await governanceView(arg) : await governanceOverview();
       case "item": return await itemView(arg);
+      case "label": return await labelView(arg);
       case "search": return await searchView(arg || "");
       case "account": return await accountView();
       case "admin": return await adminView();
@@ -322,10 +362,11 @@ async function homeView() {
 
 async function spaceView(key) {
   const show = screen();
-  const [{ types }, first, top] = await Promise.all([
+  const [{ types }, first, top, { labels }] = await Promise.all([
     get("/api/types"),
     get(`/api/items?space=${encodeURIComponent(key)}&limit=100`),
     get(`/api/spaces/${encodeURIComponent(key)}/tree?limit=1`),
+    get(`/api/labels?space=${encodeURIComponent(key)}`),
   ]);
   const status = h("div", { class: "status" });
   // The space's home is its first page at the top of the tree.
@@ -362,6 +403,8 @@ async function spaceView(key) {
     h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance"))].flatMap((b, i) => i ? [" · ", b] : [b])),
     status,
     home,
+    labels.length ? h("section", { id: "space-labels" }, h("h2", { text: t("label.title") }),
+      h("div", { class: "labels" }, labels.map((l) => h("span", { class: "label-count" }, labelChip(l.label), " " + l.count)))) : null,
     h("h2", { text: t("space.allItems") }),
     h("p", { class: "muted", text: t("space.items", { n: first.total.value }) }),
     h("table", {}, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type"), t("col.state")].map((c) => h("th", { text: c })))), rows),
@@ -720,6 +763,7 @@ async function itemView(ref) {
     title,
     guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
     h("p", { class: "muted" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : "", t("item.version", { n: item.version })),
+    labelsLine(path, item, live, status),
     status,
     transitions.length ? h("p", {}, t("item.transitions"), transitions) : null,
     type.fields.length ? h("section", {}, h("h2", { text: t("item.properties") }), props) : null,

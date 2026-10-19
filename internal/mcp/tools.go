@@ -71,6 +71,7 @@ var tools = []tool{
 			{"type", str, inQuery, false, "A type name, e.g. task."},
 			{"state", str, inQuery, false, "A workflow state, e.g. open."},
 			{"parent", str, inQuery, false, "The ID of the containing item."},
+			{"label", str, inQuery, false, "A label the items carry, e.g. runbook."},
 		}, paging...)},
 	{Name: "search_items", Description: "Full-text search over readable items, best match first, paged.",
 		Method: "GET", Path: "/api/search", Params: append([]param{

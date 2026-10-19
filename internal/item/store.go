@@ -272,6 +272,40 @@ func (s *Store) SetTitle(actor string, id ID, title string) error {
 	return s.record(actor, Event{Kind: TitleSet, Item: id, Title: title})
 }
 
+// labelRE is what a label may be (ADR-0044): lower-case letters and
+// digits, joined by "-", "_" or ".", up to 64 characters.
+var labelRE = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}](?:[\p{Ll}\p{Lo}\p{N}._-]{0,62}[\p{Ll}\p{Lo}\p{N}])?$`)
+
+// NormalLabel is the label a person typed, as stored: trimmed and lower
+// case, inner spaces as "-". ok is false when it is still not a label.
+func NormalLabel(s string) (string, bool) {
+	l := strings.Join(strings.Fields(strings.ToLower(s)), "-")
+	return l, labelRE.MatchString(l)
+}
+
+// SetLabels replaces an item's labels; they are normalised, sorted and
+// made unique (ADR-0044).
+func (s *Store) SetLabels(actor string, id ID, labels []string) error {
+	it, err := s.live(id)
+	if err != nil {
+		return err
+	}
+	var out []string
+	for _, l := range labels {
+		n, ok := NormalLabel(l)
+		if !ok {
+			return invalid("label %q: use letters and digits, joined by -, _ or ., up to 64 characters", l)
+		}
+		out = append(out, n)
+	}
+	slices.Sort(out)
+	out = slices.Compact(out)
+	if slices.Equal(out, it.Labels) {
+		return nil
+	}
+	return s.record(actor, Event{Kind: LabelsSet, Item: id, Labels: out})
+}
+
 // SetProperty sets or (with nil) clears one property.
 func (s *Store) SetProperty(actor string, id ID, field string, value any) error {
 	it, err := s.live(id)
@@ -601,6 +635,11 @@ func (s *Store) apply(e Event) {
 		it.Title = e.Title
 		it.Version++
 		touch(it.ID)
+	case LabelsSet:
+		it := s.items[e.Item]
+		it.Labels = slices.Clone(e.Labels)
+		it.Version++
+		touch(it.ID)
 	case PropertySet:
 		it := s.items[e.Item]
 		if e.Value == nil {
@@ -699,7 +738,7 @@ func (s *Store) purgeItems(ids ...ID) []ID {
 		}
 		it := s.items[id]
 		it.Presence, it.trashedBy = Purged, 0
-		it.Title, it.Properties, it.Body, it.Comments = "", Props{}, Doc{}, nil
+		it.Title, it.Properties, it.Body, it.Comments, it.Labels = "", Props{}, Doc{}, nil, nil
 		if it.Origin != nil {
 			o := *it.Origin
 			o.Raw = ""
@@ -735,6 +774,8 @@ type Query struct {
 	Where Props
 	// IncludeDeleted also returns trashed items and tombstones.
 	IncludeDeleted bool
+	// Label requires the item to carry this label (ADR-0044).
+	Label string
 }
 
 // Find returns copies of the matching items in creation order.
@@ -745,7 +786,8 @@ func (s *Store) Find(q Query) []Item {
 			(q.Type != "" && it.Type != q.Type) ||
 			(q.Space != "" && it.Space != q.Space) ||
 			(q.State != "" && it.State != q.State) ||
-			(q.Parent != "" && it.Parent != q.Parent) {
+			(q.Parent != "" && it.Parent != q.Parent) ||
+			(q.Label != "" && !slices.Contains(it.Labels, q.Label)) {
 			continue
 		}
 		match := true

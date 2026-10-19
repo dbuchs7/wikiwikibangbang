@@ -158,6 +158,7 @@ type itemJSON struct {
 	Restriction *restrictionJSON `json:"restriction,omitempty"`
 	Origin      *originJSON      `json:"origin,omitempty"`
 	Managed     string           `json:"managed,omitempty"`
+	Labels      []string         `json:"labels"`
 }
 
 // toItemJSON omits the raw import source: it is large and is content kept
@@ -165,7 +166,10 @@ type itemJSON struct {
 func toItemJSON(it item.Item) itemJSON {
 	j := itemJSON{ID: it.ID, Key: it.Key, Type: it.Type, TypeVersion: it.TypeVersion, Space: it.Space,
 		Parent: it.Parent, Title: it.Title, Properties: map[string]any(it.Properties), State: it.State,
-		Body: []blockJSON{}, Version: it.Version, Presence: it.Presence, Managed: it.Managed}
+		Body: []blockJSON{}, Version: it.Version, Presence: it.Presence, Managed: it.Managed, Labels: it.Labels}
+	if j.Labels == nil {
+		j.Labels = []string{}
+	}
 	if j.Properties == nil {
 		j.Properties = map[string]any{}
 	}
@@ -219,10 +223,12 @@ type eventJSON struct {
 	// Comment names the comment of a comment event; its text is never part
 	// of the history, so a deleted comment stays hidden (ADR-0035).
 	Comment item.ID `json:"comment,omitempty"`
+	// Labels are the item's labels after a LabelsSet (ADR-0044).
+	Labels []string `json:"labels,omitempty"`
 }
 
 func toEventJSON(e item.Event) eventJSON {
 	return eventJSON{Seq: e.Seq, At: e.At, Actor: e.Actor, Kind: e.Kind, Item: e.Item, Erased: e.Erased,
 		Title: e.Title, Field: e.Field, Value: e.Value, Transition: e.Transition, From: e.From, To: e.To,
-		Space: e.Space, Parent: e.Parent, Reason: e.Reason, Comment: e.Comment}
+		Space: e.Space, Parent: e.Parent, Reason: e.Reason, Comment: e.Comment, Labels: e.Labels}
 }

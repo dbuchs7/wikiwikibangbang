@@ -248,5 +248,11 @@ export default {
   "version.changes": "Changes",
   "version.title": "Changes of {when} by {who}",
   "version.noChanges": "The body did not change.",
-  "version.restore": "Restore this version"
+  "version.restore": "Restore this version",
+
+  "label.title": "Labels",
+  "label.placeholder": "Add a label",
+  "label.remove": "Remove the label {label}",
+  "label.noItems": "Nothing you may read carries this label.",
+  "label.more": "Showing the first page of {n}."
 };

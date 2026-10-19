@@ -51,7 +51,7 @@ func (s *Store) guard(actor string, batch []Event) []Event {
 }
 
 // contentTexts lists every text of an item's content: title, string
-// properties, body blocks and comments.
+// properties, body blocks, comments and labels.
 func (it *Item) contentTexts() []string {
 	texts := []string{it.Title}
 	for _, v := range it.Properties {
@@ -65,6 +65,7 @@ func (it *Item) contentTexts() []string {
 	for _, c := range it.Comments {
 		texts = append(texts, c.Text)
 	}
+	texts = append(texts, it.Labels...)
 	return texts
 }
 
@@ -72,7 +73,7 @@ func (it *Item) fingerprints() map[string]bool { return fingerprintsOf(it.conten
 
 // eventFingerprints identifies the sensitive data an event brings in.
 func eventFingerprints(e Event) map[string]bool {
-	texts := []string{e.Title, e.Text}
+	texts := append([]string{e.Title, e.Text}, e.Labels...)
 	if s, ok := e.Value.(string); ok {
 		texts = append(texts, s)
 	}

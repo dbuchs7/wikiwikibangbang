@@ -56,3 +56,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0041](0041-page-tree-and-sibling-order.md) | The page tree: one level at a time, siblings in an order the move event carries | Accepted | Landed |
 | [0042](0042-tasks-panels-tables-and-computed-blocks.md) | Tasks, panels, tables, tables of contents and lists of child pages as flat blocks | Accepted | Landed |
 | [0043](0043-comparing-and-restoring-body-versions.md) | Earlier bodies are read from the log, compared in the browser and restored as a new commit | Accepted | Landed |
+| [0044](0044-labels.md) | Labels are part of their item's content, set as a whole, counted per space | Accepted | Landed |

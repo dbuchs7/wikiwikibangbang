@@ -444,6 +444,45 @@ func (x *Session) SetTitle(id ID, title string) error {
 	return x.s.SetTitle(x.who, id, title)
 }
 
+// SetLabels replaces the labels of an editable item (ADR-0044).
+func (x *Session) SetLabels(id ID, labels []string) error {
+	if _, err := x.editable(id); err != nil {
+		return err
+	}
+	return x.s.SetLabels(x.who, id, labels)
+}
+
+// LabelCount is a label and how many readable items carry it.
+type LabelCount struct {
+	Label string
+	Count int
+}
+
+// Labels counts the labels of the readable live items of a space, or of
+// all spaces when space is empty, most used first (ADR-0044).
+func (x *Session) Labels(space string) []LabelCount {
+	counts := map[string]int{}
+	for _, it := range x.s.items {
+		if it.Presence != Live || (space != "" && it.Space != space) || len(it.Labels) == 0 || !x.s.canRead(x.who, it) {
+			continue
+		}
+		for _, l := range it.Labels {
+			counts[l]++
+		}
+	}
+	out := make([]LabelCount, 0, len(counts))
+	for l, n := range counts {
+		out = append(out, LabelCount{l, n})
+	}
+	slices.SortFunc(out, func(a, b LabelCount) int {
+		if a.Count != b.Count {
+			return b.Count - a.Count
+		}
+		return strings.Compare(a.Label, b.Label)
+	})
+	return out
+}
+
 // SetProperty sets a property of an editable item.
 func (x *Session) SetProperty(id ID, field string, value any) error {
 	if _, err := x.editable(id); err != nil {

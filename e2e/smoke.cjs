@@ -317,6 +317,17 @@ function check(cond, msg) {
     await page.waitForSelector("#body .ProseMirror:has-text('Upgrade the primary first.')");
     check(await page.locator("#body .pm-task").count() === 0, "the restored body is the earlier one");
 
+    step("labels: a label added to a page lists the page");
+    await page.fill("#labels [name=label]", "Disaster Recovery");
+    await page.press("#labels [name=label]", "Enter");
+    await page.waitForSelector("#labels .label a:text-is('disaster-recovery')");
+    await page.click("#labels .label a:text-is('disaster-recovery')");
+    await page.waitForSelector("#labelled td:has-text('Upgrade')");
+    await page.goBack();
+    await page.waitForSelector("#labels .label");
+    await page.click("#labels .label-remove");
+    await page.waitForFunction(() => document.querySelectorAll("#labels .label").length === 0);
+
     step("links: the link check page says when checking is off");
     await page.click("#nav >> text=Spaces");
     await page.click("a:has-text('Platform')");
