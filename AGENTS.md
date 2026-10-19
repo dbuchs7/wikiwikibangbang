@@ -137,6 +137,7 @@ internal/repoconfig/ tests keeping ruleset, CI workflow and release matrix consi
 internal/settingsdrift/ comparison of recorded and live GitHub settings (ADR-0003)
 e2e/               browser smoke test of the UI (Playwright; test tool only, not part of the build)
 docs/architecture/ the invariants with their checks
+docs/brand/        the logo in every format and its generator; the web UI embeds copies
 docs/testing/      the guide for people testing a release; .github/ISSUE_TEMPLATE/ holds the matching report form
 docs/adr/          architecture decision records, index in README.md, consistency tests
 ```

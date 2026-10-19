@@ -9,6 +9,7 @@ import (
 
 func TestEmbeddedUIHasEntryPointAndAssets(t *testing.T) {
 	for _, name := range []string{"index.html", "assets/app.js", "assets/api.js", "assets/dom.js", "assets/editor.js", "assets/live.js", "assets/style.css",
+		"assets/brand/logo-black.svg", "assets/brand/logo-white.svg", "favicon.ico", "assets/brand/favicon.svg", "assets/brand/apple-touch-icon.png",
 		"vendor/prosemirror.js", "vendor/prosemirror.LICENSE.txt"} {
 		if _, err := fs.Stat(FS(), name); err != nil {
 			t.Errorf("%s: %v", name, err)

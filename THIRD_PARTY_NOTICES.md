@@ -35,6 +35,8 @@ The web UI embeds a bundle of these JavaScript packages, built from `internal/we
 
 The web UI's stylesheet, `internal/web/static/assets/style.css`, adapts the palette, type, spacing and component look of the console of [pblumer/atlas](https://github.com/pblumer/atlas) (`api/web/app.css`), licensed under AGPL-3.0-only like this project. No atlas name, logo or font is included.
 
+The wordmark of the logo (`docs/brand`, and its copies in `internal/web/static`) is drawn from the outlines of [Inter](https://rsms.me/inter/) Display by Rasmus Andersson, licensed under the SIL Open Font License 1.1. The outlines are part of the artwork; no font file is included.
+
 The Go standard library and runtime are under the BSD-3-Clause license of the Go project.
 
 ## NOTICE of github.com/coreos/go-oidc/v3

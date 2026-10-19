@@ -84,7 +84,8 @@ code { word-break: break-all; }
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
-.brand { font-size: 15px; font-weight: 700; color: var(--text); }
+.brand { display: inline-flex; align-items: center; color: var(--text); }
+.brand img { display: block; height: 24px; width: auto; } /* the logo (docs/brand) */
 .brand:hover { text-decoration: none; }
 nav { display: flex; align-items: center; gap: 2px 4px; flex-wrap: wrap; flex: 1; }
 nav > a, nav > button.link {
