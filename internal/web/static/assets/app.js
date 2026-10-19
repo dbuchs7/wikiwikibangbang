@@ -395,7 +395,7 @@ async function route() {
     if (!me) return loginView();
     switch (section) {
       case "new": return await newView(params);
-      case "tasks": return await tasksView();
+      case "tasks": return await tasksView(arg, params);
       case "space": return await spaceView(arg);
       case "board": return await boardView(arg, arg2);
       case "links": return await linksView(arg);
@@ -719,10 +719,28 @@ async function boardView(key, typeName) {
 // tasksView lists open work across every space one may read: items of a
 // type with a workflow that are not in its last state. It reads the paged
 // item listing, at most boardMax items, like the board.
-async function tasksView() {
+// taskFields finds the fields of a type that make it a task in the inbox
+// (ADR-0049), by convention: the assignee is the user field named assignee
+// or, failing that, the first user field; the due date the first date
+// field named like a deadline (as governance reads it, ADR-0040); the
+// priority an enum named priority, its values ordered from low to high.
+function taskFields(type) {
+  const users = type.fields.filter((f) => f.kind === "user");
+  return {
+    assignee: users.find((f) => /^(assignee|zugewiesen|bearbeiter)/i.test(f.name)) || users[0] || null,
+    due: type.fields.find((f) => f.kind === "date" && /due|deadline|f(ä|ae)llig/i.test(f.name)) || null,
+    priority: type.fields.find((f) => f.kind === "enum" && /^(priority|priorität|prioritaet)$/i.test(f.name)) || null,
+  };
+}
+
+// tasksView is the inbox of open work across spaces (ADR-0049): the items
+// whose type has a workflow and that are not in its last state, in three
+// lists — assigned to me, unassigned, all — overdue and urgent first. One
+// takes a task over or gives it back, and moves it on by its transitions.
+async function tasksView(tab, params) {
   const show = screen();
-  const { types } = await get("/api/types");
-  const flows = new Map(types.filter((ty) => ty.workflow).map((ty) => [ty.name, ty.workflow]));
+  const [{ types }, { spaces }] = await Promise.all([get("/api/types"), get("/api/spaces")]);
+  const typeOf = new Map(types.filter((ty) => ty.workflow).map((ty) => [ty.name, { ty, f: taskFields(ty) }]));
   let page = await get("/api/items?limit=100");
   const items = [...page.items];
   while (page.next && items.length < boardMax) {
@@ -730,23 +748,81 @@ async function tasksView() {
     items.push(...page.items);
   }
   const open = items.filter((it) => {
-    const wf = flows.get(it.type);
+    const wf = typeOf.get(it.type)?.ty.workflow;
     return wf && it.state !== wf.states[wf.states.length - 1];
   });
-  open.sort((a, b) => a.space.localeCompare(b.space) || a.key.localeCompare(b.key, undefined, { numeric: true }));
+  const assigneeOf = (it) => {
+    const f = typeOf.get(it.type).f.assignee;
+    return f ? it.properties[f.name] || "" : null;
+  };
+  await learnNames(open.map(assigneeOf).filter(Boolean));
+  const today = new Date().toISOString().slice(0, 10);
+  const dueOf = (it) => {
+    const f = typeOf.get(it.type).f.due;
+    return f && it.properties[f.name] ? String(it.properties[f.name]).slice(0, 10) : "";
+  };
+  const rankOf = (it) => {
+    const f = typeOf.get(it.type).f.priority;
+    return f ? f.values.indexOf(it.properties[f.name]) : -1;
+  };
+  const space = params.get("space") || "";
+  const lists = {
+    mine: open.filter((it) => assigneeOf(it) === me.user.id),
+    unassigned: open.filter((it) => assigneeOf(it) === ""),
+    all: open,
+  };
+  const current = lists[tab] ? tab : (lists.mine.length ? "mine" : "all");
+  const shown = lists[current].filter((it) => !space || it.space === space);
+  // Overdue first, then by due date, then the most urgent, then by key.
+  shown.sort((a, b) => {
+    const da = dueOf(a) || "9999", db = dueOf(b) || "9999";
+    return da.localeCompare(db) || rankOf(b) - rankOf(a) || a.space.localeCompare(b.space) || a.key.localeCompare(b.key, undefined, { numeric: true });
+  });
+  const mayEditIn = new Set(spaces.filter((s) => mayEdit(s.role)).map((s) => s.key));
+  const status = h("div", { class: "status" });
+  const setAssignee = (it, value) => action(() =>
+    put(`/api/items/${it.id}/properties/${encodeURIComponent(typeOf.get(it.type).f.assignee.name)}`, { value }), status);
+
+  const row = (it) => {
+    const { ty, f } = typeOf.get(it.type);
+    const who = assigneeOf(it);
+    const due = dueOf(it);
+    const canAct = mayEditIn.has(it.space);
+    const claim = canAct && f.assignee
+      ? (who === me.user.id
+        ? h("button", { class: "link", text: t("tasks.unclaim"), onclick: () => setAssignee(it, null) })
+        : h("button", { class: "link", text: t("tasks.claim"), onclick: () => setAssignee(it, me.user.id) }))
+      : null;
+    const moves = canAct ? ty.workflow.transitions.filter((tr) => tr.from.includes(it.state))
+      .map((tr) => h("button", { class: "link", text: tr.name, onclick: () => action(() => post(`/api/items/${it.id}/transitions`, { name: tr.name }), status) })) : [];
+    return h("tr", { class: due && due < today ? "overdue" : "" },
+      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)),
+      h("td", { text: it.title }),
+      h("td", { text: it.state }),
+      h("td", { text: who === null ? "" : who ? person(who) : t("tasks.nobody") }),
+      h("td", {}, due ? h("span", { class: due < today ? "badge danger" : due === today ? "badge" : "", text: due < today ? t("tasks.overdue", { date: due }) : due }) : ""),
+      h("td", { text: f.priority ? it.properties[f.priority.name] || "" : "" }),
+      h("td", {}, link(`#/board/${encodeURIComponent(it.space)}/${encodeURIComponent(it.type)}`, it.space)),
+      h("td", { class: "task-actions" }, [claim, ...moves].filter(Boolean).flatMap((b, k) => k ? [" · ", b] : [b])));
+  };
+  const tabLink = (id, label) => link(`#/tasks/${id}${space ? "?space=" + encodeURIComponent(space) : ""}`, `${label} (${lists[id].length})`,
+    id === current ? "tab active" : "tab");
+  const spaceFilter = h("select", { "aria-label": t("col.space"), onchange: (ev) => {
+    location.hash = `#/tasks/${current}` + (ev.target.value ? "?space=" + encodeURIComponent(ev.target.value) : "");
+  } }, h("option", { value: "", text: t("tasks.allSpaces") }),
+  [...new Set(open.map((it) => it.space))].sort().map((k) => h("option", { value: k, text: k, selected: k === space })));
   show(
-    h("h1", { text: t("tasks.title") }),
-    h("p", { class: "muted", text: t("tasks.open", { n: open.length }) }),
-    h("section", { id: "tasks" }, open.length
-      ? h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("col.type"), t("col.state"), t("col.space")].map((c) => h("th", { text: c })))),
-        h("tbody", {}, open.map((it) => h("tr", {},
-          h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)),
-          h("td", { text: it.title }),
-          h("td", { text: it.type }),
-          h("td", { text: it.state }),
-          h("td", {}, link(`#/board/${encodeURIComponent(it.space)}/${encodeURIComponent(it.type)}`, it.space)),
-        ))))
-      : h("p", { class: "muted", text: t("tasks.none") })),
+    h("div", { class: "page-head" }, h("h1", { text: t("tasks.title") }),
+      h("p", { class: "actions" }, link(newHref(space || here.space), t("tasks.new"), "button"))),
+    h("nav", { class: "tabs", "aria-label": t("tasks.title") },
+      tabLink("mine", t("tasks.mine")), tabLink("unassigned", t("tasks.unassigned")), tabLink("all", t("tasks.all")), spaceFilter),
+    status,
+    h("section", { id: "tasks" }, shown.length
+      ? h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space"), ""]
+        .map((c) => h("th", { text: c })))),
+      h("tbody", {}, shown.map(row)))
+      : h("p", { class: "muted", text: current === "mine" ? t("tasks.noneMine") : t("tasks.none") })),
+    h("p", { class: "muted", text: t("tasks.conventions") }),
     page.next ? h("p", { class: "notice", text: t("tasks.truncated", { n: items.length }) }) : null,
   );
 }
@@ -952,7 +1028,7 @@ async function itemView(ref) {
   const show = screen();
   const { item, editable } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
-  const [{ types }, history, out, inc, embeds, comments, { attachments }, { watches }] = await Promise.all([
+  const [{ types }, history, out, inc, embeds, comments, { attachments }, { watches }, { spaces }] = await Promise.all([
     get("/api/types"),
     get(path + "/history"),
     get(path + "/relations?direction=outgoing"),
@@ -961,11 +1037,13 @@ async function itemView(ref) {
     get(path + "/comments"),
     get(path + "/attachments"),
     get("/api/me/watches"),
+    get("/api/spaces"),
   ]);
+  const spaceAdmin = spaces.find((sp) => sp.key === item.space)?.role === "space-admin";
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
   const level = `/api/spaces/${encodeURIComponent(item.space)}/tree` + (item.parent ? "?parent=" + item.parent : "");
   const [, open, siblings] = await Promise.all([
-    learnNames([...history.events.map((e) => e.actor), ...comments.comments.flatMap((c) => c.resolvedBy ? [c.author, c.resolvedBy] : [c.author]), ...attachments.map((a) => a.author)]),
+    learnNames([...history.events.map((e) => e.actor), ...type.fields.filter((f) => f.kind === "user").map((f) => item.properties[f.name]), ...comments.comments.flatMap((c) => c.resolvedBy ? [c.author, c.resolvedBy] : [c.author]), ...attachments.map((a) => a.author)]),
     ancestors(item),
     item.presence === "live" ? get(level) : { items: [] },
   ]);
@@ -1002,7 +1080,12 @@ async function itemView(ref) {
     return h("tr", {},
       h("th", { text: f.name }),
       h("td", {}, input),
-      h("td", {}, canEdit ? h("button", { text: t("common.save"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) }), status) }) : null),
+      h("td", {}, canEdit ? h("button", { text: t("common.save"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) }), status) }) : null,
+        // A user field names a person by ID; show who it is, and let one
+        // put oneself in (ADR-0049).
+        f.kind === "user" && item.properties[f.name] ? h("span", { class: "muted", text: " " + person(item.properties[f.name]) }) : null,
+        f.kind === "user" && canEdit && item.properties[f.name] !== me.user.id
+          ? h("button", { class: "link", text: t("tasks.assignMe"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: me.user.id }), status) }) : null),
     );
   }));
 
@@ -1034,7 +1117,8 @@ async function itemView(ref) {
     transitions.length ? h("p", {}, t("item.transitions"), transitions) : null,
     type.fields.length ? h("section", {}, h("h2", { text: t("item.properties") }), props) : null,
     type.body ? bodyEditor(item, embeds.embeds, live, threads) : null,
-    relationsSection(out.relations, inc.relations, item.id),
+    await relationsSection(path, out.relations, inc.relations, item.id, canEdit),
+    await accessSection(path, item, canEdit, spaceAdmin),
     attachmentsSection(path, attachments, canEdit),
     threads.section,
     h("p", {}, reorder, actions),
@@ -1058,13 +1142,81 @@ function bodyEditor(item, embeds, live, threads) {
   return h("section", { id: "body" }, h("h2", { text: t("item.body") }), session.element);
 }
 
-function relationsSection(out, inc, self) {
-  const row = (r, other) => h("li", {}, `${r.type}${r.derived ? t("rel.fromBody") : ""} `, link("#/item/" + other, other.slice(0, 8)));
-  if (out.length + inc.length === 0) return null;
-  return h("section", {},
+// relationsSection lists an item's relations both ways, with the related
+// items' keys and titles. One who may edit the item relates it to another
+// by key and removes relations made by hand; those derived from a body
+// change with the body.
+async function relationsSection(path, out, inc, self, canEdit) {
+  const others = [...new Set([...out.map((r) => r.to), ...inc.map((r) => r.from)])].slice(0, 50);
+  const known = new Map(await Promise.all(others.map(async (id) => [id, await get("/api/items/" + id).then((x) => x.item).catch(() => null)])));
+  const label = (id) => { const it = known.get(id); return it ? `${it.key} ${it.title}` : id.slice(0, 8); };
+  const status = h("div", { class: "status" });
+  const row = (r, other, outgoing) => h("li", {},
+    h("span", { class: "muted", text: (outgoing ? r.type : t("rel.incoming", { type: r.type })) + (r.derived ? t("rel.fromBody") : "") + " " }),
+    link("#/item/" + encodeURIComponent(known.get(other)?.key || other), label(other)),
+    canEdit && outgoing && !r.derived ? h("button", { type: "button", class: "link", text: "×", title: t("rel.remove"), "aria-label": t("rel.remove"),
+      onclick: () => action(() => del("/api/relations/" + encodeURIComponent(r.id)), status) }) : null);
+  const add = canEdit ? form({ id: "add-relation", class: "inline" }, [
+    h("input", { name: "type", required: true, list: "relation-types", placeholder: t("rel.type"), "aria-label": t("rel.type"), size: 12 }),
+    h("datalist", { id: "relation-types" }, ["relates-to", "blocks", "implements", "duplicates", "depends-on"].map((v) => h("option", { value: v }))),
+    h("input", { name: "target", required: true, placeholder: t("rel.target"), "aria-label": t("rel.target"), size: 12 }),
+    h("button", { type: "submit", text: t("rel.add") }),
+  ], async (d) => {
+    const target = (await get("/api/items/" + encodeURIComponent(d.get("target").trim()))).item;
+    await post("/api/relations", { type: d.get("type").trim(), from: self, to: target.id });
+    route();
+  }) : null;
+  if (out.length + inc.length === 0 && !add) return null;
+  return h("section", { id: "relations" },
     h("h2", { text: t("rel.title") }),
-    h("ul", { class: "list" }, out.map((r) => row(r, r.to)), inc.map((r) => row(r, r.from))),
-  );
+    out.length + inc.length ? h("ul", { class: "list" }, out.map((r) => row(r, r.to, true)), inc.map((r) => row(r, r.from, false)))
+      : h("p", { class: "muted", text: t("rel.none") }),
+    add, status);
+}
+
+// accessSection shows who may read and edit an item and lets one who may
+// edit it narrow that, without locking themselves out; a space
+// administrator may name anyone (ADR-0022). Holders of the erasure role
+// redact an item at once (ADR-0026).
+async function accessSection(path, item, canEdit, spaceAdmin) {
+  const r = item.restriction || { read: [], edit: [] };
+  const read = r.read || [], edit = r.edit || [];
+  await learnNames([...read, ...edit].filter((p) => !p.startsWith("@")));
+  const status = h("div", { class: "status" });
+  const listed = (list) => list.length ? list.map((p) => p.startsWith("@") ? p : person(p)).join(", ") : t("access.everyone");
+  const set = (next) => action(() => put(path + "/restriction", next), status);
+  const restricted = read.length + edit.length > 0;
+  // Who else may read or edit a restricted item is chosen among the
+  // accounts, which space administrators may list.
+  const users = canEdit && restricted && spaceAdmin ? (await get("/api/users")).users : null;
+  if (users) for (const u of users) names.set(u.id, u.username);
+  const pick = users ? form({ id: "restrict", class: "inline" }, [
+    h("select", { name: "who", "aria-label": t("access.who") }, users.map((u) => h("option", { value: u.id, text: u.username }))),
+    h("select", { name: "what", "aria-label": t("access.what") }, h("option", { value: "read", text: t("access.mayRead") }), h("option", { value: "edit", text: t("access.mayEdit") })),
+    h("button", { type: "submit", text: t("access.add") }),
+  ], async (d) => {
+    const who = d.get("who");
+    const next = { read: [...read], edit: [...edit] };
+    // Whoever may edit a restricted item must also read it.
+    if (next.read.length && !next.read.includes(who)) next.read.push(who);
+    if (d.get("what") === "edit" && next.edit.length && !next.edit.includes(who)) next.edit.push(who);
+    await put(path + "/restriction", next);
+    route();
+  }) : null;
+  if (!canEdit && !restricted && !me.erasure) return null;
+  return h("section", { id: "access" },
+    h("h2", { text: t("access.title") }),
+    h("p", {}, t("access.read", { who: listed(read) }), h("br"), t("access.edit", { who: listed(edit) })),
+    canEdit ? h("p", { class: "actions-row" },
+      h("button", { type: "button", class: "secondary", text: t("access.onlyMe"), onclick: () => set({ read: [me.user.id], edit: [me.user.id] }) }),
+      h("button", { type: "button", class: "secondary", text: t("access.onlyMeEdits"), onclick: () => set({ read: read, edit: [me.user.id] }) }),
+      restricted ? h("button", { type: "button", class: "secondary", text: t("access.lift"), onclick: () => set({ read: [], edit: [] }) }) : null) : null,
+    pick,
+    me.erasure && item.presence !== "purged" ? h("p", {}, h("button", { type: "button", class: "danger", text: t("access.redact"), onclick: () => {
+      const reason = prompt(t("access.redactReason"));
+      if (reason && reason.trim() && confirm(t("access.redactConfirm", { key: item.key }))) action(() => post(path + "/redact", { reason: reason.trim() }), status);
+    } })) : null,
+    status);
 }
 
 // commentThreads shows an item's comments (ADR-0035) as threads: a first

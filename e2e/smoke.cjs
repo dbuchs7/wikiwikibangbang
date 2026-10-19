@@ -230,6 +230,22 @@ function check(cond, msg) {
     await page.click("#drawer-apps a:has-text('Governance')");
     await page.waitForSelector("#governance-overview td:has-text('PLAT')");
 
+    step("task inbox: an overdue unassigned task is taken over and lands under Assigned to me");
+    await page.evaluate(async () => {
+      const send = (method, path, body) => fetch(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      await send("POST", "/api/types", { name: "ticket", body: true,
+        fields: [{ name: "assignee", kind: "user" }, { name: "due", kind: "date" }, { name: "priority", kind: "enum", values: ["low", "high"] }],
+        workflow: { initial: "open", states: ["open", "closed"], transitions: [{ name: "close", from: ["open"], to: "closed" }] } });
+      await send("POST", "/api/items", { space: "PLAT", type: "ticket", title: "Renew the certificate", properties: { due: "2020-01-31", priority: "high" } });
+    });
+    await page.goto(base + "/#/tasks/unassigned");
+    await page.waitForSelector("#tasks tr.overdue:has-text('Renew the certificate') .badge:has-text('overdue since 2020-01-31')");
+    await page.click("#tasks tr:has-text('Renew the certificate') button:has-text('Take over')");
+    await page.goto(base + "/#/tasks/mine");
+    await page.waitForSelector("#tasks tr:has-text('Renew the certificate') td:has-text('you')");
+    await page.click("#tasks tr:has-text('Renew the certificate') button:has-text('close')");
+    await page.waitForSelector("#tasks tr:has-text('Renew the certificate')", { state: "detached" });
+
     step("board: columns are the workflow's states; dragging a card performs the transition");
     await page.click("a.brand");
     await page.click("a:has-text('Platform')");
@@ -369,6 +385,18 @@ function check(cond, msg) {
     await page.click(".thread.inline button:has-text('Resolve')");
     await page.waitForSelector(".resolved-threads summary:has-text('Resolved (1)')");
     check(await page.locator("#body .comment-anchor").count() === 0, "a resolved thread's text is not highlighted");
+
+    step("relations and access: a page is related by key and unrelated; only I may edit it, then everyone again");
+    await page.fill("#add-relation [name=type]", "depends-on");
+    await page.fill("#add-relation [name=target]", "PLAT-1");
+    await page.click("#add-relation button[type=submit]");
+    await page.waitForSelector("#relations li:has-text('depends-on') a:has-text('PLAT-1')");
+    await page.click("#relations li:has-text('depends-on') button[aria-label='Remove this relation']");
+    await page.waitForSelector("#relations li:has-text('depends-on')", { state: "detached" });
+    await page.click("#access button:has-text('Only I may edit')");
+    await page.waitForSelector("#access p:has-text('May edit: you')");
+    await page.click("#access button:has-text('Lift the restriction')");
+    await page.waitForSelector("#access p:has-text('May edit: everyone with a role in the space')");
 
     step("files: an upload is listed and downloads; an image goes into the body and shows after a reload");
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
