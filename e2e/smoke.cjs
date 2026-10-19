@@ -36,6 +36,9 @@ function check(cond, msg) {
     await page.click("#login button[type=submit]");
     await page.waitForSelector("text=No spaces yet");
 
+    step("the footer names the running version");
+    await page.waitForSelector("footer.footer:has-text('wikiwikibangbang')");
+
     step("administration: space, type, user, role");
     await page.click("text=Administration");
     await page.fill("#new-space [name=key]", "PLAT");

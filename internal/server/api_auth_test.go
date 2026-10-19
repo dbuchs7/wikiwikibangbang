@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -116,6 +117,11 @@ func TestLoginSessionAndLogout(t *testing.T) {
 	me := c.expect("GET", "/api/me", "", http.StatusOK)
 	if me["admin"] != true || me["via"] != "session" {
 		t.Fatalf("me %v", me)
+	}
+	// Signed-in users see which build runs, for the footer; anonymous
+	// callers do not (the next request after logout is refused).
+	if v, _ := me["version"].(string); v != buildinfo.Get().Version || v == "" {
+		t.Fatalf("version %v, want %q", me["version"], buildinfo.Get().Version)
 	}
 	c.expect("POST", "/api/logout", "", http.StatusNoContent)
 	c.expect("GET", "/api/me", "", http.StatusUnauthorized)

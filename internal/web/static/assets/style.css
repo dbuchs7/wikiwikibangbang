@@ -180,6 +180,9 @@ table.history td { font-size: 13px; }
 .pm-mention { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
 .ProseMirror-hideselection *::selection { background: transparent; }
 
+.footer { max-width: 1120px; margin: 0 auto; padding: 8px 22px 22px; font-size: 11px; color: var(--muted); }
+.footer:empty { display: none; }
+
 /* ---------- Board (ADR-0036) ---------- */
 .board { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
 .board-column {
