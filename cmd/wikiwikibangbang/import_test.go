@@ -40,7 +40,8 @@ func fakeSite(t *testing.T) *httptest.Server {
 		case r.URL.Path == "/wiki/api/v2/pages":
 			answer(map[string]any{"results": []any{page("1", "Home", ""), page("2", "Private", "1")}})
 		case r.URL.Path == "/wiki/rest/api/content/2/restriction/byOperation/read":
-			answer(map[string]any{"restrictions": map[string]any{"user": map[string]any{"results": []any{map[string]any{"accountId": "acc-anna"}}}, "group": none}})
+			answer(map[string]any{"restrictions": map[string]any{"user": map[string]any{"results": []any{map[string]any{"accountId": "acc-anna"}}},
+				"group": map[string]any{"results": []any{map[string]any{"name": "dev team"}}}}})
 		case strings.HasPrefix(r.URL.Path, "/wiki/rest/api/content/"):
 			answer(map[string]any{"restrictions": map[string]any{"user": none, "group": none}})
 		case r.URL.Path == "/rest/api/3/field":
@@ -79,20 +80,25 @@ func TestImportFromConfluenceCloud(t *testing.T) {
 	if err := os.WriteFile(users, []byte("# source account, local username\nacc-anna anna\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	groups := filepath.Join(t.TempDir(), "groups")
+	if err := os.WriteFile(groups, []byte("# source group, local group\ndev team @engineering\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("WWBB_IMPORT_EMAIL", "anna@acme.example")
 	t.Setenv("WWBB_IMPORT_TOKEN", "tok")
-	args := []string{"import", "-from", "atlassian-cloud", "-site", srv.URL, "-spaces", "ENG", "-projects", "PLAT", "-data-dir", dir, "-users", users}
+	args := []string{"import", "-from", "atlassian-cloud", "-site", srv.URL, "-spaces", "ENG", "-projects", "PLAT", "-data-dir", dir,
+		"-users", users, "-groups", groups, "-grant", "@engineering=editor", "-grant", "anna=space-admin"}
 
 	code, out, errOut := runCmd(t, context.Background(), append(args, "-dry-run")...)
 	if code != 0 || !strings.Contains(out, "dry run, nothing written: 3 pages and issues created") {
 		t.Fatalf("dry run: exit %d, %q, %q", code, out, errOut)
 	}
 	code, out, errOut = runCmd(t, context.Background(), args...)
-	if code != 0 || !strings.Contains(out, "imported: 3 pages and issues created") {
+	if code != 0 || !strings.Contains(out, "imported: 3 pages and issues created, 0 updated, 0 unchanged; 4 roles granted") {
 		t.Fatalf("import: exit %d, %q, %q", code, out, errOut)
 	}
 	code, out, _ = runCmd(t, context.Background(), args...)
-	if code != 0 || !strings.Contains(out, "0 pages and issues created, 0 updated, 3 unchanged") {
+	if code != 0 || !strings.Contains(out, "0 pages and issues created, 0 updated, 3 unchanged; 0 roles granted") {
 		t.Fatalf("re-run: exit %d, %q", code, out)
 	}
 
@@ -111,9 +117,16 @@ func TestImportFromConfluenceCloud(t *testing.T) {
 	if got := issues[0].Properties["assignee"]; got != string(anna.ID) {
 		t.Errorf("assignee %v, want the local account %s", got, anna.ID)
 	}
+	db.Read(func(s *item.Store) {
+		for _, space := range []string{"ENG", "PLAT"} {
+			if s.GrantedRole(space, "@engineering") != item.Editor || s.GrantedRole(space, string(anna.ID)) != item.SpaceAdmin {
+				t.Errorf("roles in %s not granted", space)
+			}
+		}
+	})
 	for _, it := range items {
-		if it.Title == "Private" && !slices.Equal(it.Restriction.Read, []string{string(anna.ID)}) {
-			t.Errorf("the restriction names %v, want the local account %s", it.Restriction.Read, anna.ID)
+		if want := []string{string(anna.ID), "@engineering"}; it.Title == "Private" && !slices.Equal(it.Restriction.Read, want) {
+			t.Errorf("the restriction names %v, want %v", it.Restriction.Read, want)
 		}
 	}
 }
@@ -138,6 +151,9 @@ func TestImportRefusesUnsafeOrIncompleteInput(t *testing.T) {
 		{true, append(slices.Clone(base), "-site", "http://wiki.example"), 2, "only over https"},
 		{false, append(slices.Clone(base), "-site", srv.URL), 2, "WWBB_IMPORT_TOKEN"},
 		{true, append(slices.Clone(base), "-site", srv.URL, "-users", users), 1, `no local account "nobody"`},
+		{true, append(slices.Clone(base), "-site", srv.URL, "-grant", "bert=editor"), 1, `no local account "bert"`},
+		{true, append(slices.Clone(base), "-site", srv.URL, "-grant", "@team=owner"), 2, `unknown role "owner"`},
+		{true, append(slices.Clone(base), "-site", srv.URL, "-groups", users), 1, `want "source group @local-group"`},
 	}
 	for _, c := range cases {
 		if c.env {

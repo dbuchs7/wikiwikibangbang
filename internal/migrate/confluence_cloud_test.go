@@ -136,7 +136,7 @@ func TestConfluenceCloudReadsSpacesPagesAndRestrictions(t *testing.T) {
 		t.Errorf("a page in a folder keeps a parent: %+v", p)
 	}
 	text := fmt.Sprint(problems)
-	for _, want := range []string{"folder", `group "devs"`, "102", "restricted to no one"} {
+	for _, want := range []string{"folder", "102", "restricted to no one"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("problems lack %q: %v", want, problems)
 		}

@@ -53,6 +53,14 @@ func (s *Store) GrantRole(actor, space, principal string, role Role) error {
 	return s.record(actor, Event{Kind: RoleGranted, Space: space, Principal: principal, Role: role})
 }
 
+// GrantedRole is the role granted to a principal (or "@group") in a space
+// directly, not through a group or a system role; 0 if there is none.
+func (s *Store) GrantedRole(space, principal string) Role { return s.spaceRoles[space][principal] }
+
+// GroupSize is the number of members of a group, named with or without its
+// "@".
+func (s *Store) GroupSize(group string) int { return len(s.groups[strings.TrimPrefix(group, "@")]) }
+
 // GrantSystemRole gives a principal a system role.
 func (s *Store) GrantSystemRole(actor, principal, role string) error {
 	if role != RoleAdmin && role != RoleErasure {

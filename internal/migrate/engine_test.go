@@ -2,6 +2,7 @@ package migrate
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -291,5 +292,79 @@ func TestKeyCollisionDuringSyncIsReported(t *testing.T) {
 	}
 	if !hasProblem(rep, "PLAT-21 was taken") {
 		t.Fatalf("collision not reported: %+v", rep.Problems)
+	}
+}
+
+func TestGrantsAreAddedNeverLowered(t *testing.T) {
+	s := newStore(t)
+	snap := sample()
+	m := Derive(snap)
+	m.Grants = []Grant{{Principal: "@platform", Role: item.Editor}, {Principal: "u-anna", Role: item.SpaceAdmin}}
+	rep, err := Run(s, snap, m, Options{Actor: "import"})
+	if err != nil || rep.Granted != 2 {
+		t.Fatalf("first run: granted %d, %v", rep.Granted, err)
+	}
+	if s.GrantedRole("PLAT", "@platform") != item.Editor || s.GrantedRole("PLAT", "u-anna") != item.SpaceAdmin {
+		t.Fatal("roles not granted")
+	}
+	// A space administrator raises the group's role after the import; the
+	// next run keeps it and grants nothing again.
+	if err := s.GrantRole("u-anna", "PLAT", "@platform", item.SpaceAdmin); err != nil {
+		t.Fatal(err)
+	}
+	again, err := Run(s, snap, m, Options{Actor: "import"})
+	if err != nil || again.Granted != 0 || s.GrantedRole("PLAT", "@platform") != item.SpaceAdmin {
+		t.Fatalf("re-run: granted %d, role %v, %v", again.Granted, s.GrantedRole("PLAT", "@platform"), err)
+	}
+}
+
+func TestSourceGroupsMapToLocalGroups(t *testing.T) {
+	snap := sample()
+	snap.Pages[1].ReadAllowList = []string{"acc-anna", "group:devs", "group:contractors"}
+	snap.Pages[1].EditAllowList = []string{"group:contractors"}
+	m := Derive(snap)
+	m.Groups = map[string]string{"devs": "@engineering"}
+	s := newStore(t)
+	rep, err := Run(s, snap, m, Options{Actor: "import"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := byOrigin(t, s, "confluence", "2001").Restriction.Read
+	want := []string{"anna@acme.example", "@engineering", "external:group:contractors"}
+	if !slices.Equal(got, want) {
+		t.Errorf("restriction %v, want %v", got, want)
+	}
+	n := 0
+	for _, p := range rep.Problems {
+		if strings.Contains(p.Message, `group "contractors"`) {
+			n++
+		}
+	}
+	if n != 1 || hasProblem(rep, `group "devs"`) {
+		t.Errorf("an unmapped group is reported once per page, a mapped one not: %+v", rep.Problems)
+	}
+}
+
+func TestEmptyLocalGroupsAreReported(t *testing.T) {
+	s := newStore(t)
+	if err := s.AddToGroup("admin", "engineering", "u-anna"); err != nil {
+		t.Fatal(err)
+	}
+	snap := sample()
+	m := Derive(snap)
+	m.Groups = map[string]string{"devs": "@engineering", "ops": "@operations"}
+	m.Grants = []Grant{{Principal: "@platform", Role: item.Editor}, {Principal: "@operations", Role: item.Viewer}, {Principal: "u-anna", Role: item.Editor}}
+	rep, err := Run(s, snap, m, Options{Actor: "import"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var empty []string
+	for _, p := range rep.Problems {
+		if strings.Contains(p.Message, "no members yet") {
+			empty = append(empty, p.Source)
+		}
+	}
+	if want := []string{"group @operations", "group @platform"}; !slices.Equal(empty, want) {
+		t.Errorf("reported %v, want %v once each", empty, want)
 	}
 }

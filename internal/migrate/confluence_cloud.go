@@ -158,9 +158,9 @@ func (r *cloudReader) page(ctx context.Context, space string, raw json.RawMessag
 }
 
 // restriction returns the accounts a page restricts an operation to, or
-// nil when it is not restricted. Groups cannot be mapped yet and become
-// placeholder accounts: the page is then restricted to its listed users
-// only, which is narrower than the source.
+// nil when it is not restricted. A group becomes "group:<name>", which
+// Mapping.Groups maps to a local group; unmapped, it is a placeholder no one
+// holds, which is narrower than the source.
 func (r *cloudReader) restriction(ctx context.Context, pageID, op, ref string) ([]string, error) {
 	var res struct {
 		Restrictions *struct {
@@ -201,7 +201,6 @@ func (r *cloudReader) restriction(ctx context.Context, pageID, op, ref string) (
 	if g := res.Restrictions.Group; g != nil {
 		for _, grp := range g.Results {
 			out = append(out, "group:"+grp.Name)
-			r.problem(ref, "its %s restriction names the group %q, which is not mapped; members of the group lose access until it is", op, grp.Name)
 		}
 	}
 	return out, nil

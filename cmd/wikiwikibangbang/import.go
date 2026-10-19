@@ -34,6 +34,9 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	projects := fs.String("projects", "", "comma-separated keys of the Jira projects to import")
 	dataDir := fs.String("data-dir", defaultDataDir, "directory holding the event log; the server must be stopped")
 	usersFile := fs.String("users", "", `file mapping source account IDs to local usernames, one "accountId username" per line`)
+	groupsFile := fs.String("groups", "", `file mapping source groups to local groups, one "source group @local-group" per line`)
+	var grants grantFlags
+	fs.Var(&grants, "grant", `give a role in every imported space, as "username=role" or "@group=role" with role viewer, editor or space-admin; repeatable`)
 	dryRun := fs.Bool("dry-run", false, "report what the import would do without writing anything")
 	if err := fs.Parse(args); err != nil {
 		return parseFailed(err)
@@ -65,6 +68,15 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		}
 	}
 
+	var groups map[string]string
+	if *groupsFile != "" {
+		var err error
+		if groups, err = readGroupMap(*groupsFile); err != nil {
+			fmt.Fprintln(stderr, "import:", err)
+			return 1
+		}
+	}
+
 	db, _, err := storage.Open(*dataDir)
 	if err != nil {
 		fmt.Fprintln(stderr, "import: cannot open the data directory (is the server still running?):", err)
@@ -76,6 +88,11 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, "import:", err)
 		return 1
 	}
+	roles, err := grants.resolve(db.Accounts)
+	if err != nil {
+		fmt.Fprintln(stderr, "import:", err)
+		return 1
+	}
 
 	snap, problems, err := readCloud(ctx, *site, email, token, spaceKeys, projectKeys)
 	if err != nil {
@@ -83,6 +100,7 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		return 1
 	}
 	m := migrate.Derive(snap).MapAccounts(local)
+	m.Groups, m.Grants = groups, roles
 	var rep migrate.Report
 	err = db.Write(func(s *item.Store) error {
 		rep, err = migrate.Run(s, snap, m, migrate.Options{Actor: importActor, DryRun: *dryRun})
@@ -96,7 +114,7 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if *dryRun {
 		what = "dry run, nothing written"
 	}
-	fmt.Fprintf(stdout, "%s: %d pages and issues created, %d updated, %d unchanged\n", what, rep.Created, rep.Updated, rep.Unchanged)
+	fmt.Fprintf(stdout, "%s: %d pages and issues created, %d updated, %d unchanged; %d roles granted\n", what, rep.Created, rep.Updated, rep.Unchanged, rep.Granted)
 	all := append(problems, rep.Problems...)
 	if len(all) > 0 {
 		fmt.Fprintf(stdout, "%d problems:\n", len(all))
@@ -202,9 +220,82 @@ func localPrincipals(accounts *auth.Accounts, byName map[string]string) (map[str
 	for src, name := range byName {
 		id, ok := ids[strings.ToLower(name)]
 		if !ok {
-			return nil, fmt.Errorf("no local account %q (mapped from %s); create it first or fix the users file", name, src)
+			return nil, fmt.Errorf("no local account %q (named for %s); create it first or correct the name", name, src)
 		}
 		out[src] = string(id)
 	}
 	return out, nil
+}
+
+// grantFlags collects -grant values.
+type grantFlags []string
+
+func (g *grantFlags) String() string { return strings.Join(*g, ",") }
+
+func (g *grantFlags) Set(v string) error {
+	who, role, ok := strings.Cut(v, "=")
+	if !ok || strings.TrimSpace(who) == "" {
+		return fmt.Errorf(`want "username=role" or "@group=role", got %q`, v)
+	}
+	if _, ok := roleNames[role]; !ok {
+		return fmt.Errorf("unknown role %q; use viewer, editor or space-admin", role)
+	}
+	*g = append(*g, v)
+	return nil
+}
+
+var roleNames = map[string]item.Role{"viewer": item.Viewer, "editor": item.Editor, "space-admin": item.SpaceAdmin}
+
+// resolve turns usernames into the user IDs the store knows; a group is
+// kept as it is. A username without an account is an error.
+func (g grantFlags) resolve(accounts *auth.Accounts) ([]migrate.Grant, error) {
+	byName := map[string]string{}
+	for _, v := range g {
+		who, _, _ := strings.Cut(v, "=")
+		if !strings.HasPrefix(who, "@") {
+			byName[who] = who
+		}
+	}
+	ids, err := localPrincipals(accounts, byName)
+	if err != nil {
+		return nil, err
+	}
+	var out []migrate.Grant
+	for _, v := range g {
+		who, role, _ := strings.Cut(v, "=")
+		if id, ok := ids[who]; ok {
+			who = id
+		}
+		out = append(out, migrate.Grant{Principal: who, Role: roleNames[role]})
+	}
+	return out, nil
+}
+
+// readGroupMap reads "source group @local-group" lines; a source group's
+// name may hold spaces, the local group is the last word. Blank lines and
+// lines starting with # are skipped.
+func readGroupMap(path string) (map[string]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	out := map[string]string{}
+	sc := bufio.NewScanner(f)
+	for n := 1; sc.Scan(); n++ {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		i := strings.LastIndexAny(line, " \t")
+		if i < 0 || !strings.HasPrefix(line[i+1:], "@") || len(line[i+1:]) < 2 {
+			return nil, fmt.Errorf("%s:%d: want \"source group @local-group\", got %q", path, n, line)
+		}
+		src := strings.TrimSpace(line[:i])
+		if _, dup := out[src]; dup {
+			return nil, fmt.Errorf("%s:%d: group %q is mapped twice", path, n, src)
+		}
+		out[src] = line[i+1:]
+	}
+	return out, sc.Err()
 }
