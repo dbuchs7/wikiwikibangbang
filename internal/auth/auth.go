@@ -127,6 +127,10 @@ type user struct {
 	// seen is the sequence number of the newest item event whose
 	// notification the user has seen (ADR-0046).
 	seen int
+	// avatar is the user's profile picture and its media type, or empty
+	// (ADR-0050).
+	avatar     []byte
+	avatarType string
 }
 
 type token struct {
@@ -193,6 +197,9 @@ type event struct {
 	Subject  string    `json:"subject,omitempty"`
 	Language string    `json:"language,omitempty"`
 	Seen     int       `json:"seen,omitempty"`
+	// Avatar is a profile picture; an AvatarSet without one removes it.
+	Avatar     []byte `json:"avatar,omitempty"`
+	AvatarType string `json:"avatarType,omitempty"`
 }
 
 const (
@@ -208,6 +215,9 @@ const (
 	// notificationsSeen records how far a user has seen their
 	// notifications (ADR-0046).
 	notificationsSeen = "NotificationsSeen"
+	// avatarSet records a user's profile picture, or its removal
+	// (ADR-0050).
+	avatarSet = "AvatarSet"
 )
 
 // apply is the only code that changes accounts; it runs live and on load.
@@ -247,6 +257,12 @@ func (a *Accounts) apply(e event) error {
 			return fmt.Errorf("notifications seen by unknown user %s", e.User)
 		}
 		u.seen = max(u.seen, e.Seen)
+	case avatarSet:
+		u, ok := a.users[e.User]
+		if !ok {
+			return fmt.Errorf("avatar of unknown user %s", e.User)
+		}
+		u.avatar, u.avatarType = e.Avatar, e.AvatarType
 	case tokenRevoked:
 		if t, ok := a.tokenIDs[e.Token]; ok {
 			delete(a.tokens, t.hash)
@@ -354,6 +370,35 @@ func (a *Accounts) SetLanguage(id UserID, language string) error {
 		return nil
 	}
 	return a.record(event{Kind: languageSet, User: id, Language: language})
+}
+
+// SetAvatar records a user's profile picture of the given media type;
+// empty data removes it. Checking the picture is the caller's concern.
+func (a *Accounts) SetAvatar(id UserID, data []byte, mediaType string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	u, ok := a.users[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if len(data) == 0 {
+		if len(u.avatar) == 0 {
+			return nil
+		}
+		mediaType = ""
+	}
+	return a.record(event{Kind: avatarSet, User: id, Avatar: slices.Clone(data), AvatarType: mediaType})
+}
+
+// Avatar returns a user's profile picture and its media type, or nil.
+func (a *Accounts) Avatar(id UserID) ([]byte, string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	u, ok := a.users[id]
+	if !ok || len(u.avatar) == 0 {
+		return nil, ""
+	}
+	return u.avatar, u.avatarType
 }
 
 // SetSeen records that a user has seen their notifications up to the item

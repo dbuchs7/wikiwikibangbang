@@ -417,3 +417,24 @@ tr.overdue td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
   #nav .search { flex: 1 1 100%; margin: 0 0 4px; }
   #nav > a, #nav > button.link { min-height: 40px; }
 }
+/* The account menu and profile pictures (ADR-0050). */
+.account { position: relative; }
+.account-button { display: inline-flex; align-items: center; padding: 2px; border-radius: 50%; background: none; border: 2px solid transparent; }
+.account-button:hover, .account-button[aria-expanded="true"] { background: none; border-color: var(--accent); }
+.avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; overflow: hidden; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-32 { width: 32px; height: 32px; font-size: 13px; }
+.avatar-40 { width: 40px; height: 40px; font-size: 15px; }
+.avatar-64 { width: 64px; height: 64px; font-size: 24px; }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 230px; padding: 6px 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.menu-head { display: flex; align-items: center; gap: 10px; padding: 8px 14px 10px; }
+.menu [role=menuitem] { display: block; width: 100%; padding: 8px 14px; text-align: left; color: var(--text); background: none; border: 0; border-radius: 0; font: inherit; }
+.menu [role=menuitem]:hover, .menu [role=menuitem]:focus { background: var(--accent-soft); color: var(--accent); text-decoration: none; outline: none; }
+.menu hr { border: 0; border-top: 1px solid var(--border); margin: 6px 0; }
+.avatar-row { display: flex; gap: 16px; align-items: center; }
+/* The bell and the account sit at the right end of the header, so the
+   account menu opens inward on every width. */
+#nav > #nav-notifications { margin-left: auto; }
+.menu { max-width: calc(100vw - 32px); }

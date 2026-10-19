@@ -118,6 +118,7 @@ func Routes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/vendor/", Summary: "Vendored UI libraries and their licenses (ADR-0032)", Access: Public, Handler: noListing(files)},
 	}
 	routes = append(routes, authRoutes(d)...)
+	routes = append(routes, avatarRoutes(d)...)
 	routes = append(routes, oidcRoutes(d)...)
 	routes = append(routes, itemRoutes(d)...)
 	routes = append(routes, mcpRoutes()...)

@@ -363,10 +363,73 @@ function renderNav() {
     search,
     h("button", { id: "nav-new", class: "primary", type: "button", text: t("nav.newButton"), onclick: () => { location.hash = newHref(); } }),
     bell,
-    me.admin ? link("#/admin", t("nav.admin")) : null,
-    link("#/account", me.user.username),
-    h("button", { class: "link", onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }, t("nav.logout")),
+    accountMenu(),
   );
+}
+
+// avatar shows a user's profile picture, or their initials when they have
+// none (ADR-0050). tag names the picture's content, so a new one is
+// fetched when it changes.
+function avatar(id, name, tag, size = 32) {
+  const initials = (name || "?").split(/[\s._@-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "?";
+  const box = h("span", { class: `avatar avatar-${size}`, "aria-hidden": "true" });
+  if (tag) {
+    const img = h("img", { src: `/api/users/${encodeURIComponent(id)}/avatar?v=${encodeURIComponent(tag)}`, alt: "", width: size, height: size });
+    img.addEventListener("error", () => box.replaceChildren(initials));
+    box.append(img);
+  } else {
+    box.textContent = initials;
+  }
+  return box;
+}
+
+// accountMenu is the account's button in the header: the profile picture
+// or initials, opening a menu with the account, the AI assistants, the
+// administration for administrators, and signing out.
+function accountMenu() {
+  const button = h("button", { type: "button", id: "account-button", class: "account-button", "aria-haspopup": "menu", "aria-expanded": "false",
+    "aria-controls": "account-menu", title: t("nav.accountOf", { name: me.user.username }), "aria-label": t("nav.accountOf", { name: me.user.username }) },
+  avatar(me.user.id, me.user.username, me.avatar));
+  const item = (href, text) => h("a", { href, role: "menuitem", text, tabindex: "-1" });
+  const roles = [me.admin ? t("admin.roleAdmin") : null, me.erasure ? t("admin.roleErasure") : null].filter(Boolean);
+  const menu = h("div", { id: "account-menu", class: "menu", role: "menu", hidden: true, "aria-label": t("nav.account") },
+    h("div", { class: "menu-head" }, avatar(me.user.id, me.user.username, me.avatar, 40),
+      h("div", {}, h("strong", { text: me.user.username }), roles.length ? h("div", { class: "muted", text: roles.join(", ") }) : null)),
+    item("#/account", t("nav.accountPage")),
+    item("#/mcp", t("nav.mcp")),
+    me.admin ? item("#/admin", t("nav.admin")) : null,
+    h("hr"),
+    h("button", { type: "button", role: "menuitem", tabindex: "-1", class: "link", id: "logout", text: t("nav.logout"),
+      onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }));
+  const entries = () => [...menu.querySelectorAll("[role=menuitem]")];
+  const close = (focus) => {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", outside, true);
+    if (focus) button.focus();
+  };
+  const outside = (ev) => { if (!menu.contains(ev.target) && !button.contains(ev.target)) close(false); };
+  const open = () => {
+    menu.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    document.addEventListener("click", outside, true);
+    entries()[0]?.focus();
+  };
+  button.addEventListener("click", () => (menu.hidden ? open() : close(true)));
+  menu.addEventListener("click", (ev) => { if (ev.target.closest("[role=menuitem]")) close(false); });
+  menu.addEventListener("keydown", (ev) => {
+    const list = entries();
+    const at = list.indexOf(document.activeElement);
+    if (ev.key === "Escape") { ev.preventDefault(); close(true); }
+    else if (ev.key === "ArrowDown") { ev.preventDefault(); list[(at + 1) % list.length].focus(); }
+    else if (ev.key === "ArrowUp") { ev.preventDefault(); list[(at - 1 + list.length) % list.length].focus(); }
+    else if (ev.key === "Home") { ev.preventDefault(); list[0].focus(); }
+    else if (ev.key === "End") { ev.preventDefault(); list[list.length - 1].focus(); }
+    else if (ev.key === "Tab") close(false);
+  });
+  onLeave(() => close(false));
+  return h("div", { class: "account" }, button, menu);
 }
 
 // here is where the user is: the space and item shown, so that "New"
@@ -1415,6 +1478,7 @@ async function accountView() {
   show(
     h("h1", { text: me.user.username }),
     h("p", { class: "muted", text: t("account.id", { id: me.user.id, via: me.via }) }),
+    avatarCard(),
     form({ class: "card", id: "language" }, [
       field(t("account.language"), h("select", { name: "language", onchange: (ev) => ev.target.form.requestSubmit() },
         languages.filter((l) => !me.languages || me.languages.includes(l.code))
@@ -1455,6 +1519,43 @@ async function accountView() {
       h("p", { class: "muted" }, t("account.mcpHint"), " ", link("#/mcp", t("nav.mcp"))),
     ),
   );
+}
+
+// avatarCard sets or removes one's profile picture (ADR-0050). The browser
+// cuts the picture to a square and scales it down to 256 pixels before
+// sending it, so a photo from a phone fits the server's budget.
+function avatarCard() {
+  const status = h("div", { class: "status" });
+  const picker = h("input", { type: "file", id: "avatar-file", accept: "image/png,image/jpeg,image/gif,image/webp", "aria-label": t("account.avatarChoose") });
+  picker.addEventListener("change", () => action(async () => {
+    const file = picker.files[0];
+    if (!file) return;
+    const blob = await squareImage(file, 256);
+    const res = await fetch("/api/me/avatar", { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: blob });
+    if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error || res.statusText);
+    me.avatar = (await res.json()).avatar;
+  }, status));
+  return h("section", { class: "card", id: "avatar" },
+    h("h2", { text: t("account.avatar") }),
+    h("div", { class: "avatar-row" }, avatar(me.user.id, me.user.username, me.avatar, 64),
+      h("div", {},
+        h("p", { class: "muted", text: me.avatar ? t("account.avatarSet") : t("account.avatarNone") }),
+        h("label", { class: "upload" }, h("span", { text: t("account.avatarChoose") }), picker),
+        me.avatar ? h("button", { type: "button", class: "link", text: t("account.avatarRemove"),
+          onclick: () => action(async () => { await del("/api/me/avatar"); me.avatar = ""; }, status) }) : null)),
+    status);
+}
+
+// squareImage cuts the middle square out of an image file and scales it to
+// size pixels, as a PNG.
+async function squareImage(file, size) {
+  const bitmap = await createImageBitmap(file).catch(() => { throw new Error(t("account.avatarNotImage")); });
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = Math.min(size, side);
+  canvas.getContext("2d").drawImage(bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t("account.avatarNotImage")))), "image/png"));
 }
 
 // --- AI assistants (MCP) --------------------------------------------------------
