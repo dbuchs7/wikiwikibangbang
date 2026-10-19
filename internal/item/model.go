@@ -233,6 +233,8 @@ const (
 	LabelsSet         EventKind = "LabelsSet"
 	AttachmentAdded   EventKind = "AttachmentAdded"
 	AttachmentDeleted EventKind = "AttachmentDeleted"
+	Watched           EventKind = "Watched"
+	Unwatched         EventKind = "Unwatched"
 	CommentDeleted    EventKind = "CommentDeleted"
 )
 

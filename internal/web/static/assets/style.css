@@ -353,3 +353,12 @@ label.upload { display: inline-flex; align-items: center; gap: 8px; }
 .pm-image figcaption { margin-top: 4px; color: var(--muted); font-size: 13px; }
 .pm-image figcaption input { width: 60%; text-align: center; border: 0; border-bottom: 1px dashed var(--border-strong); background: transparent; color: inherit; font: inherit; }
 .pm-image.ProseMirror-selectednode img { outline: 2px solid var(--accent); }
+
+/* Watching and notifications (ADR-0046). */
+#nav > a.unread { color: var(--accent); font-weight: 600; }
+ul.notifications { list-style: none; padding: 0; margin: 0 0 10px; }
+ul.notifications li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+ul.notifications li.unread { font-weight: 600; }
+ul.notifications li.unread::before { content: "● "; color: var(--accent); }
+button.secondary { background: var(--surface); color: var(--accent); }
+button.secondary:hover { background: var(--accent-soft); color: var(--accent); }

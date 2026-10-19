@@ -58,3 +58,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0043](0043-comparing-and-restoring-body-versions.md) | Earlier bodies are read from the log, compared in the browser and restored as a new commit | Accepted | Landed |
 | [0044](0044-labels.md) | Labels are part of their item's content, set as a whole, counted per space | Accepted | Landed |
 | [0045](0045-attachments-encrypted-files-beside-the-log.md) | Attachments are encrypted files beside the event log, described by events of their item | Accepted | Landed |
+| [0046](0046-watching-and-notifications-from-the-log.md) | Watching items and spaces; notifications are read from the event log | Accepted | Partial |

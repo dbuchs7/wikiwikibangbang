@@ -124,6 +124,9 @@ type user struct {
 	hash string
 	// language is the UI language the user chose (ADR-0017), or empty.
 	language string
+	// seen is the sequence number of the newest item event whose
+	// notification the user has seen (ADR-0046).
+	seen int
 }
 
 type token struct {
@@ -189,6 +192,7 @@ type event struct {
 	Issuer   string    `json:"issuer,omitempty"`
 	Subject  string    `json:"subject,omitempty"`
 	Language string    `json:"language,omitempty"`
+	Seen     int       `json:"seen,omitempty"`
 }
 
 const (
@@ -201,6 +205,9 @@ const (
 	identityLinked = "IdentityLinked"
 	// languageSet records the UI language a user chose (ADR-0017).
 	languageSet = "LanguageSet"
+	// notificationsSeen records how far a user has seen their
+	// notifications (ADR-0046).
+	notificationsSeen = "NotificationsSeen"
 )
 
 // apply is the only code that changes accounts; it runs live and on load.
@@ -234,6 +241,12 @@ func (a *Accounts) apply(e event) error {
 			return fmt.Errorf("language for unknown user %s", e.User)
 		}
 		u.language = e.Language
+	case notificationsSeen:
+		u, ok := a.users[e.User]
+		if !ok {
+			return fmt.Errorf("notifications seen by unknown user %s", e.User)
+		}
+		u.seen = max(u.seen, e.Seen)
 	case tokenRevoked:
 		if t, ok := a.tokenIDs[e.Token]; ok {
 			delete(a.tokens, t.hash)
@@ -341,6 +354,31 @@ func (a *Accounts) SetLanguage(id UserID, language string) error {
 		return nil
 	}
 	return a.record(event{Kind: languageSet, User: id, Language: language})
+}
+
+// SetSeen records that a user has seen their notifications up to the item
+// event seq (ADR-0046); the mark only moves forward.
+func (a *Accounts) SetSeen(id UserID, seq int) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	u, ok := a.users[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if seq <= u.seen {
+		return nil
+	}
+	return a.record(event{Kind: notificationsSeen, User: id, Seen: seq})
+}
+
+// Seen is how far a user has seen their notifications.
+func (a *Accounts) Seen(id UserID) int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if u, ok := a.users[id]; ok {
+		return u.seen
+	}
+	return 0
 }
 
 // Usernames returns the usernames of the given IDs; unknown IDs are left

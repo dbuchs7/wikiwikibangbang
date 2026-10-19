@@ -32,7 +32,9 @@ import (
 //   - 8: the kinds AttachmentAdded and AttachmentDeleted with the field
 //     attachment, sealed when it describes a file, and the block kind
 //     image (ADR-0045). Versions 1 to 7 are still read.
-const CodecVersion = 8
+//   - 9: the kinds Watched and Unwatched (ADR-0046). Versions 1 to 8 are
+//     still read.
+const CodecVersion = 9
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
