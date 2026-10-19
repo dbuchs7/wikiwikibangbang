@@ -373,3 +373,32 @@ func TestNotificationsSeenOnlyMovesForward(t *testing.T) {
 		t.Errorf("unknown user: %v", err)
 	}
 }
+
+func TestAvatarsAreKeptAndReplayed(t *testing.T) {
+	a, j, _ := newAccounts(t)
+	u, err := a.CreateUser("anna", pw)
+	noErr(t, err)
+	if data, _ := a.Avatar(u.ID); data != nil {
+		t.Fatal("a new account has a picture")
+	}
+	pic := []byte("\x89PNG picture")
+	noErr(t, a.SetAvatar(u.ID, pic, "image/png"))
+	pic[0] = 0 // the caller's buffer is not kept
+	if data, typ := a.Avatar(u.ID); string(data) != "\x89PNG picture" || typ != "image/png" {
+		t.Fatalf("avatar %q %q", data, typ)
+	}
+	again, err := New(j.records, j.append, WithIterations(1000))
+	noErr(t, err)
+	if data, _ := again.Avatar(u.ID); string(data) != "\x89PNG picture" {
+		t.Fatalf("after a restart: %q", data)
+	}
+	noErr(t, a.SetAvatar(u.ID, nil, ""))
+	count := len(j.records)
+	noErr(t, a.SetAvatar(u.ID, nil, "")) // removing nothing records nothing
+	if data, _ := a.Avatar(u.ID); data != nil || len(j.records) != count {
+		t.Fatal("the picture was not removed, or removing twice was recorded")
+	}
+	if err := a.SetAvatar("nobody", pic, "image/png"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown user: %v", err)
+	}
+}

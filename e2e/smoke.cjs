@@ -40,7 +40,8 @@ function check(cond, msg) {
     await page.waitForSelector("footer.footer:has-text('wikiwikibangbang')");
 
     step("administration: space, type, user, role");
-    await page.click("text=Administration");
+    await page.click("#account-button");
+    await page.click("#account-menu a[href='#/admin']");
     await page.fill("#new-space [name=key]", "PLAT");
     await page.fill("#new-space [name=name]", "Platform");
     await page.click("#new-space button[type=submit]");
@@ -149,7 +150,7 @@ function check(cond, msg) {
     await other.fill("#login [name=username]", "bert");
     await other.fill("#login [name=password]", "bert's password");
     await other.click("#login button[type=submit]");
-    await other.waitForSelector("nav >> text=bert");
+    await other.waitForSelector("#account-button[aria-label='Account of bert']");
     await other.goto(base + "/#/item/PLAT-2");
     await other.waitForSelector(".ProseMirror h3");
     await page.waitForSelector(".live-presence:has-text('bert')");
@@ -430,7 +431,8 @@ function check(cond, msg) {
     await page.waitForSelector("#governance h2:has-text('Implausible')");
 
     step("administration: groups, a group's role in a space, system roles");
-    await page.click("nav a:has-text('Administration')");
+    await page.click("#account-button");
+    await page.click("#account-menu a[href='#/admin']");
     await page.fill("#add-member [name=group]", "ops");
     await page.selectOption("#add-member [name=user]", { label: "bert" });
     await page.click("#add-member button[type=submit]");
@@ -445,7 +447,8 @@ function check(cond, msg) {
     await page.click("#add-role button[type=submit]");
     await page.waitForSelector("#members tr:has-text('@ops')");
     check(await page.inputValue("#members tr:has-text('@ops') select") === "editor", "the group holds the role granted");
-    await page.click("nav a:has-text('Administration')");
+    await page.click("#account-button");
+    await page.click("#account-menu a[href='#/admin']");
     await page.click("#groups button[aria-label^='Take bert out']");
     await page.waitForSelector("#admin-groups p:has-text('No groups yet.')");
 
@@ -469,11 +472,20 @@ function check(cond, msg) {
     await page.waitForSelector("#body .ProseMirror:has-text('Made through MCP.')");
 
     step("account: token");
-    await page.click("nav a[href='#/account']");
+    await page.click("#account-button");
+    await page.click("#account-menu a[href='#/account']");
     await page.fill("#new-token [name=name]", "ci");
     await page.click("#new-token button[type=submit]");
     await page.waitForSelector("text=Copy this token now");
     check(/wwbb_[0-9a-f]{64}/.test(await page.textContent("code")), "the token secret is shown once");
+
+    step("account: a profile picture replaces the initials in the header, and goes again");
+    check((await page.textContent("#account-button .avatar")) === "A", "without a picture the header shows the initials");
+    await page.setInputFiles("#avatar-file", { name: "me.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
+    await page.waitForSelector("#account-button .avatar img");
+    await page.click("#avatar button:has-text('Remove the picture')");
+    await page.waitForSelector("#account-button .avatar:not(:has(img))");
 
     step("language: German on request, kept across sign-ins");
     await page.selectOption("#language [name=language]", "de");
@@ -496,7 +508,8 @@ function check(cond, msg) {
     await page.waitForSelector("#nav-notifications[aria-label^='Notifications']");
 
     step("log out, log in as bert, read the item");
-    await page.click("text=Log out");
+    await page.click("#account-button");
+    await page.click("#logout");
     await page.waitForSelector("#login");
     await page.fill("#login [name=username]", "bert");
     await page.fill("#login [name=password]", "bert's password");

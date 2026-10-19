@@ -406,5 +406,13 @@ export default {
   "access.lift": "Lift the restriction",
   "access.redact": "Redact at once",
   "access.redactReason": "Why must this item be erased at once? The reason is logged.",
-  "access.redactConfirm": "Erase the content of {key} for good, now? This cannot be undone."
+  "access.redactConfirm": "Erase the content of {key} for good, now? This cannot be undone.",
+  "nav.accountOf": "Account of {name}",
+  "nav.accountPage": "Account and password",
+  "account.avatar": "Profile picture",
+  "account.avatarNone": "No picture yet: your initials are shown instead.",
+  "account.avatarSet": "Shown next to your name.",
+  "account.avatarChoose": "Choose a picture",
+  "account.avatarRemove": "Remove the picture",
+  "account.avatarNotImage": "This file is not an image the browser can read."
 };

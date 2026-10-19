@@ -52,6 +52,9 @@ type Budgets struct {
 	LinkCheckLinks int
 	// AttachmentBytes is the largest file one upload stores (ADR-0045).
 	AttachmentBytes int64
+	// AvatarBytes is the largest profile picture an account keeps
+	// (ADR-0050); the browser scales a picture down before sending it.
+	AvatarBytes int64
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
@@ -68,6 +71,7 @@ func Default() Budgets {
 		SSOPending:       10_000,
 		LinkCheckLinks:   500,
 		AttachmentBytes:  25 << 20,
+		AvatarBytes:      256 << 10,
 	}
 }
 

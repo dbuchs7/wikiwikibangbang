@@ -133,6 +133,9 @@ func (h authHandlers) me(w http.ResponseWriter, r *http.Request) {
 		// Whether the caller may erase content for good (ADR-0026), so the
 		// UI offers redaction only to them.
 		"erasure": h.hasSystemRole(p, item.RoleErasure),
+		// avatar names the caller's profile picture's content, or is empty
+		// when they have none (ADR-0050).
+		"avatar": h.avatarTagOf(p.User),
 		// The UI language the user chose (ADR-0017), or empty: the UI
 		// then suggests the browser's language once.
 		"language":  h.d.DB.Accounts.Language(p.User),
@@ -317,4 +320,11 @@ func (h authHandlers) userNames(w http.ResponseWriter, r *http.Request) {
 		names[id] = name
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"names": names})
+}
+
+func (h authHandlers) avatarTagOf(id auth.UserID) string {
+	if data, _ := h.d.DB.Accounts.Avatar(id); data != nil {
+		return avatarTag(data)
+	}
+	return ""
 }

@@ -404,5 +404,13 @@ export default {
   "access.lift": "Einschränkung aufheben",
   "access.redact": "Sofort schwärzen",
   "access.redactReason": "Warum muss dieser Eintrag sofort gelöscht werden? Der Grund wird protokolliert.",
-  "access.redactConfirm": "Den Inhalt von {key} jetzt endgültig löschen? Das lässt sich nicht rückgängig machen."
+  "access.redactConfirm": "Den Inhalt von {key} jetzt endgültig löschen? Das lässt sich nicht rückgängig machen.",
+  "nav.accountOf": "Konto von {name}",
+  "nav.accountPage": "Konto und Passwort",
+  "account.avatar": "Profilbild",
+  "account.avatarNone": "Noch kein Bild: An seiner Stelle stehen Ihre Initialen.",
+  "account.avatarSet": "Wird neben Ihrem Namen gezeigt.",
+  "account.avatarChoose": "Bild wählen",
+  "account.avatarRemove": "Bild entfernen",
+  "account.avatarNotImage": "Diese Datei ist kein Bild, das der Browser lesen kann."
 };

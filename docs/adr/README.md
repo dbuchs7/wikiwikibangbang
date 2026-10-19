@@ -62,3 +62,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0047](0047-inline-comments-anchored-by-quoted-text.md) | Inline comments are anchored by the text they quote; threads take replies and are resolved | Accepted | Landed |
 | [0048](0048-roles-are-listed-and-taken-back.md) | Roles, group memberships and system roles are listed and taken back | Accepted | Landed |
 | [0049](0049-a-task-inbox-after-atlas.md) | A task inbox built on the item model, after atlas's task list; no atlas code taken over | Accepted | Partial |
+| [0050](0050-profile-pictures-in-the-accounts-journal.md) | Profile pictures are kept in the accounts journal; the header has an account menu | Accepted | Landed |
