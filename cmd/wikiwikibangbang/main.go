@@ -4,7 +4,7 @@
 //
 //	wikiwikibangbang serve [-addr :8080] [-data-dir data]
 //	wikiwikibangbang check [-data-dir data]
-//	wikiwikibangbang import -from SOURCE -site URL -spaces KEY,... [-data-dir data]
+//	wikiwikibangbang import -from SOURCE -site URL [-spaces KEY,...] [-projects KEY,...] [-data-dir data]
 //	wikiwikibangbang healthcheck [-url http://127.0.0.1:8080/healthz]
 //	wikiwikibangbang version
 package main

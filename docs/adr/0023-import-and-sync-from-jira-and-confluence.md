@@ -119,14 +119,26 @@ Found while prototyping:
 
 ## Confluence Cloud reader (2026-10-19)
 
-The maintainer chose Atlassian Cloud through its REST APIs as the first source. `internal/migrate/confluence_cloud.go` reads spaces and pages with their storage format through API v2 (`/wiki/api/v2/spaces`, `/wiki/api/v2/pages`, following the `_links.next` cursor) and page restrictions through API v1 (`/wiki/rest/api/content/{id}/restriction/byOperation/{read|update}`), and produces the Confluence part of a `Snapshot`. The command `wikiwikibangbang import -from confluence-cloud` runs it against a stopped server's data directory, with the account's e-mail address and API token from the environment.
+The maintainer chose Atlassian Cloud through its REST APIs as the first source. `internal/migrate/confluence_cloud.go` reads spaces and pages with their storage format through API v2 (`/wiki/api/v2/spaces`, `/wiki/api/v2/pages`, following the `_links.next` cursor) and page restrictions through API v1 (`/wiki/rest/api/content/{id}/restriction/byOperation/{read|update}`), and produces the Confluence part of a `Snapshot`. The command `wikiwikibangbang import -from atlassian-cloud` runs it against a stopped server's data directory, with the account's e-mail address and API token from the environment.
 
 1. **Restrictions fail closed.** A restriction that cannot be read (an answer other than 200, after retrying rate limits) or has an unexpected form restricts the page to a placeholder no one holds, and the report says so. A group in a restriction becomes a placeholder too: its members lose access until groups are mapped. An import never shows a page to more people than the source did.
 2. **Accounts are mapped by a list.** The reader sees account IDs only; the command maps them to local accounts by a file of `accountId username` lines. A username without a local account stops the import, since a placeholder would lock its owner out silently. Unmapped accounts become placeholders, as before.
 3. **The token stays on the site.** Only paths of the site are followed; an absolute or scheme-relative next link is refused, and plain http is accepted only for the local machine.
 4. **Pages under a folder or another non-page parent** are placed at the top of the space and reported.
 5. **Not verified against a live site.** The endpoints and field names follow Atlassian's published models as mirrored in an open-source client library, since Atlassian's documentation could not be reached while building. The tests use a fake site; the first import against a real site is the check, and an unexpected answer restricts and reports rather than opens.
-6. Still not built: the Jira Cloud reader, comments, attachments, labels, page history, and mapping groups.
+6. Still not built: comments, attachments, labels, page history, and mapping groups.
+
+## Jira Cloud reader (2026-10-19)
+
+`internal/migrate/jira_cloud.go` reads projects through REST API v3: the field list (`/rest/api/3/field`), each project and the statuses of its issue types (`/rest/api/3/project/{key}/statuses`), and its issues through the token-paged search (`POST /rest/api/3/search/jql`). The import command reads Confluence spaces and Jira projects into one snapshot, so page links to issues resolve in the same run.
+
+1. **Workflows without transitions.** Reading Jira's transitions needs the workflow scheme and workflow APIs; the reader takes the statuses only and lets every state be reached from every other, reported once per type. The initial state is the first status of the category "new". Reading the real transitions is a follow-up.
+2. **Fields from use.** A type's fields are the custom fields, and a short list of system fields (assignee, reporter, priority, dates, resolution …), that its issues hold a value for; an option field's values are those its issues use. Arrays (labels, components, versions) are reported as unmappable; their values stay in the raw source.
+3. **Rich text becomes plain text.** Descriptions and rich-text fields in the Atlassian Document Format become paragraphs; lists, tables and task items keep their text, links keep their address, attachments become a placeholder and are reported.
+4. **Links once.** Every issue link appears on both issues; the reader imports it from its outward side only.
+5. **Parents outside the import.** An issue whose parent (an epic in another project) is not read is placed at the top of its space and reported, instead of being refused.
+6. **"Removed in the source" looks only at what a run read.** A run that reads only some projects or spaces no longer reports the items of the others as removed.
+7. Not verified against a live site, as for the Confluence reader; the models of the same open-source client library were the reference.
 
 ## Pros and cons of the options
 

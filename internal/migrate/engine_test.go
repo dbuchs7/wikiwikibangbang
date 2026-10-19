@@ -223,6 +223,19 @@ func TestRemovedInSourceIsReportedNotDeleted(t *testing.T) {
 	}
 }
 
+// A run that reads only the projects does not report the pages of an
+// earlier run as removed, even in a shared space.
+func TestRemovedInSourceLooksOnlyAtWhatTheRunRead(t *testing.T) {
+	s := newStore(t)
+	run(t, s, sample(), Options{Actor: "import"})
+	snap := sample()
+	snap.Spaces, snap.Pages = nil, nil
+	rep := run(t, s, snap, Options{Actor: "import"})
+	if hasProblem(rep, "removed in the source") {
+		t.Fatalf("pages of another run reported as removed: %+v", rep.Problems)
+	}
+}
+
 func TestSyncModeKeepsItemsReadOnlyUntilCutOver(t *testing.T) {
 	s := newStore(t)
 	if err := s.GrantRole("admin", "PLAT", "anna@acme.example", item.Editor); !errors.Is(err, item.ErrNotFound) {

@@ -464,8 +464,17 @@ func (e *engine) principals(accounts []string) []string {
 }
 
 // reportRemoved lists imported items of this site whose source object is no
-// longer in the snapshot. They are kept: an import never deletes (D8).
+// longer in the snapshot. They are kept: an import never deletes (D8). Only
+// the spaces this snapshot covers are looked at, so importing one project
+// does not report the pages of another run as removed.
 func (e *engine) reportRemoved() {
+	covered := map[string]bool{}
+	for _, p := range e.snap.Projects {
+		covered["jira\x00"+e.m.Spaces["jira:"+p.Key]] = true
+	}
+	for _, sp := range e.snap.Spaces {
+		covered["confluence\x00"+e.m.Spaces["confluence:"+sp.Key]] = true
+	}
 	seen := map[string]bool{}
 	for _, is := range e.snap.Issues {
 		seen["jira\x00"+is.ID] = true
@@ -475,7 +484,7 @@ func (e *engine) reportRemoved() {
 	}
 	for _, it := range e.s.Find(item.Query{}) {
 		o := it.Origin
-		if o == nil || o.Instance != e.snap.Instance || seen[o.System+"\x00"+o.ExternalID] {
+		if o == nil || o.Instance != e.snap.Instance || seen[o.System+"\x00"+o.ExternalID] || !covered[o.System+"\x00"+it.Space] {
 			continue
 		}
 		e.problem(o.System+" "+it.Key, "was removed in the source; it is kept here and must be trashed by a person if no longer needed")
