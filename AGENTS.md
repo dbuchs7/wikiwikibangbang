@@ -77,7 +77,7 @@ GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/wikiwikibangbang   # any 
 docker build -t wikiwikibangbang:dev .               # container image
 ```
 
-CI builds every release platform on every push (`cross-build`); the list must equal the matrix in [`.github/workflows/release.yml`](.github/workflows/release.yml), which `internal/repoconfig` checks. A release is cut by pushing a `v*` tag — that is the maintainer's decision, never an agent's.
+CI builds every release platform on every push (`cross-build`); the list must equal the matrix in [`.github/workflows/release.yml`](.github/workflows/release.yml), which `internal/repoconfig` checks. A release is cut by a `v*` tag — pushed, or created on GitHub's release page, after which the workflow attaches the archives to that release — and that is the maintainer's decision, never an agent's. A release whose archives are missing is completed by running the `Release` workflow by hand with its tag.
 
 On pull requests CI also runs the DCO check over the proposed commits. Run it locally before asking for review:
 

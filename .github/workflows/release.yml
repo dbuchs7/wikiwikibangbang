@@ -10,15 +10,33 @@ name: Release
 # no CGO and embeds the web UI, so every target cross-compiles from the linux
 # runner.
 #
-# workflow_dispatch builds the artifacts for a dry run but publishes nothing.
+# A release can also be started on GitHub, without git: Releases -> Draft a
+# new release -> a new tag v… -> Publish. GitHub then creates the tag, this
+# workflow runs, and the archives are attached to the release that already
+# exists instead of creating a second one.
+#
+# workflow_dispatch without a tag builds the artifacts for a dry run and
+# publishes nothing. With a tag (e.g. v0.1.0) it builds that tag and attaches
+# the archives to its release — the way to complete a release whose archives
+# are missing.
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Attach the archives to the release of this existing tag, e.g. v0.1.0; leave empty for a dry run'
+        required: false
+        default: ''
 
 permissions:
   contents: read
+
+# The tag to build and publish: the pushed one, or the one given to a manual
+# run; empty for a dry run.
+env:
+  TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
 
 jobs:
   build:
@@ -39,7 +57,18 @@ jobs:
           - { goos: windows, goarch: amd64 }
           - { goos: windows, goarch: arm64 }
     steps:
+      # Refuses anything but a version tag before it reaches a shell or a ref.
+      - name: Check the tag
+        run: |
+          set -euo pipefail
+          if [ -n "${TAG}" ] && ! printf '%s' "${TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::${TAG} is not a version tag such as v0.1.0"
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG || github.sha }}
 
       - uses: actions/setup-go@v5
         with:
@@ -55,8 +84,8 @@ jobs:
           set -euo pipefail
           # The version is the tag without the leading "v"; a manual dispatch
           # (no tag) stamps a dev string so the dry run still carries one.
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            version="${GITHUB_REF_NAME#v}"
+          if [ -n "${TAG}" ]; then
+            version="${TAG#v}"
           else
             version="0.0.0-dev+${GITHUB_SHA::12}"
           fi
@@ -85,7 +114,7 @@ jobs:
   release:
     name: publish release
     needs: build
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || inputs.tag != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -104,12 +133,20 @@ jobs:
           rm -f *.sha256
           ls -la
 
-      # Every 0.x tag is a prerelease: nothing before 1.0 is stable.
-      - name: Create GitHub Release
+      # A release made on GitHub's release page exists before this runs: its
+      # tag is what started the workflow. Then the archives are attached to it
+      # (replacing any of the same name), and its title, notes and prerelease
+      # flag stay as written there. Otherwise the release is created; every
+      # 0.x tag is a prerelease, nothing before 1.0 is stable.
+      - name: Publish the archives
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
         run: |
-          gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" \
-            --title "wikiwikibangbang ${TAG}" --generate-notes --prerelease \
-            artifacts/*
+          set -euo pipefail
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" > /dev/null 2>&1; then
+            gh release upload "${TAG}" --repo "${GITHUB_REPOSITORY}" --clobber artifacts/*
+          else
+            gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" \
+              --title "wikiwikibangbang ${TAG}" --generate-notes --prerelease \
+              artifacts/*
+          fi
