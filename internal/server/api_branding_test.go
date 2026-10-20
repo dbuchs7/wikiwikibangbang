@@ -64,3 +64,32 @@ func eventsOf(audit map[string]any) []string {
 	}
 	return out
 }
+
+// TestAnOwnStylesheetDecidesTheDarkScheme: the dark scheme is served while
+// the own stylesheet is empty or defines a dark look, and empty otherwise
+// (ADR-0070).
+func TestAnOwnStylesheetDecidesTheDarkScheme(t *testing.T) {
+	w := newWorld(t)
+	anon := &client{t: t, h: w.admin.h}
+	dark := func() string {
+		t.Helper()
+		r := anon.do("GET", "/theme-dark.css", "")
+		if r.Code != http.StatusOK || !strings.HasPrefix(r.Header().Get("Content-Type"), "text/css") {
+			t.Fatalf("theme-dark.css %d", r.Code)
+		}
+		return r.Body.String()
+	}
+	if css := dark(); !strings.Contains(css, "--bg: #0e1014") || anon.expect("GET", "/branding.json", "", http.StatusOK)["dark"] != true {
+		t.Fatalf("without an own stylesheet the dark scheme is on: %s", css)
+	}
+	if got := w.admin.expect("PUT", "/api/branding", `{"css":"body{background:#fff}"}`, http.StatusOK); got["dark"] != false {
+		t.Fatalf("an own stylesheet without a dark look: %v", got)
+	}
+	if css := dark(); strings.Contains(css, "--bg") || !strings.Contains(anon.do("GET", "/branding.css", "").Body.String(), "color-scheme: light") {
+		t.Fatalf("the dark scheme is still served: %s", css)
+	}
+	w.admin.expect("PUT", "/api/branding", `{"css":"@media (prefers-color-scheme: dark) { body{background:#000} }"}`, http.StatusOK)
+	if css := dark(); !strings.Contains(css, "--bg: #0e1014") {
+		t.Fatalf("an own dark look keeps the dark scheme: %s", css)
+	}
+}

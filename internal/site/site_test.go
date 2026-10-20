@@ -41,10 +41,40 @@ func TestTheDesignIsKeptAndReplayed(t *testing.T) {
 		t.Fatal("a removed logo came back")
 	}
 	css := again.Stylesheet()
-	for _, want := range []string{"--accent: #d40000", `"Frutiger", "Corporate"`, "@font-face", ".top { background: #202020; }", "letter-spacing: 1px", "prefers-color-scheme: light"} {
+	for _, want := range []string{"--accent: #d40000", `"Frutiger", "Corporate"`, "@font-face", ".top { background: #202020; }", "letter-spacing: 1px"} {
 		if !strings.Contains(css, want) {
 			t.Errorf("the stylesheet lacks %q:\n%s", want, css)
 		}
+	}
+}
+
+// TestAnOwnStylesheetWithoutADarkSchemeTurnsItOff: an own stylesheet that
+// does not say how it looks in the dark turns the dark scheme off; then the
+// light rules apply always (ADR-0070).
+func TestAnOwnStylesheetWithoutADarkSchemeTurnsItOff(t *testing.T) {
+	s, _ := New(nil, func([]byte) error { return nil })
+	if !s.Design().DarkMode() {
+		t.Fatal("no own stylesheet, yet the dark scheme is off")
+	}
+	d := Design{Accent: "#0b2f6b", Background: "#fafafa", CSS: "body { background: white; }"}
+	if err := s.SetDesign("admin", d); err != nil {
+		t.Fatal(err)
+	}
+	css := s.Stylesheet()
+	if s.Design().DarkMode() || !strings.Contains(css, ":root { color-scheme: light; }") || strings.Contains(css, "prefers-color-scheme") {
+		t.Fatalf("light only expected:\n%s", css)
+	}
+	if !strings.Contains(css, "\n:root { --bg: #fafafa; }") || !strings.Contains(css, "--accent-soft: color-mix(in srgb, #0b2f6b 12%, white)") {
+		t.Fatalf("the light rules must apply always:\n%s", css)
+	}
+	d.CSS += "\n@media (prefers-color-scheme:dark) { body { background: black; } }"
+	if err := s.SetDesign("admin", d); err != nil {
+		t.Fatal(err)
+	}
+	css = s.Stylesheet()
+	if !s.Design().DarkMode() || strings.Contains(css, "color-scheme: light;") || !strings.Contains(css, "@media (prefers-color-scheme: light) {\n  :root { --bg: #fafafa; }") ||
+		!strings.Contains(css, "@media (prefers-color-scheme: dark) { :root { --accent:") {
+		t.Fatalf("with a dark scheme of its own:\n%s", css)
 	}
 }
 

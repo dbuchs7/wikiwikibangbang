@@ -4,8 +4,8 @@
    fields and tables are adapted from the console of pblumer/atlas
    (api/web/app.css, AGPL-3.0-only, the same license as this project; see
    THIRD_PARTY_NOTICES.md), so the two products look alike. atlas has a light
-   theme only; the dark values below are this project's own, kept because
-   the UI followed the system's dark mode before. No font files: the system
+   theme only; the dark values in dark.css are this project's own, kept
+   because the UI followed the system's dark mode before (ADR-0070). No font files: the system
    typeface keeps the page within its content-security policy (ADR-0014). */
 
 :root {
@@ -42,31 +42,6 @@
   color-scheme: light dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0e1014;
-    --surface: #161920;
-    --surface-2: #1b1f27;
-    --border: #262b34;
-    --border-strong: #363d48;
-    --text: #e8eaef;
-    --muted: #9aa1ab;
-    --accent: #5b95ff;
-    --accent-hover: #7aa9ff;
-    --accent-soft: #17233f;
-    --accent-ink: #0b0d12; /* dark ink: white on this lighter blue is too faint */
-    --danger: #ff6b5e;
-    --danger-hover: #ff8a80;
-    --danger-soft: #3a1714;
-    --success: #3fb950;
-    --success-soft: #13301c;
-    --warning: #d29922;
-    --warning-soft: #33280c;
-    --row-hover: #1b1f27;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4);
-    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
-  }
-}
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -314,11 +289,6 @@ span.tree-toggle { cursor: default; }
 .pm-panel[data-tone="warning"] { --tone: #bf8700; --tone-soft: #fff8e1; }
 .pm-panel[data-tone="tip"] { --tone: #1a7f37; --tone-soft: #e9f6ec; }
 .pm-panel[data-tone="error"] { --tone: var(--danger); --tone-soft: var(--danger-soft); }
-@media (prefers-color-scheme: dark) {
-  .pm-panel[data-tone="note"] { --tone: #a371f7; --tone-soft: #2a1f3d; }
-  .pm-panel[data-tone="warning"] { --tone: #d29922; --tone-soft: #3a2e10; }
-  .pm-panel[data-tone="tip"] { --tone: #3fb950; --tone-soft: #13301c; }
-}
 /* Consecutive panels of one tone read as one box. */
 .pm-panel[data-tone="info"] + .pm-panel[data-tone="info"],
 .pm-panel[data-tone="note"] + .pm-panel[data-tone="note"],
@@ -352,11 +322,6 @@ span.tree-toggle { cursor: default; }
 .diff-change::before { content: "~"; }
 .diff ins { background: #c7ebd1; text-decoration: none; }
 .diff del { background: #f6c9c4; }
-@media (prefers-color-scheme: dark) {
-  .diff-add { background: #13301c; }
-  .diff ins { background: #1f4d2c; }
-  .diff del { background: #5a221d; }
-}
 
 /* Labels (ADR-0044). */
 .labels { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 10px; }
@@ -492,12 +457,6 @@ button.watch-bell svg { width: 20px; height: 20px; }
 #access.access-restricted { border-color: #f0bf73; background: #fff5e6; }
 #access.access-restricted .access-bar { color: #8a4b00; }
 .access-bar { display: flex; align-items: center; gap: 8px; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) #access.access-open { background: #10291a; border-color: #2c6b41; }
-  :root:not([data-theme="light"]) #access.access-open .access-bar { color: #8fd6a5; }
-  :root:not([data-theme="light"]) #access.access-restricted { background: #33240c; border-color: #8a5a17; }
-  :root:not([data-theme="light"]) #access.access-restricted .access-bar { color: #f5c37a; }
-}
 @media (max-width: 1100px) {
   .item-layout { grid-template-columns: minmax(0, 1fr); }
 }
@@ -620,7 +579,6 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .pm-editor hr.pm-divider { border: 0; border-top: 1px solid var(--border-strong); margin: 14px 0; }
 .pm-editor hr.pm-divider.ProseMirror-selectednode { border-top-color: var(--accent); }
 .pm-editor mark { background: #fff1a8; color: inherit; padding: 0 1px; border-radius: 2px; }
-@media (prefers-color-scheme: dark) { .pm-editor mark { background: #6b5a00; } }
 .pm-editor .ProseMirror::after { content: ""; display: block; clear: both; }
 .pm-image.pm-image-left { float: left; margin: 4px 18px 8px 0; text-align: left; }
 .pm-image.pm-image-right { float: right; margin: 4px 0 8px 18px; text-align: right; }

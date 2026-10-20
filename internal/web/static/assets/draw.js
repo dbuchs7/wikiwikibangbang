@@ -15,7 +15,10 @@ const parent = window.parent;
 const origin = window.location.origin;
 let api = null;
 
-const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+// The dark scheme follows the system unless the installation turned it off
+// (ADR-0070).
+const dark = window.matchMedia("(prefers-color-scheme: dark)").matches &&
+  await fetch("/branding.json").then((r) => r.json()).then((b) => b.dark !== false).catch(() => true);
 const root = createRoot(document.getElementById("root"));
 
 function render(lang, initialData) {
