@@ -1,0 +1,2 @@
+/* The drawing page fills the frame it is shown in (ADR-0053). */
+html, body, #root { height: 100%; margin: 0; }

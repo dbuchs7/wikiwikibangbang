@@ -12,6 +12,7 @@ import {
 import { h, safeHref } from "./dom.js";
 import { t } from "./i18n.js";
 import { anchorOf } from "./anchors.js";
+import { openDrawing, drawingName } from "./drawing.js";
 
 // Every block carries bid, its ID in a live session (ADR-0010); it is not
 // stored. Text blocks keep the mentions they had without a mention mark
@@ -336,15 +337,36 @@ function childrenView(node, childPages) {
   return { dom, ...own, update: (n) => n.type === node.type };
 }
 
-// imageView shows an image attachment; an editor edits its caption.
-function imageView(node, view, getPos, fileURL) {
-  const img = h("img", { src: fileURL ? fileURL(node.attrs.ref) : "", alt: node.attrs.text, loading: "lazy" });
+// imageView shows an image attachment; an editor edits its caption, and a
+// drawing (ADR-0053) in the drawing editor.
+function imageView(node, view, getPos, files) {
+  const img = h("img", { src: files ? files.url(node.attrs.ref) : "", alt: node.attrs.text, loading: "lazy" });
   const caption = h("figcaption");
   const dom = h("figure", { class: "pm-image", contenteditable: "false" }, img, caption);
   let shown = null;
+  // A drawing is edited from its picture and saved as a new attachment; the
+  // block then points at it. The former picture stays, as earlier versions
+  // of the body show it (ADR-0043).
+  const redraw = async (status) => {
+    status.textContent = "";
+    try {
+      const res = await fetch(files.url(node.attrs.ref), { credentials: "same-origin" });
+      if (!res.ok) throw new Error(res.statusText);
+      const png = await openDrawing(await res.blob());
+      if (!png) return;
+      const a = await files.upload(new File([png], drawingName(node.attrs.text), { type: "image/png" }));
+      const pos = getPos();
+      if (pos === undefined || dom.classList.contains("pm-locked")) throw new Error(t("draw.locked"));
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, ref: a.id }));
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
   const render = () => {
-    if (shown === node.attrs.text + view.editable) return;
-    shown = node.attrs.text + view.editable;
+    const key = node.attrs.ref + node.attrs.text + view.editable;
+    if (shown === key) return;
+    shown = key;
+    img.src = files ? files.url(node.attrs.ref) : "";
     img.alt = node.attrs.text;
     if (!view.editable) return caption.replaceChildren(node.attrs.text);
     const input = h("input", { value: node.attrs.text, placeholder: t("editor.caption"), "aria-label": t("editor.caption") });
@@ -354,7 +376,9 @@ function imageView(node, view, getPos, fileURL) {
         view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, text: input.value.replace(/[\r\n]+/g, " ") }));
       } else render(shown = null);
     });
-    caption.replaceChildren(input);
+    if (!files?.isDrawing?.(node.attrs.ref)) return caption.replaceChildren(input);
+    const status = h("span", { class: "error", role: "status" });
+    caption.replaceChildren(input, " ", h("button", { type: "button", class: "link pm-redraw", text: t("draw.edit"), onclick: () => redraw(status) }), status);
   };
   render();
   return { dom, ...own, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
@@ -382,7 +406,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       table: tableView,
       toc: (node, v) => tocView(node, v, tocs),
       children: (node) => childrenView(node, childPages),
-      image: (node, v, getPos) => imageView(node, v, getPos, files?.url),
+      image: (node, v, getPos) => imageView(node, v, getPos, files),
     },
     ...viewProps,
   });
@@ -408,9 +432,10 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     e.target.value = "";
     if (kind === "table") insertBlock(schema.nodes.table.create({ text: `${t("editor.heading", { n: 1 })}\t${t("editor.heading", { n: 2 })}\n\t` }));
     else if (kind === "image") picker.click();
+    else if (kind === "drawing") draw();
     else if (kind) insertBlock(schema.nodes[kind].create());
   } }, [["", t("editor.insert")], ["table", t("editor.table")], ["toc", t("editor.toc")], ["children", t("editor.children")],
-    files ? ["image", t("editor.image")] : null].filter(Boolean)
+    files ? ["image", t("editor.image")] : null, files ? ["drawing", t("draw.insert")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
   const picker = h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp", hidden: true, "aria-label": t("editor.image") });
@@ -427,6 +452,19 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       status.textContent = err.message;
     }
   });
+  // A drawing (ADR-0053) is made in the drawing editor, stored as an
+  // attachment that carries its scene, and shown like an image.
+  const draw = async () => {
+    status.textContent = "";
+    try {
+      const png = await openDrawing();
+      if (!png) return;
+      const a = await files.upload(new File([png], drawingName(""), { type: "image/png" }));
+      insertBlock(schema.nodes.image.create({ ref: a.id, text: "" }));
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
   const target = h("input", { class: "pm-target", placeholder: t("editor.target"), "aria-label": t("editor.targetLabel") });
   const status = h("span", { class: "error", role: "status" });
   const withTarget = (fn) => async () => {

@@ -116,6 +116,7 @@ func Routes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/assets/", Summary: "Web UI assets", Access: Public, Handler: noListing(files)},
 		{Method: http.MethodGet, Pattern: "/favicon.ico", Summary: "The site icon, where browsers look for it without a link", Access: Public, Handler: files},
 		{Method: http.MethodGet, Pattern: "/vendor/", Summary: "Vendored UI libraries and their licenses (ADR-0032)", Access: Public, Handler: noListing(files)},
+		{Method: http.MethodGet, Pattern: "/draw", Summary: "The drawing editor, shown in a frame of the UI (ADR-0053)", Access: Public, Handler: drawPage(d.UI)},
 	}
 	routes = append(routes, authRoutes(d)...)
 	routes = append(routes, avatarRoutes(d)...)
@@ -164,6 +165,20 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 func index(ui fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFileFS(w, r, ui, "index.html")
+	})
+}
+
+// DrawPolicy is the content security policy of the drawing page (ADR-0053).
+// Excalidraw sets inline styles and shows pictures from data: and blob:
+// addresses; scripts still come from this server only, and the page may be
+// framed by the UI alone.
+const DrawPolicy = "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; " +
+	"worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+
+func drawPage(ui fs.FS) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", DrawPolicy)
+		http.ServeFileFS(w, r, ui, "draw.html")
 	})
 }
 
