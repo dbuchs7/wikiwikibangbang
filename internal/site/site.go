@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"slices"
 	"strings"
@@ -222,6 +223,36 @@ func (s *Settings) RemoveAsset(actor, name string) error {
 	return s.record(event{Kind: assetRemove, Actor: actor, Asset: name})
 }
 
+// AccentInk returns the colour of text on a fill of colour c (#rrggbb):
+// white or a near black, whichever has the higher contrast ratio (WCAG
+// 2.x). The product's own palette sets it per scheme; a corporate accent
+// is the same in both, so its text colour follows from the accent alone.
+func AccentInk(c string) string {
+	l := luminance(c)
+	// Contrast with white is 1.05/(l+0.05), with the near black
+	// #0b0d12 (luminance about 0.004) (l+0.05)/0.054.
+	if 1.05/(l+0.05) >= (l+0.05)/0.054 {
+		return "#ffffff"
+	}
+	return "#0b0d12"
+}
+
+// luminance is the relative luminance of #rrggbb (WCAG 2.x).
+func luminance(c string) float64 {
+	var r, g, b uint8
+	if _, err := fmt.Sscanf(c, "#%02x%02x%02x", &r, &g, &b); err != nil {
+		return 0
+	}
+	lin := func(v uint8) float64 {
+		x := float64(v) / 255
+		if x <= 0.04045 {
+			return x / 12.92
+		}
+		return math.Pow((x+0.055)/1.055, 2.4)
+	}
+	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
+}
+
 func tag(data []byte) string {
 	// FNV-1a: a change marker for caches, not a security measure.
 	h := uint64(14695981039346656037)
@@ -262,7 +293,14 @@ func (s *Settings) Stylesheet() string {
 	if d.Accent != "" || len(stack) > 0 {
 		b.WriteString(":root {\n")
 		if d.Accent != "" {
-			fmt.Fprintf(&b, "  --accent: %s;\n  --accent-hover: color-mix(in srgb, %s 82%%, black);\n", d.Accent, d.Accent)
+			// The text on an accent fill is white or near black, whichever
+			// contrasts more, in both schemes; hovering moves the fill away
+			// from it, so the contrast only grows.
+			ink, away := AccentInk(d.Accent), "black"
+			if ink != "#ffffff" {
+				away = "white"
+			}
+			fmt.Fprintf(&b, "  --accent: %s;\n  --accent-hover: color-mix(in srgb, %s 82%%, %s);\n  --accent-ink: %s;\n", d.Accent, d.Accent, away, ink)
 		}
 		if len(stack) > 0 {
 			fmt.Fprintf(&b, "  --font-sans: %s;\n", strings.Join(stack, ", "))

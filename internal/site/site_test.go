@@ -64,3 +64,36 @@ func TestTheDesignIsValidated(t *testing.T) {
 		t.Errorf("an unknown asset: %v", err)
 	}
 }
+
+// TestTheAccentGetsReadableText: the text on an accent fill contrasts with
+// it in both schemes (ADR-0052): white on dark accents, near black on light.
+func TestTheAccentGetsReadableText(t *testing.T) {
+	for accent, want := range map[string]string{
+		"#d40000": "#ffffff", "#0b5cff": "#ffffff", "#003366": "#ffffff", "#000000": "#ffffff",
+		"#ffcc00": "#0b0d12", "#5b95ff": "#0b0d12", "#ffffff": "#0b0d12", "#7fdbff": "#0b0d12",
+	} {
+		if got := AccentInk(accent); got != want {
+			t.Errorf("AccentInk(%s) = %s, want %s", accent, got, want)
+		}
+	}
+	s, err := New(nil, func([]byte) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for accent, want := range map[string][]string{
+		"#d40000": {"--accent-ink: #ffffff;", "82%, black)"},
+		"#ffcc00": {"--accent-ink: #0b0d12;", "82%, white)"},
+	} {
+		if err := s.SetDesign("admin", Design{Accent: accent}); err != nil {
+			t.Fatal(err)
+		}
+		css := s.Stylesheet()
+		root := css[strings.Index(css, ":root {"):]
+		root = root[:strings.Index(root, "}")]
+		for _, w := range want {
+			if !strings.Contains(root, w) {
+				t.Errorf("%s: the rule outside the schemes lacks %q:\n%s", accent, w, css)
+			}
+		}
+	}
+}
