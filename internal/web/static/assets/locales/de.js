@@ -62,6 +62,11 @@ export default {
   "tasks.title": "Aufgaben",
   "tasks.truncated": "Nur die ersten {n} Einträge wurden gelesen.",
 
+  "common.infoAbout": "Was prüft «{what}»?",
+  "gov.infoSensitive": "Geprüft werden Titel, Felder, Inhalt und Kommentare, bei jedem Speichern:\nPasswörter nach einer Bezeichnung (password, Passwort, pwd, passcode, Kennwort) mit mindestens 6 Zeichen, davon eine Ziffer oder ein Sonderzeichen, oder mit 16 Zeichen; maskierte Werte wie **** zählen nicht\nPrivate Schlüssel (-----BEGIN … PRIVATE KEY-----)\nZugangstoken gängiger Cloud-, Code- und Chat-Dienste, API-Geheimschlüssel, signierte Token (JWT) und Token dieses Servers\nIBAN mit gültiger Prüfziffer\nKartennummern mit gültiger Luhn-Prüfziffer",
+  "gov.infoSensitiveNote": "Ein Eintrag mit solchen Daten wird sofort auf die speichernde Person beschränkt; Bereichsadministratoren lesen ihn weiterhin. Personendaten im Sinne des Datenschutzrechts (Gesundheit, Religion usw.) werden nicht erkannt.",
+  "gov.infoStale": "Einträge, an denen seit mehr als {days} Tagen nichts geschehen ist: keine Änderung an Titel, Feldern, Inhalt, Labels oder Dateien, aber auch kein Kommentar, keine Verschiebung, keine Beziehung und keine Zugriffsänderung. Verantwortlich ist, wer den Inhalt zuletzt geändert hat. Die Anzahl Tage lässt sich in der Prüfung eines Bereichs einstellen.",
+  "gov.infoImplausible": "Formale Widersprüche, ohne den Sinn zu lesen:\nEin Datumsfeld mit dem Namen einer Frist (due, deadline, fällig) liegt in der Vergangenheit, obwohl der Eintrag noch nicht im letzten Zustand seines Workflows ist\nEin Feld, das der Typ verlangt, ist leer\nEin Artikel ohne Workflow hat keinen Inhalt",
   "gov.access": "Zugriff",
   "gov.checkAgain": "Erneut prüfen",
   "gov.colImplausible": "Unplausibel",

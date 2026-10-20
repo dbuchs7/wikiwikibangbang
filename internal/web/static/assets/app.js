@@ -1059,6 +1059,33 @@ function albumView() {
   screen()(h("h1", { text: t("album.title") }), h("p", { class: "muted", text: t("album.intro") }), h("section", { id: "album" }, albumBrowser()));
 }
 
+// infoTip is an "i" that explains what it stands beside. text holds a
+// first line and, after it, one line per point. It opens on a click (so it
+// works on touch screens and from the keyboard) and closes on a second
+// click, Escape or a click elsewhere. note, if given, closes it as a
+// paragraph of its own.
+let infoTips = 0;
+function infoTip(label, text, note) {
+  const [intro, ...points] = text.split("\n");
+  const id = "info-tip-" + ++infoTips;
+  const pop = h("div", { class: "info-pop", id, role: "note", hidden: true },
+    h("p", { text: intro }), points.length ? h("ul", {}, points.map((p) => h("li", { text: p }))) : null,
+    note ? h("p", { class: "muted", text: note }) : null);
+  const button = h("button", { type: "button", class: "info-btn", "aria-label": t("common.infoAbout", { what: label }), "aria-expanded": "false", "aria-controls": id, text: "i" });
+  const wrap = h("span", { class: "info-tip" }, button, pop);
+  const close = () => { pop.hidden = true; button.setAttribute("aria-expanded", "false"); document.removeEventListener("click", outside, true); document.removeEventListener("keydown", esc); };
+  const outside = (e) => { if (!wrap.contains(e.target)) close(); };
+  const esc = (e) => { if (e.key === "Escape") { close(); button.focus(); } };
+  button.addEventListener("click", () => {
+    if (!pop.hidden) return close();
+    pop.hidden = false;
+    button.setAttribute("aria-expanded", "true");
+    document.addEventListener("click", outside, true);
+    document.addEventListener("keydown", esc);
+  });
+  return wrap;
+}
+
 // governanceOverview shows the governance check of every space one holds
 // a role in, as counts that lead to each space's check (ADR-0040).
 async function governanceOverview() {
@@ -1069,7 +1096,10 @@ async function governanceOverview() {
     h("h1", { text: t("gov.title") }),
     h("p", { class: "muted", text: t("gov.intro") }),
     h("section", { id: "governance-overview" }, spaces.length
-      ? h("table", {}, h("thead", {}, h("tr", {}, [t("col.space"), t("gov.colSensitive"), t("gov.colStale"), t("gov.colImplausible")].map((c) => h("th", { text: c })))),
+      ? h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("col.space") }),
+        h("th", {}, t("gov.colSensitive"), " ", infoTip(t("gov.colSensitive"), t("gov.infoSensitive"), t("gov.infoSensitiveNote"))),
+        h("th", {}, t("gov.colStale"), " ", infoTip(t("gov.colStale"), t("gov.infoStale", { days: 365 }))),
+        h("th", {}, t("gov.colImplausible"), " ", infoTip(t("gov.colImplausible"), t("gov.infoImplausible"))))),
         h("tbody", {}, spaces.map((s, i) => h("tr", {},
           h("td", {}, link("#/governance/" + encodeURIComponent(s.key), s.key), " ", h("span", { class: "muted", text: s.name })),
           h("td", { text: String(reports[i].sensitive.length) }),
@@ -1111,7 +1141,7 @@ async function governanceView(key) {
         route();
       } }), t("gov.staleBefore"), daysInput, t("gov.staleAfter")),
       status,
-      h("h2", { text: t("gov.sensitive", { n: rep.sensitive.length }) }),
+      h("h2", {}, t("gov.sensitive", { n: rep.sensitive.length }), " ", infoTip(t("gov.colSensitive"), t("gov.infoSensitive"), t("gov.infoSensitiveNote"))),
       h("p", { class: "muted", text: t("gov.sensitiveNote") }),
       table([t("col.item"), t("gov.where"), t("gov.what"), t("col.responsible"), t("gov.access")], rep.sensitive.map((f) => h("tr", {},
         itemCell(f), h("td", { text: f.where }), h("td", {}, h("div", { text: f.kind }), h("code", { text: f.masked })),
@@ -1119,10 +1149,10 @@ async function governanceView(key) {
         h("td", {}, f.restricted
           ? [h("span", { text: t("gov.restricted") + " " }), h("button", { class: "link", text: t("gov.lift"), onclick: () => action(() => lift(f), status) })]
           : t("gov.open"))))),
-      h("h2", { text: t("gov.stale", { days: rep.staleDays, n: rep.stale.length }) }),
+      h("h2", {}, t("gov.stale", { days: rep.staleDays, n: rep.stale.length }), " ", infoTip(t("gov.colStale"), t("gov.infoStale", { days: rep.staleDays }))),
       table([t("col.item"), t("gov.lastChange"), t("col.responsible")], rep.stale.map((f) => h("tr", {},
         itemCell(f), h("td", { text: when(f.lastChange) }), h("td", { text: who(f.responsible) })))),
-      h("h2", { text: t("gov.implausible", { n: rep.implausible.length }) }),
+      h("h2", {}, t("gov.implausible", { n: rep.implausible.length }), " ", infoTip(t("gov.colImplausible"), t("gov.infoImplausible"))),
       table([t("col.item"), t("col.problem"), t("col.responsible")], rep.implausible.map((f) => h("tr", {},
         itemCell(f), h("td", { text: f.problem }), h("td", { text: who(f.responsible) })))),
     ),

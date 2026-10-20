@@ -551,3 +551,16 @@ dialog.album-dialog::backdrop { background: rgba(20, 22, 26, .45); }
 #tasks tr.filters td { padding: 4px 6px; background: var(--row-hover); }
 #tasks tr.filters input, #tasks tr.filters select { width: 100%; min-width: 6em; font-size: 13px; padding: 3px 6px; box-sizing: border-box; }
 .tasks-foot { display: flex; gap: 12px; align-items: baseline; }
+
+/* An "i" that explains a column or heading. The selectors outweigh the
+   general button style, whose fill and padding would hide the letter. */
+.info-tip { position: relative; display: inline-block; vertical-align: middle; margin-left: 2px; }
+.info-tip button.info-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; min-width: 0; padding: 0; margin: 0; border-radius: 50%;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--muted); font: italic 700 12px/1 Georgia, "Times New Roman", serif; cursor: pointer; text-transform: none; letter-spacing: 0; box-shadow: none; }
+.info-tip button.info-btn:hover, .info-tip button.info-btn[aria-expanded=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.info-pop { position: absolute; z-index: 30; top: 24px; left: -8px; width: min(380px, calc(100vw - 48px)); padding: 10px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); font-size: 13px; font-weight: 400; font-style: normal; text-align: left; white-space: normal; text-transform: none; letter-spacing: 0; }
+.info-pop p { margin: 0 0 6px; }
+.info-pop p:last-child { margin-bottom: 0; }
+.info-pop ul { margin: 0 0 6px; padding-left: 18px; }
+.info-pop li { margin: 2px 0; }
+th:last-child .info-pop, th:nth-last-child(2) .info-pop { left: auto; right: -8px; }
