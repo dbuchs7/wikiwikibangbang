@@ -931,3 +931,7 @@ button.info-btn { min-height: 0; box-shadow: none; margin: 0 0 0 4px; }
 .login-sso:hover { background: var(--row-hover); color: var(--text); }
 .login-sso svg { width: 18px; height: 18px; flex: none; }
 a.button.login-sso { display: flex; gap: 10px; }
+/* Copying and moving a page (ADR-0067). */
+.relocate-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.relocate-form h3 { margin-top: 0; }
+.relocate-form select, .relocate-form input:not([type=checkbox]) { width: 100%; }

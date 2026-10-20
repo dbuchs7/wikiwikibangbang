@@ -682,5 +682,16 @@ export default {
   "loginsetup.requestsOff": "ausgeschaltet: die Anmeldeseite verweist an die Administration",
   "home.version": "Version {version}",
   "home.revision": "Build {revision}",
-  "login.domain": "Die Domäne Ihres Kontos ist hier nicht zugelassen. Verwenden Sie das Konto Ihrer Organisation oder wenden Sie sich an die Administration."
+  "login.domain": "Die Domäne Ihres Kontos ist hier nicht zugelassen. Verwenden Sie das Konto Ihrer Organisation oder wenden Sie sich an die Administration.",
+  "copy.open": "Kopieren …",
+  "copy.title": "«{title}» kopieren",
+  "copy.defaultTitle": "{title} (Kopie)",
+  "copy.children": "Mit Unterseiten",
+  "copy.submit": "Kopieren",
+  "move.open": "Verschieben …",
+  "move.title": "«{title}» verschieben",
+  "move.parent": "Unterhalb von",
+  "move.top": "Oberste Ebene des Bereichs",
+  "move.note": "Die Seite wird mit ihren Unterseiten verschoben. Innerhalb eines Bereichs lässt sie sich auch im Seitenbaum ziehen.",
+  "move.submit": "Verschieben"
 };

@@ -684,5 +684,16 @@ export default {
   "loginsetup.requestsOff": "switched off: the sign-in page asks people to contact an administrator",
   "home.version": "Version {version}",
   "home.revision": "Build {revision}",
-  "login.domain": "Your account's domain may not sign in here. Use your organisation's account, or ask an administrator."
+  "login.domain": "Your account's domain may not sign in here. Use your organisation's account, or ask an administrator.",
+  "copy.open": "Copy…",
+  "copy.title": "Copy “{title}”",
+  "copy.defaultTitle": "{title} (copy)",
+  "copy.children": "With its child pages",
+  "copy.submit": "Copy",
+  "move.open": "Move…",
+  "move.title": "Move “{title}”",
+  "move.parent": "Below",
+  "move.top": "At the top of the space",
+  "move.note": "The page moves with its child pages. Within a space, you can also drag it in the page tree.",
+  "move.submit": "Move"
 };
