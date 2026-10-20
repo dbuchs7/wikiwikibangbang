@@ -530,6 +530,12 @@ function check(cond, msg) {
     await page.waitForSelector("#design .notice");
     await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() === "#d40000");
     check((await page.title()).startsWith("ACME"), "the browser title carries the name");
+    // In the dark scheme the product's text on accent fills is dark; on the
+    // corporate red it must be white (ADR-0052).
+    await page.emulateMedia({ colorScheme: "dark" });
+    check(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent-ink").trim()) === "#ffffff",
+      "white text on the red accent in the dark scheme");
+    await page.emulateMedia({ colorScheme: "light" });
     await page.click("#admin-design button:has-text('Delete')"); // the product's logo comes back
     await page.waitForSelector("header .brand picture");
 
