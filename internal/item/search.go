@@ -27,10 +27,16 @@ type Hit struct {
 	// Comment is the comment the snippet comes from, or empty when it
 	// comes from the body (ADR-0035).
 	Comment ID
+	// Stars rate, from 1 to 5, how well the item answers the search on its
+	// own, not compared with the other hits (ADR-0072): 5 the key or the
+	// whole title, 4 every term in the title, 3 some in the title or the
+	// words as typed in the text, 2 every term in one block, 1 the terms
+	// spread over the item.
+	Stars int
 }
 
 // Search returns the readable items in which every term of text occurs,
-// best first (ADR-0033). q narrows the candidates as in Find.
+// best first: by stars, then by score (ADR-0033, ADR-0072). q narrows the candidates as in Find.
 //
 // It scans the live state instead of keeping an index: content that is
 // purged or redacted leaves memory with the item, so no copy of it
@@ -40,6 +46,7 @@ func (x *Session) Search(text string, q Query) ([]Hit, error) {
 	if err != nil {
 		return nil, err
 	}
+	phrase := " " + strings.Join(wordsOf(text), " ") + " "
 	wholeKey := strings.ToUpper(strings.TrimSpace(text))
 	var hits []Hit
 	var m matcher
@@ -54,10 +61,15 @@ func (x *Session) Search(text string, q Query) ([]Hit, error) {
 			continue
 		}
 		if h, ok := m.match(it, terms, wholeKey); ok {
+			h.Stars = stars(it, terms, phrase, it.Key == wholeKey)
 			hits = append(hits, h)
 		}
 	}
 	slices.SortFunc(hits, func(a, b Hit) int {
+		// The stars come first, so the order never contradicts them.
+		if a.Stars != b.Stars {
+			return b.Stars - a.Stars
+		}
 		if a.Score != b.Score {
 			return b.Score - a.Score
 		}
@@ -93,12 +105,65 @@ func appendFold(buf []byte, text string) []byte {
 
 func fold(text string) string { return string(appendFold(nil, text)) }
 
+// wordsOf splits a text into its folded words, as a search does.
+func wordsOf(text string) []string {
+	return strings.FieldsFunc(fold(text), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+}
+
+// spaced joins words between spaces, so a phrase is found as whole words.
+func spaced(text string) string { return " " + strings.Join(wordsOf(text), " ") + " " }
+
+// stars rates a hit (ADR-0072). It runs for hits only, so its allocations
+// stay with the results, not with every item searched.
+func stars(it *Item, terms []string, phrase string, wholeKey bool) int {
+	title := spaced(it.Title)
+	if wholeKey || title == phrase {
+		return 5
+	}
+	inTitle := 0
+	for _, t := range terms {
+		if strings.Contains(title, t) {
+			inTitle++
+		}
+	}
+	if inTitle == len(terms) {
+		return 4
+	}
+	texts := make([]string, 0, len(it.Body.Blocks)+len(it.Properties))
+	for _, b := range it.Body.Blocks {
+		texts = append(texts, spaced(b.Text))
+	}
+	for _, v := range it.Properties {
+		if s, ok := v.(string); ok {
+			texts = append(texts, spaced(s))
+		}
+	}
+	oneBlock := false
+	for _, x := range texts {
+		if strings.Contains(x, phrase) {
+			return 3
+		}
+		all := true
+		for _, t := range terms {
+			all = all && strings.Contains(x, t)
+		}
+		oneBlock = oneBlock || all
+	}
+	switch {
+	case inTitle > 0:
+		return 3
+	case oneBlock:
+		return 2
+	}
+	return 1
+}
+
 func searchTerms(text string) ([]string, error) {
 	limits := budget.Get() // ADR-0015, ADR-0033
 	if len(text) > limits.SearchQueryBytes {
 		return nil, invalid("a search is at most %d bytes", limits.SearchQueryBytes)
 	}
-	words := strings.FieldsFunc(fold(text), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
+	words := wordsOf(text)
 	var terms []string
 	for _, w := range words {
 		if !slices.Contains(terms, w) {

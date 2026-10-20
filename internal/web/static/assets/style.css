@@ -918,3 +918,8 @@ a.button.login-sso { display: flex; gap: 10px; }
   table, figure, .pm-image, pre { break-inside: avoid; }
   h1, h2, h3 { break-after: avoid; }
 }
+
+/* The relevance of a search hit (ADR-0072). */
+.stars { display: inline-flex; margin-right: 8px; font-size: 14px; letter-spacing: 1px; cursor: help; vertical-align: 1px; }
+.stars-on { color: #e3a008; }
+.stars-off { color: var(--border-strong); }

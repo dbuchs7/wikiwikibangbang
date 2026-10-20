@@ -895,6 +895,12 @@ function resetView(token) {
 
 // --- search (ADR-0033) -------------------------------------------------------
 
+// stars shows how well a hit answers the search, from 1 to 5 (ADR-0072).
+function stars(n) {
+  return h("span", { class: "stars", role: "img", "aria-label": t("search.stars", { n }), title: t("search.starsHint", { n }) },
+    h("span", { class: "stars-on", text: "★".repeat(n) }), h("span", { class: "stars-off", text: "★".repeat(5 - n) }));
+}
+
 async function searchView(q) {
   const show = screen();
   const url = (after) => `/api/search?q=${encodeURIComponent(q)}&limit=50${after ? "&after=" + encodeURIComponent(after) : ""}`;
@@ -905,6 +911,7 @@ async function searchView(q) {
     for (const hit of page.hits) {
       const it = hit.item;
       list.append(h("li", {},
+        hit.stars ? stars(hit.stars) : null,
         link("#/item/" + encodeURIComponent(it.key), it.key), " ", h("strong", { text: it.title }),
         " ", h("span", { class: "muted", text: `${it.space} · ${it.type}${it.state ? " · " + it.state : ""}` }),
         hit.snippet ? h("p", { class: "snippet", text: hit.comment ? t("search.inComment", { text: hit.snippet }) : hit.snippet }) : null,

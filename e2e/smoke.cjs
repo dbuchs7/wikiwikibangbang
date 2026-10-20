@@ -1071,6 +1071,7 @@ async function mailTo(sink, address) {
     check(!(await page.isVisible("header.top")) && !(await page.isVisible("#item-export")) && await page.isVisible("h1.item-title"), "printing shows the page without the surroundings");
     await page.emulateMedia({ media: "screen" });
     await page.goto(base + "/#/search/Price");
+    await page.waitForSelector(".hits li:has-text('Price list') .stars[aria-label='4 of 5 stars']"); // every term in the title (ADR-0072)
     const [found] = await Promise.all([page.waitForEvent("download"), page.click("#search-csv")]);
     check(require("fs").readFileSync(await found.path(), "utf8").includes(exported + ",Price list,PLAT,task"), "the search as CSV");
     await page.goto(base + "/#/tasks/all");
