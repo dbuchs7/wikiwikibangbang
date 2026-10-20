@@ -146,3 +146,29 @@ func (a *Accounts) SetEmail(id UserID, email string) error {
 	c.Email = email
 	return a.record(event{Kind: contactsSet, User: id, Contacts: &c})
 }
+
+// Delivered is the sequence number of the newest item event a digest of
+// notifications was sent for, or 0 before the first (ADR-0064).
+func (a *Accounts) Delivered(id UserID) int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if u, ok := a.users[id]; ok {
+		return u.delivered
+	}
+	return 0
+}
+
+// SetDelivered records that notifications up to seq were sent; it only
+// moves forward.
+func (a *Accounts) SetDelivered(id UserID, seq int) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	u, ok := a.users[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if seq <= u.delivered {
+		return nil
+	}
+	return a.record(event{Kind: digestSent, User: id, Seen: seq})
+}

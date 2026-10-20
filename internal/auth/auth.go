@@ -112,6 +112,7 @@ type Accounts struct {
 	users    map[UserID]*user
 	byName   map[string]UserID
 	requests map[string]*request // pending account requests (ADR-0061)
+	resets   map[UserID]*reset   // password reset tokens (ADR-0064)
 	tokens   map[string]*token   // by secret hash
 	tokenIDs map[string]*token
 	sessions map[string]*session // by secret hash
@@ -134,6 +135,9 @@ type user struct {
 	avatarType string
 	// contacts are the channels messages reach the user on (ADR-0061).
 	contacts Contacts
+	// delivered is the sequence number of the newest item event a digest
+	// of notifications was sent for (ADR-0064).
+	delivered int
 }
 
 type token struct {
@@ -165,7 +169,7 @@ func New(records [][]byte, j Journal, opts ...Option) (*Accounts, error) {
 		iter:  DefaultIterations,
 		users: map[UserID]*user{}, byName: map[string]UserID{},
 		tokens: map[string]*token{}, tokenIDs: map[string]*token{}, sessions: map[string]*session{},
-		external: map[string]UserID{}, requests: map[string]*request{},
+		external: map[string]UserID{}, requests: map[string]*request{}, resets: map[UserID]*reset{},
 	}
 	for _, o := range opts {
 		o(a)
@@ -236,6 +240,9 @@ const (
 	accountRequested = "AccountRequested"
 	requestApproved  = "AccountRequestApproved"
 	requestRejected  = "AccountRequestRejected"
+	// digestSent records how far notifications were sent to a user's
+	// channels (ADR-0064).
+	digestSent = "DigestSent"
 )
 
 // apply is the only code that changes accounts; it runs live and on load.
@@ -287,6 +294,12 @@ func (a *Accounts) apply(e event) error {
 			return fmt.Errorf("contacts of unknown user %s", e.User)
 		}
 		u.contacts = *e.Contacts
+	case digestSent:
+		u, ok := a.users[e.User]
+		if !ok {
+			return fmt.Errorf("digest of unknown user %s", e.User)
+		}
+		u.delivered = max(u.delivered, e.Seen)
 	case accountRequested:
 		var c Contacts
 		if e.Contacts != nil {
@@ -513,6 +526,7 @@ func (a *Accounts) SetPassword(id UserID, current, next string) error {
 		return err
 	}
 	// A new password ends every other way in that relied on the old one.
+	delete(a.resets, id)
 	for k, s := range a.sessions {
 		if s.user == id {
 			delete(a.sessions, k)

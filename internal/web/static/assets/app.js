@@ -107,7 +107,7 @@ async function commentsView(tab = "") {
     for (const e of page.comments) {
       const c = e.comment;
       list.append(h("li", { class: "comment-entry" + (c.resolved ? " resolved" : "") },
-        avatar(c.author, person(c.author), "", 32),
+        avatar(c.author, names.get(c.author) || person(c.author), "", 32),
         h("div", { class: "comment-entry-main" },
           h("div", { class: "comment-entry-head" },
             h("strong", { text: person(c.author) }),
@@ -359,15 +359,15 @@ function renderFooter() {
 // admin marks the modules only administrators see. The notifications are
 // reached through the bell in the header, not here.
 const modules = [
-  { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"] },
-  { id: "new", name: "nav.new", href: "#/new", match: ["new"] },
-  { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban"] },
-  { id: "comments", name: "nav.comments", href: "#/comments", match: ["comments"] },
-  { id: "album", name: "nav.album", href: "#/album", match: ["album"] },
-  { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"] },
-  { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"] },
-  { id: "account", name: "nav.account", href: "#/account", match: ["account"] },
-  { id: "admin", name: "nav.admin", href: "#/admin", match: ["admin"], admin: true },
+  { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"], icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
+  { id: "new", name: "nav.new", href: "#/new", match: ["new"], icon: "M12 8v8M8 12h8M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" },
+  { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban"], icon: "M9 11l3 3 8-8M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11" },
+  { id: "comments", name: "nav.comments", href: "#/comments", match: ["comments"], icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
+  { id: "album", name: "nav.album", href: "#/album", match: ["album"], icon: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 8h.01" },
+  { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"], icon: "M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8zM19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z" },
+  { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"], icon: "M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4" },
+  { id: "account", name: "nav.account", href: "#/account", match: ["account"], icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" },
+  { id: "admin", name: "nav.admin", href: "#/admin", match: ["admin"], admin: true, icon: "M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4" },
 ];
 
 const switcher = document.getElementById("app-switcher");
@@ -403,7 +403,8 @@ document.addEventListener("keydown", (ev) => {
 function renderModules(section) {
   switcher.hidden = !me;
   mount(document.getElementById("drawer-apps"), ...modules.filter((m) => !m.admin || me?.admin).map((m) =>
-    h("a", { href: m.href, class: m.match.includes(section) ? "active" : "", "aria-current": m.match.includes(section) ? "page" : "false", text: t(m.name) })));
+    h("a", { href: m.href, class: m.match.includes(section) ? "active" : "", "aria-current": m.match.includes(section) ? "page" : "false" },
+      lineIcon(m.icon), h("span", { text: t(m.name) }))));
 }
 
 // labelChrome translates the fixed parts of index.html.
@@ -432,6 +433,23 @@ function lockIcon(closed) {
 
 // bellIcon draws a bell, as SVG: h() makes HTML elements only; filled
 // fills it.
+// lineIcon draws an outlined icon from a path, in the text's colour.
+function lineIcon(d) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(ns, "path");
+  path.setAttribute("d", d);
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.8");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  return svg;
+}
+
 function bellIcon(filled = false) {
   const ns = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(ns, "svg");
@@ -616,6 +634,7 @@ async function route() {
     const [, section, arg, arg2] = hash.split("?")[0].split("/").map(decodeURIComponent);
     const params = new URLSearchParams(hash.split("?")[1] || "");
     renderModules(section || "");
+    if (section === "reset") return resetView(arg || "");
     if (!me) return loginView();
     switch (section) {
       case "new": return await newView(params);
@@ -701,8 +720,27 @@ async function loginView() {
       route();
     }),
     sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: t("login.with", { name: sso.name }) })) : "",
+    signup.passwordReset ? h("p", { class: "login-more" },
+      h("button", { type: "button", class: "link", id: "forgot-open", text: t("reset.forgot"), onclick: forgotForm })) : "",
     signup.open ? h("p", { class: "login-more" }, t("signup.question"), " ",
       h("button", { type: "button", class: "link", id: "signup-open", text: t("signup.open"), onclick: requestForm })) : "",
+  );
+  // forgotForm asks for a reset link by mail (ADR-0064); the answer does
+  // not say whether the account exists.
+  const forgotForm = () => card.replaceChildren(
+    h("h1", { text: t("reset.title") }),
+    h("p", { class: "muted", text: t("reset.help") }),
+    form({ id: "forgot" }, [
+      field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true })),
+      h("button", { type: "submit", text: t("reset.send") }),
+    ], async (data) => {
+      await post("/api/password-reset", { username: data.get("username") });
+      card.replaceChildren(
+        h("h1", { text: t("reset.title") }),
+        h("p", { class: "notice", id: "forgot-sent", text: t("reset.sent") }),
+        h("p", {}, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })));
+    }),
+    h("p", { class: "login-more" }, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })),
   );
   // requestForm asks for an account (ADR-0061): the password is chosen
   // now, an administrator approves or rejects the request.
@@ -725,6 +763,30 @@ async function loginView() {
     h("p", { class: "login-more" }, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })),
   );
   signIn();
+  show(card);
+}
+
+// resetView chooses a new password with the token of a reset link
+// (ADR-0064). The token travels in the address's fragment, so it reaches
+// no server log and no other site.
+function resetView(token) {
+  const show = screen();
+  const card = h("section", { class: "card narrow", id: "reset-card" });
+  card.replaceChildren(
+    h("h1", { text: t("reset.choose") }),
+    form({ id: "reset" }, [
+      field(t("account.new"), h("input", { name: "password", type: "password", autocomplete: "new-password", minlength: 12, required: true })),
+      field(t("reset.repeat"), h("input", { name: "repeat", type: "password", autocomplete: "new-password", minlength: 12, required: true })),
+      h("button", { type: "submit", class: "primary", text: t("reset.save") }),
+    ], async (data) => {
+      if (data.get("password") !== data.get("repeat")) throw new Error(t("admin.differ"));
+      await post("/api/password-reset/confirm", { token, password: data.get("password") });
+      me = null;
+      card.replaceChildren(
+        h("h1", { text: t("reset.choose") }),
+        h("p", { class: "notice", id: "reset-done", text: t("reset.done") }),
+        h("p", {}, link("#/", t("login.submit"), "button primary", "reset-login")));
+    }));
   show(card);
 }
 
@@ -1252,7 +1314,7 @@ async function tasksView(tab, params) {
   const relink = () => tabs.querySelectorAll("a").forEach((a) => { a.href = a.getAttribute("href").split("?")[0] + query(); });
   show(
     h("div", { class: "page-head" }, h("h1", { text: t("tasks.title") }),
-      h("p", { class: "actions" }, link(newHref(space || here.space, "", taskType(types)), t("tasks.new"), "button", "tasks-new"))),
+      h("p", { class: "actions" }, link(newHref(space || here.space, "", taskType(types)), t("tasks.new"), "button primary", "tasks-new"))),
     tabs,
     status,
     h("section", { id: "tasks" }, shown.length
@@ -1721,13 +1783,29 @@ async function itemView(ref, params = new URLSearchParams()) {
     ? form({ class: "inline", id: "title" }, [titleInput], saveTitle)
     : h("h1", { class: "item-title" }, restricted ? lockIcon(true) : null, item.title || t("item.erased"));
 
+  // A field is saved as soon as it changes; a mark beside it says so.
   const props = h("table", { class: "props" }, type.fields.map((f) => {
     const input = propertyInput(f, item.properties[f.name]);
     input.disabled = !canEdit;
-    return h("tr", {},
+    const mark = h("span", { class: "save-mark", role: "status" });
+    if (canEdit) {
+      input.addEventListener("change", async () => {
+        mark.className = "saving";
+        mark.textContent = t("common.saving");
+        try {
+          await put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) });
+          mark.className = "saved";
+          mark.textContent = "✓ " + t("common.saved");
+        } catch (err) {
+          mark.className = "error";
+          mark.textContent = err.message;
+        }
+      });
+    }
+    return h("tr", { "data-field": f.name },
       h("th", { text: f.name }),
       h("td", {}, input),
-      h("td", {}, canEdit ? h("button", { text: t("common.save"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) }), status) }) : null,
+      h("td", {}, mark,
         // A user field names a person by ID; show who it is, and let one
         // put oneself in (ADR-0049).
         f.kind === "user" && item.properties[f.name] ? h("span", { class: "muted", text: " " + person(item.properties[f.name]) }) : null,
@@ -2147,15 +2225,31 @@ function contactsCard(contacts) {
     state.textContent = on.length ? t("contacts.available", { list: on.join(", ") }) : t("contacts.none");
   };
   summary(contacts);
+  const outcome = h("div", { id: "delivery" });
+  const resultName = { email: t("contacts.email"), slack: "Slack", teams: "Microsoft Teams", webhook: t("contacts.webhook") };
+  const showResults = (results, at) => outcome.replaceChildren(results?.length ? h("ul", { class: "delivery-results" },
+    at ? h("li", { class: "muted", text: t("contacts.lastAt", { when: when(at) }) }) : "",
+    ...results.map((r) => h("li", { class: r.ok ? "ok" : "failed" },
+      h("strong", { text: (resultName[r.channel] || r.channel) + ": " }), r.ok ? t("contacts.delivered") : r.problem))) : "");
+  showResults(contacts.last?.results, contacts.last?.at);
+  const test = h("button", { type: "button", id: "contacts-test", class: "secondary", text: t("contacts.test"), onclick: () => action(async () => {
+    test.disabled = true;
+    try {
+      const { results } = await post("/api/me/contacts/test");
+      showResults(results);
+    } finally { test.disabled = false; }
+  }, outcome) });
   return form({ class: "card", id: "contacts" }, [
     h("h2", { text: t("contacts.title") }),
     h("p", { class: "muted", text: t("contacts.help") }),
     channel("email", t("contacts.email"), "email", "name@example.org"),
+    contacts.mail ? "" : h("p", { class: "muted", id: "no-mail", text: t("contacts.noMailServer") }),
     channel("slack", "Slack", "url", "https://hooks.slack.com/services/…"),
     channel("teams", "Microsoft Teams", "url", "https://…"),
     channel("webhook", t("contacts.webhook"), "url", "https://…"),
     state,
-    h("button", { type: "submit", text: t("common.save") }),
+    h("p", { class: "actions-row" }, h("button", { type: "submit", text: t("common.save") }), test),
+    outcome,
   ], async (data, st) => {
     const saved = await put("/api/me/contacts", { email: data.get("email"), slack: data.get("slack"), teams: data.get("teams"), webhook: data.get("webhook") });
     summary(saved);
@@ -2327,6 +2421,16 @@ async function adminView() {
             onclick: () => confirm(t("requests.rejectConfirm", { name: rq.username })) && action(() => del(`/api/account-requests/${rq.id}`), status) }))))) :
       h("p", { class: "muted", id: "no-requests", text: t("requests.none") }));
 
+  // A reset link to hand over, for someone without a mail address or when
+  // mail is not set up (ADR-0064).
+  const resetCell = (u) => h("td", {}, h("button", { type: "button", class: "link", text: t("reset.link"), "aria-label": t("reset.linkFor", { name: u.username }),
+    onclick: () => action(async () => {
+      const { token, expires } = await post(`/api/users/${encodeURIComponent(u.id)}/password-reset`);
+      const url = `${location.origin}/#/reset/${token}`;
+      status.replaceChildren(h("div", { class: "notice", id: "reset-handed" },
+        h("p", { text: t("reset.linkMade", { name: u.username, when: when(expires) }) }),
+        h("code", { class: "copyable", text: url })));
+    }, status) }));
   const emailCell = (u) => h("td", {},
     h("span", { class: "muted", text: u.email || t("contacts.noEmail") }), " ",
     h("button", { type: "button", class: "link", text: t("common.edit"), "aria-label": t("contacts.editEmail", { name: u.username }), onclick: () => {
@@ -2339,7 +2443,8 @@ async function adminView() {
       h("td", { text: u.username }),
       emailCell(u),
       h("td", {}, sysToggle(u, "admin", t("admin.roleAdmin"))),
-      h("td", {}, sysToggle(u, "erasure", t("admin.roleErasure")))))),
+      h("td", {}, sysToggle(u, "erasure", t("admin.roleErasure"))),
+      resetCell(u)))),
     form({ id: "new-user" }, [
       h("h3", { text: t("admin.newUser") }),
       field(t("field.username"), h("input", { name: "username", required: true })),
@@ -2405,12 +2510,28 @@ async function adminView() {
       h("td", { text: Object.entries(e.detail || {}).map(([k, v]) => `${k}=${v}`).join(" ") }),
     ))));
 
+  // The contents stay on the left; the section in view is marked.
+  const tocLinks = sections.map(([el, title]) =>
+    h("button", { type: "button", class: "link", text: title, onclick: () => el.scrollIntoView({ block: "start", behavior: "smooth" }) }));
+  if ("IntersectionObserver" in window) {
+    const seen = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        const at = sections.findIndex(([el]) => el === e.target);
+        tocLinks.forEach((b, i) => b.classList.toggle("current", i === at));
+      }
+    }, { rootMargin: "-20% 0px -70% 0px" });
+    sections.forEach(([el]) => seen.observe(el));
+    leaving.push(() => seen.disconnect());
+  }
   show(
     h("h1", { text: t("admin.title") }),
-    h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, sections.map(([el, title]) =>
-      h("button", { type: "button", class: "link", text: title, onclick: () => el.scrollIntoView({ block: "start" }) }))),
+    h("p", { class: "muted", text: t("admin.lead") }),
     status,
-    spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, designSection, regulationsSection, importSection, auditSection,
+    h("div", { class: "admin-layout" },
+      h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, ...tocLinks),
+      h("div", { class: "admin-sections" },
+        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, designSection, regulationsSection, importSection, auditSection)),
   );
 }
 

@@ -60,6 +60,10 @@ const (
 	AccountRejected  = "account.reject"
 	AccessChanged    = "access.change"
 	ContactsChanged  = "contacts.change"
+	// Password resets (ADR-0064).
+	PasswordResetRequested = "password.reset.request"
+	PasswordReset          = "password.reset"
+	PasswordResetHanded    = "password.reset.link"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for

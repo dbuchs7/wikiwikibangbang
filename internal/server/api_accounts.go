@@ -9,6 +9,7 @@ import (
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/notify"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 )
 
@@ -30,6 +31,11 @@ func accountRoutes(d Deps) []Route {
 	}
 }
 
+// langOf is a user's UI language. A requester has none yet; mail to them
+// is written in the deciding administrator's language, the best guess
+// for the installation's.
+func (h authHandlers) langOf(id string) string { return h.d.DB.Accounts.Language(auth.UserID(id)) }
+
 type requestJSON struct {
 	ID       string    `json:"id"`
 	Username string    `json:"username"`
@@ -48,7 +54,9 @@ func (h authHandlers) waitingRequests(p auth.Principal) int {
 }
 
 func (h authHandlers) signupOpen(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]bool{"open": h.d.DB.Site.Access().AccountRequests})
+	// passwordReset says whether a forgotten password can be reset by
+	// mail (ADR-0064).
+	writeJSON(w, http.StatusOK, map[string]bool{"open": h.d.DB.Site.Access().AccountRequests, "passwordReset": h.d.Messages.resetByMail()})
 }
 
 func (h authHandlers) signup(w http.ResponseWriter, r *http.Request) {
@@ -84,6 +92,7 @@ func (h authHandlers) signup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "request not recorded")
 	default:
 		h.record(audit.Entry{Event: audit.AccountRequested, Addr: addr, Subject: rq.ID, Detail: map[string]string{"username": rq.Username}})
+		h.d.Messages.tellAdmins(rq.Username)
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "pending"})
 	}
 }
@@ -115,6 +124,8 @@ func (h authHandlers) approveRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "account not created")
 	default:
 		h.record(audit.Entry{Event: audit.AccountApproved, Actor: actor, Addr: clientAddr(r), Subject: string(u.ID), Detail: map[string]string{"username": u.Username, "request": id}})
+		h.d.Messages.mail(h.d.DB.Accounts.Contacts(u.ID).Email, notify.Message{Subject: text(h.langOf(actor), "approved.subject"),
+			Text: text(h.langOf(actor), "approved.text", u.Username), Link: h.d.Messages.n.Link("#/")})
 		writeJSON(w, http.StatusCreated, map[string]userJSON{"user": {ID: u.ID, Username: u.Username}})
 	}
 }
@@ -132,6 +143,7 @@ func (h authHandlers) rejectRequest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "request not rejected")
 	default:
 		h.record(audit.Entry{Event: audit.AccountRejected, Actor: actor, Addr: clientAddr(r), Subject: rq.ID, Detail: map[string]string{"username": rq.Username}})
+		h.d.Messages.mail(rq.Email, notify.Message{Subject: text(h.langOf(actor), "rejected.subject"), Text: text(h.langOf(actor), "rejected.text", rq.Username)})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -161,9 +173,25 @@ func (h authHandlers) setAccess(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
+// contactsJSON is one's channels with whether mail is sent at all and the
+// outcome of the last message (ADR-0064).
+type contactsJSON struct {
+	auth.Contacts
+	Mail bool      `json:"mail"`
+	Last *delivery `json:"last,omitempty"`
+}
+
+func (h authHandlers) contactsOf(id auth.UserID) contactsJSON {
+	out := contactsJSON{Contacts: h.d.DB.Accounts.Contacts(id), Mail: h.d.Messages.n.Mail()}
+	if d, ok := h.d.Messages.Last(id); ok {
+		out.Last = &d
+	}
+	return out
+}
+
 func (h authHandlers) myContacts(w http.ResponseWriter, r *http.Request) {
 	p, _ := PrincipalFrom(r.Context())
-	writeJSON(w, http.StatusOK, h.d.DB.Accounts.Contacts(p.User))
+	writeJSON(w, http.StatusOK, h.contactsOf(p.User))
 }
 
 func (h authHandlers) setMyContacts(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +213,7 @@ func (h authHandlers) setMyContacts(w http.ResponseWriter, r *http.Request) {
 	got := h.d.DB.Accounts.Contacts(p.User)
 	// The addresses are not audited: a webhook address is a credential.
 	h.record(audit.Entry{Event: audit.ContactsChanged, Actor: actor, Addr: clientAddr(r), Subject: actor, Detail: map[string]string{"channels": strings.Join(got.Channels(), ",")}})
-	writeJSON(w, http.StatusOK, got)
+	writeJSON(w, http.StatusOK, h.contactsOf(p.User))
 }
 
 func (h authHandlers) setUserEmail(w http.ResponseWriter, r *http.Request) {
