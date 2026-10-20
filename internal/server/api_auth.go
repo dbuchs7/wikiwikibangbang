@@ -53,6 +53,9 @@ func (h authHandlers) record(e audit.Entry) { h.d.DB.Audit.Record(e) }
 type userJSON struct {
 	ID       auth.UserID `json:"id"`
 	Username string      `json:"username"`
+	// Email and Channels are listed to administrators only (ADR-0061).
+	Email    string   `json:"email,omitempty"`
+	Channels []string `json:"channels,omitempty"`
 }
 
 type tokenJSON struct {
@@ -136,6 +139,9 @@ func (h authHandlers) me(w http.ResponseWriter, r *http.Request) {
 		// avatar names the caller's profile picture's content, or is empty
 		// when they have none (ADR-0050).
 		"avatar": h.avatarTagOf(p.User),
+		// The account requests waiting for an administrator (ADR-0061),
+		// counted for administrators only.
+		"requests": h.waitingRequests(p),
 		// The UI language the user chose (ADR-0017), or empty: the UI
 		// then suggests the browser's language once.
 		"language":  h.d.DB.Accounts.Language(p.User),
@@ -247,8 +253,14 @@ func (h authHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := []userJSON{}
+	admin := h.isAdmin(p)
 	for _, u := range h.d.DB.Accounts.Users() {
-		out = append(out, userJSON{ID: u.ID, Username: u.Username})
+		j := userJSON{ID: u.ID, Username: u.Username}
+		if admin {
+			c := h.d.DB.Accounts.Contacts(u.ID)
+			j.Email, j.Channels = c.Email, c.Channels()
+		}
+		out = append(out, j)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": out})
 }

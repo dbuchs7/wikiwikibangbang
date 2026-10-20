@@ -108,8 +108,10 @@ type event struct {
 	// Regulation is set by RegulationSet; RegulationRemoved names it in
 	// Asset (ADR-0058).
 	Regulation *Regulation `json:"regulation,omitempty"`
-	Type       string      `json:"type,omitempty"`
-	Data       []byte      `json:"data,omitempty"`
+	// Access is set by AccessSet (ADR-0061).
+	Access *Access `json:"access,omitempty"`
+	Type   string  `json:"type,omitempty"`
+	Data   []byte  `json:"data,omitempty"`
 }
 
 const (
@@ -119,6 +121,8 @@ const (
 
 	regulationSet     = "RegulationSet"
 	regulationRemoved = "RegulationRemoved"
+
+	accessSet = "AccessSet"
 )
 
 // Settings is safe for concurrent use.
@@ -132,6 +136,7 @@ type Settings struct {
 	// patterns of the active ones (ADR-0058).
 	regulations map[string]Regulation
 	matchers    []matcher
+	access      Access
 }
 
 // New rebuilds the settings from records and journals later changes.
@@ -173,6 +178,11 @@ func (s *Settings) apply(e event) error {
 		delete(s.regulations, e.Asset)
 		delete(s.assets, DocumentAsset(e.Asset))
 		s.matchers = compileMatchers(s.regulations)
+	case accessSet:
+		if e.Access == nil {
+			return errors.New("an access event without settings")
+		}
+		s.access = *e.Access
 	default:
 		return fmt.Errorf("unknown event %q", e.Kind)
 	}

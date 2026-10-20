@@ -639,3 +639,13 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .kanban-off { font-size: 12px; color: var(--muted); }
 #new-kanban .form-row { display: flex; flex-wrap: wrap; gap: 10px; }
 #new-kanban .form-row .field { flex: 1 1 200px; }
+
+/* Account requests (ADR-0061): a dot on the account button while requests
+   wait for an administrator, and the way to ask on the sign-in page. */
+.account-button.pending { position: relative; }
+.account-button.pending::after { content: ""; position: absolute; top: 0; right: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); border: 2px solid var(--surface); }
+#login-card .login-more { margin-top: 16px; font-size: 14px; }
+#account-requests td { vertical-align: top; }
+#account-requests td:last-child { white-space: nowrap; }
+/* An info note may hold an example of several lines. */
+.info-pop p { white-space: pre-line; }

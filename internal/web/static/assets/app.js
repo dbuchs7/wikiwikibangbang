@@ -466,6 +466,13 @@ function accountMenu() {
   const button = h("button", { type: "button", id: "account-button", class: "account-button", "aria-haspopup": "menu", "aria-expanded": "false",
     "aria-controls": "account-menu", title: t("nav.accountOf", { name: me.user.username }), "aria-label": t("nav.accountOf", { name: me.user.username }) },
   avatar(me.user.id, me.user.username, me.avatar));
+  // Account requests waiting for an administrator show as a dot
+  // (ADR-0061).
+  if (me.admin && me.requests) {
+    button.classList.add("pending");
+    button.title += " · " + t("nav.requestsWaiting", { n: me.requests });
+    button.setAttribute("aria-label", button.title);
+  }
   const item = (href, text) => h("a", { href, role: "menuitem", text, tabindex: "-1" });
   const roles = [me.admin ? t("admin.roleAdmin") : null, me.erasure ? t("admin.roleErasure") : null].filter(Boolean);
   const menu = h("div", { id: "account-menu", class: "menu", role: "menu", hidden: true, "aria-label": t("nav.account") },
@@ -473,7 +480,7 @@ function accountMenu() {
       h("div", {}, h("strong", { text: me.user.username }), roles.length ? h("div", { class: "muted", text: roles.join(", ") }) : null)),
     item("#/account", t("nav.accountPage")),
     item("#/mcp", t("nav.mcp")),
-    me.admin ? item("#/admin", t("nav.admin")) : null,
+    me.admin ? item("#/admin", me.requests ? t("nav.adminRequests", { n: me.requests }) : t("nav.admin")) : null,
     h("hr"),
     h("button", { type: "button", role: "menuitem", tabindex: "-1", class: "link", id: "logout", text: t("nav.logout"),
       onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }));
@@ -626,23 +633,47 @@ route();
 async function loginView() {
   const show = screen();
   const params = new URLSearchParams(location.search);
-  const sso = await get("/api/oidc").catch(() => ({ enabled: false }));
-  show(
-    h("section", { class: "card narrow" },
-      h("h1", { text: t("login.title") }),
-      params.get("login_error") ? h("p", { class: "error", text: t("login.failed") }) : null,
-      form({ id: "login" }, [
-        field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true })),
-        field(t("field.password"), h("input", { name: "password", type: "password", autocomplete: "current-password", required: true })),
-        h("button", { type: "submit", text: t("login.submit") }),
-      ], async (data) => {
-        await post("/api/login", { username: data.get("username"), password: data.get("password") });
-        me = null;
-        history.replaceState(null, "", "/#/");
-        route();
-      }),
-      sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: t("login.with", { name: sso.name }) })) : null,
-    ));
+  const [sso, signup] = await Promise.all([get("/api/oidc").catch(() => ({ enabled: false })), get("/api/signup").catch(() => ({ open: false }))]);
+  const card = h("section", { class: "card narrow", id: "login-card" });
+  const signIn = () => card.replaceChildren(
+    h("h1", { text: t("login.title") }),
+    params.get("login_error") ? h("p", { class: "error", text: t("login.failed") }) : "",
+    form({ id: "login" }, [
+      field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true })),
+      field(t("field.password"), h("input", { name: "password", type: "password", autocomplete: "current-password", required: true })),
+      h("button", { type: "submit", text: t("login.submit") }),
+    ], async (data) => {
+      await post("/api/login", { username: data.get("username"), password: data.get("password") });
+      me = null;
+      history.replaceState(null, "", "/#/");
+      route();
+    }),
+    sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: t("login.with", { name: sso.name }) })) : "",
+    signup.open ? h("p", { class: "login-more" }, t("signup.question"), " ",
+      h("button", { type: "button", class: "link", id: "signup-open", text: t("signup.open"), onclick: requestForm })) : "",
+  );
+  // requestForm asks for an account (ADR-0061): the password is chosen
+  // now, an administrator approves or rejects the request.
+  const requestForm = () => card.replaceChildren(
+    h("h1", { text: t("signup.title") }),
+    h("p", { class: "muted", text: t("signup.help") }),
+    form({ id: "signup" }, [
+      field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true, maxlength: 64 })),
+      field(t("contacts.email"), h("input", { name: "email", type: "email", autocomplete: "email", required: true })),
+      field(t("field.password"), h("input", { name: "password", type: "password", autocomplete: "new-password", minlength: 12, required: true })),
+      field(t("signup.reason"), h("textarea", { name: "reason", rows: 3, maxlength: 500, placeholder: t("signup.reasonHint") })),
+      h("button", { type: "submit", text: t("signup.submit") }),
+    ], async (data) => {
+      await post("/api/signup", { username: data.get("username"), email: data.get("email"), password: data.get("password"), reason: data.get("reason") });
+      card.replaceChildren(
+        h("h1", { text: t("signup.title") }),
+        h("p", { class: "notice", id: "signup-sent", text: t("signup.sent") }),
+        h("p", {}, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })));
+    }),
+    h("p", { class: "login-more" }, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })),
+  );
+  signIn();
+  show(card);
 }
 
 // --- search (ADR-0033) -------------------------------------------------------
@@ -1855,12 +1886,13 @@ function historySection(path, events, live) {
 
 async function accountView() {
   const show = screen();
-  const { tokens } = await get("/api/tokens");
+  const [{ tokens }, contacts] = await Promise.all([get("/api/tokens"), get("/api/me/contacts")]);
   const secret = h("div");
   show(
     h("h1", { text: me.user.username }),
     h("p", { class: "muted", text: t("account.id", { id: me.user.id, via: me.via }) }),
     avatarCard(),
+    contactsCard(contacts),
     form({ class: "card", id: "language" }, [
       field(t("account.language"), h("select", { name: "language", onchange: (ev) => ev.target.form.requestSubmit() },
         languages.filter((l) => !me.languages || me.languages.includes(l.code))
@@ -1926,6 +1958,33 @@ function avatarCard() {
         me.avatar ? h("button", { type: "button", class: "link", text: t("account.avatarRemove"),
           onclick: () => action(async () => { await del("/api/me/avatar"); me.avatar = ""; }, status) }) : null)),
     status);
+}
+
+// contactsCard sets the channels messages reach one on (ADR-0061): a mail
+// address and the webhook addresses of Slack, Microsoft Teams or another
+// service. A field left empty is a channel one does not have.
+function contactsCard(contacts) {
+  const channel = (name, label, type, hint) => field(label, h("input", { name, type, value: contacts[name] || "", placeholder: hint, autocomplete: name === "email" ? "email" : "off" }));
+  const state = h("p", { class: "muted", id: "channels" });
+  const summary = (c) => {
+    const on = [["email", t("contacts.email")], ["slack", "Slack"], ["teams", "Microsoft Teams"], ["webhook", t("contacts.webhook")]].filter(([k]) => c[k]).map(([, l]) => l);
+    state.textContent = on.length ? t("contacts.available", { list: on.join(", ") }) : t("contacts.none");
+  };
+  summary(contacts);
+  return form({ class: "card", id: "contacts" }, [
+    h("h2", { text: t("contacts.title") }),
+    h("p", { class: "muted", text: t("contacts.help") }),
+    channel("email", t("contacts.email"), "email", "name@example.org"),
+    channel("slack", "Slack", "url", "https://hooks.slack.com/services/…"),
+    channel("teams", "Microsoft Teams", "url", "https://…"),
+    channel("webhook", t("contacts.webhook"), "url", "https://…"),
+    state,
+    h("button", { type: "submit", text: t("common.save") }),
+  ], async (data, st) => {
+    const saved = await put("/api/me/contacts", { email: data.get("email"), slack: data.get("slack"), teams: data.get("teams"), webhook: data.get("webhook") });
+    summary(saved);
+    st.replaceChildren(h("p", { class: "notice", text: t("contacts.saved") }));
+  });
 }
 
 // squareImage cuts the middle square out of an image file and scales it to
@@ -2009,8 +2068,9 @@ async function mcpView() {
 
 async function adminView() {
   const show = screen();
-  const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }] = await Promise.all([
+  const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }, { requests }, access] = await Promise.all([
     get("/api/users"), get("/api/spaces"), get("/api/types"), get("/api/audit?limit=50"), get("/api/groups"), get("/api/system-roles"),
+    get("/api/account-requests"), get("/api/settings/access"),
   ]);
   for (const u of users) names.set(u.id, u.username);
   const status = h("div", { class: "status" });
@@ -2074,10 +2134,34 @@ async function adminView() {
     box.addEventListener("change", () => action(() => (box.checked ? put : del)(`/api/system-roles/${role}/${encodeURIComponent(u.id)}`), status));
     return h("label", { class: "check" }, box, " ", label);
   };
+  // Account requests made at the sign-in page (ADR-0061): whether they
+  // are accepted, and the ones waiting for a decision.
+  const openBox = h("input", { type: "checkbox", id: "requests-open", checked: access.accountRequests });
+  openBox.addEventListener("change", () => action(() => put("/api/settings/access", { accountRequests: openBox.checked }), status));
+  const requestsSection = section("requests", t("requests.title"),
+    h("p", { class: "muted", text: t("requests.help") }),
+    h("label", { class: "check" }, openBox, " ", t("requests.open")),
+    requests.length ? h("table", { id: "account-requests" },
+      h("tr", {}, h("th", { text: t("field.username") }), h("th", { text: t("contacts.email") }), h("th", { text: t("signup.reason") }), h("th", { text: t("requests.when") }), h("th")),
+      requests.map((rq) => h("tr", { "data-username": rq.username },
+        h("td", { text: rq.username }), h("td", { text: rq.email }), h("td", { class: "muted", text: rq.reason }), h("td", { class: "muted", text: when(rq.created) }),
+        h("td", {},
+          h("button", { type: "button", class: "approve", text: t("requests.approve"), onclick: () => action(() => post(`/api/account-requests/${rq.id}/approve`), status) }), " ",
+          h("button", { type: "button", class: "link", text: t("requests.reject"),
+            onclick: () => confirm(t("requests.rejectConfirm", { name: rq.username })) && action(() => del(`/api/account-requests/${rq.id}`), status) }))))) :
+      h("p", { class: "muted", id: "no-requests", text: t("requests.none") }));
+
+  const emailCell = (u) => h("td", {},
+    h("span", { class: "muted", text: u.email || t("contacts.noEmail") }), " ",
+    h("button", { type: "button", class: "link", text: t("common.edit"), "aria-label": t("contacts.editEmail", { name: u.username }), onclick: () => {
+      const email = prompt(t("contacts.editEmail", { name: u.username }), u.email || "");
+      if (email !== null) action(() => put(`/api/users/${encodeURIComponent(u.id)}/email`, { email: email.trim() }), status);
+    } }));
   const usersSection = section("users", t("admin.users"),
     h("p", { class: "muted", text: t("admin.usersHelp") }),
     h("table", { id: "users" }, users.map((u) => h("tr", {},
       h("td", { text: u.username }),
+      emailCell(u),
       h("td", {}, sysToggle(u, "admin", t("admin.roleAdmin"))),
       h("td", {}, sysToggle(u, "erasure", t("admin.roleErasure")))))),
     form({ id: "new-user" }, [
@@ -2150,7 +2234,7 @@ async function adminView() {
     h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, sections.map(([el, title]) =>
       h("button", { type: "button", class: "link", text: title, onclick: () => el.scrollIntoView({ block: "start" }) }))),
     status,
-    spacesSection, typesSection, usersSection, groupsSection, grantSection, backupSection, designSection, regulationsSection, importSection, auditSection,
+    spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, designSection, regulationsSection, importSection, auditSection,
   );
 }
 
@@ -2203,7 +2287,8 @@ async function regulationsCard() {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   };
   const editor = (r, isNew) => {
-    const cats = h("textarea", { name: "categories", rows: 8, class: "code", spellcheck: "false", value: toText(r.categories || []), "aria-label": t("dp.categories") });
+    const cats = h("textarea", { name: "categories", rows: 8, class: "code", spellcheck: "false", value: toText(r.categories || []), "aria-label": t("dp.categories"),
+      placeholder: t("dp.categoriesExample") });
     const doc = h("input", { type: "file", accept: "application/pdf,.pdf", "aria-label": t("dp.document") });
     doc.addEventListener("change", () => doc.files[0] && action(() => putFile(`/api/regulations/${r.id}/document`, doc.files[0]), status));
     return h("div", { class: "regulation card-like", id: "regulation-" + (r.id || "new") },
@@ -2212,14 +2297,19 @@ async function regulationsCard() {
         field(t("dp.name"), h("input", { name: "name", required: true, value: r.name || "", maxlength: 120 })),
         field(t("dp.url"), h("input", { name: "url", type: "url", value: r.url || "", placeholder: "https://" })),
         h("label", { class: "check" }, h("input", { type: "checkbox", name: "active", checked: Boolean(r.active) }), t("dp.active")),
-        field(t("dp.categories"), cats),
+        // Not a label: the info button inside would take the label's clicks.
+        h("div", { class: "field" }, h("span", {}, t("dp.categories"), " ", infoTip(t("dp.categories"), t("dp.categoriesInfo"), t("dp.categoriesExample"))), cats),
         h("p", { class: "muted", text: t("dp.categoriesHint") }),
         h("p", { class: "actions-row" },
           h("button", { type: "submit", class: "primary", text: t("common.save") }),
           isNew ? null : h("button", { type: "button", class: "danger", text: t("common.delete"), onclick: () => confirm(t("dp.deleteConfirm", { name: r.name })) && action(() => del("/api/regulations/" + r.id), status) })),
       ], async (d) => {
         const id = isNew ? d.get("id").trim() : r.id;
-        await put("/api/regulations/" + encodeURIComponent(id), { name: d.get("name").trim(), url: d.get("url").trim(), active: Boolean(d.get("active")), categories: fromText(cats.value) });
+        const categories = fromText(cats.value);
+        if (!categories.length) throw new Error(t("dp.categoriesEmpty"));
+        const bare = categories.find((c) => !c.indicators.length);
+        if (bare) throw new Error(t("dp.indicatorsEmpty", { name: bare.name }));
+        await put("/api/regulations/" + encodeURIComponent(id), { name: d.get("name").trim(), url: d.get("url").trim(), active: Boolean(d.get("active")), categories });
         route();
       }),
       isNew ? null : h("p", { class: "regulation-doc" },

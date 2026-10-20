@@ -54,6 +54,12 @@ const (
 	ItemPurged        = "item.purge"
 	ItemRedacted      = "item.redact"
 	BackupCreated     = "backup.create"
+	// The account requests and contacts (ADR-0061).
+	AccountRequested = "account.request"
+	AccountApproved  = "account.approve"
+	AccountRejected  = "account.reject"
+	AccessChanged    = "access.change"
+	ContactsChanged  = "contacts.change"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for

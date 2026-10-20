@@ -613,6 +613,17 @@ function check(cond, msg) {
     await page.goto(base + "/#/admin");
     await page.click("#admin-regulations button:has-text('Adopt template: DSG')");
     await page.waitForSelector("#regulation-dsg");
+    // An own regulation explains its format and says what is missing.
+    await page.click("#admin-regulations summary");
+    await page.click("#regulation-new .info-btn");
+    await page.waitForSelector("#regulation-new .info-pop:visible:has-text('One line per category')");
+    await page.fill("#regulation-new [name=id]", "own");
+    await page.fill("#regulation-new [name=name]", "Own rules");
+    await page.click("#regulation-new button[type=submit]");
+    await page.waitForSelector("#regulation-new .status:has-text('Enter at least one category')");
+    await page.fill("#regulation-new [name=categories]", "Health");
+    await page.click("#regulation-new button[type=submit]");
+    await page.waitForSelector("#regulation-new .status:has-text('no colon')");
     await page.check("#regulation-dsg [name=active]");
     // The box is checked before saving; wait for the save itself, so the
     // ticket below is assessed against the active regulation.
@@ -678,6 +689,41 @@ function check(cond, msg) {
     await page.waitForSelector("#kanban .card-item:has-text('Tidy the wiki')", { state: "detached" });
     await page.goto(base + "/#/kanbans");
     await page.waitForSelector("#kanbans .space-tile:has-text('Operations'):has-text('1 card')"); // still on the other kanban
+
+    step("account requests: someone asks at the sign-in page, an administrator approves, the new account sets its message channels");
+    await page.click("#account-button");
+    await page.click("#account-menu a[href='#/admin']");
+    await Promise.all([page.waitForResponse((r) => r.url().endsWith("/api/settings/access") && r.request().method() === "PUT"), page.check("#requests-open")]);
+    const guestCtx = await browser.newContext();
+    const guest = await guestCtx.newPage();
+    guest.on("pageerror", (e) => problems.push("guest page error: " + e.message));
+    guest.on("dialog", async (d) => { problems.push("guest dialog: " + d.message()); await d.dismiss(); });
+    await guest.goto(base + "/");
+    await guest.click("#signup-open");
+    await guest.fill("#signup [name=username]", "dana");
+    await guest.fill("#signup [name=email]", "dana@example.org");
+    await guest.fill("#signup [name=password]", "dana's password");
+    await guest.fill("#signup [name=reason]", hostile);
+    await guest.click("#signup button[type=submit]");
+    await guest.waitForSelector("#signup-sent");
+    await page.reload();
+    await page.waitForSelector("#account-button.pending");
+    await page.waitForSelector("#account-requests tr[data-username=dana]");
+    check(await page.locator("#account-requests tr[data-username=dana] td").nth(2).textContent() === hostile, "the note of a request shows as text");
+    await page.click("#account-requests tr[data-username=dana] button.approve");
+    await page.waitForSelector("#no-requests");
+    await page.waitForSelector("#users tr:has-text('dana'):has-text('dana@example.org')");
+    await guest.click("#signup-sent ~ p button");
+    await guest.fill("#login [name=username]", "dana");
+    await guest.fill("#login [name=password]", "dana's password");
+    await guest.click("#login button[type=submit]");
+    await guest.waitForSelector("#account-button");
+    await guest.goto(base + "/#/account");
+    check(await guest.inputValue("#contacts [name=email]") === "dana@example.org", "the address of the request is on the account");
+    await guest.fill("#contacts [name=slack]", "https://hooks.slack.com/services/T0/B0/x");
+    await guest.click("#contacts button[type=submit]");
+    await guest.waitForSelector("#channels:has-text('Mail address, Slack')");
+    await guestCtx.close();
 
     step("administration: groups, a group's role in a space, system roles");
     await page.click("#account-button");

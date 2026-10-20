@@ -119,6 +119,7 @@ func Routes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/draw", Summary: "The drawing editor, shown in a frame of the UI (ADR-0053)", Access: Public, Handler: drawPage(d.UI)},
 	}
 	routes = append(routes, authRoutes(d)...)
+	routes = append(routes, accountRoutes(d)...)
 	routes = append(routes, avatarRoutes(d)...)
 	routes = append(routes, brandingRoutes(d)...)
 	routes = append(routes, regulationRoutes(d)...)
