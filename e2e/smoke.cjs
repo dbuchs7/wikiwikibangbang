@@ -591,8 +591,12 @@ function check(cond, msg) {
     await page.click("#admin-regulations button:has-text('Adopt template: DSG')");
     await page.waitForSelector("#regulation-dsg");
     await page.check("#regulation-dsg [name=active]");
-    await page.click("#regulation-dsg button[type=submit]");
-    await page.waitForSelector("#regulation-dsg [name=active]:checked");
+    // The box is checked before saving; wait for the save itself, so the
+    // ticket below is assessed against the active regulation.
+    await Promise.all([
+      page.waitForResponse((r) => r.url().endsWith("/api/regulations/dsg") && r.request().method() === "PUT" && r.ok()),
+      page.click("#regulation-dsg button[type=submit]"),
+    ]);
     const absence = await page.evaluate(async () => {
       const r = await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ space: "PLAT", type: "ticket", title: "Absence", properties: { priority: "low" }, body: [{ kind: "paragraph", text: "Arztzeugnis bis Freitag" }] }) });
