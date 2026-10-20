@@ -49,7 +49,9 @@ import (
 //   - 15: blocks may carry Align, the block kind divider, and the marks
 //     underline, strike and highlight (ADR-0059). Versions 1 to 14 are
 //     still read.
-const CodecVersion = 15
+//   - 16: the kinds KanbanSet and KanbanRemoved with the field kanban
+//     (ADR-0060). Versions 1 to 15 are still read.
+const CodecVersion = 16
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
@@ -170,6 +172,7 @@ type wireEvent struct {
 	Reply       ID                    `json:"reply,omitempty"`
 	Hold        *Hold                 `json:"hold,omitempty"`
 	Outcome     string                `json:"outcome,omitempty"`
+	Kanban      *Kanban               `json:"kanban,omitempty"`
 	Erased      bool                  `json:"erased,omitempty"`
 	// Sealed holds the encrypted content (wireContent) when a Sealer was
 	// used; the plaintext content fields are then empty.
@@ -260,7 +263,7 @@ func toWire(e Event) (wireEvent, error) {
 		Members: e.Members, Group: e.Group, Principal: e.Principal, SystemRole: e.SystemRole,
 		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed,
 		Comment: e.Comment, Text: e.Text, Labels: e.Labels, Attachment: e.Attachment, Erased: e.Erased,
-		Anchor: e.Anchor, Reply: e.Reply, Hold: e.Hold, Outcome: e.Outcome,
+		Anchor: e.Anchor, Reply: e.Reply, Hold: e.Hold, Outcome: e.Outcome, Kanban: e.Kanban,
 	}
 	if e.Role != 0 {
 		name, ok := roleNames[e.Role]
@@ -299,7 +302,7 @@ func fromWire(w wireEvent) (Event, error) {
 		Members: w.Members, Group: w.Group, Principal: w.Principal, SystemRole: w.SystemRole,
 		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed,
 		Comment: w.Comment, Text: w.Text, Labels: w.Labels, Attachment: w.Attachment, Erased: w.Erased,
-		Anchor: w.Anchor, Reply: w.Reply, Hold: w.Hold, Outcome: w.Outcome,
+		Anchor: w.Anchor, Reply: w.Reply, Hold: w.Hold, Outcome: w.Outcome, Kanban: w.Kanban,
 	}
 	if w.Role != "" {
 		for r, name := range roleNames {

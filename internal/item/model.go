@@ -274,6 +274,10 @@ const (
 	// takes it off (ADR-0058).
 	HoldSet      EventKind = "HoldSet"
 	HoldReleased EventKind = "HoldReleased"
+	// KanbanSet makes or renames a kanban of a space, KanbanRemoved removes
+	// it (ADR-0060).
+	KanbanSet     EventKind = "KanbanSet"
+	KanbanRemoved EventKind = "KanbanRemoved"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -327,6 +331,7 @@ type Event struct {
 	Attachment  *Attachment  // AttachmentAdded; AttachmentDeleted: only its ID
 	Hold        *Hold        // HoldSet: the hold as it is after the event
 	Outcome     string       // HoldReleased: HoldRestricted or HoldFalseAlarm; Text holds the reason
+	Kanban      *Kanban      // KanbanSet; KanbanRemoved: only its ID
 
 	// Erased is set on an event whose content (title, properties, body, raw
 	// source) was removed because its item was purged or redacted. The
