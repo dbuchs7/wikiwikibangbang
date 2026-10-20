@@ -309,3 +309,26 @@ func TestOAuthReadOnlyApproval(t *testing.T) {
 		t.Fatalf("grants: %v", g)
 	}
 }
+
+func TestOAuthNamesThePublicAddress(t *testing.T) {
+	h, _ := setupAuth(t)
+	h = WithPublicURL("https://wiki.example.org/", h)
+	anon := &client{t: t, h: h}
+	// Behind a proxy that is not trusted, the request looks like plain http;
+	// the public address still names the server.
+	if m := anon.expect("GET", ResourceMetadataPath+MCPPath, "", http.StatusOK); m["resource"] != "https://wiki.example.org/mcp" {
+		t.Fatalf("resource metadata: %v", m)
+	}
+	if m := anon.expect("GET", ServerMetadataPath, "", http.StatusOK); m["issuer"] != "https://wiki.example.org" || m["token_endpoint"] != "https://wiki.example.org/oauth/token" {
+		t.Fatalf("server metadata: %v", m)
+	}
+	rec := anon.do("POST", MCPPath, `{}`)
+	if got := rec.Header().Get("WWW-Authenticate"); !strings.Contains(got, `resource_metadata="https://wiki.example.org/.well-known/oauth-protected-resource/mcp"`) {
+		t.Fatalf("challenge: %q", got)
+	}
+	// Without a public address, the request's own address names the server.
+	bare, _ := setupAuth(t)
+	if m := (&client{t: t, h: WithPublicURL("", bare)}).expect("GET", ServerMetadataPath, "", http.StatusOK); m["issuer"] != "http://example.com" {
+		t.Fatalf("without a public address: %v", m)
+	}
+}
