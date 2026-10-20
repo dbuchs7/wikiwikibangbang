@@ -1052,6 +1052,32 @@ async function mailTo(sink, address) {
     await page.waitForSelector("p:has(a[href='#/']) >> text=PLAT"); // the page shown again after moving
     await page.waitForFunction(() => document.querySelector(".tree a.current")?.closest("ul")?.closest("li")?.querySelector(".tree-row a")?.textContent === "Tidy the wiki");
 
+    step("export: a page as Word and its table as CSV; printing hides the surroundings; lists as CSV");
+    const exported = await page.evaluate(async () => {
+      const res = await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        space: "PLAT", type: "task", title: "Price list", properties: { priority: "low" },
+        body: [{ kind: "heading", level: 1, text: "Prices" }, { kind: "table", text: "Item\tPrice\nTea\t3" }] }) });
+      return (await res.json()).item.key;
+    });
+    await page.goto(base + "/#/item/" + exported);
+    await page.click("#item-export summary");
+    await page.waitForSelector("#item-export a.export-table:has-text('Item, Price')");
+    const [docx] = await Promise.all([page.waitForEvent("download"), page.click("#export-docx")]);
+    check(docx.suggestedFilename() === exported + " Price list.docx", "the Word file is named after the page: " + docx.suggestedFilename());
+    const [table] = await Promise.all([page.waitForEvent("download"), page.click("#item-export a.export-table")]);
+    const tableText = require("fs").readFileSync(await table.path(), "utf8");
+    check(tableText === "\ufeffItem,Price\r\nTea,3\r\n", "the table as CSV: " + JSON.stringify(tableText));
+    await page.emulateMedia({ media: "print" });
+    check(!(await page.isVisible("header.top")) && !(await page.isVisible("#item-export")) && await page.isVisible("h1.item-title"), "printing shows the page without the surroundings");
+    await page.emulateMedia({ media: "screen" });
+    await page.goto(base + "/#/search/Price");
+    const [found] = await Promise.all([page.waitForEvent("download"), page.click("#search-csv")]);
+    check(require("fs").readFileSync(await found.path(), "utf8").includes(exported + ",Price list,PLAT,task"), "the search as CSV");
+    await page.goto(base + "/#/tasks/all");
+    const [tasks] = await Promise.all([page.waitForEvent("download"), page.click("#tasks-csv")]);
+    const tasksText = require("fs").readFileSync(await tasks.path(), "utf8");
+    check(tasksText.includes(exported + ",Price list"), "the task list as CSV: " + JSON.stringify(tasksText.slice(0, 300)));
+
     step("spaces: an administrator deletes a space into the trash, restores it, and deletes it for good");
     await page.goto(base + "/#/admin");
     await page.fill("#new-space [name=key]", "TMP");

@@ -27,7 +27,7 @@ An administrator can add an own stylesheet to the corporate design (ADR-0052). I
 Chosen option: **3**, as the maintainer asked, because the stylesheet itself already says whether its author thought of the dark look.
 
 - The dark scheme is on while the own stylesheet is empty or contains a `@media (prefers-color-scheme: dark)` rule; otherwise it is off for every reader (`Design.DarkMode`).
-- The UI's dark rules live in `assets/dark.css`. `index.html` links them as `/theme-dark.css` for `(prefers-color-scheme: dark)`; the server sends them, or an empty stylesheet when the dark scheme is off. The server decides, so a page opens in the right scheme without flashing the other.
+- The UI's dark rules live in `assets/dark.css`. `index.html` links them as `/theme-dark.css` for `screen and (prefers-color-scheme: dark)`, so print stays light (ADR-0071); the server sends them, or an empty stylesheet when the dark scheme is off. The server decides, so a page opens in the right scheme without flashing the other.
 - When it is off, `/branding.css` sets `color-scheme: light`, applies the corporate colours meant for the light scheme always, and leaves out the lightened dark accent. `/branding.json` carries `dark`; the UI then keeps the product's dark logo, and the drawing editor stays light.
 - The design form says whether the dark scheme is on and how to keep it: with `@media (prefers-color-scheme: dark) { … }` rules in the own stylesheet.
 
