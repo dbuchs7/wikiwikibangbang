@@ -637,6 +637,8 @@ export default {
   "design.fontFamily": "Font installed on the computers, tried first (optional)",
   "design.darkHint": "The dark scheme stays on as long as the own stylesheet is empty or defines its dark look with @media (prefers-color-scheme: dark) { … }; an own stylesheet without such rules turns the dark scheme off for the whole installation.",
   "design.darkOff": "The dark scheme is off: the own stylesheet defines no @media (prefers-color-scheme: dark) { … } rules, so everyone sees the light look. Add such rules to offer a dark look of your own.",
+  "export.pdfHandbook": "PDF with subpages (handbook)",
+  "export.docxHandbook": "Word with subpages (handbook)",
   "export.open": "Export",
   "export.pdf": "PDF (print)",
   "export.docx": "Word (.docx)",

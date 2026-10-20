@@ -24,6 +24,8 @@ var ceilingCalls = map[string]int{
 // its reason. A key is "<package dir>.<name>" for a package-level constant
 // or variable, or "<file>:<bound as printed>" for a ceiling call.
 var classified = map[string]string{
+	"internal/export.maxEmbedDepth": "the shape of an export (ADR-0071): how deep embedded items are written inside each other, " +
+		"like a heading level; what an export gathers is bounded by PageItems",
 	"internal/auth.MaxFailures":      "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
 	"internal/auth.MaxTokenLifetime": "a security policy (ADR-0027): how long an API token may live",
 	"internal/auth.MaxReasonLength":  "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",

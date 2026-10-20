@@ -1064,12 +1064,26 @@ async function mailTo(sink, address) {
     await page.waitForSelector("#item-export a.export-table:has-text('Item, Price')");
     const [docx] = await Promise.all([page.waitForEvent("download"), page.click("#export-docx")]);
     check(docx.suggestedFilename() === exported + " Price list.docx", "the Word file is named after the page: " + docx.suggestedFilename());
+    await page.click("#item-export summary"); // a download closes the menu
     const [table] = await Promise.all([page.waitForEvent("download"), page.click("#item-export a.export-table")]);
     const tableText = require("fs").readFileSync(await table.path(), "utf8");
     check(tableText === "\ufeffItem,Price\r\nTea,3\r\n", "the table as CSV: " + JSON.stringify(tableText));
     await page.emulateMedia({ media: "print" });
     check(!(await page.isVisible("header.top")) && !(await page.isVisible("#item-export")) && await page.isVisible("h1.item-title"), "printing shows the page without the surroundings");
     await page.emulateMedia({ media: "screen" });
+    // A page with subpages exports as a handbook, with them and what they embed.
+    await page.goto(base + "/#/space/PLAT");
+    await page.click(".tree a:text-is('Tidy the wiki')");
+    await page.waitForSelector("h1.item-title:text-is('Tidy the wiki')");
+    await page.click("#item-export summary");
+    await page.waitForSelector("#export-docx-handbook");
+    const [book] = await Promise.all([page.waitForEvent("download"), page.click("#export-docx-handbook")]);
+    check(book.suggestedFilename().endsWith("Tidy the wiki.docx"), "the handbook is named after its root page: " + book.suggestedFilename());
+    await page.click("#item-export summary");
+    await page.click("#export-pdf-handbook");
+    const frame = await (await page.waitForSelector("#export-frame")).contentFrame();
+    await frame.waitForSelector("h2.page-title:text-is('Runbook template')");
+    check(await frame.isVisible("nav.contents"), "the printable handbook lists its pages");
     await page.goto(base + "/#/search/Price");
     await page.waitForSelector(".hits li:has-text('Price list') .stars[aria-label='4 of 5 stars']"); // every term in the title (ADR-0072)
     const [found] = await Promise.all([page.waitForEvent("download"), page.click("#search-csv")]);

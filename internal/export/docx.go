@@ -16,21 +16,36 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
-// Document is a page to write as a Word document.
+// Document is what an export writes: one page, or a page with the pages
+// below it as a handbook (ADR-0071).
 type Document struct {
+	// Pages are in reading order; the first is the root, Depth 0.
+	Pages []Page
+	// Embeds are the items the bodies embed, by ID, as far as the reader
+	// may read them; an embed missing here is shown as Restricted.
+	Embeds     map[item.ID]Page
+	Restricted string
+	// Contents, when set, heads a list of the pages at the start.
+	Contents string
+}
+
+// Page is an item as exported.
+type Page struct {
+	ID    item.ID
+	Key   string
 	Title string
 	// Facts are label and value pairs shown under the title: the key, the
 	// type, the state and the properties.
 	Facts [][2]string
 	Body  []item.Block
 	// Images are the item's pictures by attachment ID; a picture block
-	// whose file is missing or in a format Word cannot show keeps only its
-	// caption.
+	// whose file is missing or in a format the target cannot show keeps
+	// only its caption.
 	Images map[item.ID]Image
-	// Ref names an embedded or mentioned item, or says it is restricted.
-	Ref func(item.ID) string
 	// Children are the titles of the child pages, for a list of them.
 	Children []string
+	// Depth is the page's level below the root.
+	Depth int
 }
 
 // Image is a picture file.
@@ -38,6 +53,13 @@ type Image struct {
 	Name, Type string
 	Data       []byte
 }
+
+// maxEmbedDepth bounds how deep embedded items are written inside each
+// other; deeper ones, and an item inside itself, show by key and title.
+const maxEmbedDepth = 3
+
+// name names an item: key and title.
+func (p Page) name() string { return strings.TrimSpace(p.Key + " " + p.Title) }
 
 // textWidth is the width of the text column of an A4 page with margins of
 // 2.5 cm, in EMU (English Metric Units, 914400 to the inch).
@@ -57,7 +79,7 @@ func DOCX(w io.Writer, d Document) error {
 	files := []struct{ name, data string }{
 		{"[Content_Types].xml", contentTypes},
 		{"_rels/.rels", rootRels},
-		{"docProps/core.xml", fmt.Sprintf(coreProps, esc(d.Title))},
+		{"docProps/core.xml", fmt.Sprintf(coreProps, esc(b.title()))},
 		{"word/document.xml", documentHead + body + sectPr + "</w:body></w:document>"},
 		{"word/styles.xml", styles},
 		{"word/numbering.xml", b.numbering()},
@@ -99,27 +121,75 @@ type docxBuilder struct {
 
 func (b *docxBuilder) body() string {
 	var out strings.Builder
-	out.WriteString(para("Title", "", runs(b, b.d.Title, nil)))
-	if len(b.d.Facts) > 0 {
+	if len(b.d.Pages) == 0 {
+		return ""
+	}
+	root := b.d.Pages[0]
+	out.WriteString(para("Title", "", runs(b, root.Title, nil)))
+	if b.d.Contents != "" && len(b.d.Pages) > 1 {
+		out.WriteString(para("TOCHeading", "", run(b.d.Contents, "")))
+		for _, p := range b.d.Pages[1:] {
+			out.WriteString(paraPr(fmt.Sprintf(`<w:ind w:left="%d"/>`, (p.Depth-1)*360), run(p.Title, "")))
+		}
+	}
+	for i, p := range b.d.Pages {
+		if i > 0 {
+			// A chapter starts on a new page; a section below it does not.
+			pPr := fmt.Sprintf(`<w:pStyle w:val="Heading%d"/>`, min(p.Depth, 6))
+			if p.Depth == 1 {
+				pPr += `<w:pageBreakBefore/>`
+			}
+			out.WriteString(paraPr(pPr, runs(b, p.Title, nil)))
+		}
+		b.page(&out, p, p.Depth, map[item.ID]bool{p.ID: true}, 0)
+	}
+	return out.String()
+}
+
+// page writes an item's facts and body; base is the heading level of its
+// title, so its own headings come below it.
+func (b *docxBuilder) page(out *strings.Builder, p Page, base int, path map[item.ID]bool, embedDepth int) {
+	if len(p.Facts) > 0 {
 		var rows [][]string
-		for _, f := range b.d.Facts {
+		for _, f := range p.Facts {
 			rows = append(rows, []string{f[0], f[1]})
 		}
 		out.WriteString(table(rows, false))
 		out.WriteString(para("", "", ""))
 	}
 	listNum := 0
-	for i, bl := range b.d.Body {
-		if bl.Kind == item.OrderedItem && (i == 0 || b.d.Body[i-1].Kind != item.OrderedItem) {
+	for i, bl := range p.Body {
+		if bl.Kind == item.OrderedItem && (i == 0 || p.Body[i-1].Kind != item.OrderedItem) {
 			b.ordered++
 			listNum = 1 + b.ordered
 		}
-		out.WriteString(b.block(bl, listNum))
+		if bl.Kind == item.Embed {
+			b.embed(out, bl.Ref, base, path, embedDepth)
+			continue
+		}
+		out.WriteString(b.block(bl, p, base, listNum))
 	}
-	return out.String()
 }
 
-func (b *docxBuilder) block(bl item.Block, listNum int) string {
+// embed writes an embedded item where it is embedded: its name, facts and
+// body, or its name alone when it is too deep or already open around it.
+func (b *docxBuilder) embed(out *strings.Builder, id item.ID, base int, path map[item.ID]bool, embedDepth int) {
+	e, ok := b.d.Embeds[id]
+	if !ok {
+		out.WriteString(para("EmbedTitle", "", run("↳ "+b.d.Restricted, "")))
+		return
+	}
+	out.WriteString(para("EmbedTitle", "", run("↳ "+e.name(), "")))
+	if path[id] || embedDepth >= maxEmbedDepth {
+		return
+	}
+	path[id] = true
+	b.page(out, e, base+1, path, embedDepth+1)
+	delete(path, id)
+	out.WriteString(paraPr(`<w:pBdr><w:bottom w:val="dotted" w:sz="4" w:space="1" w:color="BFBFBF"/></w:pBdr>`, ""))
+}
+
+func (b *docxBuilder) block(bl item.Block, p Page, base, listNum int) string {
 	jc := ""
 	switch bl.Align {
 	case "center", "right":
@@ -130,7 +200,7 @@ func (b *docxBuilder) block(bl item.Block, listNum int) string {
 	text := runs(b, bl.Text, bl.Marks)
 	switch bl.Kind {
 	case item.Heading:
-		level := min(max(bl.Level, 1), 3)
+		level := min(base+min(max(bl.Level, 1), 3), 6)
 		return paraPr(fmt.Sprintf(`<w:pStyle w:val="Heading%d"/>`, level)+align(jc), text)
 	case item.BulletItem:
 		return paraPr(`<w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>`, text)
@@ -157,12 +227,10 @@ func (b *docxBuilder) block(bl item.Block, listNum int) string {
 	case item.Divider:
 		return paraPr(`<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="BFBFBF"/></w:pBdr>`, "")
 	case item.Image:
-		return b.picture(bl)
-	case item.Embed:
-		return para("", "", run("↳ "+b.ref(bl.Ref), ""))
+		return b.picture(bl, p.Images)
 	case item.TOC:
 		var out strings.Builder
-		for _, h := range b.d.Body {
+		for _, h := range p.Body {
 			if h.Kind == item.Heading && strings.TrimSpace(h.Text) != "" {
 				out.WriteString(paraPr(fmt.Sprintf(`<w:ind w:left="%d"/>`, (max(h.Level, 1)-1)*360), run(h.Text, "")))
 			}
@@ -170,7 +238,7 @@ func (b *docxBuilder) block(bl item.Block, listNum int) string {
 		return out.String()
 	case item.Children:
 		var out strings.Builder
-		for _, c := range b.d.Children {
+		for _, c := range p.Children {
 			out.WriteString(paraPr(`<w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>`, run(c, "")))
 		}
 		return out.String()
@@ -179,20 +247,13 @@ func (b *docxBuilder) block(bl item.Block, listNum int) string {
 	}
 }
 
-func (b *docxBuilder) ref(id item.ID) string {
-	if b.d.Ref == nil {
-		return string(id)
-	}
-	return b.d.Ref(id)
-}
-
 // picture places an image of the item, sized as in the page.
-func (b *docxBuilder) picture(bl item.Block) string {
+func (b *docxBuilder) picture(bl item.Block, images map[item.ID]Image) string {
 	caption := ""
 	if strings.TrimSpace(bl.Text) != "" {
 		caption = para("Caption", "", run(bl.Text, ""))
 	}
-	img, ok := b.d.Images[bl.Ref]
+	img, ok := images[bl.Ref]
 	if !ok {
 		return caption
 	}
@@ -224,10 +285,17 @@ func (b *docxBuilder) picture(bl item.Block) string {
 	return paraPr(jc, drawing) + caption
 }
 
-// runs writes a text with its marks as runs of equal formatting.
-func runs(b *docxBuilder, text string, marks []item.Mark) string {
+// segment is a stretch of text with one set of marks.
+type segment struct {
+	text                                          string
+	bold, italic, under, strike, code, high, link bool
+	href                                          string
+}
+
+// segments cuts a text at its marks' boundaries, counted in code points.
+func segments(text string, marks []item.Mark) []segment {
 	if text == "" {
-		return ""
+		return nil
 	}
 	n := utf8.RuneCountInString(text)
 	cuts := []int{0, n}
@@ -237,59 +305,68 @@ func runs(b *docxBuilder, text string, marks []item.Mark) string {
 	slices.Sort(cuts)
 	cuts = slices.Compact(cuts)
 	chars := []rune(text)
-	var out strings.Builder
+	var out []segment
 	for i := 0; i+1 < len(cuts); i++ {
 		from, to := cuts[i], cuts[i+1]
 		if from >= to {
 			continue
 		}
-		var props, href string
-		var bold, italic, under, strike, code, high, link bool
+		sg := segment{text: string(chars[from:to])}
 		for _, m := range marks {
 			if m.Start > from || m.End < to {
 				continue
 			}
 			switch m.Type {
 			case item.MarkBold:
-				bold = true
+				sg.bold = true
 			case item.MarkItalic:
-				italic = true
+				sg.italic = true
 			case item.MarkUnderline:
-				under = true
+				sg.under = true
 			case item.MarkStrike:
-				strike = true
+				sg.strike = true
 			case item.MarkCode:
-				code = true
+				sg.code = true
 			case item.MarkHighlight:
-				high = true
+				sg.high = true
 			case item.MarkLink:
-				link, href = true, m.Href
+				sg.link, sg.href = safeLink(m.Href), m.Href
 			}
 		}
+		out = append(out, sg)
+	}
+	return out
+}
+
+// runs writes a text with its marks as runs of equal formatting.
+func runs(b *docxBuilder, text string, marks []item.Mark) string {
+	var out strings.Builder
+	for _, sg := range segments(text, marks) {
+		var props string
 		// The order of the run properties is the schema's.
-		if link {
+		if sg.link {
 			props += `<w:rStyle w:val="Hyperlink"/>`
-		} else if code {
+		} else if sg.code {
 			props += `<w:rStyle w:val="CodeChar"/>`
 		}
-		if bold {
+		if sg.bold {
 			props += "<w:b/>"
 		}
-		if italic {
+		if sg.italic {
 			props += "<w:i/>"
 		}
-		if strike {
+		if sg.strike {
 			props += "<w:strike/>"
 		}
-		if high {
+		if sg.high {
 			props += `<w:highlight w:val="yellow"/>`
 		}
-		if under {
+		if sg.under {
 			props += `<w:u w:val="single"/>`
 		}
-		r := run(string(chars[from:to]), props)
-		if link && safeLink(href) {
-			b.links = append(b.links, href)
+		r := run(sg.text, props)
+		if sg.link {
+			b.links = append(b.links, sg.href)
 			r = fmt.Sprintf(`<w:hyperlink r:id="rL%d">%s</w:hyperlink>`, len(b.links), r)
 		}
 		out.WriteString(r)
@@ -382,6 +459,13 @@ func table(rows [][]string, header bool) string {
 	return out.String()
 }
 
+func (b *docxBuilder) title() string {
+	if len(b.d.Pages) == 0 {
+		return ""
+	}
+	return b.d.Pages[0].Title
+}
+
 func (b *docxBuilder) rels() string {
 	var out strings.Builder
 	out.WriteString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
@@ -472,6 +556,11 @@ const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
 	`<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="360" w:after="120"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>` +
 	`<w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr></w:style>` +
 	`<w:style w:type="paragraph" w:styleId="Heading3"><w:name w:val="heading 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="200" w:after="80"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:b/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style>` +
+	`<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="160" w:after="60"/><w:outlineLvl w:val="3"/></w:pPr><w:rPr><w:b/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:style>` +
+	`<w:style w:type="paragraph" w:styleId="Heading5"><w:name w:val="heading 5"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="120" w:after="60"/><w:outlineLvl w:val="4"/></w:pPr><w:rPr><w:b/><w:i/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:style>` +
+	`<w:style w:type="paragraph" w:styleId="Heading6"><w:name w:val="heading 6"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="120" w:after="40"/><w:outlineLvl w:val="5"/></w:pPr><w:rPr><w:i/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:style>` +
+	`<w:style w:type="paragraph" w:styleId="TOCHeading"><w:name w:val="TOC Heading"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/><w:szCs w:val="26"/></w:rPr></w:style>` +
+	`<w:style w:type="paragraph" w:styleId="EmbedTitle"><w:name w:val="Embedded item"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:pBdr><w:top w:val="dotted" w:sz="4" w:space="1" w:color="BFBFBF"/></w:pBdr><w:spacing w:before="160" w:after="80"/></w:pPr><w:rPr><w:b/><w:color w:val="404040"/></w:rPr></w:style>` +
 	`<w:style w:type="paragraph" w:styleId="ListParagraph"><w:name w:val="List Paragraph"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="60"/><w:ind w:left="720"/></w:pPr></w:style>` +
 	`<w:style w:type="paragraph" w:styleId="Quote"><w:name w:val="Quote"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="BFBFBF"/></w:pBdr><w:ind w:left="360"/></w:pPr><w:rPr><w:i/><w:color w:val="595959"/></w:rPr></w:style>` +
 	`<w:style w:type="paragraph" w:styleId="Code"><w:name w:val="Code"/><w:basedOn w:val="Normal"/><w:pPr><w:shd w:val="clear" w:color="auto" w:fill="F4F5F7"/><w:spacing w:after="120" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/><w:sz w:val="19"/><w:szCs w:val="19"/></w:rPr></w:style>` +

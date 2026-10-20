@@ -905,8 +905,8 @@ a.button.login-sso { display: flex; gap: 10px; }
 .export-menu > summary::-webkit-details-marker { display: none; }
 .export-list { position: absolute; right: 0; z-index: 20; display: flex; flex-direction: column; gap: 2px; min-width: 15rem; margin-top: 6px;
   padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
-.export-list > a, .export-list > button.link { display: block; padding: 6px 10px; border-radius: 6px; text-align: left; color: var(--text); text-decoration: none; }
-.export-list > a:hover, .export-list > button.link:hover { background: var(--row-hover); }
+.export-list a, .export-list button.link { display: block; padding: 6px 10px; border-radius: 6px; text-align: left; color: var(--text); text-decoration: none; }
+.export-list a:hover, .export-list button.link:hover { background: var(--row-hover); }
 @media print {
   :root { color-scheme: light; }
   body { background: #fff !important; }
@@ -923,3 +923,7 @@ a.button.login-sso { display: flex; gap: 10px; }
 .stars { display: inline-flex; margin-right: 8px; font-size: 14px; letter-spacing: 1px; cursor: help; vertical-align: 1px; }
 .stars-on { color: #e3a008; }
 .stars-off { color: var(--border-strong); }
+/* The frame a page's printable form loads in, to print it (ADR-0071). */
+.export-frame { position: fixed; right: 0; bottom: 0; width: 1px; height: 1px; border: 0; opacity: 0; }
+.export-handbook:empty { display: none; }
+.export-handbook { display: contents; }
