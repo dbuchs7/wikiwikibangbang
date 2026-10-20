@@ -64,6 +64,11 @@ export default {
   "tasks.title": "Tasks",
   "tasks.truncated": "Only the first {n} items were read.",
 
+  "common.infoAbout": "What does “{what}” check?",
+  "gov.infoSensitive": "Checked in titles, fields, bodies and comments, on every save:\nPasswords after a label (password, Passwort, pwd, passcode, Kennwort) with at least 6 characters, of which a digit or a symbol, or 16 characters; masked values such as **** do not count\nPrivate keys (-----BEGIN … PRIVATE KEY-----)\nAccess tokens of common cloud, code-hosting and chat services, API secret keys, signed tokens (JWT) and this server's own tokens\nIBANs with valid check digits\nCard numbers with a valid Luhn check digit",
+  "gov.infoSensitiveNote": "An item that gets such data is restricted at once to the person who saved it; space administrators still read it. Personal data in the sense of data protection law (health, religion and so on) is not detected.",
+  "gov.infoStale": "Items on which nothing has happened for more than {days} days: no change to title, fields, body, labels or files, and no comment, move, relation or access change either. Responsible is whoever last changed the content. The number of days can be set on a space's check.",
+  "gov.infoImplausible": "Formal contradictions, checked without reading the meaning:\nA date field named like a deadline (due, deadline, fällig) lies in the past while the item is not yet in its workflow's last state\nA field the item's type requires is empty\nAn article without workflow has an empty body",
   "gov.access": "Access",
   "gov.checkAgain": "Check again",
   "gov.colImplausible": "Implausible",

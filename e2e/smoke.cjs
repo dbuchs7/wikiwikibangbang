@@ -230,6 +230,11 @@ function check(cond, msg) {
     await page.click("#app-switcher");
     await page.click("#drawer-apps a:has-text('Governance')");
     await page.waitForSelector("#governance-overview td:has-text('PLAT')");
+    // An "i" beside each column says what it checks; Escape closes it.
+    await page.click("#governance-overview th:has-text('Sensitive data') .info-btn");
+    await page.waitForSelector("#governance-overview .info-pop:visible li:has-text('IBAN')");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#governance-overview .info-pop", { state: "hidden" });
 
     step("task inbox: an overdue unassigned task is taken over and lands under Assigned to me");
     await page.evaluate(async () => {
