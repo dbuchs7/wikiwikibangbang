@@ -471,5 +471,13 @@ export default {
   "design.fontFamily": "Font installed on the computers, tried first (optional)",
   "design.css": "Own stylesheet (CSS)",
   "design.cssFile": "Load a stylesheet from a file",
-  "design.saved": "Saved. The appearance applies to everyone at once."
+  "design.saved": "Saved. The appearance applies to everyone at once.",
+  "design.contrastTitle": "Some colours are hard to read (below the contrast of 4.5 : 1 that WCAG AA asks for normal text):",
+  "design.contrastHint": "The design is saved all the same. The accent's text colour and its variant for the dark scheme are chosen automatically.",
+  "design.contrast.headerText": "Text in the header on its background: {ratio} : 1.",
+  "design.contrast.textOnBackground": "Text on the page background: {ratio} : 1.",
+  "design.contrast.accentInk": "Text on accent buttons: {ratio} : 1, even with the better of black and white.",
+  "design.contrast.accentOnSurface": "The accent as link text on white cards: {ratio} : 1.",
+  "design.contrast.accentOnDarkSurface": "The accent as link text in the dark scheme: {ratio} : 1.",
+  "design.contrast.accentOnBackground": "The accent as link text on the page background: {ratio} : 1."
 };

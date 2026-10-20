@@ -530,12 +530,20 @@ function check(cond, msg) {
     await page.waitForSelector("#design .notice");
     await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() === "#d40000");
     check((await page.title()).startsWith("ACME"), "the browser title carries the name");
-    // In the dark scheme the product's text on accent fills is dark; on the
-    // corporate red it must be white (ADR-0052).
+    check(await page.locator("#design-contrast li").count() === 0, "a readable design brings no contrast warning");
+    // In the dark scheme the corporate red is lightened until it reads on the
+    // dark cards, and its buttons carry dark text (ADR-0052).
     await page.emulateMedia({ colorScheme: "dark" });
-    check(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent-ink").trim()) === "#ffffff",
-      "white text on the red accent in the dark scheme");
+    const darkAccent = await page.evaluate(() => { const s = getComputedStyle(document.documentElement); return [s.getPropertyValue("--accent").trim(), s.getPropertyValue("--accent-ink").trim()]; });
+    check(darkAccent[0] === "#e35959" && darkAccent[1] === "#0b0d12", "the dark scheme's accent and its text: " + darkAccent);
     await page.emulateMedia({ colorScheme: "light" });
+    // Yellow is unreadable as link text on white: saved, with a warning.
+    await page.fill("#design [name=accent]", "#ffcc00");
+    await page.click("#design button[type=submit]");
+    await page.waitForSelector("#design-contrast li:has-text('link text on white cards')");
+    await page.fill("#design [name=accent]", "#d40000");
+    await page.click("#design button[type=submit]");
+    await page.waitForFunction(() => document.querySelectorAll("#design-contrast li").length === 0);
     await page.click("#admin-design button:has-text('Delete')"); // the product's logo comes back
     await page.waitForSelector("header .brand picture");
 
