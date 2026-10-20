@@ -64,6 +64,10 @@ const (
 	PasswordResetRequested = "password.reset.request"
 	PasswordReset          = "password.reset"
 	PasswordResetHanded    = "password.reset.link"
+	// Deleting spaces (ADR-0069).
+	SpaceTrashed  = "space.trash"
+	SpaceRestored = "space.restore"
+	SpacePurged   = "space.purge"
 	// OAuth for AI assistants (ADR-0068).
 	OAuthClientCreated = "oauth.client.create"
 	OAuthClientRemoved = "oauth.client.remove"

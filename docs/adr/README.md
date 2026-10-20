@@ -81,3 +81,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0066](0066-several-identity-providers-entra-id-and-google.md) | Several identity providers side by side: Microsoft Entra ID and Google | Accepted | Landed |
 | [0067](0067-copying-pages-with-their-child-pages.md) | Copying pages with their child pages, and moving them by a form | Accepted | Landed |
 | [0068](0068-oauth-for-ai-assistants.md) | OAuth for AI assistants on the MCP endpoint | Accepted | Landed |
+| [0069](0069-deleting-a-space-in-two-steps.md) | Deleting a space in two steps | Accepted | Landed |

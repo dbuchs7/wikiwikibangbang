@@ -2599,10 +2599,10 @@ async function oauthView(params) {
 
 async function adminView() {
   const show = screen();
-  const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }, { requests }, access, sso, delivery] = await Promise.all([
+  const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }, { requests }, access, sso, delivery, { spaces: trashed }] = await Promise.all([
     get("/api/users"), get("/api/spaces"), get("/api/types"), get("/api/audit?limit=50"), get("/api/groups"), get("/api/system-roles"),
     get("/api/account-requests"), get("/api/settings/access"), get("/api/oidc").catch(() => ({ enabled: false })),
-    get("/api/settings/delivery").catch(() => ({ status: {} })),
+    get("/api/settings/delivery").catch(() => ({ status: {} })), get("/api/spaces/trash").catch(() => ({ spaces: [] })),
   ]);
   for (const u of users) names.set(u.id, u.username);
   const status = h("div", { class: "status" });
@@ -2617,10 +2617,38 @@ async function adminView() {
     return el;
   };
 
+  // Deleting a space takes two steps (ADR-0069): into the trash, where it
+  // can be restored, then for good after its key is typed again.
+  const spaceStatus = h("div", { class: "status", id: "space-status" });
+  const spaceAction = (fn) => async () => {
+    spaceStatus.replaceChildren();
+    try {
+      if (await fn() !== false) route();
+    } catch (err) {
+      spaceStatus.replaceChildren(errorBox(err));
+    }
+  };
   const spacesSection = section("spaces", t("admin.spaces"),
     spaces.length ? h("table", {}, spaces.map((sp) => h("tr", {},
       h("td", {}, link("#/space/" + encodeURIComponent(sp.key), sp.name)), h("td", { class: "muted", text: sp.key }),
-      h("td", {}, link("#/members/" + encodeURIComponent(sp.key), t("admin.members")))))) : h("p", { class: "muted", text: t("admin.none") }),
+      h("td", {}, link("#/members/" + encodeURIComponent(sp.key), t("admin.members"))),
+      h("td", {}, h("button", { type: "button", class: "secondary", "data-trash-space": sp.key, text: t("admin.trashSpace"), onclick: spaceAction(async () => {
+        if (!confirm(t("admin.trashSpaceConfirm", { name: sp.name }))) return false;
+        await del("/api/spaces/" + encodeURIComponent(sp.key));
+      }) }))))) : h("p", { class: "muted", text: t("admin.none") }),
+    spaceStatus,
+    trashed.length ? h("div", { id: "space-trash" },
+      h("h3", { text: t("admin.spaceTrash") }),
+      h("p", { class: "muted", text: t("admin.spaceTrashNote") }),
+      h("table", {}, trashed.map((sp) => h("tr", {},
+        h("td", { text: sp.name }), h("td", { class: "muted", text: sp.key }),
+        h("td", { class: "muted", text: t("admin.spaceItems", { n: sp.items }) }),
+        h("td", {}, h("button", { type: "button", class: "secondary", text: t("admin.restoreSpace"), onclick: spaceAction(() => post("/api/spaces/" + encodeURIComponent(sp.key) + "/restore")) }),
+          " ", h("button", { type: "button", class: "danger", text: t("admin.purgeSpace"), onclick: spaceAction(async () => {
+            const typed = prompt(t("admin.purgeSpaceConfirm", { name: sp.name, key: sp.key }));
+            if (typed === null) return false;
+            await post("/api/spaces/" + encodeURIComponent(sp.key) + "/purge", { confirm: typed.trim() });
+          }) })))))) : null,
     form({ id: "new-space" }, [
       h("h3", { text: t("admin.newSpace") }),
       field(t("admin.key"), h("input", { name: "key", required: true, pattern: "[A-Z][A-Z0-9]*", title: t("admin.keyHint") })),

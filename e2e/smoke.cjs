@@ -63,7 +63,19 @@ async function mailTo(sink, address) {
   const problems = [];
   page.on("pageerror", (e) => problems.push("page error: " + e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/status of 401/.test(m.text())) problems.push("console: " + m.text()); });
-  page.on("dialog", async (d) => { problems.push("dialog: " + d.message()); await d.dismiss(); });
+  // A step that expects a confirmation or prompt sets its answer first:
+  // true accepts, a string is typed in; any other dialog is a problem.
+  let answer = null;
+  page.on("dialog", async (d) => {
+    if (answer !== null) {
+      const a = answer;
+      answer = null;
+      await (a === true ? d.accept() : d.accept(a));
+      return;
+    }
+    problems.push("dialog: " + d.message());
+    await d.dismiss();
+  });
   const step = (name) => console.log("·", name);
 
   try {
@@ -883,7 +895,8 @@ async function mailTo(sink, address) {
     await page.click("#design button[type=submit]");
     await page.waitForSelector("#design .notice");
     await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() === "#d40000");
-    check((await page.title()).startsWith("ACME"), "the browser title carries the name");
+    // The title follows once the design is fetched again, which may be after the stylesheet.
+    await page.waitForFunction(() => document.title.startsWith("ACME"));
     check(await page.locator("#design-contrast li").count() === 0, "a readable design brings no contrast warning");
     // In the dark scheme the corporate red is lightened until it reads on the
     // dark cards, and its buttons carry dark text (ADR-0052).
@@ -1028,6 +1041,25 @@ async function mailTo(sink, address) {
     await page.click("#relocate-form button[type=submit]");
     await page.waitForSelector("p:has(a[href='#/']) >> text=PLAT"); // the page shown again after moving
     await page.waitForFunction(() => document.querySelector(".tree a.current")?.closest("ul")?.closest("li")?.querySelector(".tree-row a")?.textContent === "Tidy the wiki");
+
+    step("spaces: an administrator deletes a space into the trash, restores it, and deletes it for good");
+    await page.goto(base + "/#/admin");
+    await page.fill("#new-space [name=key]", "TMP");
+    await page.fill("#new-space [name=name]", "Temporary");
+    await page.click("#new-space button[type=submit]");
+    await page.waitForSelector("button[data-trash-space=TMP]");
+    answer = true;
+    await page.click("button[data-trash-space=TMP]");
+    await page.waitForSelector("#space-trash td:text-is('TMP')");
+    check(!(await page.$("button[data-trash-space=TMP]")), "a space in the trash leaves the list of spaces");
+    await page.click("#space-trash button:has-text('Restore')");
+    await page.waitForSelector("button[data-trash-space=TMP]");
+    answer = true;
+    await page.click("button[data-trash-space=TMP]");
+    await page.waitForSelector("#space-trash td:text-is('TMP')");
+    answer = "TMP";
+    await page.click("#space-trash button:has-text('Delete for good')");
+    await page.waitForFunction(() => !document.querySelector("#space-trash") && !document.querySelector("button[data-trash-space=TMP]"));
 
     step("log out, log in as bert, read the item");
     await page.click("#account-button");

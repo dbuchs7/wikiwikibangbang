@@ -327,7 +327,7 @@ func (j journal) Append(batch []item.Event) error {
 	deleted := map[item.ID][]item.ID{}
 	for _, e := range batch {
 		switch e.Kind {
-		case item.ItemPurged:
+		case item.ItemPurged, item.SpacePurged:
 			gone = append(gone, e.Members...)
 		case item.ItemRedacted:
 			gone = append(gone, e.Item)

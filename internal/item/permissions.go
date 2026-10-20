@@ -162,6 +162,11 @@ func (s *Store) SystemRoleHeld(role string) bool {
 // spaceRole is the highest role a principal holds in a space, directly or
 // through groups; a system admin is SpaceAdmin everywhere.
 func (s *Store) spaceRole(principal, space string) Role {
+	// A space in the trash, or deleted, is out of everyone's sight,
+	// administrators' too: they act on it as a whole (ADR-0069).
+	if sp := s.spaces[space]; sp != nil && sp.state != "" {
+		return 0
+	}
 	if s.hasSystemRole(principal, RoleAdmin) {
 		return SpaceAdmin
 	}
