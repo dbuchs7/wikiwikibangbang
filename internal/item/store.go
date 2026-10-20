@@ -20,6 +20,9 @@ import (
 type Store struct {
 	now   func() time.Time
 	newID func() ID
+	// assess finds the indicators of data protection regulations in
+	// content, for live commands only (ADR-0058); nil turns it off.
+	assess Assessor
 
 	log      []Event
 	types    map[string][]TypeDef // all versions, oldest first
@@ -129,6 +132,8 @@ func (s *Store) record(actor string, e Event) error { return s.recordBatch(actor
 func (s *Store) recordBatch(actor string, events ...Event) error {
 	// Sensitive data restricts its item in the same batch (ADR-0040).
 	events = append(events, s.guard(actor, events)...)
+	// Data protection indicators hold an item open to its space (ADR-0058).
+	events = append(events, s.holds(actor, events)...)
 	first := len(s.log) + 1
 	// UTC without a monotonic reading: the value that survives the journal.
 	at := s.now().UTC()
@@ -785,6 +790,8 @@ func (s *Store) apply(e Event) {
 		s.applyComment(e, touch)
 	case AttachmentAdded, AttachmentDeleted:
 		s.applyAttachment(e, touch)
+	case HoldSet, HoldReleased:
+		s.applyHold(e, touch)
 	case Watched, Unwatched:
 		s.applyWatch(e)
 	case RoleRevoked, GroupMemberRemoved, SystemRoleRevoked:

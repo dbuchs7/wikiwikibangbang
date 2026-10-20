@@ -13,6 +13,9 @@ func governanceRoutes(h itemHandlers) []Route {
 		{Method: http.MethodGet, Pattern: "/api/spaces/{space}/governance",
 			Summary: "Check a space: sensitive data, items unchanged for staleDays (365), implausible values; what one may read",
 			Handler: http.HandlerFunc(h.governance)},
+		{Method: http.MethodPost, Pattern: "/api/items/{ref}/hold/release",
+			Summary: "End an item's data protection review: outcome restricted (reading is restricted to people or groups) or false-alarm (with a reason); not by who saved the findings",
+			Handler: http.HandlerFunc(h.releaseHold)},
 	}
 }
 
@@ -41,6 +44,51 @@ type implausibleJSON struct {
 	Title       string  `json:"title"`
 	Problem     string  `json:"problem"`
 	Responsible string  `json:"responsible,omitempty"`
+}
+
+// personalJSON is an item holding indicators of a data protection
+// regulation (ADR-0058).
+type personalJSON struct {
+	Item        item.ID         `json:"item"`
+	Key         string          `json:"key"`
+	Title       string          `json:"title"`
+	Findings    []dpFindingJSON `json:"findings"`
+	Held        bool            `json:"held"`
+	Savers      []string        `json:"savers,omitempty"`
+	Restricted  bool            `json:"restricted"`
+	Responsible string          `json:"responsible,omitempty"`
+	MayRelease  bool            `json:"mayRelease,omitempty"`
+}
+
+func toPersonalJSON(ps []item.PersonalData) []personalJSON {
+	out := []personalJSON{}
+	for _, p := range ps {
+		out = append(out, personalJSON{Item: p.Item, Key: p.Key, Title: p.Title, Findings: toDPFindings(p.Findings), Held: p.Held,
+			Savers: p.Savers, Restricted: p.Restricted, Responsible: p.Responsible, MayRelease: p.MayRelease})
+	}
+	return out
+}
+
+// releaseHold ends an item's data protection review (ADR-0058).
+func (h itemHandlers) releaseHold(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Outcome string `json:"outcome"`
+		Reason  string `json:"reason"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	h.write(w, r, http.StatusOK, func(x *item.Session, _ *item.Store) (any, error) {
+		it, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		if err := x.ReleaseHold(it.ID, req.Outcome, req.Reason); err != nil {
+			return nil, err
+		}
+		got, err := x.Get(it.ID)
+		return map[string]itemJSON{"item": toItemJSON(got)}, err
+	})
 }
 
 // governance answers a check of a space (ADR-0040). It scans the live
@@ -74,6 +122,7 @@ func (h itemHandlers) governance(w http.ResponseWriter, r *http.Request) {
 			impl[i] = implausibleJSON(p)
 		}
 		out["sensitive"], out["stale"], out["implausible"] = sens, stale, impl
+		out["personal"] = toPersonalJSON(rep.Personal)
 		return out, nil
 	})
 }

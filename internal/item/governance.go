@@ -118,6 +118,26 @@ type Report struct {
 	Sensitive   []SensitiveFinding
 	Stale       []StaleItem
 	Implausible []Implausible
+	// Personal lists the items whose content holds indicators of data in
+	// need of protection (ADR-0058): held ones waiting for review, and
+	// restricted ones, which are assessed but not held.
+	Personal []PersonalData
+}
+
+// PersonalData is an item whose content holds indicators of a regulation.
+type PersonalData struct {
+	Item     ID
+	Key      string
+	Title    string
+	Findings []DPFinding
+	// Held reports an open review; Savers then brought the findings in and
+	// may not release it.
+	Held        bool
+	Savers      []string
+	Restricted  bool
+	Responsible string
+	// MayRelease reports whether the reader may release the hold.
+	MayRelease bool
 }
 
 // SensitiveFinding is sensitive data in an item, shown masked.
@@ -180,8 +200,27 @@ func (x *Session) Governance(space string, now time.Time, staleAfter time.Durati
 		for _, p := range x.s.implausible(it, now) {
 			rep.Implausible = append(rep.Implausible, Implausible{Item: it.ID, Key: it.Key, Title: it.Title, Problem: p, Responsible: responsible})
 		}
+		if pd, ok := x.personal(it, responsible); ok {
+			rep.Personal = append(rep.Personal, pd)
+		}
 	}
 	return rep, nil
+}
+
+// personal reports an item's data protection findings: its open hold, or
+// what the regulations find in a restricted item (ADR-0058).
+func (x *Session) personal(it *Item, responsible string) (PersonalData, bool) {
+	pd := PersonalData{Item: it.ID, Key: it.Key, Title: it.Title, Restricted: len(it.Restriction.Read) > 0, Responsible: responsible}
+	if it.Hold != nil {
+		pd.Held, pd.Findings, pd.Savers = true, slices.Clone(it.Hold.Findings), slices.Clone(it.Hold.Savers)
+		pd.MayRelease = x.MayEdit(it.ID) && !slices.Contains(it.Hold.Savers, x.who)
+		return pd, true
+	}
+	if x.s.assess == nil {
+		return pd, false
+	}
+	pd.Findings = slices.DeleteFunc(x.s.assess(it.contentTexts()), func(f DPFinding) bool { return slices.Contains(it.Cleared, f.key()) })
+	return pd, len(pd.Findings) > 0
 }
 
 func (s *Store) sensitiveIn(it *Item, responsible string, rep *Report) {
@@ -253,7 +292,7 @@ func (s *Store) lastEditor(id ID) (string, time.Time) {
 		if when.IsZero() {
 			when = e.At
 		}
-		if e.Item == id && e.HasContent() && e.Actor != GovernanceActor {
+		if e.Item == id && e.HasContent() && e.Actor != GovernanceActor && e.Kind != HoldReleased {
 			who = e.Actor
 			break
 		}
@@ -285,6 +324,13 @@ func (x *Session) Findings(now time.Time, staleAfter time.Duration) Report {
 		for _, f := range rep.Implausible {
 			if f.Responsible == x.who {
 				mine.Implausible = append(mine.Implausible, f)
+			}
+		}
+		// A hold is the business of whoever may release it and of whoever
+		// brought it in (ADR-0058).
+		for _, f := range rep.Personal {
+			if f.Held && (f.MayRelease || slices.Contains(f.Savers, x.who)) {
+				mine.Personal = append(mine.Personal, f)
 			}
 		}
 	}

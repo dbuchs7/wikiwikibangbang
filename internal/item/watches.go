@@ -225,13 +225,33 @@ func (x *Session) scan(before, after int, fn func(Notification) bool) {
 // because of sensitive data that the principal is to hear of: as the one
 // who saved the data (the one the item is restricted to) or as an
 // administrator of the item's space, who may lift it (ADR-0040, ADR-0057).
+//
+// Data protection holds are told the same way: a hold to those whose saves
+// brought the findings in and to the space's administrators, a release to
+// those who brought them in (ADR-0058).
 func (x *Session) governanceAlert(e Event) bool {
-	if e.Kind != RestrictionSet || e.Actor != GovernanceActor || e.Restriction == nil {
+	var concerned []string
+	admins := true
+	switch {
+	case e.Kind == RestrictionSet && e.Actor == GovernanceActor && e.Restriction != nil:
+		concerned = e.Restriction.Read
+	case e.Kind == HoldSet && e.Hold != nil:
+		concerned = e.Hold.Savers
+	case e.Kind == HoldReleased && e.Actor != x.who:
+		admins = false
+		t := x.s.touching[e.Item]
+		for i := len(t) - 1; i >= 0; i-- {
+			if p := x.s.log[t[i]]; p.Seq < e.Seq && p.Item == e.Item && p.Kind == HoldSet && p.Hold != nil {
+				concerned = p.Hold.Savers
+				break
+			}
+		}
+	default:
 		return false
 	}
 	it := x.s.items[e.Item]
 	if it == nil || it.Presence == Purged || !x.s.canRead(x.who, it) {
 		return false
 	}
-	return slices.Contains(e.Restriction.Read, x.who) || x.s.spaceRole(x.who, it.Space) == SpaceAdmin
+	return slices.Contains(concerned, x.who) || (admins && x.s.spaceRole(x.who, it.Space) == SpaceAdmin)
 }

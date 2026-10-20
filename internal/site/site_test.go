@@ -138,3 +138,61 @@ func TestContrastWarnsAboutHardToReadPairs(t *testing.T) {
 		t.Errorf("a readable design: %v", got)
 	}
 }
+
+// TestRegulationsAreKeptAndAssess: regulations replay, only active ones
+// assess, indicators match at the start of words, and the templates are
+// valid (ADR-0058).
+func TestRegulationsAreKeptAndAssess(t *testing.T) {
+	for _, tpl := range Templates {
+		if err := tpl.Validate(); err != nil {
+			t.Errorf("template %s: %v", tpl.ID, err)
+		}
+	}
+	var records [][]byte
+	j := func(r []byte) error { records = append(records, r); return nil }
+	s, err := New(nil, j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dsg := Templates[0]
+	dsg.Active = true
+	if err := s.SetRegulation("admin", dsg); err != nil {
+		t.Fatal(err)
+	}
+	inactive := Templates[1]
+	if err := s.SetRegulation("admin", inactive); err != nil {
+		t.Fatal(err)
+	}
+	got := s.Assess([]string{"Die Diagnosen liegen vor.", "Eine Prognose-Diagnose"})
+	if len(got) != 1 || got[0].Regulation != "dsg" || got[0].Indicator != "Diagnose" {
+		t.Fatalf("assess: %+v", got)
+	}
+	if got := s.Assess([]string{"Agnostiker"}); len(got) != 0 {
+		t.Errorf("a word inside another word: %+v", got)
+	}
+	if err := s.SetRegulation("admin", Regulation{ID: "x", Name: "X", Categories: []Category{{Name: "c", Indicators: []string{"re:("}}}}); err == nil {
+		t.Error("a broken pattern is accepted")
+	}
+	if err := s.SetRegulation("admin", Regulation{ID: "Bad ID", Name: "X", Categories: []Category{{Name: "c"}}}); err == nil {
+		t.Error("a bad ID is accepted")
+	}
+	if err := s.SetAsset("admin", DocumentAsset("dsg"), "application/pdf", []byte("%PDF")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetAsset("admin", DocumentAsset("nope"), "application/pdf", []byte("%PDF")); err == nil {
+		t.Error("a document of no regulation is accepted")
+	}
+	again, err := New(records, j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again.Regulations()) != 2 || len(again.Assess([]string{"Diagnose"})) != 1 {
+		t.Fatal("regulations are not replayed")
+	}
+	if err := again.RemoveRegulation("admin", "dsg"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := again.Asset(DocumentAsset("dsg")); ok || len(again.Assess([]string{"Diagnose"})) != 0 {
+		t.Error("removing a regulation keeps its document or its indicators")
+	}
+}

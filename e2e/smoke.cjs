@@ -586,6 +586,42 @@ function check(cond, msg) {
     await page.waitForSelector(`#notifications li.governance:has-text('${leaked}'):has-text('because of sensitive data')`);
     await page.waitForSelector(`#my-findings li.finding-sensitive:has-text('${leaked}')`);
 
+    step("data protection: a template is adopted; a medical certificate holds a ticket as a draft until a second person releases it");
+    await page.goto(base + "/#/admin");
+    await page.click("#admin-regulations button:has-text('Adopt template: DSG')");
+    await page.waitForSelector("#regulation-dsg");
+    await page.check("#regulation-dsg [name=active]");
+    await page.click("#regulation-dsg button[type=submit]");
+    await page.waitForSelector("#regulation-dsg [name=active]:checked");
+    const absence = await page.evaluate(async () => {
+      const r = await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ space: "PLAT", type: "ticket", title: "Absence", properties: { priority: "low" }, body: [{ kind: "paragraph", text: "Arztzeugnis bis Freitag" }] }) });
+      return (await r.json()).item.key;
+    });
+    await page.goto(base + "/#/item/" + absence);
+    await page.waitForSelector("#hold:has-text('Draft: data protection review open') .chip:has-text('Arztzeugnis')");
+    check(await page.locator("#hold form").count() === 0, "who saved the content cannot release it");
+    const reviewer = await browser.newPage();
+    reviewer.on("pageerror", (e) => problems.push("reviewer's page error: " + e.message));
+    await reviewer.goto(base + "/");
+    await reviewer.fill("#login [name=username]", "bert");
+    await reviewer.fill("#login [name=password]", "bert's password");
+    await reviewer.click("#login button[type=submit]");
+    await reviewer.waitForSelector("#nav-notifications.findings");
+    await reviewer.goto(base + "/#/notifications");
+    await reviewer.waitForSelector(`#my-findings li.finding-personal:has-text('${absence}'):has-text('waiting for your release')`);
+    await reviewer.goto(base + "/#/item/" + absence);
+    await reviewer.waitForSelector("#hold form");
+    check(await reviewer.isDisabled("#hold input[value=restricted]"), "an open item cannot be released as restricted");
+    await reviewer.check("#hold input[value=false-alarm]");
+    await reviewer.fill("#hold [name=reason]", "a template, no real person");
+    await reviewer.click("#hold button[type=submit]");
+    await reviewer.waitForSelector("#hold", { state: "detached" });
+    await reviewer.close();
+    await page.reload();
+    await page.waitForSelector("h1.item-title");
+    check(await page.locator("#hold").count() === 0, "released for everyone");
+
     step("administration: groups, a group's role in a space, system roles");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");
