@@ -1060,6 +1060,7 @@ async function mailTo(sink, address) {
       return (await res.json()).item.key;
     });
     await page.goto(base + "/#/item/" + exported);
+    await page.waitForSelector("h1.item-title:text-is('Price list')"); // not the menu of the page shown before
     await page.click("#item-export summary");
     await page.waitForSelector("#item-export a.export-table:has-text('Item, Price')");
     const [docx] = await Promise.all([page.waitForEvent("download"), page.click("#export-docx")]);
