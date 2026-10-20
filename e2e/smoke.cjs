@@ -238,9 +238,24 @@ function check(cond, msg) {
         fields: [{ name: "assignee", kind: "user" }, { name: "due", kind: "date" }, { name: "priority", kind: "enum", values: ["low", "high"] }],
         workflow: { initial: "open", states: ["open", "closed"], transitions: [{ name: "close", from: ["open"], to: "closed" }] } });
       await send("POST", "/api/items", { space: "PLAT", type: "ticket", title: "Renew the certificate", properties: { due: "2020-01-31", priority: "high" } });
+      await send("POST", "/api/items", { space: "PLAT", type: "ticket", title: "Tidy the wiki", properties: { priority: "low" } });
     });
     await page.goto(base + "/#/tasks/unassigned");
     await page.waitForSelector("#tasks tr.overdue:has-text('Renew the certificate') .badge:has-text('overdue since 2020-01-31')");
+    // Every column filters; the filters stay in the address and across a reload.
+    await page.selectOption("#tasks select[aria-label='Filter Due']", "overdue");
+    await page.waitForSelector("#tasks tbody tr:has-text('Tidy the wiki')", { state: "hidden" });
+    check(page.url().includes("due=overdue"), "the filter is in the address: " + page.url());
+    await page.reload();
+    await page.waitForSelector("#tasks tbody tr:has-text('Renew the certificate')");
+    check(await page.locator("#tasks tbody tr:visible").count() === 1 && await page.inputValue("#tasks select[aria-label='Filter Due']") === "overdue", "the filter survives a reload");
+    await page.selectOption("#tasks select[aria-label='Filter Priority']", "low");
+    await page.waitForSelector("#tasks p:has-text('No task matches the filters.')");
+    await page.click("#tasks button:has-text('Reset filters')");
+    await page.waitForSelector("#tasks tbody tr:has-text('Tidy the wiki')");
+    await page.fill("#tasks input[aria-label='Filter Title']", "tidy");
+    await page.waitForSelector("#tasks tbody tr:has-text('Renew the certificate')", { state: "hidden" });
+    await page.fill("#tasks input[aria-label='Filter Title']", "");
     await page.click("#tasks tr:has-text('Renew the certificate') button:has-text('Take over')");
     await page.goto(base + "/#/tasks/mine");
     await page.waitForSelector("#tasks tr:has-text('Renew the certificate') td:has-text('you')");
@@ -430,6 +445,7 @@ function check(cond, msg) {
     check(await page.locator("#attachments li").count() === 2, "both files are listed");
 
     step("drawing: a drawing made in the drawing editor goes into the body, keeps its scene and is edited again");
+    const drawingKey = decodeURIComponent(page.url().split("/item/")[1].split("?")[0]);
     await page.click("#edit");
     await page.waitForSelector("#body.editing .ProseMirror");
     await page.locator("#body .ProseMirror").click();
@@ -508,10 +524,10 @@ function check(cond, msg) {
     await page.waitForSelector("#body.reading");
     await page.waitForFunction(() => { const img = document.querySelector("#body .pm-image img"); return img && img.complete && img.naturalWidth > 100; });
     check(await page.locator("#attachments li:has-text('.drawing.png')").count() === 1, "the copy is a file of the page it was inserted into");
-    await page.waitForSelector("#attachments li:has-text('.drawing.png') .att-origin a:has-text('PLAT-5')"); // the copy names its origin
+    await page.waitForSelector(`#attachments li:has-text('.drawing.png') .att-origin a:has-text('${drawingKey}')`); // the copy names its origin
 
     step("provenance: the original is drawn again; its copy learns of it and takes the newer version over");
-    await page.goto(base + "/#/item/PLAT-5?edit");
+    await page.goto(base + "/#/item/" + drawingKey + "?edit");
     await page.waitForSelector("#body.editing .pm-redraw");
     await page.click("#body .pm-redraw");
     await page.waitForSelector("dialog.drawing[open] iframe");
@@ -531,7 +547,7 @@ function check(cond, msg) {
     await page.goto(base + "/#/item/PLAT-2");
     await page.waitForSelector("#attachments .att-origin .chip:has-text('original changed')");
     await page.goto(base + "/#/item/PLAT-2?edit");
-    await page.waitForSelector("#body.editing .pm-take-over:has-text('PLAT-5')");
+    await page.waitForSelector(`#body.editing .pm-take-over:has-text('${drawingKey}')`);
     await page.click("#body .pm-take-over");
     await page.waitForFunction(() => !document.querySelector("#body .pm-take-over")); // the block now shows the newer version
     await page.click("#edit-done");
