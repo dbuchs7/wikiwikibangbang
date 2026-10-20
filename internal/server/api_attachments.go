@@ -6,7 +6,9 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
@@ -21,7 +23,77 @@ func attachmentRoutes(h itemHandlers) []Route {
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/attachments", Summary: "Upload a file: the body is the content (application/octet-stream), name the file name", Handler: http.HandlerFunc(h.uploadAttachment)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/attachments/{id}", Summary: "Download a file; images show inline, everything else downloads", Handler: http.HandlerFunc(h.downloadAttachment)},
 		{Method: http.MethodDelete, Pattern: "/api/items/{ref}/attachments/{id}", Summary: "Delete a file; its content is destroyed", Handler: http.HandlerFunc(h.deleteAttachment)},
+		{Method: http.MethodGet, Pattern: "/api/album", Summary: "The album: images and drawings of every item one may read, newest first; space, q (name, key or title), kind (image or drawing), offset and limit narrow it", Handler: http.HandlerFunc(h.album)},
 	}
+}
+
+// DrawingSuffix ends the name of a drawing's file (ADR-0053).
+const DrawingSuffix = ".drawing.png"
+
+// albumLimit is the most pictures one album request returns.
+const albumLimit = 200
+
+// album lists the images of the items the caller may read (ADR-0054). To
+// use one in another item, the UI copies it there: a body shows only its
+// own item's files, under that item's key and access.
+func (h itemHandlers) album(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	kind, text := q.Get("kind"), strings.ToLower(strings.TrimSpace(q.Get("q")))
+	if kind != "" && kind != "image" && kind != "drawing" {
+		writeError(w, http.StatusBadRequest, "kind is image or drawing")
+		return
+	}
+	offset, limit := 0, 48
+	if v := q.Get("offset"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			writeError(w, http.StatusBadRequest, "offset must be a number from 0")
+			return
+		}
+		offset = n
+	}
+	if v := q.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > albumLimit {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("limit must be from 1 to %d", albumLimit))
+			return
+		}
+		limit = n
+	}
+	keep := func(a item.Attachment) bool {
+		drawing := strings.HasSuffix(a.Name, DrawingSuffix)
+		return inlineTypes[a.Type] && (kind == "" || (kind == "drawing") == drawing)
+	}
+	h.read(w, r, func(x *item.Session) (any, error) {
+		all := x.Pictures(q.Get("space"), keep)
+		if text != "" {
+			all = slices.DeleteFunc(all, func(p item.Picture) bool {
+				return !strings.Contains(strings.ToLower(p.Attachment.Name+" "+p.Item.Key+" "+p.Item.Title), text)
+			})
+		}
+		type itemRef struct {
+			ID    item.ID `json:"id"`
+			Key   string  `json:"key"`
+			Title string  `json:"title"`
+			Space string  `json:"space"`
+			Type  string  `json:"type"`
+		}
+		type picture struct {
+			Item       itemRef        `json:"item"`
+			Attachment attachmentJSON `json:"attachment"`
+			Drawing    bool           `json:"drawing"`
+		}
+		out := []picture{}
+		for _, p := range all[min(offset, len(all)):min(offset+limit, len(all))] {
+			out = append(out, picture{Item: itemRef{p.Item.ID, p.Item.Key, p.Item.Title, p.Item.Space, p.Item.Type},
+				Attachment: toAttachmentJSON(p.Attachment), Drawing: strings.HasSuffix(p.Attachment.Name, DrawingSuffix)})
+		}
+		next := 0
+		if offset+limit < len(all) {
+			next = offset + limit
+		}
+		return map[string]any{"pictures": out, "total": len(all), "next": next}, nil
+	})
 }
 
 type attachmentJSON struct {

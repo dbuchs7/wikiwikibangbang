@@ -8,6 +8,7 @@ import { pageTree, ancestors } from "./tree.js";
 import { renderDiff } from "./diff.js";
 import { commentPlugin } from "./anchors.js";
 import { isDrawing } from "./drawing.js";
+import { albumBrowser } from "./album.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 
 const app = document.getElementById("app");
@@ -171,6 +172,7 @@ const childPagesOf = (item) => async () =>
 const filesOf = (item, attachments = []) => {
   const drawings = new Set(attachments.filter((a) => isDrawing(a.name)).map((a) => a.id));
   return {
+    item: item.id,
     url: (id) => `/api/items/${item.id}/attachments/${id}`,
     upload: async (file) => {
       const a = await upload("/api/items/" + item.id, file);
@@ -284,6 +286,7 @@ const modules = [
   { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"] },
   { id: "new", name: "nav.new", href: "#/new", match: ["new"] },
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks"] },
+  { id: "album", name: "nav.album", href: "#/album", match: ["album"] },
   { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"] },
   { id: "notifications", name: "nav.notifications", href: "#/notifications", match: ["notifications"] },
   { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"] },
@@ -535,6 +538,7 @@ async function route() {
       case "item": return await itemView(arg, params);
       case "label": return await labelView(arg);
       case "notifications": return await notificationsView();
+      case "album": return albumView();
       case "search": return await searchView(arg || "");
       case "account": return await accountView();
       case "mcp": return await mcpView();
@@ -979,6 +983,12 @@ async function tasksView(tab, params) {
     h("p", { class: "muted", text: t("tasks.conventions") }),
     page.next ? h("p", { class: "notice", text: t("tasks.truncated", { n: items.length }) }) : null,
   );
+}
+
+// albumView shows the images and drawings of every item one may read
+// (ADR-0054); each leads to its item.
+function albumView() {
+  screen()(h("h1", { text: t("album.title") }), h("p", { class: "muted", text: t("album.intro") }), h("section", { id: "album" }, albumBrowser()));
 }
 
 // governanceOverview shows the governance check of every space one holds

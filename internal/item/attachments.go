@@ -1,6 +1,7 @@
 package item
 
 import (
+	"cmp"
 	"regexp"
 	"slices"
 	"strings"
@@ -181,4 +182,35 @@ func (x *Session) DeleteAttachment(id, attachment ID) error {
 		return err
 	}
 	return x.s.DeleteAttachment(x.who, id, attachment)
+}
+
+// Picture is a file of a readable item, as the album lists it (ADR-0054).
+type Picture struct {
+	Item       Item
+	Attachment Attachment
+}
+
+// Pictures returns the files of the live items the principal may read,
+// for which keep returns true, in space (every space when empty), newest
+// first. Reading an item is the right to see its files; the album shows
+// nothing one could not open item by item.
+func (x *Session) Pictures(space string, keep func(Attachment) bool) []Picture {
+	var out []Picture
+	for _, it := range x.s.items {
+		if it.Presence != Live || (space != "" && it.Space != space) || len(it.Attachments) == 0 || !x.s.canRead(x.who, it) {
+			continue
+		}
+		for _, a := range it.Attachments {
+			if !a.Deleted && keep(a) {
+				out = append(out, Picture{Item: Item{ID: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Type: it.Type}, Attachment: a})
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b Picture) int {
+		if c := cmp.Compare(b.Attachment.Created, a.Attachment.Created); c != 0 {
+			return c
+		}
+		return strings.Compare(string(a.Attachment.ID), string(b.Attachment.ID))
+	})
+	return out
 }
