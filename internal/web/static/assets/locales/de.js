@@ -41,6 +41,8 @@ export default {
 
   "search.inComment": "In einem Kommentar: {text}",
   "search.none": "Unter den Einträgen, die Sie lesen dürfen, wurde nichts gefunden.",
+  "search.stars": "{n} von 5 Sternen",
+  "search.starsHint": "Relevanz {n} von 5: 5 Schlüssel oder ganzer Titel, 4 alle Begriffe im Titel, 3 einige im Titel oder die Wörter wie eingegeben im Text, 2 alle Begriffe in einem Absatz, 1 die Begriffe über die Seite verteilt",
   "search.results": { "one": "{n} Treffer für «{q}»", "other": "{n} Treffer für «{q}»" },
   "search.title": "Suche",
 

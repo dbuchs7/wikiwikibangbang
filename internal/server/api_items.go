@@ -473,7 +473,7 @@ func (h itemHandlers) searchItems(w http.ResponseWriter, r *http.Request) {
 		}
 		out := make([]hitJSON, len(page))
 		for i, hit := range page {
-			out[i] = hitJSON{Item: toItemJSON(hit.Item), Score: hit.Score, Snippet: hit.Snippet, Comment: hit.Comment}
+			out[i] = hitJSON{Item: toItemJSON(hit.Item), Score: hit.Score, Stars: hit.Stars, Snippet: hit.Snippet, Comment: hit.Comment}
 		}
 		res["hits"] = out
 		return res, nil
@@ -481,9 +481,11 @@ func (h itemHandlers) searchItems(w http.ResponseWriter, r *http.Request) {
 }
 
 type hitJSON struct {
-	Item    itemJSON `json:"item"`
-	Score   int      `json:"score"`
-	Snippet string   `json:"snippet,omitempty"`
+	Item  itemJSON `json:"item"`
+	Score int      `json:"score"`
+	// Stars rate the hit from 1 to 5 (ADR-0072).
+	Stars   int    `json:"stars"`
+	Snippet string `json:"snippet,omitempty"`
 	// Comment is the comment the snippet comes from (ADR-0035).
 	Comment item.ID `json:"comment,omitempty"`
 }

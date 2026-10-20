@@ -231,3 +231,44 @@ func TestSearchFindsCommentsButNotDeletedOnes(t *testing.T) {
 		t.Fatalf("a deleted comment is found: %v", hitKeys(got))
 	}
 }
+
+// TestHitsAreRatedWithStars: each hit is rated on its own, by where and how
+// the terms occur (ADR-0072).
+func TestHitsAreRatedWithStars(t *testing.T) {
+	s := setup(t)
+	noErr(t, s.GrantRole("admin", "PLAT", "anna", Editor))
+	mk := func(title string, body ...string) Item {
+		var blocks []Block
+		for _, b := range body {
+			blocks = append(blocks, Block{Kind: Paragraph, Text: b})
+		}
+		it := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: title}))
+		if len(blocks) > 0 {
+			noErr(t, s.CommitBody("anna", it.ID, Doc{Blocks: blocks}))
+		}
+		return it
+	}
+	exact := mk("Rote Buche")
+	inTitle := mk("Die rote Buche im Jura")
+	someTitle := mk("Buchen", "Laub und rote Blätter")
+	phrase := mk("Bäume", "Die rote Buche wächst langsam.")
+	oneBlock := mk("Wald", "Eine Buche hat im Herbst rote Blätter.")
+	spread := mk("Notiz", "rote", "eine Buche")
+	want := map[ID]int{exact.ID: 5, inTitle.ID: 4, someTitle.ID: 3, phrase.ID: 3, oneBlock.ID: 2, spread.ID: 1}
+	hits, err := s.As("anna").Search("rote Buche", Query{})
+	noErr(t, err)
+	if len(hits) != len(want) {
+		t.Fatalf("hits: %d", len(hits))
+	}
+	for _, h := range hits {
+		if h.Stars != want[h.Item.ID] {
+			t.Errorf("%q: %d stars, want %d", h.Item.Title, h.Stars, want[h.Item.ID])
+		}
+	}
+	// The key typed in full is five stars.
+	byKey, err := s.As("anna").Search(spread.Key, Query{})
+	noErr(t, err)
+	if len(byKey) == 0 || byKey[0].Item.ID != spread.ID || byKey[0].Stars != 5 {
+		t.Fatalf("by key: %+v", byKey)
+	}
+}
