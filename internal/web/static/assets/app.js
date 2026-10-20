@@ -1906,7 +1906,15 @@ async function itemView(ref, params = new URLSearchParams()) {
     type.fields.length ? props : null,
     transitions.length ? h("p", { class: "actions-row" }, transitions) : null,
     labelsLine(path, item, canEdit, status));
-  const more = reorder.length || actions.length ? card("item-actions", h("p", { class: "actions-row" }, reorder, actions)) : null;
+  // Copying and moving a page with its child pages, to any place one may
+  // create in (ADR-0067); dragging in the tree moves within a space.
+  const relocate = h("div", { id: "relocate" });
+  const relocateButtons = live ? [
+    h("button", { type: "button", id: "item-copy", text: t("copy.open"), onclick: () => relocateForm(relocate, item, "copy", spaces, status) }),
+    canEdit ? h("button", { type: "button", id: "item-move", text: t("move.open"), onclick: () => relocateForm(relocate, item, "move", spaces, status) }) : null,
+  ] : [];
+  const more = reorder.length || actions.length || relocateButtons.length
+    ? card("item-actions", h("p", { class: "actions-row" }, reorder, relocateButtons, actions), relocate) : null;
   show(withTree(tree,
     h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
     h("div", { class: "page-head" }, title, headActions),
@@ -1925,6 +1933,46 @@ async function itemView(ref, params = new URLSearchParams()) {
         historySection(path, history.events, canEdit),
         more)),
   ));
+}
+
+// relocateForm copies or moves an item (ADR-0067): to a space one may edit
+// in, below a page there or at its top; a copy takes a title and, if
+// wished, the child pages. The parent list holds the space's pages, found
+// by typing.
+async function relocateForm(box, item, mode, spaces, status) {
+  const editable = spaces.filter((s) => mayEdit(s.role));
+  const spaceSelect = h("select", { name: "space", id: "relocate-space" }, editable.map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})`, selected: s.key === item.space })));
+  const parentSelect = h("select", { name: "parent", id: "relocate-parent" });
+  const fillParents = async () => {
+    const { items } = await get(`/api/items?space=${encodeURIComponent(spaceSelect.value)}&limit=500`);
+    parentSelect.replaceChildren(
+      h("option", { value: "", text: t("move.top") }),
+      ...items.filter((it) => it.id !== item.id).sort((a, b) => a.title.localeCompare(b.title))
+        .map((it) => h("option", { value: it.id, text: `${it.title} (${it.key})`, selected: mode === "copy" && it.id === item.parent })));
+  };
+  spaceSelect.addEventListener("change", () => action(fillParents, status));
+  await fillParents();
+  const copying = mode === "copy";
+  box.replaceChildren(form({ id: "relocate-form", class: "relocate-form" }, [
+    h("h3", { text: copying ? t("copy.title", { title: item.title }) : t("move.title", { title: item.title }) }),
+    field(t("col.space"), spaceSelect),
+    field(t("move.parent"), parentSelect),
+    copying ? field(t("col.title"), h("input", { name: "title", id: "relocate-title", required: true, value: t("copy.defaultTitle", { title: item.title }) })) : "",
+    copying ? h("label", { class: "check" }, h("input", { type: "checkbox", name: "children", id: "relocate-children", checked: true }), " ", t("copy.children")) : "",
+    copying ? "" : h("p", { class: "muted", text: t("move.note") }),
+    h("p", { class: "actions-row" },
+      h("button", { type: "submit", text: copying ? t("copy.submit") : t("move.submit") }),
+      h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => box.replaceChildren() })),
+  ], async (data) => {
+    if (copying) {
+      const res = await post(`/api/items/${item.id}/copy`, { space: data.get("space"), parent: data.get("parent"), title: data.get("title").trim(), children: Boolean(data.get("children")) });
+      location.hash = "#/item/" + encodeURIComponent(res.item.key);
+    } else {
+      await post(`/api/items/${item.id}/move`, { space: data.get("space"), parent: data.get("parent"), before: "" });
+      route();
+    }
+  }));
+  box.querySelector("select")?.focus();
 }
 
 // bodySection shows an item's body: for reading, with the passages

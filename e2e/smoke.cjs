@@ -960,6 +960,24 @@ async function mailTo(sink, address) {
     await page.selectOption("#language [name=language]", "en");
     await page.waitForSelector("#nav-notifications[aria-label^='Notifications']");
 
+    step("copy and move: a page is copied with its child pages, then moved below another page");
+    await page.goto(base + "/#/space/PLAT");
+    await page.click(".tree a:has-text('Runbook')");
+    await page.waitForSelector(".tree a.current:has-text('Runbook')");
+    await page.click("#item-copy");
+    await page.waitForSelector("#relocate-form #relocate-children:checked");
+    await page.selectOption("#relocate-parent", "");
+    await page.fill("#relocate-title", "Runbook template");
+    await page.click("#relocate-form button[type=submit]");
+    await page.waitForSelector("h1.item-title:text-is('Runbook template')");
+    await page.waitForSelector(".tree a.current:has-text('Runbook template')");
+    await page.waitForSelector(".tree li:has(> .tree-row a.current) > ul a:text-is('Install')"); // its child pages came along
+    await page.click("#item-move");
+    await page.selectOption("#relocate-parent", { label: (await page.locator("#relocate-parent option:has-text('Tidy the wiki')").textContent()).trim() });
+    await page.click("#relocate-form button[type=submit]");
+    await page.waitForSelector("p:has(a[href='#/']) >> text=PLAT"); // the page shown again after moving
+    await page.waitForFunction(() => document.querySelector(".tree a.current")?.closest("ul")?.closest("li")?.querySelector(".tree-row a")?.textContent === "Tidy the wiki");
+
     step("log out, log in as bert, read the item");
     await page.click("#account-button");
     await page.click("#logout");
