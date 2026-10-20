@@ -935,3 +935,7 @@ a.button.login-sso { display: flex; gap: 10px; }
 .relocate-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
 .relocate-form h3 { margin-top: 0; }
 .relocate-form select, .relocate-form input:not([type=checkbox]) { width: 100%; }
+
+/* The consent page's choice of access (ADR-0068). */
+#oauth-access { display: grid; gap: 8px; margin: 16px 0; padding: 0; border: 0; }
+#oauth-access legend { margin-bottom: 8px; padding: 0; font-weight: 600; }

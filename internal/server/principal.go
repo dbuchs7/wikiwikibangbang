@@ -45,12 +45,34 @@ func resolve(a *auth.Accounts, r *http.Request) (auth.Principal, bool) {
 		if !ok {
 			return auth.Principal{}, false
 		}
-		return a.TokenPrincipal(strings.TrimSpace(secret))
+		secret = strings.TrimSpace(secret)
+		if strings.HasPrefix(secret, auth.OAuthAccessPrefix) {
+			return oauthPrincipal(a, r, secret)
+		}
+		return a.TokenPrincipal(secret)
 	}
 	if c, err := r.Cookie(SessionCookie); err == nil {
 		return a.Session(c.Value)
 	}
 	return auth.Principal{}, false
+}
+
+// oauthPrincipal resolves an OAuth access token (ADR-0068). It acts as its
+// person on the MCP endpoint, for which it must have been issued, and on
+// the requests the MCP adapter makes in process for its tool calls;
+// anywhere else it is no credential at all.
+func oauthPrincipal(a *auth.Accounts, r *http.Request, secret string) (auth.Principal, bool) {
+	p, target, ok := a.OAuthPrincipal(secret)
+	if !ok {
+		return auth.Principal{}, false
+	}
+	if r.Context().Value(inProcessKey{}) == true {
+		return p, true
+	}
+	if r.Method != http.MethodPost || r.URL.Path != MCPPath || (target != "" && target != resource(r)) {
+		return auth.Principal{}, false
+	}
+	return p, true
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

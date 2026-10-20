@@ -82,8 +82,10 @@ type inProcess struct {
 func (t inProcess) RoundTrip(req *http.Request) (*http.Response, error) {
 	// The inner request starts without the outer request's context values,
 	// so its principal comes from the credential headers alone, never from
-	// the request that carried the tool call. Cancellation still passes.
-	req = req.WithContext(withoutValues{req.Context()})
+	// the request that carried the tool call. Cancellation still passes. It
+	// is marked as the adapter's, which only this transport can do: an
+	// OAuth token reaches the API this way alone (ADR-0068).
+	req = req.WithContext(context.WithValue(withoutValues{req.Context()}, inProcessKey{}, true))
 	req.RemoteAddr = t.remoteAddr
 	req.RequestURI = req.URL.RequestURI()
 	rec := httptest.NewRecorder()
@@ -98,6 +100,9 @@ type withoutValues struct{ context.Context }
 func (withoutValues) Value(any) any { return nil }
 
 type selfKey struct{}
+
+// inProcessKey marks a request the MCP adapter made for a tool call.
+type inProcessKey struct{}
 
 // withSelf puts the complete handler into each request's context, so the
 // MCP endpoint can call the API through it.

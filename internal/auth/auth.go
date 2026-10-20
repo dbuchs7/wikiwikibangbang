@@ -113,6 +113,7 @@ type Accounts struct {
 	byName   map[string]UserID
 	requests map[string]*request // pending account requests (ADR-0061)
 	resets   map[UserID]*reset   // password reset tokens (ADR-0064)
+	oa       *oauthState         // OAuth clients, approvals and tokens (ADR-0068)
 	tokens   map[string]*token   // by secret hash
 	tokenIDs map[string]*token
 	sessions map[string]*session // by secret hash
@@ -213,6 +214,8 @@ type event struct {
 	// Request names an account request; Reason is the requester's note.
 	Request string `json:"request,omitempty"`
 	Reason  string `json:"reason,omitempty"`
+	// OAuth names the application of an OAuth event (ADR-0068).
+	OAuth *oauthRecord `json:"oauth,omitempty"`
 }
 
 const (
@@ -288,6 +291,8 @@ func (a *Accounts) apply(e event) error {
 			return fmt.Errorf("avatar of unknown user %s", e.User)
 		}
 		u.avatar, u.avatarType = e.Avatar, e.AvatarType
+	case oauthClientCreated, oauthClientRemoved, oauthGranted, oauthRefreshed, oauthRevoked:
+		return a.applyOAuth(e)
 	case contactsSet:
 		u, ok := a.users[e.User]
 		if !ok || e.Contacts == nil {

@@ -189,6 +189,17 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		return 1
 	}
 
+	registration := false
+	switch v := os.Getenv("WWBB_OAUTH_DYNAMIC_REGISTRATION"); v {
+	case "", "off":
+	case "on":
+		registration = true
+		log.Info("dynamic OAuth client registration is open; applications that register themselves are marked so on the consent page")
+	default:
+		log.Error("WWBB_OAUTH_DYNAMIC_REGISTRATION is unusable", "value", v, "want", "on or off")
+		return 1
+	}
+
 	ln, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Error("cannot listen", "addr", *addr, "err", err)
@@ -228,7 +239,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		// Runs before the data directory closes.
 		defer func() { stopDigest(); <-digestDone; messages.Wait() }()
 	}
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages})
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration})
 	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.Handler(routes, db.Accounts)), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
