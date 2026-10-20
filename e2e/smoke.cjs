@@ -573,6 +573,19 @@ function check(cond, msg) {
     await page.waitForSelector("#governance h2:has-text('Not changed')");
     await page.waitForSelector("#governance h2:has-text('Implausible')");
 
+    step("governance in the bell: a password saved in a page restricts it, the bell tells, the finding stays listed until resolved");
+    const leaked = await page.evaluate(async () => {
+      const r = await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ space: "PLAT", type: "ticket", title: "Leaked note", properties: { priority: "low" }, body: [{ kind: "paragraph", text: "Passwort: Sommer2026!" }] }) });
+      return (await r.json()).item.key;
+    });
+    await page.goto(base + "/#/");
+    await page.waitForSelector("#nav-notifications.findings.unread");
+    check((await page.getAttribute("#nav-notifications", "aria-label")).includes("open governance finding"), "the bell names the open findings");
+    await page.click("#nav-notifications");
+    await page.waitForSelector(`#notifications li.governance:has-text('${leaked}'):has-text('because of sensitive data')`);
+    await page.waitForSelector(`#my-findings li.finding-sensitive:has-text('${leaked}')`);
+
     step("administration: groups, a group's role in a space, system roles");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");

@@ -139,7 +139,8 @@ func (x *Session) WatchingSpace(space string) bool {
 }
 
 // Notifications returns what others changed on what the principal
-// watches, newest first, before the event before (all when 0), at most
+// watches, and the restrictions governance set because of sensitive data
+// on what the principal saved or administers (ADR-0057), newest first, before the event before (all when 0), at most
 // limit; more reports whether older ones follow. Only items the principal
 // may read now count, so a notification never shows what a restriction
 // hides.
@@ -170,25 +171,28 @@ func (x *Session) Unread(seen, limit int) int {
 // returns false.
 func (x *Session) scan(before, after int, fn func(Notification) bool) {
 	watches := x.s.watches[x.who]
-	if len(watches) == 0 {
-		return
-	}
-	oldest := 0
-	for _, since := range watches {
-		if oldest == 0 || since < oldest {
-			oldest = since
-		}
-	}
+	// Governance's restrictions are told without watching, so the walk goes
+	// back to after, not only to the oldest watch.
 	since := func(item ID, space string) (int, bool) {
 		s, ok := watches[watchKey(item, space)]
 		return s, ok
 	}
 	for i := len(x.s.log) - 1; i >= 0; i-- {
 		e := x.s.log[i]
-		if e.Seq <= max(after, oldest) {
+		if e.Seq <= after {
 			return
 		}
-		if (before > 0 && e.Seq >= before) || !notifyKinds[e.Kind] || e.Actor == x.who || e.Item == "" {
+		if (before > 0 && e.Seq >= before) || e.Item == "" {
+			continue
+		}
+		if x.governanceAlert(e) {
+			it := x.s.items[e.Item]
+			if !fn(Notification{Seq: e.Seq, At: e.At, Actor: e.Actor, Kind: e.Kind, Item: it.ID, Key: it.Key, Title: it.Title, Space: it.Space}) {
+				return
+			}
+			continue
+		}
+		if len(watches) == 0 || !notifyKinds[e.Kind] || e.Actor == x.who {
 			continue
 		}
 		it := x.s.items[e.Item]
@@ -215,4 +219,19 @@ func (x *Session) scan(before, after int, fn func(Notification) bool) {
 			return
 		}
 	}
+}
+
+// governanceAlert reports whether e is a restriction governance set
+// because of sensitive data that the principal is to hear of: as the one
+// who saved the data (the one the item is restricted to) or as an
+// administrator of the item's space, who may lift it (ADR-0040, ADR-0057).
+func (x *Session) governanceAlert(e Event) bool {
+	if e.Kind != RestrictionSet || e.Actor != GovernanceActor || e.Restriction == nil {
+		return false
+	}
+	it := x.s.items[e.Item]
+	if it == nil || it.Presence == Purged || !x.s.canRead(x.who, it) {
+		return false
+	}
+	return slices.Contains(e.Restriction.Read, x.who) || x.s.spaceRole(x.who, it.Space) == SpaceAdmin
 }

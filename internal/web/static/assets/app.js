@@ -79,6 +79,7 @@ function what(n) {
     case "CommentAdded": return t("notif.commented");
     case "LabelsSet": return t("notif.labels");
     case "AttachmentAdded": return t("notif.attached");
+    case "RestrictionSet": return t("notif.restrictedSensitive");
     default: return n.kind;
   }
 }
@@ -87,14 +88,15 @@ function what(n) {
 // marks it seen.
 async function notificationsView() {
   const show = screen();
-  const [first, { watches }] = await Promise.all([get("/api/notifications?limit=50"), get("/api/me/watches")]);
+  const [first, { watches }] = await Promise.all([get("/api/notifications?limit=50&findings=1"), get("/api/me/watches")]);
   const list = h("ul", { class: "notifications", id: "notifications" });
   const more = h("div");
   const add = async (page) => {
     await learnNames(page.notifications.map((n) => n.actor));
     for (const n of page.notifications) {
-      list.append(h("li", { class: n.unread ? "unread" : "" },
-        h("span", { text: `${person(n.actor)} ${what(n)} ` }),
+      const governance = n.actor === "governance";
+      list.append(h("li", { class: [n.unread ? "unread" : "", governance ? "governance" : ""].join(" ").trim() },
+        h("span", { text: `${governance ? t("gov.title") : person(n.actor)} ${what(n)} ` }),
         link("#/item/" + encodeURIComponent(n.key), `${n.key} ${n.title}`),
         h("span", { class: "muted", text: " · " + when(n.at) })));
     }
@@ -105,8 +107,21 @@ async function notificationsView() {
   if (first.notifications.length && first.notifications[0].seq > first.seen) {
     post("/api/notifications/seen", { seq: first.notifications[0].seq }).then(() => renderNav()).catch(() => {});
   }
+  // The governance findings one is responsible for, until they are
+  // resolved (ADR-0057).
+  const f = first.findings;
+  const kindName = { sensitive: t("gov.colSensitive"), stale: t("gov.colStale"), implausible: t("gov.colImplausible") };
+  const findings = f.items?.length ? h("section", { id: "my-findings" },
+    h("h2", {}, t("notif.findings", { n: f.sensitive + f.stale + f.implausible }), " ", link("#/governance", t("notif.findingsAll"))),
+    h("p", { class: "muted", text: t("notif.findingsNote") }),
+    h("ul", { class: "notifications" }, f.items.map((x) => h("li", { class: "finding-" + x.kind },
+      h("span", { class: "chip", text: kindName[x.kind] }), " ",
+      link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`),
+      h("span", { class: "muted", text: " · " + (x.kind === "stale" ? t("notif.unchangedSince", { date: when(x.since) }) : x.detail) }))))) : null;
   show(
     h("h1", { text: t("notif.title") }),
+    findings,
+    findings ? h("h2", { text: t("notif.changes") }) : null,
     first.notifications.length ? list : h("p", { class: "muted", text: watches.length ? t("notif.none") : t("notif.noWatches") }),
     more,
     h("h2", { text: t("watch.title") }),
@@ -403,7 +418,12 @@ function renderNav() {
     const shown = n.unread >= 100 ? "99+" : String(n.unread);
     count.textContent = shown;
     count.hidden = !n.unread;
-    const name = n.unread ? t("nav.notificationsUnread", { n: shown }) : t("nav.notifications");
+    // Open governance findings one is responsible for show as a dot until
+    // they are resolved (ADR-0057); the number counts unread changes.
+    const open = n.findings ? n.findings.sensitive + n.findings.stale + n.findings.implausible : 0;
+    bell.classList.toggle("findings", open > 0);
+    const name = (n.unread ? t("nav.notificationsUnread", { n: shown }) : t("nav.notifications"))
+      + (open ? " · " + t("nav.findingsOpen", { n: open }) : "");
     bell.title = name;
     bell.setAttribute("aria-label", name);
     bell.classList.toggle("unread", n.unread > 0);

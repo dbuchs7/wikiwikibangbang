@@ -69,3 +69,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0054](0054-an-album-of-readable-pictures-inserted-by-copy.md) | The album lists the pictures of every readable item; inserting one copies it into the target item | Accepted | Landed |
 | [0055](0055-copied-files-carry-their-source.md) | Copied files and new versions of drawings carry their source; a copy learns of a changed original | Accepted | Landed |
 | [0056](0056-images-have-a-width-in-percent-of-the-column.md) | Images have a width in percent of the text column | Accepted | Landed |
+| [0057](0057-governance-findings-in-the-bell.md) | Governance findings reach the bell: restrictions as notifications, open findings as a reminder | Accepted | Landed |
