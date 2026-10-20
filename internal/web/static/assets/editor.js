@@ -296,7 +296,7 @@ function tableView(node, view, getPos) {
       rows.length > 1 ? h("button", { type: "button", class: "link", text: t("editor.removeRow"), onclick: change((rs) => rs.pop()) }) : null,
       rows[0].length > 1 ? h("button", { type: "button", class: "link", text: t("editor.removeColumn"), onclick: change((rs) => rs.forEach((r) => r.pop())) }) : null,
     ) : null;
-    dom.replaceChildren(table, tools);
+    dom.replaceChildren(...[table, tools].filter(Boolean)); // replaceChildren writes a null out as "null"
   };
   render();
   return { dom, ...own, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
@@ -443,7 +443,16 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     }
     view.focus();
   };
-  const toolbar = editable ? h("div", { class: "pm-toolbar", role: "toolbar" },
+  // Commenting on a passage works while reading too (ADR-0047).
+  const commentButton = comment ? h("button", { type: "button", id: "comment-selection", text: t("editor.comment"), onclick: () => {
+    status.textContent = "";
+    const anchor = anchorOf(view.state);
+    if (!anchor) status.textContent = t("editor.commentNeedsSelection");
+    else comment(anchor);
+  } }) : null;
+  const toolbar = !editable
+    ? (commentButton ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, commentButton, status) : null)
+    : h("div", { class: "pm-toolbar", role: "toolbar" },
     kindSelect,
     insertSelect,
     picker,
@@ -466,15 +475,10 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       const { $to } = view.state.selection;
       view.dispatch(view.state.tr.insert($to.depth >= 1 ? $to.after(1) : $to.pos, node));
     }) }),
-    comment ? h("button", { type: "button", id: "comment-selection", text: t("editor.comment"), onclick: () => {
-      status.textContent = "";
-      const anchor = anchorOf(view.state);
-      if (!anchor) status.textContent = t("editor.commentNeedsSelection");
-      else comment(anchor);
-    } }) : null,
+    commentButton,
     h("button", { type: "button", title: t("editor.undo"), text: "↶", onclick: run(undo) }),
     h("button", { type: "button", title: t("editor.redo"), text: "↷", onclick: run(redo) }),
     status,
-  ) : null;
+  );
   return { element: h("div", { class: "pm-wrap" }, toolbar, mount), blocks: () => blocksFromDoc(view.state.doc), view };
 }

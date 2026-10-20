@@ -409,5 +409,17 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     if (view) view.setProps({ editable: () => false });
   }
 
-  return { element: el, close, view: () => view };
+  // finish sends what is not yet saved, gives up every block, and closes
+  // the session: the body is then stored as one leaves the editor.
+  async function finish() {
+    if (closed) return;
+    clearTimeout(sendTimer);
+    clearTimeout(releaseTimer);
+    if (view) view.dom.blur();
+    while (sending) await new Promise((r) => setTimeout(r, 50));
+    if (editable) await send();
+    close();
+  }
+
+  return { element: el, close, finish, view: () => view };
 }

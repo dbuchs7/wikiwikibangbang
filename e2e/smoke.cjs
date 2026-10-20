@@ -81,7 +81,7 @@ function check(cond, msg) {
     await page.click("#new-item button[type=submit]");
     await page.waitForSelector("#title");
     check(await page.inputValue("#title [name=title]") === hostile, "the title shows as typed");
-    check(page.url().endsWith("#/item/PLAT-1"), "the item is addressed by key");
+    check(page.url().endsWith("#/item/PLAT-1?edit"), "the item is addressed by key, and a new one opens for writing");
     await page.waitForSelector("#watch[aria-pressed='true'][aria-label='Stop watching']"); // its creator watches it
 
     step("edit property, transition");
@@ -129,7 +129,7 @@ function check(cond, msg) {
     await page.fill(".pm-target", "PLAT-1");
     await page.click(".pm-toolbar button:has-text('Embed')");
     await page.waitForSelector(".ProseMirror .pm-embed");
-    await page.click("#body h2"); // leaving the editor releases its blocks, which saves them
+    await page.click(".item-side #details h2"); // leaving the editor releases its blocks, which saves them
     await page.waitForSelector(".live[data-pending='0']");
 
     step("the body survives a reload exactly");
@@ -151,7 +151,7 @@ function check(cond, msg) {
     await other.fill("#login [name=password]", "bert's password");
     await other.click("#login button[type=submit]");
     await other.waitForSelector("#account-button[aria-label='Account of bert']");
-    await other.goto(base + "/#/item/PLAT-2");
+    await other.goto(base + "/#/item/PLAT-2?edit");
     await other.waitForSelector(".ProseMirror h3");
     await page.waitForSelector(".live-presence:has-text('bert')");
     // admin types in the heading; bert sees it live, marked as held.
@@ -169,8 +169,8 @@ function check(cond, msg) {
     await other.keyboard.press("End");
     await other.keyboard.type(" (bert)");
     await page.waitForSelector(".pm-locked[data-holder='bert'] >> text=first item (bert)");
-    await page.click("#body h2");
-    await other.click("#body h2");
+    await page.click(".item-side #details h2");
+    await other.click(".item-side #details h2");
     await page.waitForSelector(".live[data-pending='0']");
     await other.waitForSelector(".live[data-pending='0']");
     await other.close();
@@ -268,9 +268,11 @@ function check(cond, msg) {
     await page.click(".tree a:has-text('Runbook')");
     await page.waitForSelector(".tree a.current:has-text('Runbook')");
     for (const title of ["Install", "Upgrade"]) {
-      await page.fill("#new-child [name=title]", title);
-      await page.selectOption("#new-child [name='p:priority']", "low");
-      await page.click("#new-child button[type=submit]");
+      await page.click("#item-new-child");
+      await page.waitForSelector("#new-item [name=under]:checked");
+      await page.fill("#new-item [name=title]", title);
+      await page.selectOption("#new-item [name='p:priority']", "low");
+      await page.click("#new-item button[type=submit]");
       await page.waitForSelector(`.tree a.current:has-text('${title}')`); // the tree opens down to the new page
       await page.click(".tree a:has-text('Runbook')");
       await page.waitForSelector(".tree a.current:has-text('Runbook')");
@@ -295,6 +297,8 @@ function check(cond, msg) {
     await page.click("#new-item button[type=submit]");
     await page.waitForSelector(".tree a.current:has-text('Created from New')");
     check(await page.locator(".tree li.open > .tree-row a:has-text('Upgrade')").count() === 1, "the new page lies below the page it was created from");
+    await page.click("#edit-done"); // a new page opened for writing; Done shows it for reading
+    await page.waitForSelector("#body.reading");
     await page.click("#item-new-child"); // the item's own "new child page"
     await page.waitForSelector("#new-item [name=under]:checked");
     await page.goBack();
@@ -302,7 +306,9 @@ function check(cond, msg) {
     step("blocks: a task, a warning panel, a table and a table of contents survive a reload");
     await page.click(".tree a:has-text('Install')");
     await page.waitForSelector(".tree a.current:has-text('Install')");
-    await page.waitForSelector("#body .ProseMirror");
+    await page.waitForSelector("#body.reading"); // an existing page opens for reading
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .ProseMirror");
     await page.locator("#body .ProseMirror").click();
     await page.keyboard.type("Prepare");
     await page.selectOption("#body .pm-toolbar select", "heading:2");
@@ -321,13 +327,16 @@ function check(cond, msg) {
     await page.fill("#body .pm-table tr:nth-child(2) td:first-child input", "db1");
     await page.press("#body .pm-table tr:nth-child(2) td:first-child input", "Tab");
     await page.selectOption("#body .pm-toolbar select >> nth=1", "toc");
-    await page.click("#body h2"); // leave the editor: its blocks are released and saved
+    await page.click(".item-side #details h2"); // leave the editor: its blocks are released and saved
     await page.waitForSelector(".live[data-pending='0']");
     await page.reload();
     await page.waitForSelector("#body .pm-task[data-checked='true']:has-text('Check the backups')");
     await page.waitForSelector("#body .pm-panel[data-tone='warning']:has-text('Writers must be stopped.')");
     check(await page.inputValue("#body .pm-table tr:nth-child(2) td:first-child input") === "db1", "the table cell kept its text");
     await page.waitForSelector("#body .pm-toc button:has-text('Prepare')");
+    await page.click("#edit-done"); // read: the same blocks, shown, with no stray text
+    await page.waitForSelector("#body.reading .pm-table td:has-text('db1')");
+    check(!(await page.textContent("#body")).includes("null"), "the page for reading shows no stray text");
 
     step("versions: the changes of a body show word by word, and an earlier body comes back");
     // Two versions written through the API, so their content does not
@@ -394,10 +403,14 @@ function check(cond, msg) {
     await page.waitForSelector("#relations li:has-text('depends-on') a:has-text('PLAT-1')");
     await page.click("#relations li:has-text('depends-on') button[aria-label='Remove this relation']");
     await page.waitForSelector("#relations li:has-text('depends-on')", { state: "detached" });
+    await page.waitForSelector("#access.access-open .access-bar:has-text('Open')"); // open by default, an open lock
     await page.click("#access button:has-text('Only I may edit')");
     await page.waitForSelector("#access p:has-text('May edit: you')");
+    await page.waitForSelector("#access.access-restricted .access-bar:has-text('Restricted')");
+    await page.waitForSelector("h1.item-title .lock"); // the title carries the closed lock too
     await page.click("#access button:has-text('Lift the restriction')");
     await page.waitForSelector("#access p:has-text('May edit: everyone with a role in the space')");
+    await page.waitForSelector("#access.access-open");
 
     step("files: an upload is listed and downloads; an image goes into the body and shows after a reload");
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
@@ -406,13 +419,13 @@ function check(cond, msg) {
     const notes = await page.getAttribute("#attachments li a:has-text('notes.txt')", "href");
     const served = await page.evaluate(async (href) => { const r = await fetch(href); return [r.headers.get("content-type"), r.headers.get("content-disposition"), await r.text()]; }, notes);
     check(served[0] === "application/octet-stream" && served[1].startsWith("attachment") && served[2].includes("alert('file')"), "a text file only downloads: " + served);
-    await page.waitForSelector("#body .ProseMirror");
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .ProseMirror");
     await page.locator("#body .ProseMirror").click();
     await page.setInputFiles("#body .pm-toolbar input[type=file]", { name: "pixel.png", mimeType: "image/png", buffer: png });
     await page.waitForSelector("#body .pm-image img");
-    await page.click("#body h2"); // leave the editor: the new block is released and saved
-    await page.waitForSelector(".live[data-pending='0']");
-    await page.reload();
+    await page.click("#edit-done"); // Done saves what is not yet saved and shows the page for reading
+    await page.waitForSelector("#body.reading");
     await page.waitForFunction(() => { const img = document.querySelector("#body .pm-image img"); return img && img.complete && img.naturalWidth === 1; });
     check(await page.locator("#attachments li").count() === 2, "both files are listed");
 
