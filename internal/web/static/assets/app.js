@@ -1882,6 +1882,32 @@ async function adminView() {
 async function designCard() {
   const b = await get("/branding.json");
   const status = h("div", { class: "status" });
+  // contrast warns about pairs of colours below WCAG AA (ADR-0052); the
+  // design is saved all the same.
+  const contrast = h("div", { id: "design-contrast", role: "status" });
+  const pairText = (pair, ratio) => ({
+    headerText: () => t("design.contrast.headerText", { ratio }),
+    textOnBackground: () => t("design.contrast.textOnBackground", { ratio }),
+    accentInk: () => t("design.contrast.accentInk", { ratio }),
+    accentOnSurface: () => t("design.contrast.accentOnSurface", { ratio }),
+    accentOnDarkSurface: () => t("design.contrast.accentOnDarkSurface", { ratio }),
+    accentOnBackground: () => t("design.contrast.accentOnBackground", { ratio }),
+  }[pair] || (() => pair))();
+  // swatch shows a pair as it reads; colours set through the style
+  // object, which the content security policy allows (unlike attributes).
+  const swatch = (fg, bg) => {
+    const el = h("span", { class: "design-pair", text: "Aa", "aria-hidden": "true" });
+    el.style.color = fg;
+    el.style.background = bg;
+    return el;
+  };
+  const showContrast = (findings) => contrast.replaceChildren(findings.length ? h("div", { class: "notice warning" },
+    h("strong", { text: t("design.contrastTitle") }),
+    h("ul", {}, findings.map((f) => h("li", {},
+      swatch(f.foreground, f.background),
+      " ", pairText(f.pair, f.ratio.toFixed(1)), " ", h("span", { class: "muted", text: `${f.foreground} / ${f.background}` })))),
+    h("p", { class: "muted", text: t("design.contrastHint") })) : "");
+  showContrast(b.contrast || []);
   const colour = (name, label) => {
     const on = h("input", { type: "checkbox", name: name + "-on", checked: Boolean(b[name]), "aria-label": t("design.use", { what: label }) });
     const pick = h("input", { type: "color", name, value: b[name] || "#0b5cff", "aria-label": label });
@@ -1919,6 +1945,7 @@ async function designCard() {
       h("div", { class: "design-colours" },
         colour("accent", t("design.accent")), colour("background", t("design.backgroundColour")),
         colour("headerBackground", t("design.headerBackground")), colour("headerText", t("design.headerText"))),
+      contrast,
       field(t("design.font"), h("select", { name: "font" }, h("option", { value: "", text: t("design.fontDefault") }),
         Object.entries(fontNames).map(([v, label]) => h("option", { value: v, text: label, selected: b.font === v })),
         h("option", { value: "upload", text: t("design.fontUpload"), selected: b.font === "upload" }))),
@@ -1928,8 +1955,9 @@ async function designCard() {
       h("button", { type: "submit", class: "primary", text: t("common.save") }),
     ], async (d, st) => {
       const pick = (name) => (d.get(name + "-on") ? d.get(name) : "");
-      await put("/api/branding", { name: d.get("name"), accent: pick("accent"), background: pick("background"),
+      const saved = await put("/api/branding", { name: d.get("name"), accent: pick("accent"), background: pick("background"),
         headerBackground: pick("headerBackground"), headerText: pick("headerText"), font: d.get("font"), fontFamily: d.get("fontFamily").trim(), css: cssText.value });
+      showContrast(saved.contrast || []);
       await applyBranding(true);
       st.replaceChildren(h("p", { class: "notice", text: t("design.saved") }));
     }),

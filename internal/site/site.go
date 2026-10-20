@@ -312,6 +312,16 @@ func (s *Settings) Stylesheet() string {
 	}
 	if d.Accent != "" {
 		fmt.Fprintf(&b, "@media (prefers-color-scheme: light) { :root { --accent-soft: color-mix(in srgb, %s 12%%, white); } }\n", d.Accent)
+		// On the dark scheme's cards most corporate colours are too dark to
+		// read as text; the scheme gets the accent lightened just enough,
+		// as the product's own palette does with its blue.
+		if dark := DarkAccent(d.Accent); dark != d.Accent {
+			ink, away := AccentInk(dark), "black"
+			if ink != "#ffffff" {
+				away = "white"
+			}
+			fmt.Fprintf(&b, "@media (prefers-color-scheme: dark) { :root { --accent: %s; --accent-hover: color-mix(in srgb, %s 82%%, %s); --accent-ink: %s; } }\n", dark, dark, away, ink)
+		}
 	}
 	var light strings.Builder
 	if d.Background != "" {

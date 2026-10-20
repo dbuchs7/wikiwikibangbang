@@ -36,11 +36,18 @@ type brandingJSON struct {
 	// Assets names the content of each file the design has.
 	Assets map[string]string `json:"assets"`
 	Fonts  []string          `json:"fonts"`
+	// Contrast lists the pairs of colours below WCAG AA (ADR-0052); a
+	// warning, the design is kept.
+	Contrast []site.Finding `json:"contrast"`
 }
 
 func (h authHandlers) getBranding(w http.ResponseWriter, r *http.Request) {
 	s := h.d.DB.Site
-	out := brandingJSON{Design: s.Design(), Assets: map[string]string{}, Fonts: []string{"system", "humanist", "serif", "rounded", "mono"}}
+	d := s.Design()
+	out := brandingJSON{Design: d, Assets: map[string]string{}, Fonts: []string{"system", "humanist", "serif", "rounded", "mono"}, Contrast: d.Contrast()}
+	if out.Contrast == nil {
+		out.Contrast = []site.Finding{}
+	}
 	for _, name := range site.Assets {
 		if a, ok := s.Asset(name); ok {
 			out.Assets[name] = a.Tag

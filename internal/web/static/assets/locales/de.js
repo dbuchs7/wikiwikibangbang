@@ -469,5 +469,13 @@ export default {
   "design.fontFamily": "Auf den Computern installierte Schrift, zuerst versucht (optional)",
   "design.css": "Eigenes Stylesheet (CSS)",
   "design.cssFile": "Stylesheet aus einer Datei laden",
-  "design.saved": "Gespeichert. Das Erscheinungsbild gilt sofort für alle."
+  "design.saved": "Gespeichert. Das Erscheinungsbild gilt sofort für alle.",
+  "design.contrastTitle": "Einige Farben sind schwer lesbar (unter dem Kontrast von 4.5 : 1, den WCAG AA für normalen Text verlangt):",
+  "design.contrastHint": "Das Design wird trotzdem gespeichert. Die Schriftfarbe auf der Akzentfarbe und deren Variante für den dunklen Modus werden automatisch gewählt.",
+  "design.contrast.headerText": "Text in der Kopfzeile auf ihrem Hintergrund: {ratio} : 1.",
+  "design.contrast.textOnBackground": "Text auf dem Seitenhintergrund: {ratio} : 1.",
+  "design.contrast.accentInk": "Text auf Akzent-Schaltflächen: {ratio} : 1, selbst mit dem besseren von Schwarz und Weiss.",
+  "design.contrast.accentOnSurface": "Die Akzentfarbe als Linktext auf weissen Karten: {ratio} : 1.",
+  "design.contrast.accentOnDarkSurface": "Die Akzentfarbe als Linktext im dunklen Modus: {ratio} : 1.",
+  "design.contrast.accentOnBackground": "Die Akzentfarbe als Linktext auf dem Seitenhintergrund: {ratio} : 1."
 };

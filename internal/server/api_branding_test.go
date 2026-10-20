@@ -13,9 +13,15 @@ func TestTheCorporateDesignThroughTheAPI(t *testing.T) {
 	w.bert.expect("PUT", "/api/branding", `{"accent":"#d40000"}`, http.StatusForbidden)
 	w.admin.expect("PUT", "/api/branding", `{"accent":"red"}`, http.StatusBadRequest)
 	got := w.admin.expect("PUT", "/api/branding", `{"name":"ACME","accent":"#d40000","font":"serif","css":".brand{gap:2px}"}`, http.StatusOK)
-	if got["name"] != "ACME" {
+	if got["name"] != "ACME" || len(got["contrast"].([]any)) != 0 {
 		t.Fatalf("set %v", got)
 	}
+	// Colours hard to read are kept, with a warning naming the pair.
+	warned := w.admin.expect("PUT", "/api/branding", `{"accent":"#ffcc00","headerBackground":"#336699"}`, http.StatusOK)
+	if c := warned["contrast"].([]any); len(c) != 2 || c[0].(map[string]any)["pair"] != "headerText" || c[1].(map[string]any)["pair"] != "accentOnSurface" {
+		t.Fatalf("contrast %v", warned["contrast"])
+	}
+	w.admin.expect("PUT", "/api/branding", `{"name":"ACME","accent":"#d40000","font":"serif","css":".brand{gap:2px}"}`, http.StatusOK)
 	// Reading is public: the sign-in page carries the design.
 	if b := anon.expect("GET", "/branding.json", "", http.StatusOK); b["accent"] != "#d40000" {
 		t.Fatalf("branding.json %v", b)

@@ -528,3 +528,9 @@ dialog.album-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(10
 dialog.album-dialog::backdrop { background: rgba(20, 22, 26, .45); }
 .album-dialog-body { padding: 12px; overflow: auto; max-height: calc(100vh - 130px); }
 .album-dialog .drawing-bar button { margin-left: auto; }
+
+/* Contrast warnings of the corporate design (ADR-0052). */
+.notice.warning { background: var(--danger-soft); border-color: var(--danger); }
+#design-contrast ul { margin: 6px 0; padding-left: 0; list-style: none; }
+#design-contrast li { margin: 4px 0; }
+.design-pair { display: inline-block; min-width: 2.4em; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; font-weight: 600; text-align: center; }

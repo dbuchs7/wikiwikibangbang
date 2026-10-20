@@ -97,3 +97,44 @@ func TestTheAccentGetsReadableText(t *testing.T) {
 		}
 	}
 }
+
+// TestContrastWarnsAboutHardToReadPairs: the check names the pairs below
+// WCAG AA and nothing else (ADR-0052).
+func TestContrastWarnsAboutHardToReadPairs(t *testing.T) {
+	if r := ContrastRatio("#000000", "#ffffff"); r < 20.99 || r > 21.01 {
+		t.Errorf("black on white: %v", r)
+	}
+	pairs := func(d Design) (out []string) {
+		for _, f := range d.Contrast() {
+			if f.Ratio >= MinContrast {
+				t.Errorf("%s reported at %v", f.Pair, f.Ratio)
+			}
+			out = append(out, f.Pair)
+		}
+		return out
+	}
+	if got := pairs(Design{}); len(got) != 0 {
+		t.Errorf("the product's colours: %v", got)
+	}
+	// A dark red reads on white; the dark scheme gets it lightened.
+	if got := pairs(Design{Accent: "#d40000"}); len(got) != 0 {
+		t.Errorf("dark red: %v", got)
+	}
+	if dark := DarkAccent("#d40000"); dark == "#d40000" || ContrastRatio(dark, productDarkSurface) < MinContrast {
+		t.Errorf("dark-scheme red %s", dark)
+	}
+	if dark := DarkAccent("#5b95ff"); dark != "#5b95ff" {
+		t.Errorf("the product's dark-scheme blue reads already, got %s", dark)
+	}
+	// Yellow carries dark text, but is unreadable as link text on white.
+	if got := pairs(Design{Accent: "#ffcc00"}); strings.Join(got, ",") != "accentOnSurface" {
+		t.Errorf("yellow: %v", got)
+	}
+	got := pairs(Design{HeaderBackground: "#336699", Background: "#222222"})
+	if strings.Join(got, ",") != "headerText,textOnBackground" {
+		t.Errorf("dark header and page: %v", got)
+	}
+	if got := pairs(Design{HeaderBackground: "#336699", HeaderText: "#ffffff", Accent: "#0b5cff", Background: "#f7f3ea"}); len(got) != 0 {
+		t.Errorf("a readable design: %v", got)
+	}
+}
