@@ -120,6 +120,7 @@ func Routes(d Deps) []Route {
 	}
 	routes = append(routes, authRoutes(d)...)
 	routes = append(routes, accountRoutes(d)...)
+	routes = append(routes, spaceIconRoutes(d)...)
 	routes = append(routes, avatarRoutes(d)...)
 	routes = append(routes, brandingRoutes(d)...)
 	routes = append(routes, regulationRoutes(d)...)

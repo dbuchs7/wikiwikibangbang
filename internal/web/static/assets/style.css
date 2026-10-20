@@ -649,3 +649,20 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 #account-requests td:last-child { white-space: nowrap; }
 /* An info note may hold an example of several lines. */
 .info-pop p { white-space: pre-line; }
+
+/* Spaces on the start page (ADR-0062): tiles or a list, each with the
+   space's icon or, without one, its key. */
+.segmented { display: inline-flex; margin: 0 0 12px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.segmented .segment { border: 0; border-radius: 0; background: var(--surface); color: var(--text); padding: 4px 12px; font-size: 13px; }
+.segmented .segment[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink, #fff); }
+.space-tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.space-icon { flex: none; border-radius: 8px; object-fit: contain; background: var(--surface); }
+.space-icon-24 { width: 24px; height: 24px; border-radius: 5px; }
+.space-icon-48 { width: 48px; height: 48px; }
+.space-icon-64 { width: 64px; height: 64px; }
+.space-icon-key { display: inline-flex; align-items: center; justify-content: center; font-weight: 700; color: var(--accent); background: var(--bg); border: 1px solid var(--border); }
+.space-icon-24.space-icon-key { font-size: 9px; }
+.space-icon-48.space-icon-key { font-size: 14px; }
+.space-icon-64.space-icon-key { font-size: 18px; }
+.space-list { width: 100%; margin-bottom: 22px; }
+.space-list .space-link { display: inline-flex; align-items: center; gap: 8px; }

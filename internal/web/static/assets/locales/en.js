@@ -627,5 +627,11 @@ export default {
   "dp.categoriesInfo": "How to enter categories and indicators:\nOne line per category: the category's name, a colon, then its indicators separated by commas.\nAn indicator is a word or the start of a word to look for, e.g. “diagnos” finds diagnosis and diagnoses; case does not matter.\nSeveral words as one indicator find the phrase, e.g. “medical certificate”.\nFor patterns, start an indicator with “re:”, e.g. re:756\\.\\d{4}\\.\\d{4}\\.\\d{2} for a Swiss social security number.\nAt least one category with at least one indicator is needed; at most 30 categories.",
   "dp.categoriesExample": "Example:\nHealth: diagnosis, medical certificate, illness\nReligion: denomination, church tax",
   "dp.categoriesEmpty": "Enter at least one category, one per line, e.g. “Health: diagnosis, illness”. The (i) beside the field explains the format.",
-  "dp.indicatorsEmpty": "The category “{name}” has no indicators: write them after the colon, separated by commas."
+  "dp.indicatorsEmpty": "The category “{name}” has no indicators: write them after the colon, separated by commas.",
+  "home.layout": "Show the spaces as",
+  "home.tiles": "Tiles",
+  "home.list": "List",
+  "space.icon": "Icon or logo",
+  "space.iconChoose": "Choose a picture",
+  "space.iconHelp": "Shown on the space's tile on the start page: PNG, JPEG, GIF, WebP or SVG, ideally square."
 };

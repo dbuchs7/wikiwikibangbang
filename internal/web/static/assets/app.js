@@ -752,14 +752,69 @@ async function homeView() {
       ? h("div", { class: "card first-steps" },
         h("p", { text: me.admin ? t("spaces.noneAdmin") : t("spaces.none") }),
         me.admin ? h("ol", {}, h("li", { text: t("home.step1") }), h("li", { text: t("home.step2") }), h("li", { text: t("home.step3") })) : null)
-      : h("ul", { class: "space-tiles spaces" }, spaces.map((s) => h("li", {},
-        h("a", { href: "#/space/" + encodeURIComponent(s.key), class: "space-tile" },
-          h("span", { class: "space-key", text: s.key }),
-          h("strong", { text: s.name }),
-          h("span", { class: "badge", text: roleText(s.role) }))))),
+      : spacesOverview(spaces),
     me.admin ? setupCard(types) : null,
     me.admin ? newSpaceForm(spaces.length === 0) : null,
   );
+}
+
+// spaceIcon shows a space's icon or logo (ADR-0062), or its key when it
+// has none.
+function spaceIcon(s, size) {
+  if (!s.icon) return h("span", { class: `space-icon space-icon-${size} space-icon-key`, "aria-hidden": "true", text: s.key.slice(0, 3) });
+  return h("img", { class: `space-icon space-icon-${size}`, src: `/api/spaces/${encodeURIComponent(s.key)}/icon?v=${encodeURIComponent(s.icon)}`, alt: "", width: size, height: size });
+}
+
+// spacesLayout is how the start page shows the spaces, as tiles or as a
+// list; each reader's own choice, kept in the browser.
+const spacesLayout = {
+  get() { try { return localStorage.getItem("wwbb.spaces") === "list" ? "list" : "tiles"; } catch { return "tiles"; } },
+  set(v) { try { localStorage.setItem("wwbb.spaces", v); } catch { /* the choice lasts for this page only */ } },
+};
+
+// spacesOverview shows the spaces as tiles or as a list, with a switch.
+function spacesOverview(spaces) {
+  const box = h("div", { id: "spaces-overview" });
+  const draw = (layout) => {
+    const toggle = (value, label) => h("button", { type: "button", class: "segment", "aria-pressed": String(layout === value), id: "spaces-" + value, text: label,
+      onclick: () => { spacesLayout.set(value); draw(value); } });
+    const href = (s) => "#/space/" + encodeURIComponent(s.key);
+    box.replaceChildren(
+      h("div", { class: "segmented", role: "group", "aria-label": t("home.layout") }, toggle("tiles", t("home.tiles")), toggle("list", t("home.list"))),
+      layout === "list"
+        ? h("table", { class: "spaces space-list" },
+          h("tr", {}, h("th", { text: t("field.name") }), h("th", { text: t("admin.key") }), h("th", { text: t("admin.role") })),
+          spaces.map((s) => h("tr", {},
+            h("td", {}, h("a", { href: href(s), class: "space-link" }, spaceIcon(s, 24), h("span", { text: s.name }))),
+            h("td", { class: "muted", text: s.key }),
+            h("td", {}, h("span", { class: "badge", text: roleText(s.role) })))))
+        : h("ul", { class: "space-tiles spaces" }, spaces.map((s) => h("li", {},
+          h("a", { href: href(s), class: "space-tile" },
+            h("span", { class: "space-tile-head" }, h("span", { class: "space-key", text: s.key }), s.icon ? spaceIcon(s, 48) : ""),
+            h("strong", { text: s.name }),
+            h("span", { class: "badge", text: roleText(s.role) }))))));
+  };
+  draw(spacesLayout.get());
+  return box;
+}
+
+// spaceIconCard sets or removes a space's icon (space administrators).
+function spaceIconCard(sp, status) {
+  const picker = h("input", { type: "file", id: "space-icon-file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml", "aria-label": t("space.iconChoose") });
+  const path = `/api/spaces/${encodeURIComponent(sp.key)}/icon`;
+  picker.addEventListener("change", () => action(async () => {
+    const file = picker.files[0];
+    if (!file) return;
+    const res = await fetch(path, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: file });
+    if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error || res.statusText);
+  }, status));
+  return h("section", { class: "card", id: "space-icon" },
+    h("h2", { text: t("space.icon") }),
+    h("div", { class: "avatar-row" }, spaceIcon(sp, 64),
+      h("div", {},
+        h("p", { class: "muted", text: t("space.iconHelp") }),
+        h("label", { class: "upload" }, h("span", { text: t("space.iconChoose") }), picker),
+        sp.icon ? h("button", { type: "button", class: "link", text: t("common.delete"), onclick: () => action(() => del(path), status) }) : "")));
 }
 
 // newSpaceForm creates a space and opens it (administrators). It starts
@@ -2462,6 +2517,7 @@ async function membersView(key) {
     h("h1", { text: t("members.heading", { space: sp.name }) }),
     h("p", { class: "muted", text: t("members.help") }),
     status,
+    sp.role === "space-admin" ? spaceIconCard(sp, status) : null,
     roles.length ? h("table", { id: "members" }, roles.map(row)) : h("p", { class: "muted", text: t("members.none") }),
     form({ class: "card", id: "add-role" }, [
       h("h2", { text: t("members.add") }),

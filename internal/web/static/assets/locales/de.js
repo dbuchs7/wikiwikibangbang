@@ -625,5 +625,11 @@ export default {
   "dp.categoriesInfo": "So werden Kategorien und Indikatoren erfasst:\nEine Zeile pro Kategorie: der Name der Kategorie, ein Doppelpunkt, dann die Indikatoren durch Kommas getrennt.\nEin Indikator ist ein Wort oder ein Wortanfang, nach dem gesucht wird, z.B. findet «diagnos» Diagnose und Diagnosen; Gross- und Kleinschreibung spielt keine Rolle.\nMehrere Wörter als ein Indikator finden die Wortfolge, z.B. «ärztliches Zeugnis».\nFür Muster beginnt ein Indikator mit «re:», z.B. re:756\\.\\d{4}\\.\\d{4}\\.\\d{2} für eine AHV-Nummer.\nNötig ist mindestens eine Kategorie mit mindestens einem Indikator; höchstens 30 Kategorien.",
   "dp.categoriesExample": "Beispiel:\nGesundheit: Diagnose, Arztzeugnis, Krankheit\nReligion: Konfession, Kirchensteuer",
   "dp.categoriesEmpty": "Bitte mindestens eine Kategorie erfassen, eine pro Zeile, z.B. «Gesundheit: Diagnose, Krankheit». Das (i) neben dem Feld erklärt das Format.",
-  "dp.indicatorsEmpty": "Die Kategorie «{name}» hat keine Indikatoren: Diese folgen nach dem Doppelpunkt, durch Kommas getrennt."
+  "dp.indicatorsEmpty": "Die Kategorie «{name}» hat keine Indikatoren: Diese folgen nach dem Doppelpunkt, durch Kommas getrennt.",
+  "home.layout": "Bereiche anzeigen als",
+  "home.tiles": "Kacheln",
+  "home.list": "Liste",
+  "space.icon": "Icon oder Logo",
+  "space.iconChoose": "Bild wählen",
+  "space.iconHelp": "Erscheint auf der Kachel des Bereichs auf der Startseite: PNG, JPEG, GIF, WebP oder SVG, idealerweise quadratisch."
 };

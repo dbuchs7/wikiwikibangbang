@@ -73,6 +73,9 @@ type spaceJSON struct {
 	// Role is the caller's role in the space (viewer, editor or
 	// space-admin), so the UI offers only what the caller may do.
 	Role string `json:"role,omitempty"`
+	// Icon names the content of the space's icon, or is empty when it has
+	// none (ADR-0062).
+	Icon string `json:"icon,omitempty"`
 }
 
 type markJSON struct {

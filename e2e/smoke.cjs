@@ -744,6 +744,19 @@ function check(cond, msg) {
     await page.click("#add-role button[type=submit]");
     await page.waitForSelector("#members tr:has-text('@ops')");
     check(await page.inputValue("#members tr:has-text('@ops') select") === "editor", "the group holds the role granted");
+    await page.setInputFiles("#space-icon-file", { name: "icon.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
+    await page.waitForSelector("#space-icon img.space-icon[src*='/api/spaces/PLAT/icon']");
+
+    step("start page: the spaces as tiles with their icon, or as a list, as each reader chooses");
+    await page.click("a.brand");
+    await page.waitForSelector("#spaces-overview .space-tile:has-text('Platform') img.space-icon");
+    await page.click("#spaces-list");
+    await page.waitForSelector("#spaces-overview table.space-list a:has-text('Platform') img.space-icon");
+    await page.reload();
+    await page.waitForSelector("#spaces-list[aria-pressed=true]"); // the choice is kept
+    await page.click("#spaces-tiles");
+    await page.waitForSelector("#spaces-overview .space-tile");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");
     await page.click("#groups button[aria-label^='Take bert out']");

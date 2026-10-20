@@ -210,7 +210,7 @@ func (h itemHandlers) listSpaces(w http.ResponseWriter, r *http.Request) {
 	h.read(w, r, func(x *item.Session) (any, error) {
 		out := []spaceJSON{}
 		for _, sp := range x.Spaces() {
-			out = append(out, spaceJSON{Key: sp.Key, Name: sp.Name, Role: roleName(x.Role(sp.Key))})
+			out = append(out, spaceJSON{Key: sp.Key, Name: sp.Name, Role: roleName(x.Role(sp.Key)), Icon: spaceIconTag(h.d.DB.Site, sp.Key)})
 		}
 		return map[string]any{"spaces": out}, nil
 	})
