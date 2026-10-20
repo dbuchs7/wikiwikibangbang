@@ -13,6 +13,7 @@ import { h, safeHref } from "./dom.js";
 import { t } from "./i18n.js";
 import { anchorOf } from "./anchors.js";
 import { openDrawing, drawingName } from "./drawing.js";
+import { pickFromAlbum, pictureFile, captionOf } from "./album.js";
 
 // Every block carries bid, its ID in a live session (ADR-0010); it is not
 // stored. Text blocks keep the mentions they had without a mention mark
@@ -433,9 +434,10 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     if (kind === "table") insertBlock(schema.nodes.table.create({ text: `${t("editor.heading", { n: 1 })}\t${t("editor.heading", { n: 2 })}\n\t` }));
     else if (kind === "image") picker.click();
     else if (kind === "drawing") draw();
+    else if (kind === "album") fromAlbum();
     else if (kind) insertBlock(schema.nodes[kind].create());
   } }, [["", t("editor.insert")], ["table", t("editor.table")], ["toc", t("editor.toc")], ["children", t("editor.children")],
-    files ? ["image", t("editor.image")] : null, files ? ["drawing", t("draw.insert")] : null].filter(Boolean)
+    files ? ["image", t("editor.image")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
   const picker = h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp", hidden: true, "aria-label": t("editor.image") });
@@ -461,6 +463,19 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       if (!png) return;
       const a = await files.upload(new File([png], drawingName(""), { type: "image/png" }));
       insertBlock(schema.nodes.image.create({ ref: a.id, text: "" }));
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
+  // A picture from the album (ADR-0054) is copied into this item, unless
+  // it is one of its own files already.
+  const fromAlbum = async () => {
+    status.textContent = "";
+    try {
+      const p = await pickFromAlbum();
+      if (!p) return;
+      const a = p.item.id === files.item ? p.attachment : await files.upload(await pictureFile(p));
+      insertBlock(schema.nodes.image.create({ ref: a.id, text: captionOf(p.attachment.name) }));
     } catch (err) {
       status.textContent = err.message;
     }

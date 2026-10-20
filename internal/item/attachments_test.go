@@ -93,3 +93,45 @@ func TestAttachments(t *testing.T) {
 		}
 	}
 }
+
+// TestPicturesListOnlyReadableFiles: the album (ADR-0054) lists the files
+// of live items one may read, newest first, and nothing else.
+func TestPicturesListOnlyReadableFiles(t *testing.T) {
+	s := permFixture(t)
+	anna, ben, carl, pat := s.As("anna"), s.As("ben"), s.As("carl"), s.As("pat")
+	open := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Open"}))
+	secret := mustItem(t)(pat.Create(NewItem{Space: "PLAT", Type: "page", Title: "Secret"}))
+	gone := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Gone"}))
+	_, err := anna.AddAttachment(open.ID, testFile(fileA, "a.png"))
+	noErr(t, err)
+	notes := testFile("00000000000000000000000000000001", "notes.txt")
+	notes.Type = "text/plain"
+	_, err = anna.AddAttachment(open.ID, notes)
+	noErr(t, err)
+	_, err = pat.AddAttachment(secret.ID, testFile(fileB, "b.png"))
+	noErr(t, err)
+	noErr(t, pat.Restrict(secret.ID, Restriction{Read: []string{"pat"}}))
+	_, err = anna.AddAttachment(gone.ID, testFile("00000000000000000000000000000002", "c.png"))
+	noErr(t, err)
+	noErr(t, anna.Trash(gone.ID))
+
+	images := func(a Attachment) bool { return a.Type == "image/png" }
+	names := func(ps []Picture) (out []string) {
+		for _, p := range ps {
+			out = append(out, p.Item.Key+"/"+p.Attachment.Name)
+		}
+		return out
+	}
+	if got := names(ben.Pictures("", images)); len(got) != 1 || got[0] != open.Key+"/a.png" {
+		t.Errorf("a viewer sees %v", got)
+	}
+	if got := names(pat.Pictures("PLAT", images)); len(got) != 2 {
+		t.Errorf("the one who may read the restricted page sees %v", got)
+	}
+	if got := pat.Pictures("OPS", images); len(got) != 0 {
+		t.Errorf("another space shows %v", names(got))
+	}
+	if got := carl.Pictures("", images); len(got) != 0 {
+		t.Errorf("an outsider sees %v", names(got))
+	}
+}

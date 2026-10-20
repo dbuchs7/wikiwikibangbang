@@ -218,7 +218,7 @@ function check(cond, msg) {
     await page.click("#app-switcher");
     await page.waitForSelector("#drawer:not([hidden])");
     const modules = (await page.locator("#drawer-apps a").allTextContents()).join(",");
-    check(modules === "Spaces,Create,Tasks,AI assistants (MCP),Notifications,Governance,Account,Administration", "the modules of an administrator: " + modules);
+    check(modules === "Spaces,Create,Tasks,Album,AI assistants (MCP),Notifications,Governance,Account,Administration", "the modules of an administrator: " + modules);
     await page.keyboard.press("Escape");
     await page.waitForSelector("#drawer", { state: "hidden" });
     await page.click("#app-switcher");
@@ -458,6 +458,28 @@ function check(cond, msg) {
     await page.waitForFunction(() => { const imgs = [...document.querySelectorAll("#body .pm-image img")]; return imgs.length === 2 && imgs.every((i) => i.complete && i.naturalWidth > 0) && imgs.some((i) => i.naturalWidth > 100); });
     check(await page.locator("#attachments li:has-text('.drawing.png')").count() === 1, "the drawing is a file of the page");
     check(await page.locator("#body.reading .pm-redraw").count() === 0, "a drawing is edited only while editing");
+
+    step("album: every readable picture in one place; one is copied into another page and stays editable as a drawing");
+    await page.goto(base + "/#/album");
+    await page.waitForSelector("#album .album-card img");
+    check(await page.locator("#album .album-card").count() === 2, "the album shows the image and the drawing, not the text file");
+    await page.selectOption("#album select[aria-label=Kind]", "drawing");
+    await page.waitForFunction(() => document.querySelectorAll("#album .album-card").length === 1);
+    await page.goto(base + "/#/item/PLAT-2?edit");
+    await page.waitForSelector("#body.editing .ProseMirror");
+    await page.locator("#body .ProseMirror").click();
+    await page.selectOption("#body .pm-toolbar select:has(option[value=album])", "album");
+    await page.waitForSelector("dialog.album-dialog[open] .album-card");
+    await page.fill("dialog.album-dialog input[type=search]", "drawing");
+    await page.selectOption("dialog.album-dialog select[aria-label=Kind]", "drawing");
+    await page.waitForFunction(() => document.querySelectorAll("dialog.album-dialog .album-card").length === 1);
+    await page.click("dialog.album-dialog .album-pick");
+    await page.waitForSelector("dialog.album-dialog", { state: "detached" });
+    await page.waitForSelector("#body .pm-image .pm-redraw"); // the copy is a drawing of this page
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    await page.waitForFunction(() => { const img = document.querySelector("#body .pm-image img"); return img && img.complete && img.naturalWidth > 100; });
+    check(await page.locator("#attachments li:has-text('.drawing.png')").count() === 1, "the copy is a file of the page it was inserted into");
 
     step("links: the link check page says when checking is off");
     await page.click("a.brand");

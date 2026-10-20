@@ -99,3 +99,59 @@ func TestAttachmentsThroughTheAPI(t *testing.T) {
 	w.bert.expect("DELETE", base+"/"+string(a.ID), "", http.StatusOK)
 	w.vera.expect("GET", base+"/"+string(a.ID), "", http.StatusNotFound)
 }
+
+// TestAlbumListsReadableImages: the album (ADR-0054) lists the images and
+// drawings of the items the caller may read, filtered and paged; never
+// other files, never a restricted item's to those it excludes.
+func TestAlbumListsReadableImages(t *testing.T) {
+	w := newWorld(t)
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{7}, 100)...)
+	mk := func(title string) (string, string) {
+		it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"`+title+`","properties":{"priority":"low"}}`, http.StatusCreated)
+		return field(it, "item", "key").(string), field(it, "item", "id").(string)
+	}
+	openKey, _ := mk("Network plan")
+	_, secretID := mk("Secret")
+	for _, f := range []struct{ key, name string }{{openKey, "rack.png"}, {openKey, "flow" + DrawingSuffix}, {secretID, "secret.png"}} {
+		if r := w.bert.upload("/api/items/"+f.key+"/attachments?name="+f.name, "application/octet-stream", png); r.Code != http.StatusCreated {
+			t.Fatalf("upload %s: %d", f.name, r.Code)
+		}
+	}
+	if r := w.bert.upload("/api/items/"+openKey+"/attachments?name=notes.txt", "application/octet-stream", []byte("plain text")); r.Code != http.StatusCreated {
+		t.Fatalf("upload notes: %d", r.Code)
+	}
+	w.bert.expect("PUT", "/api/items/"+secretID+"/restriction", `{"read":["`+w.ids["bert"]+`"],"edit":[]}`, http.StatusOK)
+
+	names := func(c *client, query string) []string {
+		var out []string
+		for _, p := range field(c.expect("GET", "/api/album"+query, "", http.StatusOK), "pictures").([]any) {
+			out = append(out, p.(map[string]any)["attachment"].(map[string]any)["name"].(string))
+		}
+		return out
+	}
+	if got := names(w.bert, ""); len(got) != 3 {
+		t.Errorf("bert sees %v", got)
+	}
+	if got := names(w.vera, ""); len(got) != 2 || strings.Contains(strings.Join(got, " "), "secret") {
+		t.Errorf("vera sees %v", got)
+	}
+	if got := names(w.carla, ""); len(got) != 0 {
+		t.Errorf("an outsider sees %v", got)
+	}
+	if got := names(w.vera, "?kind=drawing"); len(got) != 1 || got[0] != "flow"+DrawingSuffix {
+		t.Errorf("drawings: %v", got)
+	}
+	if got := names(w.vera, "?kind=image&q=RACK"); len(got) != 1 || got[0] != "rack.png" {
+		t.Errorf("search: %v", got)
+	}
+	if got := names(w.vera, "?q=network"); len(got) != 2 {
+		t.Errorf("search by the item's title: %v", got)
+	}
+	page := w.vera.expect("GET", "/api/album?limit=1", "", http.StatusOK)
+	if field(page, "total").(float64) != 2 || field(page, "next").(float64) != 1 {
+		t.Errorf("paging: %v", page)
+	}
+	for _, bad := range []string{"?kind=video", "?limit=0", "?limit=201", "?offset=-1"} {
+		w.vera.expect("GET", "/api/album"+bad, "", http.StatusBadRequest)
+	}
+}
