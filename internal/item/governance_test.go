@@ -163,3 +163,40 @@ func TestGovernanceReport(t *testing.T) {
 		t.Errorf("outsider: %v", err)
 	}
 }
+
+// TestGovernanceRestrictionsAreNotified: whoever saved sensitive data and
+// the space's administrators hear of the restriction without watching the
+// item; others do not, and nobody hears of a change they may not read
+// (ADR-0057).
+func TestGovernanceRestrictionsAreNotified(t *testing.T) {
+	s := permFixture(t)
+	anna, ben, pat := s.As("anna"), s.As("ben"), s.As("pat")
+	page := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	noErr(t, anna.CommitBody(page.ID, Doc{Blocks: []Block{{Kind: Paragraph, Text: "Passwort: Sommer2026!"}}}))
+	told := func(x *Session) []EventKind {
+		var kinds []EventKind
+		list, _ := x.Notifications(0, 10)
+		for _, n := range list {
+			if n.Item == page.ID {
+				kinds = append(kinds, n.Kind)
+			}
+		}
+		return kinds
+	}
+	if got := told(anna); len(got) != 1 || got[0] != RestrictionSet {
+		t.Errorf("the one who saved hears %v", got)
+	}
+	if got := told(pat); len(got) != 1 || got[0] != RestrictionSet {
+		t.Errorf("the space administrator hears %v", got)
+	}
+	if got := told(ben); len(got) != 0 {
+		t.Errorf("a reader the item is now hidden from hears %v", got)
+	}
+	if anna.Unread(0, 10) != 1 {
+		t.Errorf("unread for the one who saved: %d", anna.Unread(0, 10))
+	}
+	// The one who saved is responsible for the finding.
+	if f := anna.Findings(time.Now(), 365*24*time.Hour); len(f.Sensitive) != 1 || len(pat.Findings(time.Now(), 365*24*time.Hour).Sensitive) != 0 {
+		t.Errorf("findings: anna %+v", f)
+	}
+}

@@ -564,3 +564,10 @@ dialog.album-dialog::backdrop { background: rgba(20, 22, 26, .45); }
 .info-pop ul { margin: 0 0 6px; padding-left: 18px; }
 .info-pop li { margin: 2px 0; }
 th:last-child .info-pop, th:nth-last-child(2) .info-pop { left: auto; right: -8px; }
+
+/* Open governance findings (ADR-0057): an amber dot on the bell, and the
+   list on the notifications page. */
+#nav > a.bell.findings::after { content: ""; position: absolute; bottom: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: #e8a317; border: 2px solid var(--surface); }
+#my-findings .chip { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #fff4e5; color: #8a5300; }
+#my-findings h2 a { font-size: 13px; font-weight: 400; margin-left: 8px; }
+.notifications li.governance { border-left: 3px solid #e8a317; padding-left: 8px; }

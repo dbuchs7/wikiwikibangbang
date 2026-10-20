@@ -260,3 +260,33 @@ func (s *Store) lastEditor(id ID) (string, time.Time) {
 	}
 	return who, when
 }
+
+// Findings returns the governance findings of every space the principal
+// holds a role in for which the principal is responsible, i.e. whose
+// content they changed last (ADR-0057). It is what their bell reminds them
+// of; the reports per space list everyone's.
+func (x *Session) Findings(now time.Time, staleAfter time.Duration) Report {
+	var mine Report
+	for _, sp := range x.Spaces() {
+		rep, err := x.Governance(sp.Key, now, staleAfter)
+		if err != nil {
+			continue
+		}
+		for _, f := range rep.Sensitive {
+			if f.Responsible == x.who {
+				mine.Sensitive = append(mine.Sensitive, f)
+			}
+		}
+		for _, f := range rep.Stale {
+			if f.Responsible == x.who {
+				mine.Stale = append(mine.Stale, f)
+			}
+		}
+		for _, f := range rep.Implausible {
+			if f.Responsible == x.who {
+				mine.Implausible = append(mine.Implausible, f)
+			}
+		}
+	}
+	return mine
+}

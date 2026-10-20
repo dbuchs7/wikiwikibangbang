@@ -90,6 +90,46 @@ type notificationJSON struct {
 // unreadCap bounds the unread count the navigation shows ("99+").
 const unreadCap = 100
 
+// defaultStale is how long an item may stay unchanged before governance
+// names it (ADR-0040).
+const defaultStale = 365 * 24 * time.Hour
+
+// findingJSON is a governance finding one is responsible for (ADR-0057).
+type findingJSON struct {
+	Kind   string  `json:"kind"` // sensitive, stale or implausible
+	Item   item.ID `json:"item"`
+	Key    string  `json:"key"`
+	Title  string  `json:"title"`
+	Detail string  `json:"detail,omitempty"`
+	// Since is when a stale item changed last.
+	Since *time.Time `json:"since,omitempty"`
+}
+
+// findingsLimit bounds the findings listed; the counts are complete.
+const findingsLimit = 100
+
+// findingsOf counts the findings one is responsible for and, with list,
+// lists them.
+func findingsOf(r item.Report, list bool) map[string]any {
+	out := map[string]any{"sensitive": len(r.Sensitive), "stale": len(r.Stale), "implausible": len(r.Implausible)}
+	if !list {
+		return out
+	}
+	items := []findingJSON{}
+	for _, f := range r.Sensitive {
+		items = append(items, findingJSON{Kind: "sensitive", Item: f.Item, Key: f.Key, Title: f.Title, Detail: f.Kind + " · " + f.Where})
+	}
+	for _, f := range r.Implausible {
+		items = append(items, findingJSON{Kind: "implausible", Item: f.Item, Key: f.Key, Title: f.Title, Detail: f.Problem})
+	}
+	for _, f := range r.Stale {
+		since := f.LastChange
+		items = append(items, findingJSON{Kind: "stale", Item: f.Item, Key: f.Key, Title: f.Title, Since: &since})
+	}
+	out["items"] = items[:min(len(items), findingsLimit)]
+	return out
+}
+
 func (h itemHandlers) notifications(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, ok := parseLimit(w, q)
@@ -113,7 +153,8 @@ func (h itemHandlers) notifications(w http.ResponseWriter, r *http.Request) {
 			out = append(out, notificationJSON{Seq: n.Seq, At: n.At, Actor: n.Actor, Kind: n.Kind, Item: n.Item, Key: n.Key,
 				Title: n.Title, Space: n.Space, Created: n.Created, Unread: n.Seq > seen})
 		}
-		res := map[string]any{"notifications": out, "unread": x.Unread(seen, unreadCap), "seen": seen}
+		res := map[string]any{"notifications": out, "unread": x.Unread(seen, unreadCap), "seen": seen,
+			"findings": findingsOf(x.Findings(time.Now(), defaultStale), q.Get("findings") != "")}
 		if more {
 			res["next"] = list[len(list)-1].Seq
 		}
