@@ -68,3 +68,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0053](0053-drawings-with-excalidraw-on-a-page-of-their-own.md) | Drawings are made with Excalidraw on a page of their own and stored as PNG attachments that carry their scene | Accepted | Landed |
 | [0054](0054-an-album-of-readable-pictures-inserted-by-copy.md) | The album lists the pictures of every readable item; inserting one copies it into the target item | Accepted | Landed |
 | [0055](0055-copied-files-carry-their-source.md) | Copied files and new versions of drawings carry their source; a copy learns of a changed original | Accepted | Landed |
+| [0056](0056-images-have-a-width-in-percent-of-the-column.md) | Images have a width in percent of the text column | Accepted | Landed |

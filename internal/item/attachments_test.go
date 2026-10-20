@@ -203,3 +203,19 @@ func TestCopiesKnowTheirOrigin(t *testing.T) {
 		t.Errorf("a copy from an unreadable item: %v", err)
 	}
 }
+
+// TestImagesHaveAWidth: an image may be shown at 10 to 100 percent of the
+// column; no other block has a width (ADR-0056).
+func TestImagesHaveAWidth(t *testing.T) {
+	const ref = "0123456789abcdef0123456789abcdef"
+	for _, ok := range []Block{{Kind: Image, Ref: ref}, {Kind: Image, Ref: ref, Width: 10}, {Kind: Image, Ref: ref, Width: 100}} {
+		if err := CheckBlock(ok, "self"); err != nil {
+			t.Errorf("%+v: %v", ok, err)
+		}
+	}
+	for _, bad := range []Block{{Kind: Image, Ref: ref, Width: 5}, {Kind: Image, Ref: ref, Width: 101}, {Kind: Image, Ref: ref, Width: -1}, {Kind: Paragraph, Text: "x", Width: 50}} {
+		if err := CheckBlock(bad, "self"); !errors.Is(err, ErrValidation) {
+			t.Errorf("%+v: %v", bad, err)
+		}
+	}
+}

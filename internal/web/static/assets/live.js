@@ -283,7 +283,7 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     const out = { kind: b.kind, text: b.text ?? "" };
     if (b.kind === "embed") return { kind: "embed", ref: b.ref };
     if (b.kind === "toc" || b.kind === "children") return { kind: b.kind };
-    if (b.kind === "image") return { kind: "image", text: b.text ?? "", ref: b.ref };
+    if (b.kind === "image") return b.width ? { kind: "image", text: b.text ?? "", ref: b.ref, width: b.width } : { kind: "image", text: b.text ?? "", ref: b.ref };
     if (b.kind === "heading") out.level = b.level;
     if (b.marks?.length) out.marks = b.marks;
     if (b.mentions?.length) out.mentions = b.mentions;

@@ -538,3 +538,11 @@ dialog.album-dialog::backdrop { background: rgba(20, 22, 26, .45); }
 .design-pair { display: inline-block; min-width: 2.4em; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; font-weight: 600; text-align: center; }
 .att-origin .chip { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--danger-soft); color: var(--danger); }
 .pm-take-over { font-size: 13px; }
+
+/* Image sizes (ADR-0056): the frame takes the width, the corner handle
+   resizes while editing. */
+.pm-image-frame { position: relative; display: inline-block; max-width: 100%; vertical-align: top; }
+.pm-image-frame img { display: block; margin: 0 auto; }
+.pm-resize { display: none; position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px; border-radius: 3px; background: var(--accent); border: 2px solid var(--surface); cursor: nwse-resize; touch-action: none; }
+.pm-image.pm-sizable:hover .pm-resize, .pm-image.pm-sizable.ProseMirror-selectednode .pm-resize { display: block; }
+.pm-image-size { font-size: 13px; padding: 2px 4px; }

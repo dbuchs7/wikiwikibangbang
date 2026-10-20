@@ -108,6 +108,9 @@ type Block struct {
 	// Checked is whether a task is done; Tone is a panel's tone (ADR-0042).
 	Checked bool   `json:",omitempty"`
 	Tone    string `json:",omitempty"`
+	// Width is an image's width in percent of the text column, 10 to 100;
+	// 0 shows it at its own size, at most the column (ADR-0056).
+	Width int `json:",omitempty"`
 }
 
 // Doc is a structured document body (ADR-0001: a block document, not HTML
