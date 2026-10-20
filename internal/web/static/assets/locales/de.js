@@ -105,7 +105,7 @@ export default {
   "item.guarded": "Automatisch eingeschränkt: Dieser Eintrag scheint schützenswerte Daten zu enthalten, etwa ein Passwort. Nur die verfassende Person und die Bereichsadministratoren können ihn lesen, bis eine Administratorin oder ein Administrator die Einschränkung unter Governance aufhebt.",
   "item.meta": "{type} · {presence}",
   "item.new": "Neuer Eintrag",
-  "item.properties": "Eigenschaften",
+  "item.properties": "Eigner und Details",
   "item.purge": "Endgültig löschen",
   "item.purgeConfirm": "Endgültig löschen? Der Inhalt kann nicht wiederhergestellt werden.",
   "item.restore": "Wiederherstellen",
@@ -412,5 +412,11 @@ export default {
   "account.avatarSet": "Wird neben Ihrem Namen gezeigt.",
   "account.avatarChoose": "Bild wählen",
   "account.avatarRemove": "Bild entfernen",
-  "account.avatarNotImage": "Diese Datei ist kein Bild, das der Browser lesen kann."
+  "account.avatarNotImage": "Diese Datei ist kein Bild, das der Browser lesen kann.",
+  "item.edit": "Bearbeiten",
+  "item.done": "Fertig",
+  "item.noBody": "Dieser Typ hat keinen Text; seine Angaben stehen rechts.",
+  "item.side": "Zu diesem Eintrag",
+  "access.open": "Offen: alle mit einer Rolle im Bereich",
+  "access.restricted": "Eingeschränkt"
 };

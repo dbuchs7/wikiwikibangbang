@@ -107,7 +107,7 @@ export default {
   "item.guarded": "Restricted automatically: this item seems to contain sensitive data, such as a password. Only its author and the space administrators can read it until an administrator lifts the restriction under Governance.",
   "item.meta": "{type} · {presence}",
   "item.new": "New item",
-  "item.properties": "Properties",
+  "item.properties": "Owner and details",
   "item.purge": "Delete for good",
   "item.purgeConfirm": "Delete for good? The content cannot be recovered.",
   "item.restore": "Restore",
@@ -414,5 +414,11 @@ export default {
   "account.avatarSet": "Shown next to your name.",
   "account.avatarChoose": "Choose a picture",
   "account.avatarRemove": "Remove the picture",
-  "account.avatarNotImage": "This file is not an image the browser can read."
+  "account.avatarNotImage": "This file is not an image the browser can read.",
+  "item.edit": "Edit",
+  "item.done": "Done",
+  "item.noBody": "This type has no text; its details are on the right.",
+  "item.side": "About this item",
+  "access.open": "Open: everyone with a role in the space",
+  "access.restricted": "Restricted"
 };

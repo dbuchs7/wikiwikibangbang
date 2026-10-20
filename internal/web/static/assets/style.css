@@ -450,3 +450,46 @@ button.watch-bell { display: inline-flex; align-items: center; justify-content: 
   background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 button.watch-bell:hover { background: var(--row-hover); color: var(--text); border-color: var(--border-strong); }
 button.watch-bell svg { width: 20px; height: 20px; }
+/* An item: its text, read or edited in place, and a column of what
+   belongs to it (ADR-0051). */
+.item-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.item-main { min-width: 0; }
+.item-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.side-card > h2, .item-side > section > h2 { font-size: 15px; margin: 0 0 8px; }
+.item-side > section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin: 0; }
+.item-side table { width: 100%; font-size: 13px; }
+.item-side table.history td { padding: 4px 6px; overflow-wrap: anywhere; }
+.item-side .props th { width: 35%; }
+.item-side .props input, .item-side .props select { max-width: 100%; }
+#body.reading .pm-editor .ProseMirror { min-height: 0; }
+#body.editing { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius); }
+.item-title { display: inline-flex; align-items: center; gap: 8px; }
+.item-title .lock { color: #a15c00; }
+/* The access bar: an open lock on calm green while everyone in the space may
+   read; a closed lock on amber when access is narrowed. */
+#access.access-open { border-color: #b7dfc3; background: #f1faf3; }
+#access.access-open .access-bar { color: #1d6b34; }
+#access.access-restricted { border-color: #f0bf73; background: #fff5e6; }
+#access.access-restricted .access-bar { color: #8a4b00; }
+.access-bar { display: flex; align-items: center; gap: 8px; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) #access.access-open { background: #10291a; border-color: #2c6b41; }
+  :root:not([data-theme="light"]) #access.access-open .access-bar { color: #8fd6a5; }
+  :root:not([data-theme="light"]) #access.access-restricted { background: #33240c; border-color: #8a5a17; }
+  :root:not([data-theme="light"]) #access.access-restricted .access-bar { color: #f5c37a; }
+}
+@media (max-width: 1100px) {
+  .item-layout { grid-template-columns: minmax(0, 1fr); }
+}
+/* Fields in the side column: the name above, the value and its button
+   beside each other, so nothing reaches past the card. */
+.item-side .props, .item-side .props tbody { display: block; }
+.item-side .props tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.item-side .props th { grid-column: 1 / -1; width: auto; padding: 0; font-weight: 500; color: var(--muted); }
+.item-side .props td { padding: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.item-side .props td input, .item-side .props td select { width: 100%; }
+.item-side .props td:last-child button:not(.link) { padding: 6px 10px; font-size: 13px; }
+.item-side .upload { display: flex; flex-direction: column; gap: 4px; }
+.item-side .upload input { max-width: 100%; }
+.item-side form.inline { flex-wrap: wrap; }

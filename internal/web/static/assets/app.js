@@ -326,6 +326,21 @@ function labelChrome() {
   close.setAttribute("aria-label", t("common.close"));
 }
 
+// lockIcon draws a padlock, closed or open, as SVG.
+function lockIcon(closed) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", width: "18", height: "18", "aria-hidden": "true", class: "lock" })) svg.setAttribute(k, v);
+  const body = document.createElementNS(ns, "rect");
+  for (const [k, v] of Object.entries({ x: "5", y: "11", width: "14", height: "10", rx: "2", fill: "currentColor" })) body.setAttribute(k, v);
+  const shackle = document.createElementNS(ns, "path");
+  // An open lock's shackle swings up and away on the right.
+  shackle.setAttribute("d", closed ? "M8 11V8a4 4 0 0 1 8 0v3" : "M8 11V7a4 4 0 0 1 7.5-2");
+  for (const [k, v] of Object.entries({ fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round" })) shackle.setAttribute(k, v);
+  svg.append(shackle, body);
+  return svg;
+}
+
 // bellIcon draws a bell, as SVG: h() makes HTML elements only; filled
 // fills it.
 function bellIcon(filled = false) {
@@ -507,7 +522,7 @@ async function route() {
       case "board": return await boardView(arg, arg2);
       case "links": return await linksView(arg);
       case "governance": return arg ? await governanceView(arg) : await governanceOverview();
-      case "item": return await itemView(arg);
+      case "item": return await itemView(arg, params);
       case "label": return await labelView(arg);
       case "notifications": return await notificationsView();
       case "search": return await searchView(arg || "");
@@ -1124,14 +1139,19 @@ function newItemForm({ space, spaces = null, types, parent = null, heading = t("
     const target = spaceSelect ? spaceSelect.value : space;
     const below = under && under.checked && !under.disabled ? parent.id : "";
     const { item } = await post("/api/items", { space: target, type: ty.name, parent: below, title: f.querySelector("[name=title]").value, properties });
-    location.hash = "#/item/" + encodeURIComponent(item.key);
+    // A new item with a body opens for writing (ADR-0051).
+    location.hash = "#/item/" + encodeURIComponent(item.key) + (ty.body ? "?edit" : "");
   });
   return f;
 }
 
 // --- one item ---------------------------------------------------------------
 
-async function itemView(ref) {
+// itemView shows an item for reading; with ?edit its title and body are
+// edited in place, in the live session (ADR-0051). The column on the right
+// holds what belongs to the item besides its text: owner and details,
+// comments, files, relations, access and history.
+async function itemView(ref, params = new URLSearchParams()) {
   const show = screen();
   const { item, editable } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
@@ -1159,6 +1179,8 @@ async function itemView(ref) {
   // Changes are offered only to who may make them (role, restriction,
   // import hold); the server decides again on every request.
   const canEdit = live && editable;
+  const editing = canEdit && params.has("edit");
+  const itemHref = "#/item/" + encodeURIComponent(item.key);
   here.space = item.space;
   here.parent = item.id;
   const threads = commentThreads(path, comments, canEdit);
@@ -1174,12 +1196,13 @@ async function itemView(ref) {
     if (after || !siblings.next) reorder.push(h("button", { text: t("item.moveDown"), onclick: () => place(after ? after.id : "") }));
   }
 
-  const title = canEdit
+  const restricted = (item.restriction?.read?.length || 0) + (item.restriction?.edit?.length || 0) > 0;
+  const title = editing
     ? form({ class: "inline", id: "title" }, [
       h("input", { name: "title", value: item.title, class: "title", "aria-label": t("col.title") }),
       h("button", { type: "submit", text: t("item.saveTitle") }),
     ], async (data) => { await put(path + "/title", { title: data.get("title") }); route(); })
-    : h("h1", { text: item.title || t("item.erased") });
+    : h("h1", { class: "item-title" }, restricted ? lockIcon(true) : null, item.title || t("item.erased"));
 
   const props = h("table", { class: "props" }, type.fields.map((f) => {
     const input = propertyInput(f, item.properties[f.name]);
@@ -1212,41 +1235,63 @@ async function itemView(ref) {
   const guarded = item.restriction?.read?.length && lastRestriction?.actor === "governance";
   // The tree opens down to the page and shows the page's own children.
   const tree = pageTree({ space: item.space, current: item.id, newPage: canEdit ? newHref(item.space, item.id) : "", open: [...open, item.id], onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
+  // Leaving the editor stores what is not yet saved, then shows the page.
+  let session = null;
+  const done = h("button", { type: "button", id: "edit-done", class: "primary", text: t("item.done"), onclick: async () => {
+    done.disabled = true;
+    try { if (session) await session.finish(); } finally { location.hash = itemHref; }
+  } });
+  const headActions = h("p", { class: "actions" },
+    live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null,
+    editing ? done : canEdit ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null,
+    canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null);
+  let body = null;
+  if (type.body) {
+    const b = bodySection(item, embeds.embeds, editing, threads);
+    body = b.element;
+    session = b.session;
+  }
+  const card = (id, ...content) => h("section", { class: "side-card", id }, ...content);
+  const details = card("details",
+    h("h2", { text: t("item.properties") }),
+    type.fields.length ? props : null,
+    transitions.length ? h("p", { class: "actions-row" }, transitions) : null,
+    labelsLine(path, item, canEdit, status));
+  const more = reorder.length || actions.length ? card("item-actions", h("p", { class: "actions-row" }, reorder, actions)) : null;
   show(withTree(tree,
     h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
-    h("div", { class: "page-head" }, title,
-      canEdit ? h("p", { class: "actions" }, link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child")) : null),
+    h("div", { class: "page-head" }, title, headActions),
     guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
     h("p", { class: "muted" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : "", t("item.version", { n: item.version })),
-    labelsLine(path, item, canEdit, status),
-    item.presence === "live" ? h("p", {}, watchButton(path, watches.some((w) => w.item === item.id), status)) : null,
     status,
-    transitions.length ? h("p", {}, t("item.transitions"), transitions) : null,
-    type.fields.length ? h("section", {}, h("h2", { text: t("item.properties") }), props) : null,
-    type.body ? bodyEditor(item, embeds.embeds, live, threads) : null,
-    await relationsSection(path, out.relations, inc.relations, item.id, canEdit),
-    await accessSection(path, item, canEdit, spaceAdmin),
-    attachmentsSection(path, attachments, canEdit),
-    threads.section,
-    h("p", {}, reorder, actions),
-    canEdit ? newItemForm({ space: item.space, types, parent: item, heading: t("item.newChild"), id: "new-child" }) : null,
-    historySection(path, history.events, canEdit),
+    h("div", { class: "item-layout" },
+      h("div", { class: "item-main" }, body || h("p", { class: "muted", text: t("item.noBody") })),
+      h("aside", { class: "item-side", "aria-label": t("item.side") },
+        details,
+        threads.section,
+        attachmentsSection(path, attachments, canEdit),
+        await relationsSection(path, out.relations, inc.relations, item.id, canEdit),
+        await accessSection(path, item, canEdit, spaceAdmin),
+        historySection(path, history.events, canEdit),
+        more)),
   ));
 }
 
-// bodyEditor edits a live item's body in its live session (ADR-0010):
-// changes reach everyone at once and are saved when one leaves a block.
-// A trashed or erased item's body is only shown. threads highlights the
-// passages commented on and starts inline comments (ADR-0047).
-function bodyEditor(item, embeds, live, threads) {
+// bodySection shows an item's body: for reading, with the passages
+// commented on highlighted and commenting on a selection offered; or, when
+// editing, in its live session (ADR-0010), where changes reach everyone at
+// once and are saved as one leaves a block.
+function bodySection(item, embeds, editing, threads) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
-  if (!live) {
-    return h("section", { id: "body" }, h("h2", { text: t("item.body") }), readOnlyBody(item, embeds));
+  if (!editing) {
+    const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
+      extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined });
+    return { element: h("section", { id: "body", class: "reading" }, view.element), session: null };
   }
   const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item),
     extra: [threads.plugin], comment: threads.start });
   onLeave(session.close);
-  return h("section", { id: "body" }, h("h2", { text: t("item.body") }), session.element);
+  return { element: h("section", { id: "body", class: "editing" }, session.element), session };
 }
 
 // relationsSection lists an item's relations both ways, with the related
@@ -1310,9 +1355,10 @@ async function accessSection(path, item, canEdit, spaceAdmin) {
     await put(path + "/restriction", next);
     route();
   }) : null;
-  if (!canEdit && !restricted && !me.erasure) return null;
-  return h("section", { id: "access" },
-    h("h2", { text: t("access.title") }),
+  // Open is the normal case; a restriction is for sensitive content, and
+  // shows as a closed lock on a coloured bar (ADR-0051).
+  return h("section", { id: "access", class: "side-card " + (restricted ? "access-restricted" : "access-open") },
+    h("h2", { class: "access-bar" }, lockIcon(restricted), restricted ? t("access.restricted") : t("access.open")),
     h("p", {}, t("access.read", { who: listed(read) }), h("br"), t("access.edit", { who: listed(edit) })),
     canEdit ? h("p", { class: "actions-row" },
       h("button", { type: "button", class: "secondary", text: t("access.onlyMe"), onclick: () => set({ read: [me.user.id], edit: [me.user.id] }) }),
