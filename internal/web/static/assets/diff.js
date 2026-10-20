@@ -17,6 +17,7 @@ export function line(b) {
     case "table": return text.split("\n").map((r) => "| " + r.split("\t").join(" | ") + " |").join("\n");
     case "toc": return "[" + t("editor.toc") + "]";
     case "children": return "[" + t("editor.children") + "]";
+    case "divider": return "———";
     case "embed": return "[" + t("editor.embed") + " " + (b.ref || "").slice(0, 8) + "]";
     default: return text;
   }

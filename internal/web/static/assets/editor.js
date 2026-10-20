@@ -20,31 +20,44 @@ import { pickFromAlbum, pictureFile, captionOf } from "./album.js";
 // (imported bodies), so saving does not drop their relations.
 const bid = { bid: { default: null } };
 const textAttrs = { ...bid, mentions: { default: [] } };
+// Paragraphs, headings, quotes and panels can be aligned (ADR-0059). The
+// alignment is a class, as the content security policy refuses style
+// attributes; pasted text keeps an alignment it states.
+const alignAttrs = { ...textAttrs, align: { default: "" } };
+const alignClass = (n) => (n.attrs.align ? "pm-align-" + n.attrs.align : null);
+const pastedAlign = (dom) => {
+  const a = dom.style?.textAlign || dom.getAttribute("align") || "";
+  return ["center", "right", "justify"].includes(a) ? a : "";
+};
 
 export const schema = new Schema({
   nodes: {
     doc: { content: "block+" },
-    paragraph: { group: "block", content: "inline*", attrs: textAttrs, parseDOM: [{ tag: "p" }], toDOM: () => ["p", 0] },
+    paragraph: { group: "block", content: "inline*", attrs: alignAttrs, parseDOM: [{ tag: "p", getAttrs: (dom) => ({ align: pastedAlign(dom) }) }],
+      toDOM: (n) => ["p", { class: alignClass(n) }, 0] },
     heading: {
       group: "block", content: "inline*", defining: true,
-      attrs: { ...textAttrs, level: { default: 1 } },
-      parseDOM: [1, 2, 3, 4, 5, 6].map((l) => ({ tag: "h" + l, attrs: { level: Math.min(l, 3) } })),
-      toDOM: (n) => ["h" + (n.attrs.level + 1), 0], // h1 is the item's title
+      attrs: { ...alignAttrs, level: { default: 1 } },
+      parseDOM: [1, 2, 3, 4, 5, 6].map((l) => ({ tag: "h" + l, getAttrs: (dom) => ({ level: Math.min(l, 3), align: pastedAlign(dom) }) })),
+      toDOM: (n) => ["h" + (n.attrs.level + 1), { class: alignClass(n) }, 0], // h1 is the item's title
     },
     bullet: { group: "block", content: "inline*", attrs: textAttrs, parseDOM: [{ tag: "ul > li" }], toDOM: () => ["div", { class: "pm-bullet" }, 0] },
     ordered: { group: "block", content: "inline*", attrs: textAttrs, parseDOM: [{ tag: "ol > li" }], toDOM: () => ["div", { class: "pm-ordered" }, 0] },
-    quote: { group: "block", content: "inline*", attrs: textAttrs, parseDOM: [{ tag: "blockquote" }], toDOM: () => ["blockquote", 0] },
+    quote: { group: "block", content: "inline*", attrs: alignAttrs, parseDOM: [{ tag: "blockquote" }], toDOM: (n) => ["blockquote", { class: alignClass(n) }, 0] },
     code_block: { group: "block", content: "text*", marks: "", code: true, defining: true, attrs: bid, parseDOM: [{ tag: "pre", preserveWhitespace: "full" }], toDOM: () => ["pre", ["code", 0]] },
     // ADR-0042. A task's checkbox and a table's cells are drawn by node
     // views (createEditor); toDOM is what a copy carries.
     task: { group: "block", content: "inline*", attrs: { ...textAttrs, checked: { default: false } }, toDOM: (n) => ["div", { class: "pm-task", "data-checked": String(n.attrs.checked) }, 0] },
-    panel: { group: "block", content: "inline*", attrs: { ...textAttrs, tone: { default: "info" } }, toDOM: (n) => ["div", { class: "pm-panel", "data-tone": n.attrs.tone }, 0] },
+    panel: { group: "block", content: "inline*", attrs: { ...alignAttrs, tone: { default: "info" } }, toDOM: (n) => ["div", { class: ["pm-panel", alignClass(n)].filter(Boolean).join(" "), "data-tone": n.attrs.tone }, 0] },
+    // A horizontal rule between blocks (ADR-0059).
+    divider: { group: "block", atom: true, selectable: true, attrs: bid, parseDOM: [{ tag: "hr" }], toDOM: () => ["hr", { class: "pm-divider" }] },
     table: { group: "block", atom: true, selectable: true, attrs: { ...bid, text: { default: "\t\n\t" } }, toDOM: (n) => ["pre", { class: "pm-table" }, n.attrs.text] },
     toc: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-toc" }] },
     children: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-children" }] },
     // An image attachment of the item (ADR-0045), with a plain caption.
     // width is percent of the column, 0 for the picture's own size (ADR-0056).
-    image: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" }, width: { default: 0 } }, toDOM: (n) => ["figure", { class: "pm-image" }, ["figcaption", n.attrs.text]] },
+    // align is left or right (the text flows beside it) or center (ADR-0059).
+    image: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" }, width: { default: 0 }, align: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-image" }, ["figcaption", n.attrs.text]] },
     // Content an importer could not convert (ADR-0023), kept as it came and
     // shown as text; it cannot be created in the editor.
     unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, attrs: bid, toDOM: () => ["pre", { class: "pm-unsupported", title: t("editor.unsupported") }, 0] },
@@ -65,6 +78,10 @@ export const schema = new Schema({
     bold: { parseDOM: [{ tag: "strong" }, { tag: "b" }], toDOM: () => ["strong", 0] },
     italic: { parseDOM: [{ tag: "em" }, { tag: "i" }], toDOM: () => ["em", 0] },
     code: { parseDOM: [{ tag: "code" }], toDOM: () => ["code", 0] },
+    // ADR-0059.
+    underline: { parseDOM: [{ tag: "u" }, { style: "text-decoration=underline" }], toDOM: () => ["u", 0] },
+    strike: { parseDOM: [{ tag: "s" }, { tag: "del" }, { tag: "strike" }, { style: "text-decoration=line-through" }], toDOM: () => ["s", 0] },
+    highlight: { parseDOM: [{ tag: "mark" }], toDOM: () => ["mark", 0] },
     link: {
       attrs: { href: {} }, inclusive: false,
       // Pasted links keep only targets the model allows (ADR-0014).
@@ -105,8 +122,8 @@ export function docFromBlocks(blocks, embeds = []) {
 export function nodeFromBlock(b, embeds = []) {
   const id = b.id ?? null;
   if (b.kind === "table") return schema.nodes.table.create({ bid: id, text: b.text || "" });
-  if (b.kind === "toc" || b.kind === "children") return schema.nodes[b.kind].create({ bid: id });
-  if (b.kind === "image") return schema.nodes.image.create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0 });
+  if (b.kind === "toc" || b.kind === "children" || b.kind === "divider") return schema.nodes[b.kind].create({ bid: id });
+  if (b.kind === "image") return schema.nodes.image.create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0, align: b.align || "" });
   if (b.kind === "embed") {
     const v = embeds.find((e) => e.ref === b.ref);
     return schema.nodes.embed.create({
@@ -122,6 +139,7 @@ export function nodeFromBlock(b, embeds = []) {
   if (type === schema.nodes.heading) attrs.level = b.level || 1;
   if (type === schema.nodes.task) attrs.checked = Boolean(b.checked);
   if (type === schema.nodes.panel) attrs.tone = b.tone || "info";
+  if (type.spec.attrs?.align) attrs.align = b.align || "";
   return type.create(attrs, inlineContent(b.text || "", plain ? [] : b.marks || []));
 }
 
@@ -161,8 +179,13 @@ export function blocksFromDoc(doc) {
 export function blockFromNode(node) {
   if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
   if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
-  if (node.type === schema.nodes.toc || node.type === schema.nodes.children) return { kind: node.type.name };
-  if (node.type === schema.nodes.image) return node.attrs.width ? { kind: "image", text: node.attrs.text, ref: node.attrs.ref, width: node.attrs.width } : { kind: "image", text: node.attrs.text, ref: node.attrs.ref };
+  if (node.type === schema.nodes.toc || node.type === schema.nodes.children || node.type === schema.nodes.divider) return { kind: node.type.name };
+  if (node.type === schema.nodes.image) {
+    const b = { kind: "image", text: node.attrs.text, ref: node.attrs.ref };
+    if (node.attrs.width) b.width = node.attrs.width;
+    if (node.attrs.align) b.align = node.attrs.align;
+    return b;
+  }
   let text = "";
   const marks = [];
   const mentions = new Set((node.attrs && node.attrs.mentions) || []);
@@ -189,6 +212,7 @@ export function blockFromNode(node) {
   if (mentions.size) b.mentions = [...mentions];
   if (node.type === schema.nodes.task && node.attrs.checked) b.checked = true;
   if (node.type === schema.nodes.panel) b.tone = node.attrs.tone;
+  if (node.attrs.align) b.align = node.attrs.align;
   return b;
 }
 
@@ -225,10 +249,42 @@ function plugins() {
     keymap({
       "Mod-z": undo, "Mod-y": redo, "Shift-Mod-z": redo,
       "Mod-b": toggleMark(schema.marks.bold), "Mod-i": toggleMark(schema.marks.italic), "Mod-`": toggleMark(schema.marks.code),
+      "Mod-u": toggleMark(schema.marks.underline), "Mod-Shift-x": toggleMark(schema.marks.strike), "Mod-Shift-h": toggleMark(schema.marks.highlight),
+      "Mod-Shift-l": setAlign(""), "Mod-Shift-e": setAlign("center"), "Mod-Shift-r": setAlign("right"), "Mod-Shift-j": setAlign("justify"),
       Enter: chainCommands(listItem, baseKeymap.Enter),
     }),
     keymap(baseKeymap),
   ];
+}
+
+// setAlign aligns the blocks of the selection that can be aligned
+// (ADR-0059); "" is the default, left.
+export function setAlign(align) {
+  return (state, dispatch) => {
+    const { from, to } = state.selection;
+    const tr = state.tr;
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (node.isTextblock && "align" in node.attrs && node.attrs.align !== align) tr.setNodeMarkup(pos, null, { ...node.attrs, align });
+      return !node.isTextblock;
+    });
+    if (!tr.docChanged) return false;
+    if (dispatch) dispatch(tr);
+    return true;
+  };
+}
+
+// alignOf is the alignment of the block the selection starts in, or null
+// for a block that cannot be aligned.
+function alignOf(state) {
+  const node = state.selection.$from.parent;
+  return node.isTextblock && "align" in node.attrs ? node.attrs.align : null;
+}
+
+// markActive reports whether a mark applies at the selection.
+function markActive(state, type) {
+  const { from, $from, to, empty } = state.selection;
+  if (empty) return Boolean(type.isInSet(state.storedMarks || $from.marks()));
+  return state.doc.rangeHasMark(from, to, type);
 }
 
 // --- node views (ADR-0042) -----------------------------------------------------
@@ -355,14 +411,23 @@ function imageView(node, view, getPos, files) {
   // The width is set through the style object, which the content security
   // policy allows (unlike a style attribute). A width in percent applies to
   // the frame, which is a share of the column; the picture fills it.
+  // A picture floated left or right takes its width (half the column by
+  // default) as a whole figure, so the text flows beside it (ADR-0059).
   const showWidth = (w) => {
-    frame.style.width = w ? `${w}%` : "";
-    img.style.width = w ? "100%" : "";
+    const floats = node.attrs.align === "left" || node.attrs.align === "right";
+    dom.style.width = floats ? `${w || 50}%` : "";
+    frame.style.width = floats ? "100%" : w ? `${w}%` : "";
+    img.style.width = w || floats ? "100%" : "";
   };
   const setWidth = (w) => {
     const pos = getPos();
     if (pos === undefined || dom.classList.contains("pm-locked")) return showWidth(node.attrs.width);
     view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, width: w }));
+  };
+  // Left and right let the text flow beside the picture (ADR-0059).
+  const setImageAlign = (align) => {
+    const pos = getPos();
+    if (pos !== undefined && !dom.classList.contains("pm-locked")) view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, align }));
   };
   // Dragging the corner sets the width in steps of 5 percent of the column.
   handle.addEventListener("pointerdown", (e) => {
@@ -422,13 +487,14 @@ function imageView(node, view, getPos, files) {
     }
   };
   const render = () => {
-    const key = node.attrs.ref + node.attrs.text + node.attrs.width + view.editable;
+    const key = node.attrs.ref + node.attrs.text + node.attrs.width + node.attrs.align + view.editable;
     if (shown === key) return;
     shown = key;
     img.src = files ? files.url(node.attrs.ref) : "";
     img.alt = node.attrs.text;
     showWidth(node.attrs.width);
     dom.classList.toggle("pm-sizable", view.editable);
+    for (const a of ["left", "center", "right"]) dom.classList.toggle("pm-image-" + a, node.attrs.align === a);
     if (!view.editable) return caption.replaceChildren(node.attrs.text);
     const size = h("select", { class: "pm-image-size", "aria-label": t("editor.imageSize"), onchange: (e) => setWidth(Number(e.target.value)) },
       [...new Set([...imageSizes, node.attrs.width])].sort((a, b) => a - b).map((w) =>
@@ -443,7 +509,10 @@ function imageView(node, view, getPos, files) {
     const status = h("span", { class: "error", role: "status" });
     const origin = files?.origin?.(node.attrs.ref);
     // replaceChildren takes nodes and strings only: no arrays, no null.
-    caption.replaceChildren(...[input, " ", size,
+    const place = h("select", { class: "pm-image-align", "aria-label": t("editor.imageAlign"), onchange: (e) => setImageAlign(e.target.value) },
+      [["", t("editor.imageAlignDefault")], ["left", t("editor.imageAlignLeft")], ["center", t("editor.imageAlignCenter")], ["right", t("editor.imageAlignRight")]]
+        .map(([v, label]) => h("option", { value: v, text: label, selected: v === node.attrs.align })));
+    caption.replaceChildren(...[input, " ", size, " ", place,
       ...(files?.isDrawing?.(node.attrs.ref) ? [" ", h("button", { type: "button", class: "link pm-redraw", text: t("draw.edit"), onclick: () => redraw(status) })] : []),
       ...(origin?.newer ? [" ", h("button", { type: "button", class: "link pm-take-over", text: t("att.takeOver", { key: origin.item.key }), onclick: () => takeOver(status, origin) })] : []),
       status]);
@@ -465,8 +534,12 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
   const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
+  // The toolbar shows what applies at the selection, after every change,
+  // one's own or another's in a live session (ADR-0059).
+  let onUpdate = () => {};
+  const statePlugin = new Plugin({ view: () => ({ update: (v) => onUpdate(v.state) }) });
   const view = new EditorView(mount, {
-    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...plugins(), tocPlugin] }),
+    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...plugins(), tocPlugin, statePlugin] }),
     editable: () => editable,
     attributes: { "aria-label": t("editor.body"), role: "textbox", "aria-multiline": "true" },
     nodeViews: {
@@ -503,7 +576,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind === "drawing") draw();
     else if (kind === "album") fromAlbum();
     else if (kind) insertBlock(schema.nodes[kind].create());
-  } }, [["", t("editor.insert")], ["table", t("editor.table")], ["toc", t("editor.toc")], ["children", t("editor.children")],
+  } }, [["", t("editor.insert")], ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["children", t("editor.children")],
     files ? ["image", t("editor.image")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
@@ -571,16 +644,45 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     if (!anchor) status.textContent = t("editor.commentNeedsSelection");
     else comment(anchor);
   } }) : null;
+  // The toolbar's groups; buttons that show a state (a mark, an alignment)
+  // are pressed while it applies at the selection (ADR-0059).
+  const group = (...els) => h("span", { class: "pm-group" }, ...els.filter(Boolean));
+  const toggle = (title, label, cmd, isOn, cls) => {
+    const el = h("button", { type: "button", title, "aria-label": title, "aria-pressed": "false", class: cls || null, onclick: run(cmd) }, label);
+    return { el, isOn };
+  };
+  const markButton = (name, title, label) => toggle(title, label, toggleMark(schema.marks[name]), (st) => markActive(st, schema.marks[name]));
+  const markButtons = [
+    markButton("bold", t("editor.bold"), h("strong", { text: "B" })),
+    markButton("italic", t("editor.italic"), h("em", { text: "I" })),
+    markButton("underline", t("editor.underline"), h("u", { text: "U" })),
+    markButton("strike", t("editor.strike"), h("s", { text: "S" })),
+    markButton("highlight", t("editor.highlight"), h("mark", { text: "ab" })),
+    markButton("code", t("editor.code"), "</>"),
+  ];
+  // An alignment icon: four lines, drawn by the stylesheet.
+  const alignIcon = (a) => h("span", { class: "pm-ico pm-ico-" + a, "aria-hidden": "true" }, h("i"), h("i"), h("i"), h("i"));
+  const alignButtons = [["", t("editor.alignLeft"), "left"], ["center", t("editor.alignCenter"), "center"], ["right", t("editor.alignRight"), "right"], ["justify", t("editor.alignJustify"), "justify"]]
+    .map(([a, title, icon]) => toggle(title, alignIcon(icon), setAlign(a), (st) => alignOf(st) === a));
+  const listButton = (kind, label, title) => h("button", { type: "button", title, "aria-label": title, text: label, onclick: () => {
+    const node = schema.nodes[kind];
+    const inIt = view.state.selection.$from.parent.type === node;
+    run(setBlockType(inIt ? schema.nodes.paragraph : node))();
+  } });
+  const stateful = [...markButtons, ...alignButtons];
+  const refresh = (st) => {
+    for (const b of stateful) b.el.setAttribute("aria-pressed", String(Boolean(b.isOn(st))));
+    const canAlign = alignOf(st) !== null;
+    for (const b of alignButtons) b.el.disabled = !canAlign;
+  };
   const toolbar = !editable
     ? (commentButton ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, commentButton, status) : null)
-    : h("div", { class: "pm-toolbar", role: "toolbar" },
-    kindSelect,
-    insertSelect,
-    picker,
-    h("button", { type: "button", title: t("editor.bold"), onclick: run(toggleMark(schema.marks.bold)) }, h("strong", { text: "B" })),
-    h("button", { type: "button", title: t("editor.italic"), onclick: run(toggleMark(schema.marks.italic)) }, h("em", { text: "I" })),
-    h("button", { type: "button", title: t("editor.code"), onclick: run(toggleMark(schema.marks.code)), text: "</>" }),
-    target,
+    : h("div", { class: "pm-toolbar", role: "toolbar", "aria-label": t("editor.toolbar") },
+    group(kindSelect),
+    group(...markButtons.map((b) => b.el)),
+    group(...alignButtons.map((b) => b.el)),
+    group(listButton("bullet", "•", t("editor.bullet")), listButton("ordered", "1.", t("editor.ordered")), listButton("task", "☑", t("editor.task"))),
+    group(target,
     h("button", { type: "button", text: t("editor.link"), onclick: withTarget(async (href) => {
       if (!isSafeLink(href)) throw new Error(t("editor.linkNeedsURL"));
       if (view.state.selection.empty) throw new Error(t("editor.linkNeedsSelection"));
@@ -595,11 +697,16 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       const node = schema.nodes.embed.create({ ref: it.id, label: `${it.key} ${it.title}`, href: "#/item/" + encodeURIComponent(it.key) });
       const { $to } = view.state.selection;
       view.dispatch(view.state.tr.insert($to.depth >= 1 ? $to.after(1) : $to.pos, node));
-    }) }),
+    }) })),
+    group(insertSelect, picker),
     commentButton,
     h("button", { type: "button", title: t("editor.undo"), text: "↶", onclick: run(undo) }),
     h("button", { type: "button", title: t("editor.redo"), text: "↷", onclick: run(redo) }),
     status,
   );
+  if (editable) {
+    onUpdate = refresh;
+    refresh(view.state);
+  }
   return { element: h("div", { class: "pm-wrap" }, toolbar, mount), blocks: () => blocksFromDoc(view.state.doc), view };
 }

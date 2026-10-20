@@ -50,10 +50,11 @@ type tool struct {
 const blockFormat = "A body is a list of blocks, each an object with kind and text. Kinds: paragraph, " +
 	"heading (level 1-3), bullet and ordered (one block per list item), task (checked true or false), quote, code, " +
 	"panel (tone info, note, warning, tip or error), table (text holds rows separated by \\n and cells by \\t; the first row " +
-	"is the header), toc and children (no text: a table of contents and a list of child pages), embed (ref: an item ID), " +
-	"image (ref: an attachment ID of the item, text the caption, width 10-100 percent of the column or absent for its own size). " +
+	"is the header), toc, children and divider (no text: a table of contents, a list of child pages, a horizontal rule), embed (ref: an item ID), " +
+	"image (ref: an attachment ID of the item, text the caption, width 10-100 percent of the column or absent for its own size, align left or right to let text flow beside it, or center). " +
+	"Paragraphs, headings, quotes and panels may have align center, right or justify. " +
 	"Inline formats are marks over the text, counted in Unicode code points: " +
-	"{\"type\": \"bold\"|\"italic\"|\"code\"|\"link\" (with href)|\"mention\" (with ref, an item ID), \"start\": 0, \"end\": 5}. " +
+	"{\"type\": \"bold\"|\"italic\"|\"underline\"|\"strike\"|\"highlight\"|\"code\"|\"link\" (with href)|\"mention\" (with ref, an item ID), \"start\": 0, \"end\": 5}. " +
 	"Example: [{\"kind\":\"heading\",\"level\":1,\"text\":\"Runbook\"},{\"kind\":\"paragraph\",\"text\":\"Stop the writers first.\"," +
 	"\"marks\":[{\"type\":\"bold\",\"start\":0,\"end\":4}]},{\"kind\":\"bullet\",\"text\":\"db1\"},{\"kind\":\"bullet\",\"text\":\"db2\"}]."
 

@@ -219,3 +219,31 @@ func TestImagesHaveAWidth(t *testing.T) {
 		}
 	}
 }
+
+// TestBlocksAreAligned: text blocks align center, right or justify, images
+// left, center or right; nothing else is aligned. A divider holds nothing,
+// and the new marks carry no target (ADR-0059).
+func TestBlocksAreAligned(t *testing.T) {
+	const ref = "0123456789abcdef0123456789abcdef"
+	ok := []Block{
+		{Kind: Paragraph, Text: "x", Align: "justify"}, {Kind: Heading, Level: 2, Text: "x", Align: "center"},
+		{Kind: Quote, Text: "x", Align: "right"}, {Kind: Panel, Tone: "info", Text: "x", Align: "center"},
+		{Kind: Image, Ref: ref, Align: "left"}, {Kind: Divider},
+		{Kind: Paragraph, Text: "abc", Marks: []Mark{{Type: MarkUnderline, Start: 0, End: 1}, {Type: MarkStrike, Start: 1, End: 2}, {Type: MarkHighlight, Start: 2, End: 3}}},
+	}
+	for _, b := range ok {
+		if err := CheckBlock(b, "self"); err != nil {
+			t.Errorf("%+v: %v", b, err)
+		}
+	}
+	bad := []Block{
+		{Kind: Paragraph, Text: "x", Align: "left"}, {Kind: Image, Ref: ref, Align: "justify"},
+		{Kind: BulletItem, Text: "x", Align: "center"}, {Kind: CodeBlock, Text: "x", Align: "right"},
+		{Kind: Divider, Text: "x"}, {Kind: Paragraph, Text: "x", Marks: []Mark{{Type: MarkHighlight, Start: 0, End: 1, Href: "https://x.ch"}}},
+	}
+	for _, b := range bad {
+		if err := CheckBlock(b, "self"); !errors.Is(err, ErrValidation) {
+			t.Errorf("%+v: %v", b, err)
+		}
+	}
+}

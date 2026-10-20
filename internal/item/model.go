@@ -65,6 +65,9 @@ const (
 	Table    BlockKind = "table"
 	TOC      BlockKind = "toc"
 	Children BlockKind = "children"
+	// Divider is a horizontal rule between blocks; it holds nothing
+	// (ADR-0059).
+	Divider BlockKind = "divider"
 	// Image shows an image attachment of the item; Ref names the
 	// attachment and Text is its caption (ADR-0045).
 	Image BlockKind = "image"
@@ -82,6 +85,18 @@ const (
 	MarkCode    MarkType = "code"
 	MarkLink    MarkType = "link"    // Href holds the target
 	MarkMention MarkType = "mention" // Ref names the mentioned item
+	// Underline, strike-through and highlight (ADR-0059).
+	MarkUnderline MarkType = "underline"
+	MarkStrike    MarkType = "strike"
+	MarkHighlight MarkType = "highlight"
+)
+
+// TextAligns are the alignments of a block of text, ImageAligns those of
+// an image: left and right float it with the text flowing beside it
+// (ADR-0059). Empty is the default: left for text, centred for images.
+var (
+	TextAligns  = []string{"center", "right", "justify"}
+	ImageAligns = []string{"left", "center", "right"}
 )
 
 // Mark formats the text between Start and End, counted in Unicode code
@@ -111,6 +126,10 @@ type Block struct {
 	// Width is an image's width in percent of the text column, 10 to 100;
 	// 0 shows it at its own size, at most the column (ADR-0056).
 	Width int `json:",omitempty"`
+	// Align is the alignment of a paragraph, heading, quote or panel (one of
+	// TextAligns) or of an image (one of ImageAligns); empty is the default
+	// (ADR-0059).
+	Align string `json:",omitempty"`
 }
 
 // Doc is a structured document body (ADR-0001: a block document, not HTML

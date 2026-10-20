@@ -46,7 +46,10 @@ import (
 //     (ADR-0056). Versions 1 to 12 are still read.
 //   - 14: the kinds HoldSet, with hold, and HoldReleased, with outcome and
 //     text, both sealed content (ADR-0058). Versions 1 to 13 are still read.
-const CodecVersion = 14
+//   - 15: blocks may carry Align, the block kind divider, and the marks
+//     underline, strike and highlight (ADR-0059). Versions 1 to 14 are
+//     still read.
+const CodecVersion = 15
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
