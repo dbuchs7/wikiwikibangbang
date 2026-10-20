@@ -904,6 +904,16 @@ async function mailTo(sink, address) {
     const darkAccent = await page.evaluate(() => { const s = getComputedStyle(document.documentElement); return [s.getPropertyValue("--accent").trim(), s.getPropertyValue("--accent-ink").trim()]; });
     check(darkAccent[0] === "#e35959" && darkAccent[1] === "#0b0d12", "the dark scheme's accent and its text: " + darkAccent);
     await page.emulateMedia({ colorScheme: "light" });
+    // An own stylesheet without a dark look turns the dark scheme off for everyone (ADR-0070).
+    await page.fill("#design [name=css]", ".brand { letter-spacing: .5px; }");
+    await page.click("#design button[type=submit]");
+    await page.waitForSelector("#design-dark:has-text('dark scheme is off')");
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#f5f6f8");
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.fill("#design [name=css]", "");
+    await page.click("#design button[type=submit]");
+    await page.waitForSelector("#design-dark:has-text('stays on')");
     // Yellow is unreadable as link text on white: saved, with a warning.
     await page.fill("#design [name=accent]", "#ffcc00");
     await page.click("#design button[type=submit]");

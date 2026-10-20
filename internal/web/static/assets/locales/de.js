@@ -631,6 +631,8 @@ export default {
   "design.fontMono": "Nichtproportional",
   "design.fontUpload": "Die hochgeladene Schriftdatei",
   "design.fontFamily": "Auf den Computern installierte Schrift, zuerst versucht (optional)",
+  "design.darkHint": "Der Nachtmodus bleibt eingeschaltet, solange das eigene Stylesheet leer ist oder sein dunkles Aussehen mit @media (prefers-color-scheme: dark) { … } festlegt; ein eigenes Stylesheet ohne solche Regeln schaltet den Nachtmodus für die ganze Instanz aus.",
+  "design.darkOff": "Der Nachtmodus ist ausgeschaltet: Das eigene Stylesheet enthält keine Regeln @media (prefers-color-scheme: dark) { … }, deshalb sehen alle das helle Aussehen. Mit solchen Regeln lässt sich ein eigenes dunkles Aussehen anbieten.",
   "design.css": "Eigenes Stylesheet (CSS)",
   "design.cssFile": "Stylesheet aus einer Datei laden",
   "design.saved": "Gespeichert. Das Erscheinungsbild gilt sofort für alle.",

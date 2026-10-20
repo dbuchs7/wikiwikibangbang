@@ -82,3 +82,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0067](0067-copying-pages-with-their-child-pages.md) | Copying pages with their child pages, and moving them by a form | Accepted | Landed |
 | [0068](0068-oauth-for-ai-assistants.md) | OAuth for AI assistants on the MCP endpoint | Accepted | Landed |
 | [0069](0069-deleting-a-space-in-two-steps.md) | Deleting a space in two steps | Accepted | Landed |
+| [0070](0070-an-own-stylesheet-without-a-dark-look-turns-the-dark-scheme-off.md) | An own stylesheet without a dark look turns the dark scheme off | Accepted | Landed |

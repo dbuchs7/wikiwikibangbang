@@ -1,0 +1,42 @@
+/* The dark scheme of the UI (ADR-0070). index.html links it for
+   (prefers-color-scheme: dark); the server sends it empty when the
+   installation's own stylesheet turns the dark scheme off. */
+
+:root {
+  --bg: #0e1014;
+  --surface: #161920;
+  --surface-2: #1b1f27;
+  --border: #262b34;
+  --border-strong: #363d48;
+  --text: #e8eaef;
+  --muted: #9aa1ab;
+  --accent: #5b95ff;
+  --accent-hover: #7aa9ff;
+  --accent-soft: #17233f;
+  --accent-ink: #0b0d12; /* dark ink: white on this lighter blue is too faint */
+  --danger: #ff6b5e;
+  --danger-hover: #ff8a80;
+  --danger-soft: #3a1714;
+  --success: #3fb950;
+  --success-soft: #13301c;
+  --warning: #d29922;
+  --warning-soft: #33280c;
+  --row-hover: #1b1f27;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+.pm-panel[data-tone="note"] { --tone: #a371f7; --tone-soft: #2a1f3d; }
+.pm-panel[data-tone="warning"] { --tone: #d29922; --tone-soft: #3a2e10; }
+.pm-panel[data-tone="tip"] { --tone: #3fb950; --tone-soft: #13301c; }
+
+.diff-add { background: #13301c; }
+.diff ins { background: #1f4d2c; }
+.diff del { background: #5a221d; }
+
+#access.access-open { background: #10291a; border-color: #2c6b41; }
+#access.access-open .access-bar { color: #8fd6a5; }
+#access.access-restricted { background: #33240c; border-color: #8a5a17; }
+#access.access-restricted .access-bar { color: #f5c37a; }
+
+.pm-editor mark { background: #6b5a00; }

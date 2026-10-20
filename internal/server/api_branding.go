@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"mime"
 	"net/http"
 	"strconv"
@@ -23,6 +24,7 @@ func brandingRoutes(d Deps) []Route {
 	h := authHandlers{d: d}
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/branding.css", Summary: "The corporate design as a stylesheet over the UI's own", Access: Public, Handler: http.HandlerFunc(h.brandingCSS)},
+		{Method: http.MethodGet, Pattern: "/theme-dark.css", Summary: "The UI's dark scheme, linked for dark system settings; empty when the installation's own stylesheet turns it off (ADR-0070)", Access: Public, Handler: http.HandlerFunc(h.darkCSS)},
 		{Method: http.MethodGet, Pattern: "/branding/{asset}", Summary: "A file of the corporate design: logo, background or font", Access: Public, Handler: http.HandlerFunc(h.brandingAsset)},
 		{Method: http.MethodGet, Pattern: "/branding.json", Summary: "The corporate design: name, colours, font, own stylesheet, and which files it has", Access: Public, Handler: http.HandlerFunc(h.getBranding)},
 		{Method: http.MethodPut, Pattern: "/api/branding", Summary: "Set the corporate design (administrators)", Handler: http.HandlerFunc(h.setBranding)},
@@ -39,12 +41,14 @@ type brandingJSON struct {
 	// Contrast lists the pairs of colours below WCAG AA (ADR-0052); a
 	// warning, the design is kept.
 	Contrast []site.Finding `json:"contrast"`
+	// Dark says whether the UI offers its dark scheme (ADR-0070).
+	Dark bool `json:"dark"`
 }
 
 func (h authHandlers) getBranding(w http.ResponseWriter, r *http.Request) {
 	s := h.d.DB.Site
 	d := s.Design()
-	out := brandingJSON{Design: d, Assets: map[string]string{}, Fonts: []string{"system", "humanist", "serif", "rounded", "mono"}, Contrast: d.Contrast()}
+	out := brandingJSON{Design: d, Assets: map[string]string{}, Fonts: []string{"system", "humanist", "serif", "rounded", "mono"}, Contrast: d.Contrast(), Dark: d.DarkMode()}
 	if out.Contrast == nil {
 		out.Contrast = []site.Finding{}
 	}
@@ -58,7 +62,28 @@ func (h authHandlers) getBranding(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h authHandlers) brandingCSS(w http.ResponseWriter, r *http.Request) {
-	css := h.d.DB.Site.Stylesheet()
+	serveCSS(w, r, h.d.DB.Site.Stylesheet())
+}
+
+// darkCSS serves the UI's dark scheme, or nothing when the installation's
+// own stylesheet turns it off (ADR-0070). The server decides, so a page
+// opens in the right scheme without flashing the other.
+func (h authHandlers) darkCSS(w http.ResponseWriter, r *http.Request) {
+	css := "/* The dark scheme is off: the installation's own stylesheet does not define one (ADR-0070). */\n"
+	if h.d.DB.Site.Design().DarkMode() {
+		data, err := fs.ReadFile(h.d.UI, "assets/dark.css")
+		if err != nil {
+			writeError(w, http.StatusNotFound, "no dark scheme")
+			return
+		}
+		css = string(data)
+	}
+	serveCSS(w, r, css)
+}
+
+// serveCSS sends a stylesheet that may change at any time; the browser
+// asks again each time and gets it only when it changed.
+func serveCSS(w http.ResponseWriter, r *http.Request, css string) {
 	sum := sha256.Sum256([]byte(css))
 	tag := strconv.Quote(hex.EncodeToString(sum[:8]))
 	hd := w.Header()

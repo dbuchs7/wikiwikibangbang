@@ -297,6 +297,17 @@ func tag(data []byte) string {
 // stylesheet: custom properties the UI is built on, the header, the font,
 // the background, then the own stylesheet. Colours that suit a light page
 // apply when the reader's system is light; the accent applies always.
+// darkRules finds the rules of a dark scheme in a stylesheet.
+var darkRules = regexp.MustCompile(`prefers-color-scheme\s*:\s*dark`)
+
+// DarkMode reports whether the UI offers its dark scheme (ADR-0070): it
+// does unless the installation's own stylesheet replaces the look without
+// saying how it looks in the dark, which it says with a
+// @media (prefers-color-scheme: dark) rule.
+func (d Design) DarkMode() bool {
+	return strings.TrimSpace(d.CSS) == "" || darkRules.MatchString(d.CSS)
+}
+
 func (s *Settings) Stylesheet() string {
 	s.mu.Lock()
 	d := s.design
@@ -305,6 +316,19 @@ func (s *Settings) Stylesheet() string {
 	s.mu.Unlock()
 	var b strings.Builder
 	b.WriteString("/* The corporate design of this installation (ADR-0052). */\n")
+	dark := d.DarkMode()
+	if !dark {
+		// The dark scheme is off (ADR-0070): form controls and scroll bars
+		// stay light too, and what applies to the light scheme applies
+		// always.
+		b.WriteString(":root { color-scheme: light; }\n")
+	}
+	lightOnly := func(rules string) string {
+		if !dark {
+			return strings.TrimPrefix(strings.ReplaceAll(rules, "\n  ", "\n"), "  ")
+		}
+		return "@media (prefers-color-scheme: light) {\n" + rules + "}\n"
+	}
 	if hasFont {
 		fmt.Fprintf(&b, "@font-face { font-family: \"Corporate\"; src: url(\"/branding/font?v=%s\"); font-display: swap; }\n", font.Tag)
 	}
@@ -341,11 +365,11 @@ func (s *Settings) Stylesheet() string {
 		}
 	}
 	if d.Accent != "" {
-		fmt.Fprintf(&b, "@media (prefers-color-scheme: light) { :root { --accent-soft: color-mix(in srgb, %s 12%%, white); } }\n", d.Accent)
+		b.WriteString(lightOnly(fmt.Sprintf("  :root { --accent-soft: color-mix(in srgb, %s 12%%, white); }\n", d.Accent)))
 		// On the dark scheme's cards most corporate colours are too dark to
 		// read as text; the scheme gets the accent lightened just enough,
 		// as the product's own palette does with its blue.
-		if dark := DarkAccent(d.Accent); dark != d.Accent {
+		if dark := DarkAccent(d.Accent); d.DarkMode() && dark != d.Accent {
 			ink, away := AccentInk(dark), "black"
 			if ink != "#ffffff" {
 				away = "white"
@@ -364,7 +388,7 @@ func (s *Settings) Stylesheet() string {
 		fmt.Fprintf(&light, "  .top, .top .brand, #nav > a, #nav > button.link, #app-switcher, #nav-notifications { color: %s; }\n", d.HeaderText)
 	}
 	if light.Len() > 0 {
-		b.WriteString("@media (prefers-color-scheme: light) {\n" + light.String() + "}\n")
+		b.WriteString(lightOnly(light.String()))
 	}
 	if hasBackground {
 		bg, _ := s.Asset(AssetBackground)

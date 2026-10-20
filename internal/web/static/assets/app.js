@@ -703,8 +703,13 @@ async function applyBranding(reload = false) {
   } else if (productLogo) {
     brand.replaceChildren(productLogo.cloneNode(true));
   }
+  // Without a dark scheme (ADR-0070) the product's logo stays the dark one.
+  if (b.dark === false) brand.querySelector("picture source")?.remove();
   document.title = b.name ? `${b.name} · wikiwikibangbang` : "wikiwikibangbang";
-  if (reload) document.getElementById("branding-css").href = "/branding.css?v=" + Date.now();
+  if (reload) {
+    document.getElementById("branding-css").href = "/branding.css?v=" + Date.now();
+    document.getElementById("dark-css").href = "/theme-dark.css?v=" + Date.now();
+  }
 }
 
 window.addEventListener("hashchange", route);
@@ -3002,6 +3007,7 @@ async function designCard() {
         h("option", { value: "upload", text: t("design.fontUpload"), selected: b.font === "upload" }))),
       field(t("design.fontFamily"), h("input", { name: "fontFamily", value: b.fontFamily || "", placeholder: "Frutiger" })),
       field(t("design.css"), cssText),
+      h("p", { class: "muted", id: "design-dark", text: b.dark === false ? t("design.darkOff") : t("design.darkHint") }),
       h("label", { class: "upload" }, h("span", { text: t("design.cssFile") }), cssPicker),
       h("button", { type: "submit", class: "primary", text: t("common.save") }),
     ], async (d, st) => {
@@ -3009,6 +3015,7 @@ async function designCard() {
       const saved = await put("/api/branding", { name: d.get("name"), accent: pick("accent"), background: pick("background"),
         headerBackground: pick("headerBackground"), headerText: pick("headerText"), font: d.get("font"), fontFamily: d.get("fontFamily").trim(), css: cssText.value });
       showContrast(saved.contrast || []);
+      document.getElementById("design-dark").textContent = saved.dark === false ? t("design.darkOff") : t("design.darkHint");
       await applyBranding(true);
       st.replaceChildren(h("p", { class: "notice", text: t("design.saved") }));
     }),
