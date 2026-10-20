@@ -158,6 +158,16 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 	if db.Site, err = site.New(ssc.Records, sl.Append); err != nil {
 		return nil, Recovery{}, err
 	}
+	// Content is assessed against the installation's data protection
+	// regulations on save (ADR-0058); replay reads the outcome from the log.
+	settings := db.Site
+	db.Store.SetAssessor(func(texts []string) []item.DPFinding {
+		var out []item.DPFinding
+		for _, f := range settings.Assess(texts) {
+			out = append(out, item.DPFinding{Regulation: f.Regulation, Category: f.Category, Indicator: f.Indicator})
+		}
+		return out
+	})
 	rec := recovery(sc, log)
 	if rec.Shredded, err = db.heal(); err != nil {
 		return nil, Recovery{}, fmt.Errorf("storage: destroying leftover keys: %w", err)

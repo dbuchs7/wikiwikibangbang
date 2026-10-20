@@ -80,6 +80,8 @@ function what(n) {
     case "LabelsSet": return t("notif.labels");
     case "AttachmentAdded": return t("notif.attached");
     case "RestrictionSet": return t("notif.restrictedSensitive");
+    case "HoldSet": return t("notif.held");
+    case "HoldReleased": return t("notif.released");
     default: return n.kind;
   }
 }
@@ -110,14 +112,15 @@ async function notificationsView() {
   // The governance findings one is responsible for, until they are
   // resolved (ADR-0057).
   const f = first.findings;
-  const kindName = { sensitive: t("gov.colSensitive"), stale: t("gov.colStale"), implausible: t("gov.colImplausible") };
+  const kindName = { sensitive: t("gov.colSensitive"), stale: t("gov.colStale"), implausible: t("gov.colImplausible"), personal: t("gov.colPersonal") };
   const findings = f.items?.length ? h("section", { id: "my-findings" },
-    h("h2", {}, t("notif.findings", { n: f.sensitive + f.stale + f.implausible }), " ", link("#/governance", t("notif.findingsAll"))),
+    h("h2", {}, t("notif.findings", { n: f.sensitive + f.stale + f.implausible + (f.personal || 0) }), " ", link("#/governance", t("notif.findingsAll"))),
     h("p", { class: "muted", text: t("notif.findingsNote") }),
     h("ul", { class: "notifications" }, f.items.map((x) => h("li", { class: "finding-" + x.kind },
       h("span", { class: "chip", text: kindName[x.kind] }), " ",
       link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`),
-      h("span", { class: "muted", text: " · " + (x.kind === "stale" ? t("notif.unchangedSince", { date: when(x.since) }) : x.detail) }))))) : null;
+      h("span", { class: "muted", text: " · " + (x.kind === "stale" ? t("notif.unchangedSince", { date: when(x.since) }) : x.detail) }),
+      x.release ? h("strong", { class: "finding-release", text: " · " + t("dp.yourRelease") }) : null)))) : null;
   show(
     h("h1", { text: t("notif.title") }),
     findings,
@@ -420,7 +423,7 @@ function renderNav() {
     count.hidden = !n.unread;
     // Open governance findings one is responsible for show as a dot until
     // they are resolved (ADR-0057); the number counts unread changes.
-    const open = n.findings ? n.findings.sensitive + n.findings.stale + n.findings.implausible : 0;
+    const open = n.findings ? n.findings.sensitive + n.findings.stale + n.findings.implausible + (n.findings.personal || 0) : 0;
     bell.classList.toggle("findings", open > 0);
     const name = (n.unread ? t("nav.notificationsUnread", { n: shown }) : t("nav.notifications"))
       + (open ? " · " + t("nav.findingsOpen", { n: open }) : "");
@@ -1119,12 +1122,14 @@ async function governanceOverview() {
       ? h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("col.space") }),
         h("th", {}, t("gov.colSensitive"), " ", infoTip(t("gov.colSensitive"), t("gov.infoSensitive"), t("gov.infoSensitiveNote"))),
         h("th", {}, t("gov.colStale"), " ", infoTip(t("gov.colStale"), t("gov.infoStale", { days: 365 }))),
-        h("th", {}, t("gov.colImplausible"), " ", infoTip(t("gov.colImplausible"), t("gov.infoImplausible"))))),
+        h("th", {}, t("gov.colImplausible"), " ", infoTip(t("gov.colImplausible"), t("gov.infoImplausible"))),
+        h("th", {}, t("gov.colPersonal"), " ", infoTip(t("gov.colPersonal"), t("gov.infoPersonal"))))),
         h("tbody", {}, spaces.map((s, i) => h("tr", {},
           h("td", {}, link("#/governance/" + encodeURIComponent(s.key), s.key), " ", h("span", { class: "muted", text: s.name })),
           h("td", { text: String(reports[i].sensitive.length) }),
           h("td", { text: String(reports[i].stale.length) }),
           h("td", { text: String(reports[i].implausible.length) }),
+          h("td", { text: String((reports[i].personal || []).length) }),
         ))))
       : h("p", { class: "muted", text: t("gov.noSpaces") })),
   );
@@ -1140,7 +1145,9 @@ async function governanceView(key) {
   const show = screen();
   const days = Number(new URLSearchParams(location.hash.split("?")[1] || "").get("staleDays")) || 365;
   const rep = await get(`/api/spaces/${encodeURIComponent(key)}/governance?staleDays=${days}`);
-  await learnNames([...rep.sensitive, ...rep.stale, ...rep.implausible].map((f) => f.responsible));
+  await learnNames([...rep.sensitive, ...rep.stale, ...rep.implausible, ...rep.personal].map((f) => f.responsible));
+  const { regulations } = await get("/api/regulations").catch(() => ({ regulations: [] }));
+  const regName = new Map(regulations.map((r) => [r.id, r.name.split(" – ")[0]]));
   const status = h("div", { class: "status" });
   const who = person;
   const itemCell = (f) => h("td", {}, link("#/item/" + encodeURIComponent(f.key), f.title || f.key), h("div", { class: "muted", text: f.key }));
@@ -1175,6 +1182,12 @@ async function governanceView(key) {
       h("h2", {}, t("gov.implausible", { n: rep.implausible.length }), " ", infoTip(t("gov.colImplausible"), t("gov.infoImplausible"))),
       table([t("col.item"), t("col.problem"), t("col.responsible")], rep.implausible.map((f) => h("tr", {},
         itemCell(f), h("td", { text: f.problem }), h("td", { text: who(f.responsible) })))),
+      h("h2", { id: "personal-data" }, t("gov.personal", { n: rep.personal.length }), " ", infoTip(t("gov.colPersonal"), t("gov.infoPersonal"))),
+      table([t("col.item"), t("gov.what"), t("dp.status"), t("col.responsible")], rep.personal.map((f) => h("tr", { class: f.held ? "held" : "" },
+        itemCell(f),
+        h("td", {}, f.findings.map((x) => h("div", {}, h("span", { class: "chip", text: x.indicator }), ` ${x.category} (${regName.get(x.regulation) || x.regulation})`))),
+        h("td", {}, f.held ? [h("strong", { text: t("dp.statusHeld") }), f.mayRelease ? [" · ", link("#/item/" + encodeURIComponent(f.key), t("dp.toRelease"))] : null] : t("dp.statusRestricted")),
+        h("td", { text: who(f.responsible) })))),
     ),
   );
 }
@@ -1422,6 +1435,7 @@ async function itemView(ref, params = new URLSearchParams()) {
     h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
     h("div", { class: "page-head" }, title, headActions),
     guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
+    item.hold ? await holdBanner(item, path, canEdit) : null,
     h("p", { class: "muted" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : "", t("item.version", { n: item.version })),
     status,
     h("div", { class: "item-layout" },
@@ -1973,6 +1987,7 @@ async function adminView() {
     }));
 
   const designSection = section("design", t("design.title"), await designCard());
+  const regulationsSection = section("regulations", t("dp.adminTitle"), await regulationsCard());
 
   const importSection = section("import", t("admin.import"),
     h("p", { text: t("admin.importText") }),
@@ -1990,8 +2005,91 @@ async function adminView() {
     h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, sections.map(([el, title]) =>
       h("button", { type: "button", class: "link", text: title, onclick: () => el.scrollIntoView({ block: "start" }) }))),
     status,
-    spacesSection, typesSection, usersSection, groupsSection, grantSection, backupSection, designSection, importSection, auditSection,
+    spacesSection, typesSection, usersSection, groupsSection, grantSection, backupSection, designSection, regulationsSection, importSection, auditSection,
   );
+}
+
+// holdBanner shows an item's open data protection review (ADR-0058): what
+// was found under which regulation, who saved it, and, for a second person
+// who may edit the item, the release.
+async function holdBanner(item, path, canEdit) {
+  const { regulations } = await get("/api/regulations").catch(() => ({ regulations: [] }));
+  const reg = new Map(regulations.map((r) => [r.id, r]));
+  await learnNames(item.hold.savers);
+  const status = h("div", { class: "status" });
+  const savedByMe = item.hold.savers.includes(me.user.id);
+  const restricted = Boolean(item.restriction?.read?.length);
+  const law = (id) => {
+    const r = reg.get(id);
+    if (!r) return id;
+    return [r.url ? link(r.url, r.name) : r.name, r.document ? [" (", link(`/api/regulations/${id}/document`, t("dp.documentShort")), ")"] : null];
+  };
+  const release = canEdit && !savedByMe ? form({ class: "hold-release" }, [
+    h("label", { class: "check" }, h("input", { type: "radio", name: "outcome", value: "restricted", checked: restricted, disabled: !restricted }), t("dp.outcomeRestricted")),
+    restricted ? null : h("p", { class: "muted", text: t("dp.restrictFirst") }),
+    h("label", { class: "check" }, h("input", { type: "radio", name: "outcome", value: "false-alarm", checked: !restricted }), t("dp.outcomeFalseAlarm")),
+    field(t("dp.reason"), h("textarea", { name: "reason", rows: 2 })),
+    h("button", { type: "submit", class: "primary", text: t("dp.release") }),
+  ], async (d) => {
+    await post(path + "/hold/release", { outcome: d.get("outcome"), reason: d.get("reason") || "" });
+    route();
+  }) : h("p", { class: "muted", text: savedByMe ? t("dp.fourEyes") : t("dp.editorsRelease") });
+  return h("section", { class: "notice warning hold", id: "hold" },
+    h("strong", { text: t("dp.heldTitle") }),
+    h("p", { text: t("dp.heldText", { who: item.hold.savers.map(person).join(", ") }) }),
+    h("ul", {}, item.hold.findings.map((f) => h("li", {}, h("span", { class: "chip", text: f.indicator }), " ", f.category, " – ", law(f.regulation)))),
+    release, status);
+}
+
+// regulationsCard keeps the data protection regulations (ADR-0058): adopted
+// from a template or written by hand, with a link to the law, its text as
+// a PDF, and per category the indicators the content is assessed for.
+async function regulationsCard() {
+  const [{ regulations }, { templates }] = await Promise.all([get("/api/regulations"), get("/api/regulations/templates")]);
+  const status = h("div", { class: "status" });
+  const toText = (cats) => cats.map((c) => `${c.name}: ${c.indicators.join(", ")}`).join("\n");
+  const fromText = (text) => text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+    const i = l.indexOf(":");
+    if (i < 1) throw new Error(t("dp.categoryLine", { line: l }));
+    return { name: l.slice(0, i).trim(), indicators: l.slice(i + 1).split(",").map((x) => x.trim()).filter(Boolean) };
+  });
+  const putFile = async (path, file) => {
+    const res = await fetch(path, { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/octet-stream" }, body: file });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  };
+  const editor = (r, isNew) => {
+    const cats = h("textarea", { name: "categories", rows: 8, class: "code", spellcheck: "false", value: toText(r.categories || []), "aria-label": t("dp.categories") });
+    const doc = h("input", { type: "file", accept: "application/pdf,.pdf", "aria-label": t("dp.document") });
+    doc.addEventListener("change", () => doc.files[0] && action(() => putFile(`/api/regulations/${r.id}/document`, doc.files[0]), status));
+    return h("div", { class: "regulation card-like", id: "regulation-" + (r.id || "new") },
+      form({ class: "regulation-form" }, [
+        isNew ? field(t("dp.id"), h("input", { name: "id", required: true, pattern: "[a-z0-9][a-z0-9\\-]{0,39}", placeholder: "intern" })) : h("h3", { text: r.name }),
+        field(t("dp.name"), h("input", { name: "name", required: true, value: r.name || "", maxlength: 120 })),
+        field(t("dp.url"), h("input", { name: "url", type: "url", value: r.url || "", placeholder: "https://" })),
+        h("label", { class: "check" }, h("input", { type: "checkbox", name: "active", checked: Boolean(r.active) }), t("dp.active")),
+        field(t("dp.categories"), cats),
+        h("p", { class: "muted", text: t("dp.categoriesHint") }),
+        h("p", { class: "actions-row" },
+          h("button", { type: "submit", class: "primary", text: t("common.save") }),
+          isNew ? null : h("button", { type: "button", class: "danger", text: t("common.delete"), onclick: () => confirm(t("dp.deleteConfirm", { name: r.name })) && action(() => del("/api/regulations/" + r.id), status) })),
+      ], async (d) => {
+        const id = isNew ? d.get("id").trim() : r.id;
+        await put("/api/regulations/" + encodeURIComponent(id), { name: d.get("name").trim(), url: d.get("url").trim(), active: Boolean(d.get("active")), categories: fromText(cats.value) });
+        route();
+      }),
+      isNew ? null : h("p", { class: "regulation-doc" },
+        r.document ? [link(`/api/regulations/${r.id}/document`, t("dp.documentOpen")), " ", h("button", { type: "button", class: "link", text: t("common.delete"), onclick: () => action(() => del(`/api/regulations/${r.id}/document`), status) }), " · "] : null,
+        h("label", { class: "upload" }, h("span", { text: r.document ? t("dp.documentReplace") : t("dp.documentAttach") }), doc)));
+  };
+  const have = new Set(regulations.map((r) => r.id));
+  const missing = templates.filter((tpl) => !have.has(tpl.id));
+  return h("div", {},
+    h("p", { class: "muted", text: t("dp.adminIntro") }),
+    status,
+    missing.length ? h("p", { class: "actions-row" }, missing.map((tpl) => h("button", { type: "button", class: "secondary", text: t("dp.adopt", { name: tpl.name.split(" – ")[0] }),
+      onclick: () => action(() => put("/api/regulations/" + tpl.id, { ...tpl, active: false }), status) }))) : null,
+    regulations.map((r) => editor(r, false)),
+    h("details", {}, h("summary", { text: t("dp.addOwn") }), editor({ categories: [] }, true)));
 }
 
 // designCard sets the corporate design (ADR-0052): name, logo, colours,

@@ -160,6 +160,12 @@ type Item struct {
 	// Attachments are the item's files in the order added, deleted ones
 	// without their description (ADR-0045).
 	Attachments []Attachment
+	// Hold is set while the item waits for a data protection review; only
+	// those who may edit it read it then (ADR-0058).
+	Hold *Hold
+	// Cleared are the findings a review judged false alarms; they do not
+	// hold the item again.
+	Cleared []string
 
 	created   int // sequence number of the creating event; orders items
 	trashedBy int // sequence number of the event that trashed it, or 0
@@ -245,6 +251,10 @@ const (
 	RoleRevoked        EventKind = "RoleRevoked"
 	GroupMemberRemoved EventKind = "GroupMemberRemoved"
 	SystemRoleRevoked  EventKind = "SystemRoleRevoked"
+	// HoldSet puts an item on hold for a data protection review, HoldReleased
+	// takes it off (ADR-0058).
+	HoldSet      EventKind = "HoldSet"
+	HoldReleased EventKind = "HoldReleased"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -296,6 +306,8 @@ type Event struct {
 	Reply       ID           // CommentAdded: the comment a reply answers (ADR-0047)
 	Labels      []string     // LabelsSet: the item's labels after the event
 	Attachment  *Attachment  // AttachmentAdded; AttachmentDeleted: only its ID
+	Hold        *Hold        // HoldSet: the hold as it is after the event
+	Outcome     string       // HoldReleased: HoldRestricted or HoldFalseAlarm; Text holds the reason
 
 	// Erased is set on an event whose content (title, properties, body, raw
 	// source) was removed because its item was purged or redacted. The
@@ -309,7 +321,8 @@ type Event struct {
 // comment text included (ADR-0035).
 func (e Event) HasContent() bool {
 	switch e.Kind {
-	case ItemCreated, TitleSet, PropertySet, BodyCommitted, ItemImported, CommentAdded, CommentEdited, LabelsSet, AttachmentAdded:
+	case ItemCreated, TitleSet, PropertySet, BodyCommitted, ItemImported, CommentAdded, CommentEdited, LabelsSet, AttachmentAdded,
+		HoldSet, HoldReleased:
 		return true
 	}
 	return false
@@ -323,6 +336,9 @@ func (e *Event) erase() {
 		return
 	}
 	e.Title, e.Props, e.Value, e.Text, e.Labels, e.Anchor = "", nil, nil, "", nil, nil
+	if e.Kind == HoldSet && e.Hold != nil {
+		e.Hold = &Hold{Savers: e.Hold.Savers}
+	}
 	if e.Kind == AttachmentAdded {
 		e.Attachment = nil
 	}

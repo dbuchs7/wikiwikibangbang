@@ -196,6 +196,18 @@ func (s *Store) canRead(principal string, it *Item) bool {
 			return false
 		}
 	}
+	// While a data protection review is open, only those who may edit the
+	// item read it (ADR-0058); like a restriction, it only narrows (D9).
+	if it.Hold != nil {
+		if role < Editor {
+			return false
+		}
+		for _, a := range s.ancestry(it) {
+			if !s.admits(a.Restriction.Edit, principal) {
+				return false
+			}
+		}
+	}
 	return true
 }
 

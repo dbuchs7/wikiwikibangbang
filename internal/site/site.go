@@ -105,14 +105,20 @@ type event struct {
 	Actor  string    `json:"actor,omitempty"`
 	Design *Design   `json:"design,omitempty"`
 	Asset  string    `json:"asset,omitempty"`
-	Type   string    `json:"type,omitempty"`
-	Data   []byte    `json:"data,omitempty"`
+	// Regulation is set by RegulationSet; RegulationRemoved names it in
+	// Asset (ADR-0058).
+	Regulation *Regulation `json:"regulation,omitempty"`
+	Type       string      `json:"type,omitempty"`
+	Data       []byte      `json:"data,omitempty"`
 }
 
 const (
 	designSet   = "DesignSet"
 	assetSet    = "AssetSet"
 	assetRemove = "AssetRemoved"
+
+	regulationSet     = "RegulationSet"
+	regulationRemoved = "RegulationRemoved"
 )
 
 // Settings is safe for concurrent use.
@@ -122,11 +128,15 @@ type Settings struct {
 	now     func() time.Time
 	design  Design
 	assets  map[string]Asset
+	// regulations are the data protection regulations by ID, matchers the
+	// patterns of the active ones (ADR-0058).
+	regulations map[string]Regulation
+	matchers    []matcher
 }
 
 // New rebuilds the settings from records and journals later changes.
 func New(records [][]byte, j Journal) (*Settings, error) {
-	s := &Settings{journal: j, now: time.Now, assets: map[string]Asset{}}
+	s := &Settings{journal: j, now: time.Now, assets: map[string]Asset{}, regulations: map[string]Regulation{}}
 	for i, r := range records {
 		var e event
 		if err := json.Unmarshal(r, &e); err != nil {
@@ -153,6 +163,16 @@ func (s *Settings) apply(e event) error {
 		s.assets[e.Asset] = Asset{Type: e.Type, Data: e.Data, Tag: tag(e.Data)}
 	case assetRemove:
 		delete(s.assets, e.Asset)
+	case regulationSet:
+		if e.Regulation == nil {
+			return errors.New("a regulation event without a regulation")
+		}
+		s.regulations[e.Regulation.ID] = *e.Regulation
+		s.matchers = compileMatchers(s.regulations)
+	case regulationRemoved:
+		delete(s.regulations, e.Asset)
+		delete(s.assets, DocumentAsset(e.Asset))
+		s.matchers = compileMatchers(s.regulations)
 	default:
 		return fmt.Errorf("unknown event %q", e.Kind)
 	}
@@ -199,7 +219,7 @@ func (s *Settings) Asset(name string) (Asset, bool) {
 // SetAsset stores an asset of the design; checking its content is the
 // caller's concern.
 func (s *Settings) SetAsset(actor, name, mediaType string, data []byte) error {
-	if !slices.Contains(Assets, name) {
+	if !slices.Contains(Assets, name) && !s.isDocument(name) {
 		return fmt.Errorf("%w: asset %q", ErrInvalid, name)
 	}
 	if len(data) == 0 {
@@ -212,7 +232,7 @@ func (s *Settings) SetAsset(actor, name, mediaType string, data []byte) error {
 
 // RemoveAsset removes an asset of the design.
 func (s *Settings) RemoveAsset(actor, name string) error {
-	if !slices.Contains(Assets, name) {
+	if !slices.Contains(Assets, name) && !s.isDocument(name) {
 		return fmt.Errorf("%w: asset %q", ErrInvalid, name)
 	}
 	s.mu.Lock()
@@ -346,4 +366,16 @@ func (s *Settings) Stylesheet() string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// isDocument reports whether name is the document asset of a regulation.
+func (s *Settings) isDocument(name string) bool {
+	id, ok := strings.CutPrefix(name, "regulation-")
+	if !ok {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, exists := s.regulations[id]
+	return exists
 }

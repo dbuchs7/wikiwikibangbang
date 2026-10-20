@@ -163,6 +163,27 @@ type itemJSON struct {
 	Origin      *originJSON      `json:"origin,omitempty"`
 	Managed     string           `json:"managed,omitempty"`
 	Labels      []string         `json:"labels"`
+	// Hold is the item's open data protection review (ADR-0058).
+	Hold *holdJSON `json:"hold,omitempty"`
+}
+
+type holdJSON struct {
+	Findings []dpFindingJSON `json:"findings"`
+	Savers   []string        `json:"savers"`
+}
+
+type dpFindingJSON struct {
+	Regulation string `json:"regulation"`
+	Category   string `json:"category"`
+	Indicator  string `json:"indicator"`
+}
+
+func toDPFindings(fs []item.DPFinding) []dpFindingJSON {
+	out := []dpFindingJSON{}
+	for _, f := range fs {
+		out = append(out, dpFindingJSON(f))
+	}
+	return out
 }
 
 // toItemJSON omits the raw import source: it is large and is content kept
@@ -173,6 +194,9 @@ func toItemJSON(it item.Item) itemJSON {
 		Body: []blockJSON{}, Version: it.Version, Presence: it.Presence, Managed: it.Managed, Labels: it.Labels}
 	if j.Labels == nil {
 		j.Labels = []string{}
+	}
+	if it.Hold != nil {
+		j.Hold = &holdJSON{Findings: toDPFindings(it.Hold.Findings), Savers: it.Hold.Savers}
 	}
 	if j.Properties == nil {
 		j.Properties = map[string]any{}

@@ -103,6 +103,8 @@ type findingJSON struct {
 	Detail string  `json:"detail,omitempty"`
 	// Since is when a stale item changed last.
 	Since *time.Time `json:"since,omitempty"`
+	// Release reports that the reader may release a held item (ADR-0058).
+	Release bool `json:"release,omitempty"`
 }
 
 // findingsLimit bounds the findings listed; the counts are complete.
@@ -111,13 +113,20 @@ const findingsLimit = 100
 // findingsOf counts the findings one is responsible for and, with list,
 // lists them.
 func findingsOf(r item.Report, list bool) map[string]any {
-	out := map[string]any{"sensitive": len(r.Sensitive), "stale": len(r.Stale), "implausible": len(r.Implausible)}
+	out := map[string]any{"sensitive": len(r.Sensitive), "stale": len(r.Stale), "implausible": len(r.Implausible), "personal": len(r.Personal)}
 	if !list {
 		return out
 	}
 	items := []findingJSON{}
 	for _, f := range r.Sensitive {
 		items = append(items, findingJSON{Kind: "sensitive", Item: f.Item, Key: f.Key, Title: f.Title, Detail: f.Kind + " · " + f.Where})
+	}
+	for _, f := range r.Personal {
+		detail := ""
+		if len(f.Findings) > 0 {
+			detail = f.Findings[0].Category
+		}
+		items = append(items, findingJSON{Kind: "personal", Item: f.Item, Key: f.Key, Title: f.Title, Detail: detail, Release: f.MayRelease})
 	}
 	for _, f := range r.Implausible {
 		items = append(items, findingJSON{Kind: "implausible", Item: f.Item, Key: f.Key, Title: f.Title, Detail: f.Problem})

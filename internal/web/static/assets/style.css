@@ -571,3 +571,14 @@ th:last-child .info-pop, th:nth-last-child(2) .info-pop { left: auto; right: -8p
 #my-findings .chip { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #fff4e5; color: #8a5300; }
 #my-findings h2 a { font-size: 13px; font-weight: 400; margin-left: 8px; }
 .notifications li.governance { border-left: 3px solid #e8a317; padding-left: 8px; }
+
+/* Data protection review (ADR-0058). */
+section.hold { margin: 8px 0 12px; }
+section.hold ul { margin: 6px 0; padding-left: 18px; }
+section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #fff4e5; color: #8a5300; }
+.hold-release { display: flex; flex-direction: column; gap: 6px; max-width: 640px; margin-top: 8px; }
+.hold-release button { align-self: flex-start; }
+.regulation { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 10px 0; background: var(--surface); }
+.regulation h3 { margin: 0 0 6px; }
+.regulation-form { display: flex; flex-direction: column; gap: 6px; }
+#governance tr.held td { background: #fff8ec; }

@@ -48,9 +48,12 @@ const (
 	SystemRoleTaken = "system-role.revoke"
 	GroupLeft       = "group.remove"
 	DesignChanged   = "design.change"
-	ItemPurged      = "item.purge"
-	ItemRedacted    = "item.redact"
-	BackupCreated   = "backup.create"
+	// RegulationChanged records a change of a data protection regulation
+	// (ADR-0058).
+	RegulationChanged = "regulation.change"
+	ItemPurged        = "item.purge"
+	ItemRedacted      = "item.redact"
+	BackupCreated     = "backup.create"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for

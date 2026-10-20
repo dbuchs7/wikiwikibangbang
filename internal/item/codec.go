@@ -44,7 +44,9 @@ import (
 //     to 11 are still read.
 //   - 13: an image block may carry Width, in percent of the text column
 //     (ADR-0056). Versions 1 to 12 are still read.
-const CodecVersion = 13
+//   - 14: the kinds HoldSet, with hold, and HoldReleased, with outcome and
+//     text, both sealed content (ADR-0058). Versions 1 to 13 are still read.
+const CodecVersion = 14
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
@@ -163,6 +165,8 @@ type wireEvent struct {
 	Attachment  *Attachment           `json:"attachment,omitempty"`
 	Anchor      *Anchor               `json:"anchor,omitempty"`
 	Reply       ID                    `json:"reply,omitempty"`
+	Hold        *Hold                 `json:"hold,omitempty"`
+	Outcome     string                `json:"outcome,omitempty"`
 	Erased      bool                  `json:"erased,omitempty"`
 	// Sealed holds the encrypted content (wireContent) when a Sealer was
 	// used; the plaintext content fields are then empty.
@@ -181,6 +185,7 @@ type wireContent struct {
 	Labels     []string              `json:"labels,omitempty"`
 	Attachment *Attachment           `json:"attachment,omitempty"`
 	Anchor     *Anchor               `json:"anchor,omitempty"`
+	Hold       *Hold                 `json:"hold,omitempty"`
 }
 
 func aad(w *wireEvent) []byte {
@@ -188,7 +193,7 @@ func aad(w *wireEvent) []byte {
 }
 
 func seal(w *wireEvent, sl Sealer) error {
-	c := wireContent{Title: w.Title, Props: w.Props, Value: w.Value, Body: w.Body, Text: w.Text, Labels: w.Labels, Attachment: w.Attachment, Anchor: w.Anchor}
+	c := wireContent{Title: w.Title, Props: w.Props, Value: w.Value, Body: w.Body, Text: w.Text, Labels: w.Labels, Attachment: w.Attachment, Anchor: w.Anchor, Hold: w.Hold}
 	if w.Origin != nil {
 		c.Raw = w.Origin.Raw
 		o := *w.Origin
@@ -203,7 +208,7 @@ func seal(w *wireEvent, sl Sealer) error {
 	if err != nil {
 		return err
 	}
-	w.Title, w.Props, w.Value, w.Body, w.Text, w.Labels, w.Attachment, w.Anchor, w.Sealed = "", nil, nil, nil, "", nil, nil, nil, ct
+	w.Title, w.Props, w.Value, w.Body, w.Text, w.Labels, w.Attachment, w.Anchor, w.Hold, w.Sealed = "", nil, nil, nil, "", nil, nil, nil, nil, ct
 	return nil
 }
 
@@ -223,7 +228,7 @@ func unseal(w *wireEvent, sl Sealer) (bool, error) {
 	if err := dec.Decode(&c); err != nil {
 		return false, fmt.Errorf("sealed content: %w", err)
 	}
-	w.Title, w.Props, w.Value, w.Body, w.Text, w.Labels, w.Attachment, w.Anchor = c.Title, c.Props, c.Value, c.Body, c.Text, c.Labels, c.Attachment, c.Anchor
+	w.Title, w.Props, w.Value, w.Body, w.Text, w.Labels, w.Attachment, w.Anchor, w.Hold = c.Title, c.Props, c.Value, c.Body, c.Text, c.Labels, c.Attachment, c.Anchor, c.Hold
 	if w.Origin != nil {
 		o := *w.Origin
 		o.Raw = c.Raw
@@ -252,7 +257,7 @@ func toWire(e Event) (wireEvent, error) {
 		Members: e.Members, Group: e.Group, Principal: e.Principal, SystemRole: e.SystemRole,
 		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed,
 		Comment: e.Comment, Text: e.Text, Labels: e.Labels, Attachment: e.Attachment, Erased: e.Erased,
-		Anchor: e.Anchor, Reply: e.Reply,
+		Anchor: e.Anchor, Reply: e.Reply, Hold: e.Hold, Outcome: e.Outcome,
 	}
 	if e.Role != 0 {
 		name, ok := roleNames[e.Role]
@@ -291,7 +296,7 @@ func fromWire(w wireEvent) (Event, error) {
 		Members: w.Members, Group: w.Group, Principal: w.Principal, SystemRole: w.SystemRole,
 		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed,
 		Comment: w.Comment, Text: w.Text, Labels: w.Labels, Attachment: w.Attachment, Erased: w.Erased,
-		Anchor: w.Anchor, Reply: w.Reply,
+		Anchor: w.Anchor, Reply: w.Reply, Hold: w.Hold, Outcome: w.Outcome,
 	}
 	if w.Role != "" {
 		for r, name := range roleNames {
