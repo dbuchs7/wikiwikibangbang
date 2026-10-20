@@ -272,6 +272,24 @@ function check(cond, msg) {
     await page.click("#tasks tr:has-text('Renew the certificate') button:has-text('close')");
     await page.waitForSelector("#tasks tr:has-text('Renew the certificate')", { state: "detached" });
 
+    step("new task: the form opens with the task type; the assignee is found by a few letters");
+    await page.click("#tasks-new");
+    await page.waitForSelector("#new-item [name=title]:focus");
+    check(await page.inputValue("#new-item [name=type]") === "task", "New task preselects the task type");
+    await page.selectOption("#new-item [name=type]", "ticket");
+    await page.fill("#new-item [name=title]", "Order new badges");
+    await page.fill("#new-item [name='p:assignee']", "nobody");
+    await page.click("#new-item button[type=submit]");
+    await page.waitForSelector("#new-item .status:has-text('choose a person')");
+    await page.fill("#new-item [name='p:assignee']", "ber");
+    await page.waitForSelector("#user-options option[value=bert]", { state: "attached" });
+    await page.fill("#new-item [name='p:assignee']", "bert");
+    await page.waitForFunction(() => document.querySelector("#new-item [name='p:assignee']").dataset.userId !== "");
+    await page.click("#new-item button[type=submit]");
+    await page.waitForSelector("#title");
+    check(await page.inputValue("#details [name='p:assignee']") === "bert", "the assignee shows by name");
+    await page.click("#edit-done");
+
     step("board: columns are the workflow's states; dragging a card performs the transition");
     await page.click("a.brand");
     await page.click("a:has-text('Platform')");

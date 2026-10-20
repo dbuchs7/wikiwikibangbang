@@ -97,3 +97,22 @@ func TestContactsThroughTheAPI(t *testing.T) {
 		t.Fatal("a webhook address is a credential and stays out of the audit trail")
 	}
 }
+
+func TestUserSearch(t *testing.T) {
+	w := newWorld(t)
+	got := w.bert.expect("GET", "/api/users/search?q=ER", "", http.StatusOK)["users"].([]any)
+	// "vera" contains "er"; "bert" too; prefixes come first.
+	names := []string{}
+	for _, u := range got {
+		names = append(names, u.(map[string]any)["username"].(string))
+	}
+	if strings.Join(names, ",") != "bert,vera" {
+		t.Fatalf("search: %v", names)
+	}
+	if got := w.bert.expect("GET", "/api/users/search?q=v", "", http.StatusOK)["users"].([]any); len(got) != 1 || got[0].(map[string]any)["username"] != "vera" {
+		t.Fatalf("prefix: %v", got)
+	}
+	// Vera only reads, Carla has no role: neither looks people up.
+	w.vera.expect("GET", "/api/users/search?q=b", "", http.StatusForbidden)
+	w.carla.expect("GET", "/api/users/search?q=b", "", http.StatusForbidden)
+}

@@ -631,5 +631,8 @@ export default {
   "home.list": "Liste",
   "space.icon": "Icon oder Logo",
   "space.iconChoose": "Bild wählen",
-  "space.iconHelp": "Erscheint auf der Kachel des Bereichs auf der Startseite: PNG, JPEG, GIF, WebP oder SVG, idealerweise quadratisch."
+  "space.iconHelp": "Erscheint auf der Kachel des Bereichs auf der Startseite: PNG, JPEG, GIF, WebP oder SVG, idealerweise quadratisch.",
+  "user.search": "Tippen zum Suchen …",
+  "user.unknown": "Niemand heisst «{name}»: Bitte eine Person aus den Vorschlägen wählen.",
+  "new.otherTypes": "Etwas anderes erstellen"
 };

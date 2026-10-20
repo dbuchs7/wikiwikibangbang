@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
@@ -30,6 +31,7 @@ func authRoutes(d Deps) []Route {
 		{Method: http.MethodPost, Pattern: "/api/tokens", Summary: "Create an API token; the secret is returned once", Handler: http.HandlerFunc(h.createToken)},
 		{Method: http.MethodDelete, Pattern: "/api/tokens/{id}", Summary: "Revoke one of one's own API tokens", Handler: http.HandlerFunc(h.revokeToken)},
 		{Method: http.MethodGet, Pattern: "/api/users", Summary: "List accounts (administrators and space administrators)", Handler: http.HandlerFunc(h.listUsers)},
+		{Method: http.MethodGet, Pattern: "/api/users/search", Summary: "Accounts whose username contains q, for choosing a person in a field (those who may edit in a space)", Handler: http.HandlerFunc(h.searchUsers)},
 		{Method: http.MethodGet, Pattern: "/api/users/names", Summary: "Usernames of the user IDs given as id parameters, for showing authors, and which of them have a profile picture", Handler: http.HandlerFunc(h.userNames)},
 		{Method: http.MethodPost, Pattern: "/api/users", Summary: "Create an account (administrators)", Handler: http.HandlerFunc(h.createUser)},
 		{Method: http.MethodPost, Pattern: "/api/backup", Summary: "Download an encrypted backup of the data directory (administrators; passphrase in the body)", Handler: http.HandlerFunc(h.backup)},
@@ -338,6 +340,37 @@ func (h authHandlers) userNames(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"names": names, "avatars": avatars})
+}
+
+// searchLimit bounds the matches a user search answers with.
+const searchLimit = 20
+
+// searchUsers finds accounts by part of their username, prefixes first,
+// for choosing an assignee by typing a few letters.
+func (h authHandlers) searchUsers(w http.ResponseWriter, r *http.Request) {
+	p, _ := PrincipalFrom(r.Context())
+	may := false
+	h.d.DB.Read(func(s *item.Store) { may = s.As(string(p.User)).EditsASpace() })
+	if !may {
+		writeError(w, http.StatusForbidden, "only those who may edit in a space look up people")
+		return
+	}
+	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	var prefix, inner []userJSON
+	for _, u := range h.d.DB.Accounts.Users() {
+		name := strings.ToLower(u.Username)
+		switch {
+		case strings.HasPrefix(name, q):
+			prefix = append(prefix, userJSON{ID: u.ID, Username: u.Username})
+		case strings.Contains(name, q):
+			inner = append(inner, userJSON{ID: u.ID, Username: u.Username})
+		}
+	}
+	out := append(prefix, inner...)
+	if out == nil {
+		out = []userJSON{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"users": out[:min(len(out), searchLimit)]})
 }
 
 func (h authHandlers) avatarTagOf(id auth.UserID) string {

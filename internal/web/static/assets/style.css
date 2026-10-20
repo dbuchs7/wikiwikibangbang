@@ -666,3 +666,9 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .space-icon-64.space-icon-key { font-size: 18px; }
 .space-list { width: 100%; margin-bottom: 22px; }
 .space-list .space-link { display: inline-flex; align-items: center; gap: 8px; }
+
+/* The calendar button of a date field sits left, before the date. Only
+   Chromium-based browsers let a page move it; elsewhere it stays where
+   the browser puts it. */
+input[type="date"] { position: relative; padding-left: 34px; }
+input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; left: 10px; margin: 0; cursor: pointer; }

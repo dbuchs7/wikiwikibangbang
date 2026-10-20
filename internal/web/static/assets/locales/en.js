@@ -633,5 +633,8 @@ export default {
   "home.list": "List",
   "space.icon": "Icon or logo",
   "space.iconChoose": "Choose a picture",
-  "space.iconHelp": "Shown on the space's tile on the start page: PNG, JPEG, GIF, WebP or SVG, ideally square."
+  "space.iconHelp": "Shown on the space's tile on the start page: PNG, JPEG, GIF, WebP or SVG, ideally square.",
+  "user.search": "Type to search…",
+  "user.unknown": "Nobody is called “{name}”: choose a person from the suggestions.",
+  "new.otherTypes": "Create something else"
 };

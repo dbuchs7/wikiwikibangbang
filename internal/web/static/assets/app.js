@@ -520,10 +520,11 @@ function accountMenu() {
 const here = { space: "", parent: "" };
 
 // newHref is the address of the creation view for the place shown.
-function newHref(space = here.space, parent = here.parent) {
+function newHref(space = here.space, parent = here.parent, type = "") {
   const q = new URLSearchParams();
   if (space) q.set("space", space);
   if (parent) q.set("parent", parent);
+  if (type) q.set("type", type);
   return "#/new" + (q.size ? "?" + q : "");
 }
 
@@ -868,6 +869,16 @@ async function newView(params) {
   if (params.get("parent")) parent = (await get("/api/items/" + encodeURIComponent(params.get("parent")))).item;
   const space = editable.some((s) => s.key === params.get("space")) ? params.get("space") : editable[0]?.key;
   here.space = space || "";
+  // With a type, as from "New task", only its form is shown.
+  const only = types.find((ty) => ty.name === params.get("type"));
+  if (only && editable.length) {
+    show(
+      h("h1", { text: only.workflow ? t("tasks.new") : t("new.title") }),
+      newItemForm({ space, spaces: editable, types, type: only.name, heading: only.name }),
+      h("p", { class: "muted" }, link(newHref(space, parent?.id || ""), t("new.otherTypes"))));
+    document.querySelector("#new-item [name=title]")?.focus();
+    return;
+  }
   let pageCard;
   if (types.length === 0) {
     pageCard = h("p", { class: "muted", text: me.admin ? t("new.noTypesAdmin") : t("new.noTypes") });
@@ -1033,6 +1044,13 @@ function boardOf(items, type, status, cardTail) {
 // or, failing that, the first user field; the due date the first date
 // field named like a deadline (as governance reads it, ADR-0040); the
 // priority an enum named priority, its values ordered from low to high.
+// taskType is the type "New task" creates: "task" when it has a workflow,
+// else the first type with one.
+function taskType(types) {
+  const flows = types.filter((ty) => ty.workflow);
+  return (flows.find((ty) => ty.name === "task") || flows[0])?.name || "";
+}
+
 function taskFields(type) {
   const users = type.fields.filter((f) => f.kind === "user");
   return {
@@ -1183,7 +1201,7 @@ async function tasksView(tab, params) {
   const relink = () => tabs.querySelectorAll("a").forEach((a) => { a.href = a.getAttribute("href").split("?")[0] + query(); });
   show(
     h("div", { class: "page-head" }, h("h1", { text: t("tasks.title") }),
-      h("p", { class: "actions" }, link(newHref(space || here.space), t("tasks.new"), "button"))),
+      h("p", { class: "actions" }, link(newHref(space || here.space, "", taskType(types)), t("tasks.new"), "button", "tasks-new"))),
     tabs,
     status,
     h("section", { id: "tasks" }, shown.length
@@ -1488,13 +1506,51 @@ function propertyInput(f, value) {
       return h("select", { name },
         h("option", { value: "", text: "—" }),
         f.values.map((v) => h("option", { value: v, text: v, selected: v === value })));
+    case "user":
+      return userInput(name, value);
     default:
       return h("input", { name, value: value ?? "" });
   }
 }
 
+// userInput chooses a person by typing a few letters of the username; the
+// field keeps the person's ID (ADR-0013) and shows the name. One list of
+// suggestions serves every such field.
+function userInput(name, value) {
+  let options = document.getElementById("user-options");
+  if (!options) {
+    options = h("datalist", { id: "user-options" });
+    document.body.append(options);
+  }
+  const input = h("input", { name, list: "user-options", value: value ? person(value) : "", autocomplete: "off", placeholder: t("user.search"), class: "user-input" });
+  input.dataset.userId = value || "";
+  const found = new Map();
+  let timer = 0;
+  input.addEventListener("input", () => {
+    const typed = input.value.trim();
+    input.dataset.userId = found.get(typed) || "";
+    clearTimeout(timer);
+    if (!typed || found.has(typed)) return;
+    timer = setTimeout(async () => {
+      const { users } = await get("/api/users/search?q=" + encodeURIComponent(typed)).catch(() => ({ users: [] }));
+      for (const u of users) {
+        found.set(u.username, u.id);
+        names.set(u.id, u.username);
+      }
+      options.replaceChildren(...users.map((u) => h("option", { value: u.username })));
+      input.dataset.userId = found.get(input.value.trim()) || "";
+    }, 150);
+  });
+  return input;
+}
+
 function readProperty(f, el) {
   if (f.kind === "bool") return el.checked;
+  if (f.kind === "user") {
+    if (!el.value.trim()) return null;
+    if (el.dataset.userId) return el.dataset.userId;
+    throw new Error(t("user.unknown", { name: el.value.trim() }));
+  }
   const v = el.value;
   if (v === "") return null;
   if (f.kind === "number") return Number(v);
@@ -1502,9 +1558,9 @@ function readProperty(f, el) {
 }
 
 // newItemForm creates an item in a space, below parent (an item) if one is
-// given; "page" is preselected when the type exists. With spaces, the
+// given; type, "page" by default, is preselected when it exists. With spaces, the
 // space is chosen in the form.
-function newItemForm({ space, spaces = null, types, parent = null, heading = t("item.new"), id = "new-item" }) {
+function newItemForm({ space, spaces = null, types, parent = null, heading = t("item.new"), id = "new-item", type = "page" }) {
   if (types.length === 0) return null;
   const spaceSelect = spaces && spaces.length > 1
     ? h("select", { name: "space" }, spaces.map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})`, selected: s.key === space })))
@@ -1518,7 +1574,7 @@ function newItemForm({ space, spaces = null, types, parent = null, heading = t("
     });
   }
   const fields = h("div");
-  const typeSelect = h("select", { name: "type" }, types.map((ty) => h("option", { value: ty.name, text: ty.name, selected: ty.name === "page" })));
+  const typeSelect = h("select", { name: "type" }, types.map((ty) => h("option", { value: ty.name, text: ty.name, selected: ty.name === type })));
   const showFields = () => {
     const ty = types.find((x) => x.name === typeSelect.value);
     fields.replaceChildren(...ty.fields.map((f) => field(f.name + (f.required ? " *" : ""), propertyInput(f))));
