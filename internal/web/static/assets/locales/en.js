@@ -663,5 +663,8 @@ export default {
   "contacts.test": "Send a test message",
   "contacts.delivered": "delivered",
   "contacts.lastAt": "Last message, {when}:",
-  "contacts.noMailServer": "This server sends no mail; the address is kept for when it does."
+  "contacts.noMailServer": "This server sends no mail; the address is kept for when it does.",
+  "common.saving": "Saving…",
+  "common.saved": "Saved",
+  "admin.lead": "Spaces, types, people and the settings of the whole installation. The contents lead to each part."
 };

@@ -661,5 +661,8 @@ export default {
   "contacts.test": "Testnachricht senden",
   "contacts.delivered": "zugestellt",
   "contacts.lastAt": "Letzte Nachricht, {when}:",
-  "contacts.noMailServer": "Dieser Server versendet keine E-Mails; die Adresse wird für später gespeichert."
+  "contacts.noMailServer": "Dieser Server versendet keine E-Mails; die Adresse wird für später gespeichert.",
+  "common.saving": "Speichert …",
+  "common.saved": "Gespeichert",
+  "admin.lead": "Bereiche, Typen, Personen und die Einstellungen der ganzen Installation. Das Inhaltsverzeichnis führt zu jedem Teil."
 };

@@ -134,7 +134,9 @@ async function mailTo(sink, address) {
 
     step("edit property, transition");
     await page.fill("[name='p:estimate']", "2.5");
-    await page.click("tr:has-text('estimate') button");
+    await page.press("[name='p:estimate']", "Tab"); // a field is saved as it changes
+    await page.waitForSelector("tr[data-field=estimate] .saved");
+    await page.reload();
     await page.waitForSelector("text=version 2");
     await page.click("button:has-text('finish')");
     await page.waitForSelector("text=state: done");
