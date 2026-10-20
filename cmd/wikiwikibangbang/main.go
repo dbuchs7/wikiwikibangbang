@@ -18,8 +18,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -30,6 +32,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
 	"github.com/dbuchs7/wikiwikibangbang/internal/mcp"
+	"github.com/dbuchs7/wikiwikibangbang/internal/notify"
 	"github.com/dbuchs7/wikiwikibangbang/internal/privdrop"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
@@ -204,7 +207,24 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	go func() { runCollab(liveCtx, live, time.NewTicker(collabTick).C); close(liveDone) }()
 	// Runs before the data directory closes: open drafts are committed.
 	defer func() { stopLive(); <-liveDone }()
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: provider, Collab: live, LinkCheck: links})
+	notifier, every, err := notifierFromEnv(os.Getenv)
+	if err != nil {
+		log.Error("message delivery is misconfigured", "err", err)
+		return 1
+	}
+	st := notifier.Status()
+	log.Info("message delivery", "mail", st.Mail, "mail-host", st.MailHost, "public-url", st.PublicURL, "digest", every)
+	messages := server.NewMessenger(notifier, db, log, every)
+	if every > 0 {
+		digests := time.NewTicker(every)
+		defer digests.Stop()
+		digestCtx, stopDigest := context.WithCancel(ctx)
+		digestDone := make(chan struct{})
+		go func() { messages.Run(digestCtx, digests.C); close(digestDone) }()
+		// Runs before the data directory closes.
+		defer func() { stopDigest(); <-digestDone; messages.Wait() }()
+	}
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: provider, Collab: live, LinkCheck: links, Messages: messages})
 	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.Handler(routes, db.Accounts)), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
@@ -285,6 +305,54 @@ func expireAudit(ctx context.Context, db *storage.DB, log *slog.Logger, tick <-c
 			}
 		}
 	}
+}
+
+// notifierFromEnv configures message delivery (ADR-0064). Mail is sent
+// when WWBB_SMTP_HOST is set; links in messages and the password reset by
+// mail need WWBB_PUBLIC_URL. WWBB_DIGEST_MINUTES sets how often the digest
+// of notifications goes out, 15 by default, 0 for never.
+// WWBB_WEBHOOKS_PRIVATE=on lets webhooks reach addresses in private
+// networks, for a chat server in the intranet.
+func notifierFromEnv(getenv func(string) string) (*notify.Notifier, time.Duration, error) {
+	cfg := notify.Config{PublicURL: getenv("WWBB_PUBLIC_URL")}
+	switch v := getenv("WWBB_WEBHOOKS_PRIVATE"); v {
+	case "", "off":
+	case "on":
+		// Private networks, never loopback or link-local (where cloud
+		// metadata services answer).
+		cfg.AllowedHook = func(a netip.Addr) bool { return a.Unmap().IsGlobalUnicast() }
+	default:
+		return nil, 0, fmt.Errorf("WWBB_WEBHOOKS_PRIVATE is %q, want on or off", v)
+	}
+	if host := getenv("WWBB_SMTP_HOST"); host != "" {
+		security := getenv("WWBB_SMTP_SECURITY")
+		if security == "" {
+			security = notify.SecurityStartTLS
+		}
+		port := 587
+		if security == notify.SecurityTLS {
+			port = 465
+		}
+		if v := getenv("WWBB_SMTP_PORT"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil {
+				return nil, 0, fmt.Errorf("WWBB_SMTP_PORT is %q, want a number", v)
+			}
+			port = n
+		}
+		cfg.Mail = &notify.MailConfig{Host: host, Port: port, Security: security, Username: getenv("WWBB_SMTP_USERNAME"),
+			Password: getenv("WWBB_SMTP_PASSWORD"), From: getenv("WWBB_SMTP_FROM")}
+	}
+	every := 15 * time.Minute
+	if v := getenv("WWBB_DIGEST_MINUTES"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return nil, 0, fmt.Errorf("WWBB_DIGEST_MINUTES is %q, want minutes from 0", v)
+		}
+		every = time.Duration(n) * time.Minute
+	}
+	n, err := notify.New(cfg)
+	return n, every, err
 }
 
 // ssoFromEnv configures OpenID Connect (ADR-0030) from the environment, or

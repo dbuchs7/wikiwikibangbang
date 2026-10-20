@@ -76,3 +76,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0061](0061-account-requests-and-message-channels-on-accounts.md) | Account requests at the sign-in page and message channels on accounts | Accepted | Landed |
 | [0062](0062-spaces-carry-an-icon-and-show-as-tiles-or-a-list.md) | Spaces carry an icon and show as tiles or a list | Accepted | Landed |
 | [0063](0063-a-comment-overview-across-items.md) | A comment overview across items | Accepted | Landed |
+| [0064](0064-message-delivery-and-password-reset.md) | Message delivery over the account's channels, and the password reset by mail | Accepted | Landed |

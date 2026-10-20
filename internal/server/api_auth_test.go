@@ -82,11 +82,13 @@ func setupAuth(t *testing.T, opts ...func(*Deps)) (http.Handler, Deps) {
 // publicAPI is every API route an anonymous caller may reach. Adding one is
 // a security decision; this list makes it a visible one.
 var publicAPI = map[string]bool{
-	"/api/login":         true,
-	"/api/oidc":          true, // whether single sign-on exists
-	"/api/oidc/login":    true,
-	"/api/oidc/callback": true,
-	"/api/signup":        true, // asking for an account (ADR-0061)
+	"/api/login":                  true,
+	"/api/oidc":                   true, // whether single sign-on exists
+	"/api/oidc/login":             true,
+	"/api/oidc/callback":          true,
+	"/api/signup":                 true, // asking for an account (ADR-0061)
+	"/api/password-reset":         true, // a forgotten password (ADR-0064)
+	"/api/password-reset/confirm": true,
 }
 
 func TestEveryAPIRouteButLoginNeedsAPrincipal(t *testing.T) {

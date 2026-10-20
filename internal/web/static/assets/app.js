@@ -616,6 +616,7 @@ async function route() {
     const [, section, arg, arg2] = hash.split("?")[0].split("/").map(decodeURIComponent);
     const params = new URLSearchParams(hash.split("?")[1] || "");
     renderModules(section || "");
+    if (section === "reset") return resetView(arg || "");
     if (!me) return loginView();
     switch (section) {
       case "new": return await newView(params);
@@ -701,8 +702,27 @@ async function loginView() {
       route();
     }),
     sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: t("login.with", { name: sso.name }) })) : "",
+    signup.passwordReset ? h("p", { class: "login-more" },
+      h("button", { type: "button", class: "link", id: "forgot-open", text: t("reset.forgot"), onclick: forgotForm })) : "",
     signup.open ? h("p", { class: "login-more" }, t("signup.question"), " ",
       h("button", { type: "button", class: "link", id: "signup-open", text: t("signup.open"), onclick: requestForm })) : "",
+  );
+  // forgotForm asks for a reset link by mail (ADR-0064); the answer does
+  // not say whether the account exists.
+  const forgotForm = () => card.replaceChildren(
+    h("h1", { text: t("reset.title") }),
+    h("p", { class: "muted", text: t("reset.help") }),
+    form({ id: "forgot" }, [
+      field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true })),
+      h("button", { type: "submit", text: t("reset.send") }),
+    ], async (data) => {
+      await post("/api/password-reset", { username: data.get("username") });
+      card.replaceChildren(
+        h("h1", { text: t("reset.title") }),
+        h("p", { class: "notice", id: "forgot-sent", text: t("reset.sent") }),
+        h("p", {}, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })));
+    }),
+    h("p", { class: "login-more" }, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })),
   );
   // requestForm asks for an account (ADR-0061): the password is chosen
   // now, an administrator approves or rejects the request.
@@ -725,6 +745,30 @@ async function loginView() {
     h("p", { class: "login-more" }, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })),
   );
   signIn();
+  show(card);
+}
+
+// resetView chooses a new password with the token of a reset link
+// (ADR-0064). The token travels in the address's fragment, so it reaches
+// no server log and no other site.
+function resetView(token) {
+  const show = screen();
+  const card = h("section", { class: "card narrow", id: "reset-card" });
+  card.replaceChildren(
+    h("h1", { text: t("reset.choose") }),
+    form({ id: "reset" }, [
+      field(t("account.new"), h("input", { name: "password", type: "password", autocomplete: "new-password", minlength: 12, required: true })),
+      field(t("reset.repeat"), h("input", { name: "repeat", type: "password", autocomplete: "new-password", minlength: 12, required: true })),
+      h("button", { type: "submit", class: "primary", text: t("reset.save") }),
+    ], async (data) => {
+      if (data.get("password") !== data.get("repeat")) throw new Error(t("admin.differ"));
+      await post("/api/password-reset/confirm", { token, password: data.get("password") });
+      me = null;
+      card.replaceChildren(
+        h("h1", { text: t("reset.choose") }),
+        h("p", { class: "notice", id: "reset-done", text: t("reset.done") }),
+        h("p", {}, link("#/", t("login.submit"), "button primary", "reset-login")));
+    }));
   show(card);
 }
 
@@ -2147,15 +2191,31 @@ function contactsCard(contacts) {
     state.textContent = on.length ? t("contacts.available", { list: on.join(", ") }) : t("contacts.none");
   };
   summary(contacts);
+  const outcome = h("div", { id: "delivery" });
+  const resultName = { email: t("contacts.email"), slack: "Slack", teams: "Microsoft Teams", webhook: t("contacts.webhook") };
+  const showResults = (results, at) => outcome.replaceChildren(results?.length ? h("ul", { class: "delivery-results" },
+    at ? h("li", { class: "muted", text: t("contacts.lastAt", { when: when(at) }) }) : "",
+    ...results.map((r) => h("li", { class: r.ok ? "ok" : "failed" },
+      h("strong", { text: (resultName[r.channel] || r.channel) + ": " }), r.ok ? t("contacts.delivered") : r.problem))) : "");
+  showResults(contacts.last?.results, contacts.last?.at);
+  const test = h("button", { type: "button", id: "contacts-test", class: "secondary", text: t("contacts.test"), onclick: () => action(async () => {
+    test.disabled = true;
+    try {
+      const { results } = await post("/api/me/contacts/test");
+      showResults(results);
+    } finally { test.disabled = false; }
+  }, outcome) });
   return form({ class: "card", id: "contacts" }, [
     h("h2", { text: t("contacts.title") }),
     h("p", { class: "muted", text: t("contacts.help") }),
     channel("email", t("contacts.email"), "email", "name@example.org"),
+    contacts.mail ? "" : h("p", { class: "muted", id: "no-mail", text: t("contacts.noMailServer") }),
     channel("slack", "Slack", "url", "https://hooks.slack.com/services/…"),
     channel("teams", "Microsoft Teams", "url", "https://…"),
     channel("webhook", t("contacts.webhook"), "url", "https://…"),
     state,
-    h("button", { type: "submit", text: t("common.save") }),
+    h("p", { class: "actions-row" }, h("button", { type: "submit", text: t("common.save") }), test),
+    outcome,
   ], async (data, st) => {
     const saved = await put("/api/me/contacts", { email: data.get("email"), slack: data.get("slack"), teams: data.get("teams"), webhook: data.get("webhook") });
     summary(saved);
@@ -2327,6 +2387,16 @@ async function adminView() {
             onclick: () => confirm(t("requests.rejectConfirm", { name: rq.username })) && action(() => del(`/api/account-requests/${rq.id}`), status) }))))) :
       h("p", { class: "muted", id: "no-requests", text: t("requests.none") }));
 
+  // A reset link to hand over, for someone without a mail address or when
+  // mail is not set up (ADR-0064).
+  const resetCell = (u) => h("td", {}, h("button", { type: "button", class: "link", text: t("reset.link"), "aria-label": t("reset.linkFor", { name: u.username }),
+    onclick: () => action(async () => {
+      const { token, expires } = await post(`/api/users/${encodeURIComponent(u.id)}/password-reset`);
+      const url = `${location.origin}/#/reset/${token}`;
+      status.replaceChildren(h("div", { class: "notice", id: "reset-handed" },
+        h("p", { text: t("reset.linkMade", { name: u.username, when: when(expires) }) }),
+        h("code", { class: "copyable", text: url })));
+    }, status) }));
   const emailCell = (u) => h("td", {},
     h("span", { class: "muted", text: u.email || t("contacts.noEmail") }), " ",
     h("button", { type: "button", class: "link", text: t("common.edit"), "aria-label": t("contacts.editEmail", { name: u.username }), onclick: () => {
@@ -2339,7 +2409,8 @@ async function adminView() {
       h("td", { text: u.username }),
       emailCell(u),
       h("td", {}, sysToggle(u, "admin", t("admin.roleAdmin"))),
-      h("td", {}, sysToggle(u, "erasure", t("admin.roleErasure")))))),
+      h("td", {}, sysToggle(u, "erasure", t("admin.roleErasure"))),
+      resetCell(u)))),
     form({ id: "new-user" }, [
       h("h3", { text: t("admin.newUser") }),
       field(t("field.username"), h("input", { name: "username", required: true })),

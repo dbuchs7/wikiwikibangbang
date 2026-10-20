@@ -14,7 +14,50 @@ function check(cond, msg) {
   if (!cond) throw new Error("check failed: " + msg);
 }
 
+// mailSink is a mail server that keeps every message, for the server under
+// test to send to (WWBB_SMTP_HOST=127.0.0.1, WWBB_SMTP_PORT=SMTP_SINK_PORT,
+// WWBB_SMTP_SECURITY=none). Without SMTP_SINK_PORT there is none.
+function mailSink(port) {
+  const mails = [];
+  if (!port) return { mails, close() {} };
+  const server = require("net").createServer((sock) => {
+    let buf = "", data = false, msg = "";
+    const say = (line) => sock.write(line + "\r\n");
+    say("220 sink");
+    sock.on("data", (chunk) => {
+      buf += chunk.toString("utf8");
+      let i;
+      while ((i = buf.indexOf("\r\n")) >= 0) {
+        const line = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        if (data) {
+          if (line === ".") { data = false; mails.push(msg); msg = ""; say("250 kept"); } else msg += line + "\r\n";
+          continue;
+        }
+        const cmd = line.toUpperCase();
+        if (cmd === "DATA") { data = true; say("354 go on"); } else if (cmd === "QUIT") { say("221 bye"); sock.end(); } else say("250 ok");
+      }
+    });
+  });
+  server.listen(Number(port), "127.0.0.1");
+  return { mails, close: () => server.close() };
+}
+
+// mailTo waits for a mail to an address and returns its text, decoded.
+async function mailTo(sink, address) {
+  for (let i = 0; i < 100; i++) {
+    const m = sink.mails.find((x) => x.includes(`<${address}>`));
+    if (m) {
+      const body = m.split("\r\n\r\n").slice(1).join("\r\n\r\n");
+      return body.replace(/=\r\n/g, "").replace(/=([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("no mail to " + address);
+}
+
 (async () => {
+  const sink = mailSink(process.env.SMTP_SINK_PORT);
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const page = await browser.newPage();
   const problems = [];
@@ -756,6 +799,31 @@ function check(cond, msg) {
     await guest.click("#contacts button[type=submit]");
     await guest.waitForSelector("#channels:has-text('Mail address, Slack')");
     await guestCtx.close();
+    if (process.env.SMTP_SINK_PORT) {
+      check((await mailTo(sink, "dana@example.org")).includes("Your account dana was approved"), "dana is told of the approval");
+      step("password reset: a link by mail sets a new password");
+      const resetCtx = await browser.newContext();
+      const reset = await resetCtx.newPage();
+      reset.on("pageerror", (e) => problems.push("reset page error: " + e.message));
+      sink.mails.length = 0;
+      await reset.goto(base + "/");
+      await reset.click("#forgot-open");
+      await reset.fill("#forgot [name=username]", "dana");
+      await reset.click("#forgot button[type=submit]");
+      await reset.waitForSelector("#forgot-sent");
+      const link = (await mailTo(sink, "dana@example.org")).match(/http\S*#\/reset\/[0-9a-f]+/)[0];
+      await reset.goto(link);
+      await reset.fill("#reset [name=password]", "dana's second password");
+      await reset.fill("#reset [name=repeat]", "dana's second password");
+      await reset.click("#reset button[type=submit]");
+      await reset.waitForSelector("#reset-done");
+      await reset.click("#reset-login");
+      await reset.fill("#login [name=username]", "dana");
+      await reset.fill("#login [name=password]", "dana's second password");
+      await reset.click("#login button[type=submit]");
+      await reset.waitForSelector("#account-button");
+      await resetCtx.close();
+    }
 
     step("administration: groups, a group's role in a space, system roles");
     await page.click("#account-button");
@@ -931,5 +999,6 @@ function check(cond, msg) {
     process.exitCode = 1;
   } finally {
     await browser.close();
+    sink.close();
   }
 })();

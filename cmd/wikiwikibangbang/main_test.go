@@ -510,3 +510,28 @@ func TestMCPStdio(t *testing.T) {
 		t.Fatalf("a bad flag: exit %d", code)
 	}
 }
+
+func TestNotifierFromEnv(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	n, every, err := notifierFromEnv(env(nil))
+	if err != nil || n.Mail() || every != 15*time.Minute {
+		t.Fatalf("defaults: %v %v %v", n.Mail(), every, err)
+	}
+	n, every, err = notifierFromEnv(env(map[string]string{"WWBB_SMTP_HOST": "mail.example.org", "WWBB_SMTP_FROM": "wiki@example.org",
+		"WWBB_SMTP_SECURITY": "tls", "WWBB_PUBLIC_URL": "https://wiki.example.org", "WWBB_DIGEST_MINUTES": "0"}))
+	if err != nil || !n.Mail() || every != 0 || n.Status().MailHost != "mail.example.org" {
+		t.Fatalf("mail: %+v %v %v", n.Status(), every, err)
+	}
+	for name, m := range map[string]map[string]string{
+		"no sender":    {"WWBB_SMTP_HOST": "mail.example.org"},
+		"bad port":     {"WWBB_SMTP_HOST": "h", "WWBB_SMTP_FROM": "a@b.org", "WWBB_SMTP_PORT": "x"},
+		"bad minutes":  {"WWBB_DIGEST_MINUTES": "-1"},
+		"bad private":  {"WWBB_WEBHOOKS_PRIVATE": "yes"},
+		"bad url":      {"WWBB_PUBLIC_URL": "wiki.example.org"},
+		"bad security": {"WWBB_SMTP_HOST": "h", "WWBB_SMTP_FROM": "a@b.org", "WWBB_SMTP_SECURITY": "ssl"},
+	} {
+		if _, _, err := notifierFromEnv(env(m)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

@@ -645,5 +645,21 @@ export default {
   "comments.commented": "kommentierte",
   "comments.replied": "antwortete auf",
   "comments.resolved": "Erledigt",
-  "comments.none": "Hier gibt es noch keine Kommentare."
+  "comments.none": "Hier gibt es noch keine Kommentare.",
+  "reset.forgot": "Passwort vergessen?",
+  "reset.title": "Passwort zurücksetzen",
+  "reset.help": "Geben Sie Ihren Benutzernamen ein. Ist für Ihr Konto eine E-Mail-Adresse hinterlegt, wird dorthin ein Link zum Wählen eines neuen Passworts gesendet; er ist 30 Minuten gültig.",
+  "reset.send": "Link senden",
+  "reset.sent": "Falls das Konto existiert und eine E-Mail-Adresse hat, ist ein Link unterwegs. Prüfen Sie Ihr Postfach, auch den Spam-Ordner.",
+  "reset.choose": "Neues Passwort wählen",
+  "reset.repeat": "Neues Passwort wiederholen",
+  "reset.save": "Passwort speichern",
+  "reset.done": "Ihr Passwort wurde geändert. Alle offenen Sitzungen Ihres Kontos wurden beendet; melden Sie sich mit dem neuen Passwort an.",
+  "reset.link": "Reset-Link",
+  "reset.linkFor": "Reset-Link für {name} erstellen",
+  "reset.linkMade": "Reset-Link für {name}, gültig bis {when}. Übergeben Sie ihn auf sicherem Weg; er wird nur jetzt angezeigt.",
+  "contacts.test": "Testnachricht senden",
+  "contacts.delivered": "zugestellt",
+  "contacts.lastAt": "Letzte Nachricht, {when}:",
+  "contacts.noMailServer": "Dieser Server versendet keine E-Mails; die Adresse wird für später gespeichert."
 };

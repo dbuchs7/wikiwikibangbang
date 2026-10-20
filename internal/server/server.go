@@ -70,6 +70,9 @@ type Deps struct {
 	// LinkCheck runs link checks (ADR-0039); nil means link checking is
 	// switched off.
 	LinkCheck *LinkChecks
+	// Messages sends messages to people (ADR-0064); Routes creates one
+	// that sends nothing when it is nil.
+	Messages *Messenger
 }
 
 // MetricsPath serves the operational metrics. It is the only path a token
@@ -109,6 +112,9 @@ func Routes(d Deps) []Route {
 	if d.Metrics == nil {
 		d.Metrics = NewMetrics(d.DB, d.Collab)
 	}
+	if d.Messages == nil {
+		d.Messages = NewMessenger(nil, d.DB, d.Log, 0)
+	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},
@@ -120,6 +126,7 @@ func Routes(d Deps) []Route {
 	}
 	routes = append(routes, authRoutes(d)...)
 	routes = append(routes, accountRoutes(d)...)
+	routes = append(routes, messageRoutes(d)...)
 	routes = append(routes, spaceIconRoutes(d)...)
 	routes = append(routes, avatarRoutes(d)...)
 	routes = append(routes, brandingRoutes(d)...)

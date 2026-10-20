@@ -923,6 +923,14 @@ type SpaceInfo struct {
 	Name string
 }
 
+// Seq is the sequence number of the newest event, or 0 for none.
+func (s *Store) Seq() int {
+	if len(s.log) == 0 {
+		return 0
+	}
+	return s.log[len(s.log)-1].Seq
+}
+
 // Spaces lists all spaces, ordered by key.
 func (s *Store) Spaces() []SpaceInfo {
 	out := make([]SpaceInfo, 0, len(s.spaces))

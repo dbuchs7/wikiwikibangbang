@@ -38,6 +38,9 @@ var classified = map[string]string{
 	"internal/mcp/client.go:maxAnswer": "the same bound, where the adapter reads",
 	"internal/migrate.maxSourceAnswer": "the import reading an answer of the source site (ADR-0023), " +
 		"not a caller's input to this server; it guards the import against a source that misbehaves",
+	"internal/notify.maxHookAnswer": "the answer of a webhook a message was posted to (ADR-0064), read and dropped; " +
+		"not a caller's input to this server",
+	"internal/notify/hooks.go:maxHookAnswer":    "the same bound, where the answer is dropped",
 	"internal/migrate/cloud.go:maxSourceAnswer": "the same bound, where the import reads (ADR-0023)",
 }
 

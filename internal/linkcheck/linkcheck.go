@@ -61,14 +61,32 @@ func New(o Options) *Checker {
 	if o.Concurrency <= 0 {
 		o.Concurrency = 4
 	}
+	transport := Transport(o.Allowed, o.Timeout)
+	client := &http.Client{
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= redirectLimit {
+				return errors.New("too many redirects")
+			}
+			return nil
+		},
+	}
+	return &Checker{client: client, timeout: o.Timeout, concurrency: o.Concurrency}
+}
+
+// Transport returns an HTTP transport that connects only to addresses
+// allowed decides on, checked after name resolution and on the address
+// actually connected to, and never through a proxy. Messages to webhooks
+// use it as well (ADR-0062).
+func Transport(allowed func(netip.Addr) bool, timeout time.Duration) *http.Transport {
 	dialer := &net.Dialer{
-		Timeout: o.Timeout,
+		Timeout: timeout,
 		// Control runs for the address actually connected to, after the
 		// name was resolved: a name that resolves to an internal address,
 		// or changes its answer between two lookups, is caught here.
 		Control: func(_, address string, _ syscall.RawConn) error {
 			ap, err := netip.ParseAddrPort(address)
-			if err != nil || !o.Allowed(ap.Addr().Unmap()) {
+			if err != nil || !allowed(ap.Addr().Unmap()) {
 				return errInternal
 			}
 			return nil
@@ -89,7 +107,7 @@ func New(o Options) *Checker {
 			return nil, err
 		}
 		for _, a := range addrs {
-			if !o.Allowed(a.Unmap()) {
+			if !allowed(a.Unmap()) {
 				return nil, errInternal
 			}
 		}
@@ -103,20 +121,11 @@ func New(o Options) *Checker {
 		// the proxy.
 		Proxy:                 nil,
 		DialContext:           dial,
-		TLSHandshakeTimeout:   o.Timeout,
-		ResponseHeaderTimeout: o.Timeout,
+		TLSHandshakeTimeout:   timeout,
+		ResponseHeaderTimeout: timeout,
 		MaxIdleConnsPerHost:   1,
 	}
-	client := &http.Client{
-		Transport: transport,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= redirectLimit {
-				return errors.New("too many redirects")
-			}
-			return nil
-		},
-	}
-	return &Checker{client: client, timeout: o.Timeout, concurrency: o.Concurrency}
+	return transport
 }
 
 // Public reports whether an address is on the public internet: not

@@ -75,7 +75,7 @@ func TestAccountRequestsThroughTheAPI(t *testing.T) {
 
 func TestContactsThroughTheAPI(t *testing.T) {
 	w := newWorld(t)
-	if got := w.bert.expect("GET", "/api/me/contacts", "", http.StatusOK); len(got) != 0 {
+	if got := w.bert.expect("GET", "/api/me/contacts", "", http.StatusOK); len(got) != 1 || got["mail"] != false {
 		t.Fatalf("no channels at first: %v", got)
 	}
 	w.bert.expect("PUT", "/api/me/contacts", `{"slack":"https://example.org/x"}`, http.StatusBadRequest)
