@@ -135,3 +135,71 @@ func TestPicturesListOnlyReadableFiles(t *testing.T) {
 		t.Errorf("an outsider sees %v", names(got))
 	}
 }
+
+// TestCopiesKnowTheirOrigin: a copy names its source, must have its
+// content, and learns of a newer version of it; a reader who may not read
+// the source learns nothing of it (ADR-0055).
+func TestCopiesKnowTheirOrigin(t *testing.T) {
+	s := permFixture(t)
+	anna, ben, pat := s.As("anna"), s.As("ben"), s.As("pat")
+	plans := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Plans"}))
+	runbook := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	const v1, v2, c1, c2 = "0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210", "00000000000000000000000000000001", "00000000000000000000000000000002"
+	_, err := anna.AddAttachment(plans.ID, testFile(v1, "plan.drawing.png"))
+	noErr(t, err)
+
+	forged := testFile(c1, "plan.drawing.png")
+	forged.SHA256 = strings.Repeat("cd", 32)
+	forged.Source = &Source{Item: plans.ID, Attachment: v1}
+	if _, err := anna.AddAttachment(runbook.ID, forged); !errors.Is(err, ErrValidation) {
+		t.Errorf("a copy with other content: %v", err)
+	}
+	copied := testFile(c1, "plan.drawing.png")
+	copied.Source = &Source{Item: plans.ID, Attachment: v1}
+	_, err = anna.AddAttachment(runbook.ID, copied)
+	noErr(t, err)
+	if o, ok, err := anna.FileOrigin(runbook.ID, c1); err != nil || !ok || !o.Readable || o.Item.Key != plans.Key || o.Latest != nil {
+		t.Fatalf("origin of a fresh copy: %+v %v %v", o, ok, err)
+	}
+	if _, ok, _ := anna.FileOrigin(plans.ID, v1); ok {
+		t.Error("an original is no copy")
+	}
+
+	// The original is drawn again: the copy learns of the newer version,
+	// even once the version it was copied from is deleted.
+	next := testFile(v2, "plan.drawing.png")
+	next.SHA256 = strings.Repeat("ef", 32)
+	next.Source = &Source{Item: plans.ID, Attachment: v1}
+	_, err = anna.AddAttachment(plans.ID, next)
+	noErr(t, err)
+	noErr(t, anna.DeleteAttachment(plans.ID, v1))
+	if o, _, _ := ben.FileOrigin(runbook.ID, c1); o.Latest == nil || o.Latest.ID != v2 {
+		t.Fatalf("a newer original: %+v", o)
+	}
+	// Taking it over: a copy of the newer version, which leads back to it.
+	update := testFile(c2, "plan.drawing.png")
+	update.SHA256 = next.SHA256
+	update.Source = &Source{Item: plans.ID, Attachment: v2}
+	_, err = anna.AddAttachment(runbook.ID, update)
+	noErr(t, err)
+	if o, _, _ := ben.FileOrigin(runbook.ID, c2); o.Latest != nil {
+		t.Errorf("the taken-over copy is current: %+v", o)
+	}
+	if _, err := anna.AddAttachment(runbook.ID, Attachment{ID: "00000000000000000000000000000003", Name: "x.png", Type: "image/png", Size: 3,
+		SHA256: next.SHA256, Source: &Source{Item: plans.ID, Attachment: v1}}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a copy of a deleted file: %v", err)
+	}
+
+	// Restricted to pat, the source is not told to ben, and pat may not
+	// copy what does not exist to him.
+	noErr(t, pat.Restrict(plans.ID, Restriction{Read: []string{"pat"}}))
+	if o, ok, err := ben.FileOrigin(runbook.ID, c2); err != nil || !ok || o.Readable || o.Item.Key != "" {
+		t.Errorf("an unreadable source: %+v %v %v", o, ok, err)
+	}
+	stolen := testFile("00000000000000000000000000000004", "x.png")
+	stolen.SHA256 = next.SHA256
+	stolen.Source = &Source{Item: plans.ID, Attachment: v2}
+	if _, err := anna.AddAttachment(runbook.ID, stolen); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a copy from an unreadable item: %v", err)
+	}
+}

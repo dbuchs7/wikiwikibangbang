@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":12,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":13,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -140,8 +140,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	watches := watchLog(t)
 	inline := inlineCommentLog(t)
 	access := revocationLog(t)
+	provenance := provenanceLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline, access) {
+	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline, access, provenance) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -154,18 +155,19 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v11.golden.jsonl", nil, log},
-		{"events.v11.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v11.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v11.comments.golden.jsonl", fakeSealer{}, comments},
-		{"events.v11.tree.golden.jsonl", fakeSealer{}, tree},
-		{"events.v11.blocks.golden.jsonl", fakeSealer{}, blocks},
-		{"events.v11.labels.golden.jsonl", fakeSealer{}, labels},
-		{"events.v11.attachments.golden.jsonl", fakeSealer{}, files},
-		{"events.v11.attachments.plain.golden.jsonl", nil, files},
-		{"events.v11.watches.golden.jsonl", fakeSealer{}, watches},
-		{"events.v11.inline.golden.jsonl", fakeSealer{}, inline},
-		{"events.v11.revocations.golden.jsonl", nil, access},
+		{"events.v12.golden.jsonl", nil, log},
+		{"events.v12.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v12.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v12.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v12.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v12.blocks.golden.jsonl", fakeSealer{}, blocks},
+		{"events.v12.labels.golden.jsonl", fakeSealer{}, labels},
+		{"events.v12.attachments.golden.jsonl", fakeSealer{}, files},
+		{"events.v12.attachments.plain.golden.jsonl", nil, files},
+		{"events.v12.watches.golden.jsonl", fakeSealer{}, watches},
+		{"events.v12.inline.golden.jsonl", fakeSealer{}, inline},
+		{"events.v12.revocations.golden.jsonl", nil, access},
+		{"events.v12.provenance.golden.jsonl", fakeSealer{}, provenance},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -198,7 +200,7 @@ func TestPersistedFormatIsStable(t *testing.T) {
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
 // text), 4 (comments), 5 (sibling order), 6 (block kinds), 7 (labels), 8
-// (attachments), 9 (watches), 10 (inline comments) — still open and rebuild the same state and history as today's log
+// (attachments), 9 (watches), 10 (inline comments), 11 (revocations) — still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -260,6 +262,45 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v10.attachments.plain.golden.jsonl"), nil, attachmentLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v10.watches.golden.jsonl"), fakeSealer{}, watchLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v10.inline.golden.jsonl"), fakeSealer{}, inlineCommentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.labels.golden.jsonl"), fakeSealer{}, labelLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.attachments.golden.jsonl"), fakeSealer{}, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.attachments.plain.golden.jsonl"), nil, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.watches.golden.jsonl"), fakeSealer{}, watchLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.inline.golden.jsonl"), fakeSealer{}, inlineCommentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v11.revocations.golden.jsonl"), nil, revocationLog(t))
+}
+
+// provenanceLog copies a file to another item, makes a new version of the
+// original, and deletes the version copied, so the golden file pins sealed
+// sources and the source kept by a deleted file (ADR-0055).
+func provenanceLog(t *testing.T) []Event {
+	s := setup(t)
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Plans"}))
+	other := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	file := func(id string, src *Source) Attachment {
+		return Attachment{ID: ID(id), Name: "plan.drawing.png", Type: "image/png", Size: 3, SHA256: strings.Repeat("ab", 32), Source: src}
+	}
+	const v1, v2, c1 = "0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210", "00000000000000000000000000000001"
+	for _, f := range []struct {
+		item ID
+		a    Attachment
+	}{
+		{page.ID, file(v1, nil)},
+		{other.ID, file(c1, &Source{Item: page.ID, Attachment: v1})},
+		{page.ID, file(v2, &Source{Item: page.ID, Attachment: v1})},
+	} {
+		if _, err := s.AddAttachment("anna", f.item, f.a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	noErr(t, s.DeleteAttachment("anna", page.ID, v1))
+	return s.Log()
 }
 
 // revocationLog grants and takes back a space role, a group membership and

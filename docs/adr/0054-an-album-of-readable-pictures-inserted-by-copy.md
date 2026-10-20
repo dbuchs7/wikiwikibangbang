@@ -37,7 +37,7 @@ Chosen option: **1**.
 - **Negative / trade-offs accepted:** copies diverge; changing the original does not change its copies. A plan used in many pages is updated page by page.
 - **Negative / trade-offs accepted:** a copy takes on the target's access. Someone who may read a restricted picture can put it in an open page; they could already download and upload it, so no right is added, but the album makes it easier. The sensitive-content check (ADR-0040) reads text, not pictures.
 - **Negative / trade-offs accepted:** the listing scans every item in memory, like search (ADR-0033).
-- **Follow-ups / risks to watch:** insert by reference (option 3) if living plans across pages are needed; marking copies with their source.
+- **Follow-ups / risks to watch:** insert by reference (option 3) if living plans across pages are needed. Copies carry their source since ADR-0055.
 
 ## Pros and cons of the options
 

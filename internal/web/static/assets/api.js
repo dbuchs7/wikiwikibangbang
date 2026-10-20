@@ -37,9 +37,12 @@ export const del = (p) => api("DELETE", p);
 
 // upload sends a file as an attachment of an item (ADR-0045). The body is
 // the file itself, as application/octet-stream, a type a cross-site form
-// cannot send.
-export async function upload(itemPath, file) {
-  const res = await fetch(`${itemPath}/attachments?name=${encodeURIComponent(file.name)}`, {
+// cannot send. source ({item, attachment}) names the file it is a copy or
+// a new version of (ADR-0055).
+export async function upload(itemPath, file, source) {
+  const q = new URLSearchParams({ name: file.name });
+  if (source) q.set("sourceItem", source.item), q.set("sourceAttachment", source.attachment);
+  const res = await fetch(`${itemPath}/attachments?${q}`, {
     method: "POST", credentials: "same-origin",
     headers: { "Content-Type": "application/octet-stream" }, body: file,
   });

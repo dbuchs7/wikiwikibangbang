@@ -534,3 +534,5 @@ dialog.album-dialog::backdrop { background: rgba(20, 22, 26, .45); }
 #design-contrast ul { margin: 6px 0; padding-left: 0; list-style: none; }
 #design-contrast li { margin: 4px 0; }
 .design-pair { display: inline-block; min-width: 2.4em; padding: 1px 6px; border: 1px solid var(--border); border-radius: 4px; font-weight: 600; text-align: center; }
+.att-origin .chip { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--danger-soft); color: var(--danger); }
+.pm-take-over { font-size: 13px; }

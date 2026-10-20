@@ -480,6 +480,35 @@ function check(cond, msg) {
     await page.waitForSelector("#body.reading");
     await page.waitForFunction(() => { const img = document.querySelector("#body .pm-image img"); return img && img.complete && img.naturalWidth > 100; });
     check(await page.locator("#attachments li:has-text('.drawing.png')").count() === 1, "the copy is a file of the page it was inserted into");
+    await page.waitForSelector("#attachments li:has-text('.drawing.png') .att-origin a:has-text('PLAT-5')"); // the copy names its origin
+
+    step("provenance: the original is drawn again; its copy learns of it and takes the newer version over");
+    await page.goto(base + "/#/item/PLAT-5?edit");
+    await page.waitForSelector("#body.editing .pm-redraw");
+    await page.click("#body .pm-redraw");
+    await page.waitForSelector("dialog.drawing[open] iframe");
+    let again = page.frameLocator("dialog.drawing iframe");
+    await again.locator("body[data-state=open][data-elements='1']").waitFor();
+    await again.locator("[data-testid=toolbar-ellipse]").click({ force: true });
+    const box2 = await page.locator("dialog.drawing iframe").boundingBox();
+    await page.mouse.move(box2.x + box2.width / 2 + 160, box2.y + box2.height / 2 - 40);
+    await page.mouse.down();
+    await page.mouse.move(box2.x + box2.width / 2 + 260, box2.y + box2.height / 2 + 40, { steps: 8 });
+    await page.mouse.up();
+    await again.locator("body[data-elements='2']").waitFor();
+    await page.click("dialog.drawing button:has-text('Save drawing')");
+    await page.waitForSelector("dialog.drawing", { state: "detached" });
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    await page.goto(base + "/#/item/PLAT-2");
+    await page.waitForSelector("#attachments .att-origin .chip:has-text('original changed')");
+    await page.goto(base + "/#/item/PLAT-2?edit");
+    await page.waitForSelector("#body.editing .pm-take-over:has-text('PLAT-5')");
+    await page.click("#body .pm-take-over");
+    await page.waitForFunction(() => !document.querySelector("#body .pm-take-over")); // the block now shows the newer version
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    check(await page.locator("#attachments li:has-text('.drawing.png')").count() === 2, "the newer version is a copy of its own");
 
     step("links: the link check page says when checking is off");
     await page.click("a.brand");
