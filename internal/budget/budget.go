@@ -45,6 +45,9 @@ type Budgets struct {
 	// LoginTracked bounds the addresses and usernames the login throttle
 	// remembers, so failed logins cannot exhaust memory.
 	LoginTracked int
+	// AccountRequests bounds the account requests waiting for an
+	// administrator (ADR-0061).
+	AccountRequests int
 	// SSOPending bounds the single sign-on logins begun and not finished.
 	SSOPending int
 	// LinkCheckLinks bounds the distinct web addresses one link check
@@ -71,6 +74,7 @@ func Default() Budgets {
 		LiveClients:      50,
 		LiveBlocks:       5000,
 		LoginTracked:     100_000,
+		AccountRequests:  100,
 		SSOPending:       10_000,
 		LinkCheckLinks:   500,
 		AttachmentBytes:  25 << 20,

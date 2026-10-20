@@ -86,6 +86,7 @@ var publicAPI = map[string]bool{
 	"/api/oidc":          true, // whether single sign-on exists
 	"/api/oidc/login":    true,
 	"/api/oidc/callback": true,
+	"/api/signup":        true, // asking for an account (ADR-0061)
 }
 
 func TestEveryAPIRouteButLoginNeedsAPrincipal(t *testing.T) {

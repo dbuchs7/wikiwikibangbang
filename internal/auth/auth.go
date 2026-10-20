@@ -111,7 +111,8 @@ type Accounts struct {
 
 	users    map[UserID]*user
 	byName   map[string]UserID
-	tokens   map[string]*token // by secret hash
+	requests map[string]*request // pending account requests (ADR-0061)
+	tokens   map[string]*token   // by secret hash
 	tokenIDs map[string]*token
 	sessions map[string]*session // by secret hash
 	external map[string]UserID   // issuer + "\x00" + subject -> user (ADR-0030)
@@ -131,6 +132,8 @@ type user struct {
 	// (ADR-0050).
 	avatar     []byte
 	avatarType string
+	// contacts are the channels messages reach the user on (ADR-0061).
+	contacts Contacts
 }
 
 type token struct {
@@ -162,7 +165,7 @@ func New(records [][]byte, j Journal, opts ...Option) (*Accounts, error) {
 		iter:  DefaultIterations,
 		users: map[UserID]*user{}, byName: map[string]UserID{},
 		tokens: map[string]*token{}, tokenIDs: map[string]*token{}, sessions: map[string]*session{},
-		external: map[string]UserID{},
+		external: map[string]UserID{}, requests: map[string]*request{},
 	}
 	for _, o := range opts {
 		o(a)
@@ -200,6 +203,12 @@ type event struct {
 	// Avatar is a profile picture; an AvatarSet without one removes it.
 	Avatar     []byte `json:"avatar,omitempty"`
 	AvatarType string `json:"avatarType,omitempty"`
+	// Contacts are set by ContactsSet and carry the address of an
+	// AccountRequested (ADR-0061).
+	Contacts *Contacts `json:"contacts,omitempty"`
+	// Request names an account request; Reason is the requester's note.
+	Request string `json:"request,omitempty"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 const (
@@ -218,6 +227,15 @@ const (
 	// avatarSet records a user's profile picture, or its removal
 	// (ADR-0050).
 	avatarSet = "AvatarSet"
+	// contactsSet records the channels messages reach a user on
+	// (ADR-0061).
+	contactsSet = "ContactsSet"
+	// accountRequested records a request for an account made at the
+	// sign-in page; requestApproved and requestRejected decide it. An
+	// approval is followed by the account's own events (ADR-0061).
+	accountRequested = "AccountRequested"
+	requestApproved  = "AccountRequestApproved"
+	requestRejected  = "AccountRequestRejected"
 )
 
 // apply is the only code that changes accounts; it runs live and on load.
@@ -263,6 +281,23 @@ func (a *Accounts) apply(e event) error {
 			return fmt.Errorf("avatar of unknown user %s", e.User)
 		}
 		u.avatar, u.avatarType = e.Avatar, e.AvatarType
+	case contactsSet:
+		u, ok := a.users[e.User]
+		if !ok || e.Contacts == nil {
+			return fmt.Errorf("contacts of unknown user %s", e.User)
+		}
+		u.contacts = *e.Contacts
+	case accountRequested:
+		var c Contacts
+		if e.Contacts != nil {
+			c = *e.Contacts
+		}
+		a.requests[e.Request] = &request{Request: Request{ID: e.Request, Username: e.Username, Email: c.Email, Reason: e.Reason, Created: e.At}, hash: e.Hash}
+	case requestApproved, requestRejected:
+		if _, ok := a.requests[e.Request]; !ok {
+			return fmt.Errorf("decision on unknown account request %s", e.Request)
+		}
+		delete(a.requests, e.Request)
 	case tokenRevoked:
 		if t, ok := a.tokenIDs[e.Token]; ok {
 			delete(a.tokens, t.hash)

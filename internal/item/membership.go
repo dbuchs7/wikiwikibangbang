@@ -127,6 +127,20 @@ func (x *Session) Revoke(space, principal string) error {
 	return x.s.RevokeRole(x.who, space, principal)
 }
 
+// EditsASpace reports whether the principal may edit in some space, and
+// so may look up the people to assign work to.
+func (x *Session) EditsASpace() bool {
+	if x.s.hasSystemRole(x.who, RoleAdmin) {
+		return true
+	}
+	for key := range x.s.spaces {
+		if x.s.spaceRole(x.who, key) >= Editor {
+			return true
+		}
+	}
+	return false
+}
+
 // AdministersASpace reports whether the principal is an administrator or
 // a space administrator somewhere, and so may look up the people to grant
 // roles to.

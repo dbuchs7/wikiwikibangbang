@@ -307,14 +307,14 @@ function renderFooter() {
 
 // modules are offered behind the nine dots, as in the atlas console. match
 // names the route sections that belong to a module, for its highlight.
-// admin marks the modules only administrators see.
+// admin marks the modules only administrators see. The notifications are
+// reached through the bell in the header, not here.
 const modules = [
   { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"] },
   { id: "new", name: "nav.new", href: "#/new", match: ["new"] },
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban"] },
   { id: "album", name: "nav.album", href: "#/album", match: ["album"] },
   { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"] },
-  { id: "notifications", name: "nav.notifications", href: "#/notifications", match: ["notifications"] },
   { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"] },
   { id: "account", name: "nav.account", href: "#/account", match: ["account"] },
   { id: "admin", name: "nav.admin", href: "#/admin", match: ["admin"], admin: true },
@@ -466,6 +466,13 @@ function accountMenu() {
   const button = h("button", { type: "button", id: "account-button", class: "account-button", "aria-haspopup": "menu", "aria-expanded": "false",
     "aria-controls": "account-menu", title: t("nav.accountOf", { name: me.user.username }), "aria-label": t("nav.accountOf", { name: me.user.username }) },
   avatar(me.user.id, me.user.username, me.avatar));
+  // Account requests waiting for an administrator show as a dot
+  // (ADR-0061).
+  if (me.admin && me.requests) {
+    button.classList.add("pending");
+    button.title += " · " + t("nav.requestsWaiting", { n: me.requests });
+    button.setAttribute("aria-label", button.title);
+  }
   const item = (href, text) => h("a", { href, role: "menuitem", text, tabindex: "-1" });
   const roles = [me.admin ? t("admin.roleAdmin") : null, me.erasure ? t("admin.roleErasure") : null].filter(Boolean);
   const menu = h("div", { id: "account-menu", class: "menu", role: "menu", hidden: true, "aria-label": t("nav.account") },
@@ -473,7 +480,7 @@ function accountMenu() {
       h("div", {}, h("strong", { text: me.user.username }), roles.length ? h("div", { class: "muted", text: roles.join(", ") }) : null)),
     item("#/account", t("nav.accountPage")),
     item("#/mcp", t("nav.mcp")),
-    me.admin ? item("#/admin", t("nav.admin")) : null,
+    me.admin ? item("#/admin", me.requests ? t("nav.adminRequests", { n: me.requests }) : t("nav.admin")) : null,
     h("hr"),
     h("button", { type: "button", role: "menuitem", tabindex: "-1", class: "link", id: "logout", text: t("nav.logout"),
       onclick: () => action(async () => { await post("/api/logout"); me = null; location.hash = "#/"; }) }));
@@ -513,10 +520,11 @@ function accountMenu() {
 const here = { space: "", parent: "" };
 
 // newHref is the address of the creation view for the place shown.
-function newHref(space = here.space, parent = here.parent) {
+function newHref(space = here.space, parent = here.parent, type = "") {
   const q = new URLSearchParams();
   if (space) q.set("space", space);
   if (parent) q.set("parent", parent);
+  if (type) q.set("type", type);
   return "#/new" + (q.size ? "?" + q : "");
 }
 
@@ -626,23 +634,47 @@ route();
 async function loginView() {
   const show = screen();
   const params = new URLSearchParams(location.search);
-  const sso = await get("/api/oidc").catch(() => ({ enabled: false }));
-  show(
-    h("section", { class: "card narrow" },
-      h("h1", { text: t("login.title") }),
-      params.get("login_error") ? h("p", { class: "error", text: t("login.failed") }) : null,
-      form({ id: "login" }, [
-        field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true })),
-        field(t("field.password"), h("input", { name: "password", type: "password", autocomplete: "current-password", required: true })),
-        h("button", { type: "submit", text: t("login.submit") }),
-      ], async (data) => {
-        await post("/api/login", { username: data.get("username"), password: data.get("password") });
-        me = null;
-        history.replaceState(null, "", "/#/");
-        route();
-      }),
-      sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: t("login.with", { name: sso.name }) })) : null,
-    ));
+  const [sso, signup] = await Promise.all([get("/api/oidc").catch(() => ({ enabled: false })), get("/api/signup").catch(() => ({ open: false }))]);
+  const card = h("section", { class: "card narrow", id: "login-card" });
+  const signIn = () => card.replaceChildren(
+    h("h1", { text: t("login.title") }),
+    params.get("login_error") ? h("p", { class: "error", text: t("login.failed") }) : "",
+    form({ id: "login" }, [
+      field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true })),
+      field(t("field.password"), h("input", { name: "password", type: "password", autocomplete: "current-password", required: true })),
+      h("button", { type: "submit", text: t("login.submit") }),
+    ], async (data) => {
+      await post("/api/login", { username: data.get("username"), password: data.get("password") });
+      me = null;
+      history.replaceState(null, "", "/#/");
+      route();
+    }),
+    sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: t("login.with", { name: sso.name }) })) : "",
+    signup.open ? h("p", { class: "login-more" }, t("signup.question"), " ",
+      h("button", { type: "button", class: "link", id: "signup-open", text: t("signup.open"), onclick: requestForm })) : "",
+  );
+  // requestForm asks for an account (ADR-0061): the password is chosen
+  // now, an administrator approves or rejects the request.
+  const requestForm = () => card.replaceChildren(
+    h("h1", { text: t("signup.title") }),
+    h("p", { class: "muted", text: t("signup.help") }),
+    form({ id: "signup" }, [
+      field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true, maxlength: 64 })),
+      field(t("contacts.email"), h("input", { name: "email", type: "email", autocomplete: "email", required: true })),
+      field(t("field.password"), h("input", { name: "password", type: "password", autocomplete: "new-password", minlength: 12, required: true })),
+      field(t("signup.reason"), h("textarea", { name: "reason", rows: 3, maxlength: 500, placeholder: t("signup.reasonHint") })),
+      h("button", { type: "submit", text: t("signup.submit") }),
+    ], async (data) => {
+      await post("/api/signup", { username: data.get("username"), email: data.get("email"), password: data.get("password"), reason: data.get("reason") });
+      card.replaceChildren(
+        h("h1", { text: t("signup.title") }),
+        h("p", { class: "notice", id: "signup-sent", text: t("signup.sent") }),
+        h("p", {}, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })));
+    }),
+    h("p", { class: "login-more" }, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })),
+  );
+  signIn();
+  show(card);
 }
 
 // --- search (ADR-0033) -------------------------------------------------------
@@ -721,14 +753,69 @@ async function homeView() {
       ? h("div", { class: "card first-steps" },
         h("p", { text: me.admin ? t("spaces.noneAdmin") : t("spaces.none") }),
         me.admin ? h("ol", {}, h("li", { text: t("home.step1") }), h("li", { text: t("home.step2") }), h("li", { text: t("home.step3") })) : null)
-      : h("ul", { class: "space-tiles spaces" }, spaces.map((s) => h("li", {},
-        h("a", { href: "#/space/" + encodeURIComponent(s.key), class: "space-tile" },
-          h("span", { class: "space-key", text: s.key }),
-          h("strong", { text: s.name }),
-          h("span", { class: "badge", text: roleText(s.role) }))))),
+      : spacesOverview(spaces),
     me.admin ? setupCard(types) : null,
     me.admin ? newSpaceForm(spaces.length === 0) : null,
   );
+}
+
+// spaceIcon shows a space's icon or logo (ADR-0062), or its key when it
+// has none.
+function spaceIcon(s, size) {
+  if (!s.icon) return h("span", { class: `space-icon space-icon-${size} space-icon-key`, "aria-hidden": "true", text: s.key.slice(0, 3) });
+  return h("img", { class: `space-icon space-icon-${size}`, src: `/api/spaces/${encodeURIComponent(s.key)}/icon?v=${encodeURIComponent(s.icon)}`, alt: "", width: size, height: size });
+}
+
+// spacesLayout is how the start page shows the spaces, as tiles or as a
+// list; each reader's own choice, kept in the browser.
+const spacesLayout = {
+  get() { try { return localStorage.getItem("wwbb.spaces") === "list" ? "list" : "tiles"; } catch { return "tiles"; } },
+  set(v) { try { localStorage.setItem("wwbb.spaces", v); } catch { /* the choice lasts for this page only */ } },
+};
+
+// spacesOverview shows the spaces as tiles or as a list, with a switch.
+function spacesOverview(spaces) {
+  const box = h("div", { id: "spaces-overview" });
+  const draw = (layout) => {
+    const toggle = (value, label) => h("button", { type: "button", class: "segment", "aria-pressed": String(layout === value), id: "spaces-" + value, text: label,
+      onclick: () => { spacesLayout.set(value); draw(value); } });
+    const href = (s) => "#/space/" + encodeURIComponent(s.key);
+    box.replaceChildren(
+      h("div", { class: "segmented", role: "group", "aria-label": t("home.layout") }, toggle("tiles", t("home.tiles")), toggle("list", t("home.list"))),
+      layout === "list"
+        ? h("table", { class: "spaces space-list" },
+          h("tr", {}, h("th", { text: t("field.name") }), h("th", { text: t("admin.key") }), h("th", { text: t("admin.role") })),
+          spaces.map((s) => h("tr", {},
+            h("td", {}, h("a", { href: href(s), class: "space-link" }, spaceIcon(s, 24), h("span", { text: s.name }))),
+            h("td", { class: "muted", text: s.key }),
+            h("td", {}, h("span", { class: "badge", text: roleText(s.role) })))))
+        : h("ul", { class: "space-tiles spaces" }, spaces.map((s) => h("li", {},
+          h("a", { href: href(s), class: "space-tile" },
+            h("span", { class: "space-tile-head" }, h("span", { class: "space-key", text: s.key }), s.icon ? spaceIcon(s, 48) : ""),
+            h("strong", { text: s.name }),
+            h("span", { class: "badge", text: roleText(s.role) }))))));
+  };
+  draw(spacesLayout.get());
+  return box;
+}
+
+// spaceIconCard sets or removes a space's icon (space administrators).
+function spaceIconCard(sp, status) {
+  const picker = h("input", { type: "file", id: "space-icon-file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml", "aria-label": t("space.iconChoose") });
+  const path = `/api/spaces/${encodeURIComponent(sp.key)}/icon`;
+  picker.addEventListener("change", () => action(async () => {
+    const file = picker.files[0];
+    if (!file) return;
+    const res = await fetch(path, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: file });
+    if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error || res.statusText);
+  }, status));
+  return h("section", { class: "card", id: "space-icon" },
+    h("h2", { text: t("space.icon") }),
+    h("div", { class: "avatar-row" }, spaceIcon(sp, 64),
+      h("div", {},
+        h("p", { class: "muted", text: t("space.iconHelp") }),
+        h("label", { class: "upload" }, h("span", { text: t("space.iconChoose") }), picker),
+        sp.icon ? h("button", { type: "button", class: "link", text: t("common.delete"), onclick: () => action(() => del(path), status) }) : "")));
 }
 
 // newSpaceForm creates a space and opens it (administrators). It starts
@@ -782,6 +869,16 @@ async function newView(params) {
   if (params.get("parent")) parent = (await get("/api/items/" + encodeURIComponent(params.get("parent")))).item;
   const space = editable.some((s) => s.key === params.get("space")) ? params.get("space") : editable[0]?.key;
   here.space = space || "";
+  // With a type, as from "New task", only its form is shown.
+  const only = types.find((ty) => ty.name === params.get("type"));
+  if (only && editable.length) {
+    show(
+      h("h1", { text: only.workflow ? t("tasks.new") : t("new.title") }),
+      newItemForm({ space, spaces: editable, types, type: only.name, heading: only.name }),
+      h("p", { class: "muted" }, link(newHref(space, parent?.id || ""), t("new.otherTypes"))));
+    document.querySelector("#new-item [name=title]")?.focus();
+    return;
+  }
   let pageCard;
   if (types.length === 0) {
     pageCard = h("p", { class: "muted", text: me.admin ? t("new.noTypesAdmin") : t("new.noTypes") });
@@ -947,6 +1044,13 @@ function boardOf(items, type, status, cardTail) {
 // or, failing that, the first user field; the due date the first date
 // field named like a deadline (as governance reads it, ADR-0040); the
 // priority an enum named priority, its values ordered from low to high.
+// taskType is the type "New task" creates: "task" when it has a workflow,
+// else the first type with one.
+function taskType(types) {
+  const flows = types.filter((ty) => ty.workflow);
+  return (flows.find((ty) => ty.name === "task") || flows[0])?.name || "";
+}
+
 function taskFields(type) {
   const users = type.fields.filter((f) => f.kind === "user");
   return {
@@ -1097,7 +1201,7 @@ async function tasksView(tab, params) {
   const relink = () => tabs.querySelectorAll("a").forEach((a) => { a.href = a.getAttribute("href").split("?")[0] + query(); });
   show(
     h("div", { class: "page-head" }, h("h1", { text: t("tasks.title") }),
-      h("p", { class: "actions" }, link(newHref(space || here.space), t("tasks.new"), "button"))),
+      h("p", { class: "actions" }, link(newHref(space || here.space, "", taskType(types)), t("tasks.new"), "button", "tasks-new"))),
     tabs,
     status,
     h("section", { id: "tasks" }, shown.length
@@ -1402,13 +1506,51 @@ function propertyInput(f, value) {
       return h("select", { name },
         h("option", { value: "", text: "—" }),
         f.values.map((v) => h("option", { value: v, text: v, selected: v === value })));
+    case "user":
+      return userInput(name, value);
     default:
       return h("input", { name, value: value ?? "" });
   }
 }
 
+// userInput chooses a person by typing a few letters of the username; the
+// field keeps the person's ID (ADR-0013) and shows the name. One list of
+// suggestions serves every such field.
+function userInput(name, value) {
+  let options = document.getElementById("user-options");
+  if (!options) {
+    options = h("datalist", { id: "user-options" });
+    document.body.append(options);
+  }
+  const input = h("input", { name, list: "user-options", value: value ? person(value) : "", autocomplete: "off", placeholder: t("user.search"), class: "user-input" });
+  input.dataset.userId = value || "";
+  const found = new Map();
+  let timer = 0;
+  input.addEventListener("input", () => {
+    const typed = input.value.trim();
+    input.dataset.userId = found.get(typed) || "";
+    clearTimeout(timer);
+    if (!typed || found.has(typed)) return;
+    timer = setTimeout(async () => {
+      const { users } = await get("/api/users/search?q=" + encodeURIComponent(typed)).catch(() => ({ users: [] }));
+      for (const u of users) {
+        found.set(u.username, u.id);
+        names.set(u.id, u.username);
+      }
+      options.replaceChildren(...users.map((u) => h("option", { value: u.username })));
+      input.dataset.userId = found.get(input.value.trim()) || "";
+    }, 150);
+  });
+  return input;
+}
+
 function readProperty(f, el) {
   if (f.kind === "bool") return el.checked;
+  if (f.kind === "user") {
+    if (!el.value.trim()) return null;
+    if (el.dataset.userId) return el.dataset.userId;
+    throw new Error(t("user.unknown", { name: el.value.trim() }));
+  }
   const v = el.value;
   if (v === "") return null;
   if (f.kind === "number") return Number(v);
@@ -1416,9 +1558,9 @@ function readProperty(f, el) {
 }
 
 // newItemForm creates an item in a space, below parent (an item) if one is
-// given; "page" is preselected when the type exists. With spaces, the
+// given; type, "page" by default, is preselected when it exists. With spaces, the
 // space is chosen in the form.
-function newItemForm({ space, spaces = null, types, parent = null, heading = t("item.new"), id = "new-item" }) {
+function newItemForm({ space, spaces = null, types, parent = null, heading = t("item.new"), id = "new-item", type = "page" }) {
   if (types.length === 0) return null;
   const spaceSelect = spaces && spaces.length > 1
     ? h("select", { name: "space" }, spaces.map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})`, selected: s.key === space })))
@@ -1432,7 +1574,7 @@ function newItemForm({ space, spaces = null, types, parent = null, heading = t("
     });
   }
   const fields = h("div");
-  const typeSelect = h("select", { name: "type" }, types.map((ty) => h("option", { value: ty.name, text: ty.name, selected: ty.name === "page" })));
+  const typeSelect = h("select", { name: "type" }, types.map((ty) => h("option", { value: ty.name, text: ty.name, selected: ty.name === type })));
   const showFields = () => {
     const ty = types.find((x) => x.name === typeSelect.value);
     fields.replaceChildren(...ty.fields.map((f) => field(f.name + (f.required ? " *" : ""), propertyInput(f))));
@@ -1515,11 +1657,17 @@ async function itemView(ref, params = new URLSearchParams()) {
   }
 
   const restricted = (item.restriction?.read?.length || 0) + (item.restriction?.edit?.length || 0) > 0;
+  // While editing, the title is a field saved with Done, or with Enter.
+  const titleInput = editing ? h("input", { name: "title", value: item.title, class: "title", required: true, "aria-label": t("col.title") }) : null;
+  const saveTitle = async () => {
+    const next = titleInput.value.trim();
+    if (next && next !== item.title) {
+      await put(path + "/title", { title: next });
+      item.title = next;
+    }
+  };
   const title = editing
-    ? form({ class: "inline", id: "title" }, [
-      h("input", { name: "title", value: item.title, class: "title", "aria-label": t("col.title") }),
-      h("button", { type: "submit", text: t("item.saveTitle") }),
-    ], async (data) => { await put(path + "/title", { title: data.get("title") }); route(); })
+    ? form({ class: "inline", id: "title" }, [titleInput], saveTitle)
     : h("h1", { class: "item-title" }, restricted ? lockIcon(true) : null, item.title || t("item.erased"));
 
   const props = h("table", { class: "props" }, type.fields.map((f) => {
@@ -1557,6 +1705,14 @@ async function itemView(ref, params = new URLSearchParams()) {
   let session = null;
   const done = h("button", { type: "button", id: "edit-done", class: "primary", text: t("item.done"), onclick: async () => {
     done.disabled = true;
+    // A title that cannot be saved keeps the editor open, with the reason.
+    try {
+      await saveTitle();
+    } catch (err) {
+      status.replaceChildren(errorBox(err));
+      done.disabled = false;
+      return;
+    }
     try { if (session) await session.finish(); } finally { location.hash = itemHref; }
   } });
   const headActions = h("p", { class: "actions" },
@@ -1855,12 +2011,13 @@ function historySection(path, events, live) {
 
 async function accountView() {
   const show = screen();
-  const { tokens } = await get("/api/tokens");
+  const [{ tokens }, contacts] = await Promise.all([get("/api/tokens"), get("/api/me/contacts")]);
   const secret = h("div");
   show(
     h("h1", { text: me.user.username }),
     h("p", { class: "muted", text: t("account.id", { id: me.user.id, via: me.via }) }),
     avatarCard(),
+    contactsCard(contacts),
     form({ class: "card", id: "language" }, [
       field(t("account.language"), h("select", { name: "language", onchange: (ev) => ev.target.form.requestSubmit() },
         languages.filter((l) => !me.languages || me.languages.includes(l.code))
@@ -1926,6 +2083,33 @@ function avatarCard() {
         me.avatar ? h("button", { type: "button", class: "link", text: t("account.avatarRemove"),
           onclick: () => action(async () => { await del("/api/me/avatar"); me.avatar = ""; }, status) }) : null)),
     status);
+}
+
+// contactsCard sets the channels messages reach one on (ADR-0061): a mail
+// address and the webhook addresses of Slack, Microsoft Teams or another
+// service. A field left empty is a channel one does not have.
+function contactsCard(contacts) {
+  const channel = (name, label, type, hint) => field(label, h("input", { name, type, value: contacts[name] || "", placeholder: hint, autocomplete: name === "email" ? "email" : "off" }));
+  const state = h("p", { class: "muted", id: "channels" });
+  const summary = (c) => {
+    const on = [["email", t("contacts.email")], ["slack", "Slack"], ["teams", "Microsoft Teams"], ["webhook", t("contacts.webhook")]].filter(([k]) => c[k]).map(([, l]) => l);
+    state.textContent = on.length ? t("contacts.available", { list: on.join(", ") }) : t("contacts.none");
+  };
+  summary(contacts);
+  return form({ class: "card", id: "contacts" }, [
+    h("h2", { text: t("contacts.title") }),
+    h("p", { class: "muted", text: t("contacts.help") }),
+    channel("email", t("contacts.email"), "email", "name@example.org"),
+    channel("slack", "Slack", "url", "https://hooks.slack.com/services/…"),
+    channel("teams", "Microsoft Teams", "url", "https://…"),
+    channel("webhook", t("contacts.webhook"), "url", "https://…"),
+    state,
+    h("button", { type: "submit", text: t("common.save") }),
+  ], async (data, st) => {
+    const saved = await put("/api/me/contacts", { email: data.get("email"), slack: data.get("slack"), teams: data.get("teams"), webhook: data.get("webhook") });
+    summary(saved);
+    st.replaceChildren(h("p", { class: "notice", text: t("contacts.saved") }));
+  });
 }
 
 // squareImage cuts the middle square out of an image file and scales it to
@@ -2009,8 +2193,9 @@ async function mcpView() {
 
 async function adminView() {
   const show = screen();
-  const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }] = await Promise.all([
+  const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }, { requests }, access] = await Promise.all([
     get("/api/users"), get("/api/spaces"), get("/api/types"), get("/api/audit?limit=50"), get("/api/groups"), get("/api/system-roles"),
+    get("/api/account-requests"), get("/api/settings/access"),
   ]);
   for (const u of users) names.set(u.id, u.username);
   const status = h("div", { class: "status" });
@@ -2074,10 +2259,34 @@ async function adminView() {
     box.addEventListener("change", () => action(() => (box.checked ? put : del)(`/api/system-roles/${role}/${encodeURIComponent(u.id)}`), status));
     return h("label", { class: "check" }, box, " ", label);
   };
+  // Account requests made at the sign-in page (ADR-0061): whether they
+  // are accepted, and the ones waiting for a decision.
+  const openBox = h("input", { type: "checkbox", id: "requests-open", checked: access.accountRequests });
+  openBox.addEventListener("change", () => action(() => put("/api/settings/access", { accountRequests: openBox.checked }), status));
+  const requestsSection = section("requests", t("requests.title"),
+    h("p", { class: "muted", text: t("requests.help") }),
+    h("label", { class: "check" }, openBox, " ", t("requests.open")),
+    requests.length ? h("table", { id: "account-requests" },
+      h("tr", {}, h("th", { text: t("field.username") }), h("th", { text: t("contacts.email") }), h("th", { text: t("signup.reason") }), h("th", { text: t("requests.when") }), h("th")),
+      requests.map((rq) => h("tr", { "data-username": rq.username },
+        h("td", { text: rq.username }), h("td", { text: rq.email }), h("td", { class: "muted", text: rq.reason }), h("td", { class: "muted", text: when(rq.created) }),
+        h("td", {},
+          h("button", { type: "button", class: "approve", text: t("requests.approve"), onclick: () => action(() => post(`/api/account-requests/${rq.id}/approve`), status) }), " ",
+          h("button", { type: "button", class: "link", text: t("requests.reject"),
+            onclick: () => confirm(t("requests.rejectConfirm", { name: rq.username })) && action(() => del(`/api/account-requests/${rq.id}`), status) }))))) :
+      h("p", { class: "muted", id: "no-requests", text: t("requests.none") }));
+
+  const emailCell = (u) => h("td", {},
+    h("span", { class: "muted", text: u.email || t("contacts.noEmail") }), " ",
+    h("button", { type: "button", class: "link", text: t("common.edit"), "aria-label": t("contacts.editEmail", { name: u.username }), onclick: () => {
+      const email = prompt(t("contacts.editEmail", { name: u.username }), u.email || "");
+      if (email !== null) action(() => put(`/api/users/${encodeURIComponent(u.id)}/email`, { email: email.trim() }), status);
+    } }));
   const usersSection = section("users", t("admin.users"),
     h("p", { class: "muted", text: t("admin.usersHelp") }),
     h("table", { id: "users" }, users.map((u) => h("tr", {},
       h("td", { text: u.username }),
+      emailCell(u),
       h("td", {}, sysToggle(u, "admin", t("admin.roleAdmin"))),
       h("td", {}, sysToggle(u, "erasure", t("admin.roleErasure")))))),
     form({ id: "new-user" }, [
@@ -2150,7 +2359,7 @@ async function adminView() {
     h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, sections.map(([el, title]) =>
       h("button", { type: "button", class: "link", text: title, onclick: () => el.scrollIntoView({ block: "start" }) }))),
     status,
-    spacesSection, typesSection, usersSection, groupsSection, grantSection, backupSection, designSection, regulationsSection, importSection, auditSection,
+    spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, designSection, regulationsSection, importSection, auditSection,
   );
 }
 
@@ -2203,7 +2412,8 @@ async function regulationsCard() {
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
   };
   const editor = (r, isNew) => {
-    const cats = h("textarea", { name: "categories", rows: 8, class: "code", spellcheck: "false", value: toText(r.categories || []), "aria-label": t("dp.categories") });
+    const cats = h("textarea", { name: "categories", rows: 8, class: "code", spellcheck: "false", value: toText(r.categories || []), "aria-label": t("dp.categories"),
+      placeholder: t("dp.categoriesExample") });
     const doc = h("input", { type: "file", accept: "application/pdf,.pdf", "aria-label": t("dp.document") });
     doc.addEventListener("change", () => doc.files[0] && action(() => putFile(`/api/regulations/${r.id}/document`, doc.files[0]), status));
     return h("div", { class: "regulation card-like", id: "regulation-" + (r.id || "new") },
@@ -2212,14 +2422,19 @@ async function regulationsCard() {
         field(t("dp.name"), h("input", { name: "name", required: true, value: r.name || "", maxlength: 120 })),
         field(t("dp.url"), h("input", { name: "url", type: "url", value: r.url || "", placeholder: "https://" })),
         h("label", { class: "check" }, h("input", { type: "checkbox", name: "active", checked: Boolean(r.active) }), t("dp.active")),
-        field(t("dp.categories"), cats),
+        // Not a label: the info button inside would take the label's clicks.
+        h("div", { class: "field" }, h("span", {}, t("dp.categories"), " ", infoTip(t("dp.categories"), t("dp.categoriesInfo"), t("dp.categoriesExample"))), cats),
         h("p", { class: "muted", text: t("dp.categoriesHint") }),
         h("p", { class: "actions-row" },
           h("button", { type: "submit", class: "primary", text: t("common.save") }),
           isNew ? null : h("button", { type: "button", class: "danger", text: t("common.delete"), onclick: () => confirm(t("dp.deleteConfirm", { name: r.name })) && action(() => del("/api/regulations/" + r.id), status) })),
       ], async (d) => {
         const id = isNew ? d.get("id").trim() : r.id;
-        await put("/api/regulations/" + encodeURIComponent(id), { name: d.get("name").trim(), url: d.get("url").trim(), active: Boolean(d.get("active")), categories: fromText(cats.value) });
+        const categories = fromText(cats.value);
+        if (!categories.length) throw new Error(t("dp.categoriesEmpty"));
+        const bare = categories.find((c) => !c.indicators.length);
+        if (bare) throw new Error(t("dp.indicatorsEmpty", { name: bare.name }));
+        await put("/api/regulations/" + encodeURIComponent(id), { name: d.get("name").trim(), url: d.get("url").trim(), active: Boolean(d.get("active")), categories });
         route();
       }),
       isNew ? null : h("p", { class: "regulation-doc" },
@@ -2358,6 +2573,7 @@ async function membersView(key) {
     h("h1", { text: t("members.heading", { space: sp.name }) }),
     h("p", { class: "muted", text: t("members.help") }),
     status,
+    sp.role === "space-admin" ? spaceIconCard(sp, status) : null,
     roles.length ? h("table", { id: "members" }, roles.map(row)) : h("p", { class: "muted", text: t("members.none") }),
     form({ class: "card", id: "add-role" }, [
       h("h2", { text: t("members.add") }),
