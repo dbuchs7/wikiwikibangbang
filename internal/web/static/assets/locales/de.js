@@ -673,7 +673,7 @@ export default {
   "loginsetup.help": "Was die Anmeldeseite anbietet. Single Sign-on und das Zurücksetzen per E-Mail werden in der Umgebung des Servers eingerichtet, Kontoanträge hier.",
   "loginsetup.sso": "Anmeldung mit Firmenkonto (Single Sign-on)",
   "loginsetup.ssoOn": "eingerichtet: {name}",
-  "loginsetup.ssoOff": "nicht eingerichtet: WWBB_OIDC_ISSUER, WWBB_OIDC_CLIENT_ID, WWBB_OIDC_CLIENT_SECRET und WWBB_OIDC_REDIRECT_URL setzen",
+  "loginsetup.ssoOff": "nicht eingerichtet: für Microsoft WWBB_ENTRA_TENANT_ID, WWBB_ENTRA_CLIENT_ID und WWBB_ENTRA_CLIENT_SECRET setzen, für Google WWBB_GOOGLE_CLIENT_ID, WWBB_GOOGLE_CLIENT_SECRET und WWBB_GOOGLE_DOMAINS; beides mit WWBB_PUBLIC_URL",
   "loginsetup.reset": "Passwort zurücksetzen per E-Mail",
   "loginsetup.resetOn": "eingerichtet: E-Mail über {host}",
   "loginsetup.resetOff": "nicht eingerichtet: WWBB_SMTP_HOST, WWBB_SMTP_FROM und WWBB_PUBLIC_URL setzen; bis dahin Reset-Links in der Benutzerliste erstellen",
@@ -681,5 +681,6 @@ export default {
   "loginsetup.requestsOn": "werden angenommen",
   "loginsetup.requestsOff": "ausgeschaltet: die Anmeldeseite verweist an die Administration",
   "home.version": "Version {version}",
-  "home.revision": "Build {revision}"
+  "home.revision": "Build {revision}",
+  "login.domain": "Die Domäne Ihres Kontos ist hier nicht zugelassen. Verwenden Sie das Konto Ihrer Organisation oder wenden Sie sich an die Administration."
 };

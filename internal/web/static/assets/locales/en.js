@@ -39,7 +39,7 @@ export default {
   "login.failed": "Single sign-on failed. Try again or use your password.",
   "login.submit": "Log in",
   "login.title": "Log in",
-  "login.with": "Log in with {name}",
+  "login.with": "Sign in with {name}",
 
   "search.inComment": "In a comment: {text}",
   "search.none": "Nothing found among the items you may read.",
@@ -675,7 +675,7 @@ export default {
   "loginsetup.help": "What the sign-in page offers. Single sign-on and the password reset by mail are set up in the server's environment; account requests here.",
   "loginsetup.sso": "Sign-in with a company account (single sign-on)",
   "loginsetup.ssoOn": "set up: {name}",
-  "loginsetup.ssoOff": "not set up: set WWBB_OIDC_ISSUER, WWBB_OIDC_CLIENT_ID, WWBB_OIDC_CLIENT_SECRET and WWBB_OIDC_REDIRECT_URL",
+  "loginsetup.ssoOff": "not set up: for Microsoft set WWBB_ENTRA_TENANT_ID, WWBB_ENTRA_CLIENT_ID and WWBB_ENTRA_CLIENT_SECRET; for Google WWBB_GOOGLE_CLIENT_ID, WWBB_GOOGLE_CLIENT_SECRET and WWBB_GOOGLE_DOMAINS; both with WWBB_PUBLIC_URL",
   "loginsetup.reset": "Password reset by mail",
   "loginsetup.resetOn": "set up: mail through {host}",
   "loginsetup.resetOff": "not set up: set WWBB_SMTP_HOST, WWBB_SMTP_FROM and WWBB_PUBLIC_URL; until then, make reset links in the user list",
@@ -683,5 +683,6 @@ export default {
   "loginsetup.requestsOn": "accepted",
   "loginsetup.requestsOff": "switched off: the sign-in page asks people to contact an administrator",
   "home.version": "Version {version}",
-  "home.revision": "Build {revision}"
+  "home.revision": "Build {revision}",
+  "login.domain": "Your account's domain may not sign in here. Use your organisation's account, or ask an administrator."
 };

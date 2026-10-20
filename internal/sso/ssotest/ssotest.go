@@ -33,8 +33,12 @@ type IdP struct {
 // Claims is what a login asserts; zero fields get defaults.
 type Claims struct {
 	Subject, PreferredUsername, Email string
-	Audience, Issuer, Nonce           string // override to forge
-	Expires                           time.Time
+	// HostedDomain is Google's hd claim; EmailUnverified marks the e-mail
+	// address as not verified.
+	HostedDomain            string
+	EmailUnverified         bool
+	Audience, Issuer, Nonce string // override to forge
+	Expires                 time.Time
 }
 
 type grant struct {
@@ -117,7 +121,8 @@ func (idp *IdP) token(w http.ResponseWriter, r *http.Request) {
 	payload, _ := json.Marshal(map[string]any{
 		"iss": c.Issuer, "aud": c.Audience, "sub": c.Subject, "nonce": c.Nonce,
 		"iat": time.Now().Unix(), "exp": c.Expires.Unix(),
-		"preferred_username": c.PreferredUsername, "email": c.Email, "email_verified": c.Email != "",
+		"preferred_username": c.PreferredUsername, "email": c.Email, "email_verified": c.Email != "" && !c.EmailUnverified,
+		"hd": c.HostedDomain,
 	})
 	signer, _ := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: idp.key}, (&jose.SignerOptions{}).WithHeader("kid", "k1"))
 	jws, _ := signer.Sign(payload)

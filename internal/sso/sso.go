@@ -2,6 +2,8 @@
 // authorization code flow with PKCE, state and nonce, against one
 // configured provider. It answers who the provider says the user is; what
 // that user may do is decided in the product, never by provider claims.
+// Several providers may be configured side by side, e.g. Microsoft Entra
+// ID and Google (ADR-0066).
 package sso
 
 import (
@@ -12,6 +14,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +35,23 @@ type Config struct {
 	RedirectURL string
 	// Name is shown on the login button, e.g. "Microsoft Entra ID".
 	Name string
+	// ID tells the providers apart in URLs and cookies, e.g. "entra";
+	// "sso" when empty.
+	ID string
+	// Kind is a hint for the UI's button: "microsoft", "google" or empty.
+	Kind string
+	// Domains, when set, are the only mail domains that may sign in. A
+	// domain counts when the provider asserts it: Google's hosted domain
+	// (hd), a verified e-mail address, or, with UsernameIsVerified, the
+	// preferred username.
+	Domains []string
+	// UsernameIsVerified says the preferred username carries a domain the
+	// provider verified, as Entra ID's user principal names do.
+	UsernameIsVerified bool
 }
+
+// ErrDomain refuses an identity outside the configured domains.
+var ErrDomain = errors.New("sso: the account's domain may not sign in here")
 
 // Identity is what the provider asserts about the user.
 type Identity struct {
@@ -85,6 +105,12 @@ func New(cfg Config, client *http.Client) (*Provider, error) {
 	if cfg.Name == "" {
 		cfg.Name = "single sign-on"
 	}
+	if cfg.ID == "" {
+		cfg.ID = "sso"
+	}
+	for i, d := range cfg.Domains {
+		cfg.Domains[i] = strings.ToLower(strings.TrimSpace(d))
+	}
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
@@ -95,6 +121,15 @@ func isLoopback(host string) bool { return host == "localhost" || host == "127.0
 
 // Name is the provider's display name.
 func (p *Provider) Name() string { return p.cfg.Name }
+
+// ID tells the provider apart from others.
+func (p *Provider) ID() string { return p.cfg.ID }
+
+// Kind is the hint for the UI's button.
+func (p *Provider) Kind() string { return p.cfg.Kind }
+
+// Domains are the mail domains that may sign in; empty means any.
+func (p *Provider) Domains() []string { return slices.Clone(p.cfg.Domains) }
 
 // Issuer is the configured issuer.
 func (p *Provider) Issuer() string { return p.cfg.Issuer }
@@ -183,6 +218,7 @@ func (p *Provider) Finish(ctx context.Context, state, code string) (Identity, er
 		PreferredUsername string `json:"preferred_username"`
 		Email             string `json:"email"`
 		EmailVerified     bool   `json:"email_verified"`
+		HostedDomain      string `json:"hd"`
 	}
 	if err := idt.Claims(&claims); err != nil {
 		return Identity{}, fmt.Errorf("sso: ID token claims: %w", err)
@@ -191,5 +227,38 @@ func (p *Provider) Finish(ctx context.Context, state, code string) (Identity, er
 	if id.Username == "" {
 		id.Username = id.Email
 	}
+	if !p.domainAllowed(claims.HostedDomain, id) {
+		return Identity{}, ErrDomain
+	}
 	return id, nil
+}
+
+// domainAllowed checks the configured domains against what the provider
+// asserts; an e-mail address it did not verify does not count.
+func (p *Provider) domainAllowed(hosted string, id Identity) bool {
+	if len(p.cfg.Domains) == 0 {
+		return true
+	}
+	domainOf := func(addr string) string {
+		if i := strings.LastIndexByte(addr, '@'); i >= 0 {
+			return strings.ToLower(addr[i+1:])
+		}
+		return ""
+	}
+	var asserted []string
+	if hosted != "" {
+		asserted = append(asserted, strings.ToLower(hosted))
+	}
+	if id.EmailVerified {
+		asserted = append(asserted, domainOf(id.Email))
+	}
+	if p.cfg.UsernameIsVerified {
+		asserted = append(asserted, domainOf(id.Username))
+	}
+	for _, d := range asserted {
+		if d != "" && slices.Contains(p.cfg.Domains, d) {
+			return true
+		}
+	}
+	return false
 }
