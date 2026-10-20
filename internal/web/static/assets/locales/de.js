@@ -664,5 +664,22 @@ export default {
   "contacts.noMailServer": "Dieser Server versendet keine E-Mails; die Adresse wird für später gespeichert.",
   "common.saving": "Speichert …",
   "common.saved": "Gespeichert",
-  "admin.lead": "Bereiche, Typen, Personen und die Einstellungen der ganzen Installation. Das Inhaltsverzeichnis führt zu jedem Teil."
+  "admin.lead": "Bereiche, Typen, Personen und die Einstellungen der ganzen Installation. Das Inhaltsverzeichnis führt zu jedem Teil.",
+  "login.lead": "Melden Sie sich bei {name} an.",
+  "login.or": "oder mit Benutzername",
+  "reset.noMail": "Dieser Server versendet keine E-Mails, daher kann Ihnen kein Link zugestellt werden. Wenden Sie sich an die Administration: Sie kann Ihnen einen Link zum Wählen eines neuen Passworts erstellen, der 24 Stunden gültig ist.",
+  "signup.closed": "Kontoanträge sind auf diesem Server ausgeschaltet. Wenden Sie sich für ein Konto an die Administration oder bitten Sie sie, Anträge hier zuzulassen.",
+  "loginsetup.title": "Anmeldemaske",
+  "loginsetup.help": "Was die Anmeldeseite anbietet. Single Sign-on und das Zurücksetzen per E-Mail werden in der Umgebung des Servers eingerichtet, Kontoanträge hier.",
+  "loginsetup.sso": "Anmeldung mit Firmenkonto (Single Sign-on)",
+  "loginsetup.ssoOn": "eingerichtet: {name}",
+  "loginsetup.ssoOff": "nicht eingerichtet: WWBB_OIDC_ISSUER, WWBB_OIDC_CLIENT_ID, WWBB_OIDC_CLIENT_SECRET und WWBB_OIDC_REDIRECT_URL setzen",
+  "loginsetup.reset": "Passwort zurücksetzen per E-Mail",
+  "loginsetup.resetOn": "eingerichtet: E-Mail über {host}",
+  "loginsetup.resetOff": "nicht eingerichtet: WWBB_SMTP_HOST, WWBB_SMTP_FROM und WWBB_PUBLIC_URL setzen; bis dahin Reset-Links in der Benutzerliste erstellen",
+  "loginsetup.requests": "Kontoanträge",
+  "loginsetup.requestsOn": "werden angenommen",
+  "loginsetup.requestsOff": "ausgeschaltet: die Anmeldeseite verweist an die Administration",
+  "home.version": "Version {version}",
+  "home.revision": "Build {revision}"
 };
