@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"mime"
@@ -59,11 +60,31 @@ func oauthRoutes(d Deps) []Route {
 
 type oauthHandlers struct{ authHandlers }
 
-// origin is the address this server was reached at, as it sees it: the
-// scheme is https behind a trusted proxy that says so (ADR-0037). The
-// metadata names the MCP endpoint at this address, which is the address the
-// client used, as RFC 9728 requires.
+type publicKey struct{}
+
+// WithPublicURL makes public (WWBB_PUBLIC_URL, e.g.
+// https://wiki.example.org) the address this server names itself by in
+// OAuth; empty leaves the address each request arrived at (ADR-0068).
+func WithPublicURL(public string, h http.Handler) http.Handler {
+	public = strings.TrimRight(public, "/")
+	if public == "" {
+		return h
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), publicKey{}, public)))
+	})
+}
+
+// origin is the address this server names itself by: the public address
+// when one is set, which is what people and assistants use; otherwise the
+// address the request arrived at, as the server sees it, with https behind
+// a trusted proxy that says so (ADR-0037). The metadata names the MCP
+// endpoint at this address, which must be the address the client used, as
+// RFC 9728 requires.
 func origin(r *http.Request) string {
+	if public, ok := r.Context().Value(publicKey{}).(string); ok {
+		return public
+	}
 	scheme := "http"
 	if isSecure(r) {
 		scheme = "https"

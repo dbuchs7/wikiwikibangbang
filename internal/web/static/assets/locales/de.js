@@ -440,7 +440,7 @@ export default {
   "mcp.toolsNote": "Verschieben, Papierkorb und Löschen, Einschränkungen und die Administration stehen Assistenten nicht zur Verfügung: Sie bleiben die Entscheidung eines Menschen.",
   "aiaccess.connectTitle": "Gehosteten Assistenten verbinden (Claude und andere)",
   "aiaccess.connectIntro": "Ein gehosteter Assistent verlangt in seinem Konnektor-Dialog drei Werte: die MCP-Adresse, eine Client-ID und ein Client-Secret. Man registriert den Assistenten hier einmal; danach gibt jede Person ihn bei der ersten Verwendung für sich selbst frei.",
-  "aiaccess.originMismatch": "Dieser Server veröffentlicht die Adresse {published}, nicht die hier verwendete {here}. Ein gehosteter Assistent verwendet die veröffentlichte Adresse; sie muss deshalb aus dem Internet erreichbar sein. Hinter einem Reverse Proxy, der TLS terminiert, ist WWBB_TRUSTED_PROXIES zu setzen, damit der Server seine https-Adresse veröffentlicht.",
+  "aiaccess.originMismatch": "Dieser Server veröffentlicht die Adresse {published}, nicht die hier verwendete {here}. Ein gehosteter Assistent verwendet die veröffentlichte Adresse; sie muss deshalb aus dem Internet erreichbar sein. WWBB_PUBLIC_URL ist auf die Adresse zu setzen, unter der man den Server erreicht (z. B. {here}); hinter einem Reverse Proxy, der TLS terminiert, zusätzlich WWBB_TRUSTED_PROXIES.",
   "aiaccess.registrationOpen": "Anwendungen dürfen sich auf diesem Server selbst registrieren (WWBB_OAUTH_DYNAMIC_REGISTRATION=on): Ein Assistent lässt sich allein mit der MCP-Adresse verbinden. Selbst registrierte Anwendungen sind auf der Freigabeseite als solche gekennzeichnet.",
   "aiaccess.app": "Anwendung",
   "aiaccess.other": "Andere Anwendung",

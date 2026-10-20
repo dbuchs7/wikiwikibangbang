@@ -240,7 +240,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		defer func() { stopDigest(); <-digestDone; messages.Wait() }()
 	}
 	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration})
-	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.Handler(routes, db.Accounts)), log); err != nil {
+	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.WithPublicURL(notifier.PublicURL(), server.Handler(routes, db.Accounts))), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
 	}

@@ -442,7 +442,7 @@ export default {
   "mcp.toolsNote": "Moving, trashing and deleting, restrictions and administration are not offered to assistants: they stay a person’s decision.",
   "aiaccess.connectTitle": "Connect a hosted assistant (Claude and others)",
   "aiaccess.connectIntro": "A hosted assistant asks for three values in its connector dialog: the MCP address, a client ID and a client secret. Register the assistant here once; then each person approves it for themselves the first time they use it.",
-  "aiaccess.originMismatch": "This server publishes the address {published}, not the {here} you are using. A hosted assistant uses the published one, so it must be reachable from the internet. Behind a reverse proxy that terminates TLS, set WWBB_TRUSTED_PROXIES so the server publishes its https address.",
+  "aiaccess.originMismatch": "This server publishes the address {published}, not the {here} you are using. A hosted assistant uses the published one, so it must be reachable from the internet. Set WWBB_PUBLIC_URL to the address people use (e.g. {here}); behind a reverse proxy that terminates TLS, also set WWBB_TRUSTED_PROXIES.",
   "aiaccess.registrationOpen": "Applications may register themselves on this server (WWBB_OAUTH_DYNAMIC_REGISTRATION=on): an assistant can be connected with the MCP address alone. Self-registered applications are marked as such on the consent page.",
   "aiaccess.app": "Application",
   "aiaccess.other": "Another application",
