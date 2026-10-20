@@ -287,7 +287,7 @@ async function mailTo(sink, address) {
     await page.click("#app-switcher");
     await page.waitForSelector("#drawer:not([hidden])");
     const modules = (await page.locator("#drawer-apps a").allTextContents()).join(",");
-    check(modules === "Spaces,Create,Tasks,Comments,Album,AI assistants (MCP),Governance,Account,Administration", "the modules of an administrator: " + modules);
+    check(modules === "Spaces,Create,Tasks,Comments,Album,AI access,Governance,Account,Administration", "the modules of an administrator: " + modules);
     await page.keyboard.press("Escape");
     await page.waitForSelector("#drawer", { state: "hidden" });
     await page.click("#app-switcher");
@@ -901,10 +901,58 @@ async function mailTo(sink, address) {
     await page.click("#admin-design button:has-text('Delete')"); // the product's logo comes back
     await page.waitForSelector("header .brand picture");
 
-    step("AI assistants: a token made on the MCP page lets an assistant write a page with its content");
+    step("AI access: an administrator registers Claude and gets the three values for its connector");
     await page.click("#app-switcher");
-    await page.click("#drawer-apps a:has-text('AI assistants (MCP)')");
+    await page.click("#drawer-apps a:has-text('AI access')");
     await page.waitForSelector(".tools li:has-text('create_item')");
+    check(await page.inputValue("#aiaccess-register [name=redirect]") === "https://claude.ai/api/mcp/auth_callback", "Claude's redirect address is filled in");
+    await page.click("#aiaccess-register button[type=submit]");
+    await page.waitForSelector("#aiaccess-client-secret");
+    const clientId = (await page.textContent("#aiaccess-client-id")).trim();
+    const clientSecret = (await page.textContent("#aiaccess-client-secret")).trim();
+    check(/^wwbbc_/.test(clientSecret) && (await page.textContent("#aiaccess-url")).trim().endsWith("/mcp"), "the secret and the MCP address are shown");
+    await page.waitForSelector(`#aiaccess-apps td:has-text('${clientId}')`);
+
+    step("AI access: the person approves Claude on the consent page, and Claude's token works on /mcp only");
+    const verifier = "e2e-verifier-0123456789-abcdefghijklmnopqrstuvwxyz";
+    const challenge = await page.evaluate(async (v) => {
+      const d = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(v)));
+      return btoa(String.fromCharCode(...d)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }, verifier);
+    // The callback is Claude's; here it only records where it was sent.
+    let callback = null;
+    await page.route("https://claude.ai/**", (r) => { callback = r.request().url(); r.fulfill({ status: 200, contentType: "text/html", body: "<p>back at the assistant</p>" }); });
+    const authorize = new URLSearchParams({ response_type: "code", client_id: clientId, redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+      state: "e2e-state", code_challenge: challenge, code_challenge_method: "S256", resource: base + "/mcp" });
+    await page.goto(base + "/oauth/authorize?" + authorize);
+    await page.waitForSelector("#oauth-consent h1:has-text('Allow access?')");
+    check((await page.textContent("#oauth-consent")).includes("Claude wants to act as you"), "the consent page names the application");
+    check(!(await page.$("#oauth-self")), "an application added by an administrator is not marked self-registered");
+    await page.click("#oauth-allow");
+    await page.waitForURL("https://claude.ai/**");
+    const back = new URL(callback);
+    check(back.searchParams.get("state") === "e2e-state" && back.searchParams.get("code"), "the code comes back with the state: " + callback);
+    await page.unroute("https://claude.ai/**");
+    await page.goto(base + "/#/");
+    const oauth = await page.evaluate(async ({ code, id, secret, verifier, base }) => {
+      const tok = await (await fetch("/oauth/token", { method: "POST", credentials: "omit", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: "https://claude.ai/api/mcp/auth_callback",
+          code_verifier: verifier, client_id: id, client_secret: secret, resource: base + "/mcp" }) })).json();
+      const mcp = await fetch("/mcp", { method: "POST", credentials: "omit", headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok.access_token },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_spaces", arguments: {} } }) });
+      const listed = (await mcp.json()).result;
+      const api = await fetch("/api/me", { credentials: "omit", headers: { Authorization: "Bearer " + tok.access_token } });
+      const anon = await fetch("/mcp", { method: "POST", credentials: "omit", headers: { "Content-Type": "application/json" }, body: "{}" });
+      return { prefix: (tok.access_token || "").slice(0, 6), mcp: mcp.status, spaces: listed && !listed.isError && listed.content[0].text.includes("PLAT"), api: api.status, challenge: anon.headers.get("WWW-Authenticate") };
+    }, { code: back.searchParams.get("code"), id: clientId, secret: clientSecret, verifier, base });
+    check(oauth.prefix === "wwbba_" && oauth.mcp === 200 && oauth.spaces && oauth.api === 401, "the OAuth token reaches /mcp and nothing else: " + JSON.stringify(oauth));
+    check((oauth.challenge || "").includes("resource_metadata="), "an anonymous MCP call points to the OAuth metadata: " + oauth.challenge);
+
+    step("AI access: the person withdraws the approval; local clients still use an API token");
+    await page.goto(base + "/#/mcp");
+    await page.click("#aiaccess-grants button:has-text('Withdraw')");
+    await page.waitForSelector("#aiaccess-grants p:has-text('not approved any application')");
+    await page.click("#aiaccess-token summary");
     await page.click("#mcp-token button[type=submit]");
     await page.waitForSelector("#mcp-setup pre:has-text('Bearer wwbb_')");
     const mcpToken = (await page.textContent("#mcp-setup pre")).match(/Bearer (wwbb_\S+?)"/)[1];

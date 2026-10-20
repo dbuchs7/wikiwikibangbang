@@ -64,6 +64,12 @@ const (
 	PasswordResetRequested = "password.reset.request"
 	PasswordReset          = "password.reset"
 	PasswordResetHanded    = "password.reset.link"
+	// OAuth for AI assistants (ADR-0068).
+	OAuthClientCreated = "oauth.client.create"
+	OAuthClientRemoved = "oauth.client.remove"
+	OAuthApproved      = "oauth.approve"
+	OAuthRevoked       = "oauth.revoke"
+	OAuthFailed        = "oauth.token.failed"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for

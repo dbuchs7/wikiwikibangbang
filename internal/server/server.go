@@ -74,6 +74,8 @@ type Deps struct {
 	// Messages sends messages to people (ADR-0064); Routes creates one
 	// that sends nothing when it is nil.
 	Messages *Messenger
+	// OAuthRegistration opens dynamic client registration (ADR-0068).
+	OAuthRegistration bool
 }
 
 // MetricsPath serves the operational metrics. It is the only path a token
@@ -135,6 +137,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, oidcRoutes(d)...)
 	routes = append(routes, itemRoutes(d)...)
 	routes = append(routes, mcpRoutes()...)
+	routes = append(routes, oauthRoutes(d)...)
 	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
 		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}
@@ -224,6 +227,9 @@ func gate(a Access, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p, ok := PrincipalFrom(r.Context())
 		if !ok {
+			// The challenge leads an MCP client to the OAuth metadata
+			// (RFC 9728, ADR-0068).
+			w.Header().Set("WWW-Authenticate", challenge(r))
 			writeError(w, http.StatusUnauthorized, "authentication required")
 			return
 		}

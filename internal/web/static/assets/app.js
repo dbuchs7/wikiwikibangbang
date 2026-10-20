@@ -635,7 +635,18 @@ async function route() {
     const params = new URLSearchParams(hash.split("?")[1] || "");
     renderModules(section || "");
     if (section === "reset") return resetView(arg || "");
-    if (!me) return loginView();
+    // An assistant's consent page survives signing in, single sign-on
+    // included, which returns to the start page (ADR-0068).
+    if (!me) {
+      if (section === "oauth") try { sessionStorage.setItem("wwbb-after-login", location.hash); } catch { /* not kept */ }
+      return loginView();
+    }
+    let after = null;
+    try { after = sessionStorage.getItem("wwbb-after-login"); sessionStorage.removeItem("wwbb-after-login"); } catch { /* not kept */ }
+    if (after && after !== location.hash) {
+      location.hash = after;
+      return;
+    }
     switch (section) {
       case "new": return await newView(params);
       case "tasks": return await tasksView(arg, params);
@@ -653,6 +664,7 @@ async function route() {
       case "search": return await searchView(arg || "");
       case "account": return await accountView();
       case "mcp": return await mcpView();
+      case "oauth": return await oauthView(params);
       case "admin": return await adminView();
       case "members": return await membersView(arg);
       default: return await homeView();
@@ -2363,69 +2375,217 @@ async function squareImage(file, size) {
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t("account.avatarNotImage")))), "image/png"));
 }
 
-// --- AI assistants (MCP) --------------------------------------------------------
+// --- AI access (MCP, OAuth) ------------------------------------------------------
 
-// mcpView explains how to let an AI assistant read and write through the
-// Model Context Protocol (ADR-0012): the endpoint, a token made here, the
-// settings for common clients and the tools the assistant gets. The
-// assistant acts with the token's rights, and its changes carry the
-// token's owner as author.
+// KNOWN are the assistants whose redirect address can be filled in without
+// asking. Short on purpose: a wrong address here would hand out
+// credentials that cannot work; every other assistant shows its own in its
+// connector dialog (ADR-0068).
+const KNOWN = [
+  { id: "claude", name: "Claude", redirect: "https://claude.ai/api/mcp/auth_callback", hint: "aiaccess.claudeHint" },
+];
+
+// copyable is a value to move into another window, with a copy button.
+function copyable(text, id) {
+  const pre = h("pre", { class: "snippet", text, id: id || null });
+  const button = h("button", { type: "button", class: "secondary", text: t("mcp.copy"), onclick: async () => {
+    try {
+      await navigator.clipboard.writeText(pre.textContent);
+      button.textContent = t("mcp.copied");
+    } catch {
+      button.textContent = t("mcp.copyFailed");
+    }
+  } });
+  return h("div", { class: "copyable" }, pre, button);
+}
+
+// discover reads what this server publishes about itself; both documents
+// are public.
+async function discover() {
+  const [as, rs] = await Promise.all([
+    get("/.well-known/oauth-authorization-server").catch(() => null),
+    get("/.well-known/oauth-protected-resource/mcp").catch(() => null),
+  ]);
+  return { issuer: as?.issuer || "", registration: as?.registration_endpoint || "", mcp: rs?.resource || location.origin + "/mcp" };
+}
+
+// mcpView is the AI access page (ADR-0012, ADR-0068). A hosted assistant
+// such as Claude connects with OAuth: an administrator registers it here
+// and gets the three values its connector dialog asks for; each person
+// approves it once and can withdraw the approval below. A local client
+// connects with an API token instead. Either way the assistant acts with
+// the person's rights, and its changes carry the person as author.
 async function mcpView() {
   const show = screen();
-  const endpoint = location.origin + "/mcp";
-  const listed = await api("POST", "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }).catch(() => null);
+  const [disc, listed, grants, clients] = await Promise.all([
+    discover(),
+    api("POST", "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list" }).catch(() => null),
+    get("/api/oauth/grants").catch(() => ({ grants: [] })),
+    me.admin ? get("/api/oauth/clients").catch(() => null) : null,
+  ]);
   const tools = listed?.result?.tools || [];
+  const endpoint = disc.mcp;
+
+  // The address the server publishes must be one a hosted assistant can
+  // reach; behind a proxy that is not trusted it is the http one.
+  const originNote = disc.issuer && disc.issuer !== location.origin
+    ? h("p", { class: "notice warning", id: "aiaccess-origin", text: t("aiaccess.originMismatch", { published: disc.issuer, here: location.origin }) })
+    : null;
+
+  // Connecting a hosted assistant: administrators register it here.
+  const result = h("div", { id: "aiaccess-result" });
+  const appList = h("tbody", {});
+  const clientRow = (c) => h("tr", {},
+    h("td", {}, h("strong", { text: c.name }), " ", h("span", { class: c.self ? "badge danger" : "badge", text: c.self ? t("aiaccess.selfRegistered") : t("aiaccess.addedHere") }),
+      h("div", { class: "muted", text: c.id })),
+    h("td", { class: "muted", text: c.redirects.join(", ") }),
+    h("td", { class: "muted", text: when(c.created) }),
+    h("td", {}, h("button", { type: "button", class: "danger", text: t("aiaccess.remove"), onclick: async () => {
+      if (!confirm(t("aiaccess.removeConfirm", { name: c.name }))) return;
+      await del("/api/oauth/clients/" + encodeURIComponent(c.id));
+      route();
+    } })));
+  const fillApps = (list) => appList.replaceChildren(...(list.length ? list.map(clientRow) : [h("tr", {}, h("td", { colspan: 4, class: "muted", text: t("aiaccess.noApps") }))]));
+  if (clients) fillApps(clients.clients);
+  const redirectField = h("input", { name: "redirect", type: "url", required: true, value: KNOWN[0].redirect, readOnly: true });
+  const nameField = h("input", { name: "name", required: true, value: KNOWN[0].name });
+  const hint = h("p", { class: "muted", text: t(KNOWN[0].hint) });
+  const choose = h("select", { name: "app", onchange: () => {
+    const k = KNOWN.find((x) => x.id === choose.value);
+    redirectField.readOnly = !!k;
+    redirectField.value = k ? k.redirect : "";
+    nameField.value = k ? k.name : "";
+    hint.textContent = k ? t(k.hint) : t("aiaccess.otherHint");
+  } }, ...KNOWN.map((k) => h("option", { value: k.id, text: k.name })), h("option", { value: "other", text: t("aiaccess.other") }));
+
+  const connect = h("section", { class: "card", id: "aiaccess-connect" },
+    h("h2", { text: t("aiaccess.connectTitle") }),
+    h("p", { text: t("aiaccess.connectIntro") }),
+    originNote,
+    disc.registration ? h("p", { class: "notice", text: t("aiaccess.registrationOpen") }) : null,
+    me.admin
+      ? form({ id: "aiaccess-register" }, [
+        field(t("aiaccess.app"), choose),
+        field(t("field.name"), nameField),
+        field(t("aiaccess.redirect"), redirectField),
+        hint,
+        h("button", { type: "submit", class: "primary", text: t("aiaccess.create") }),
+      ], async (data) => {
+        const res = await post("/api/oauth/clients", { name: data.get("name"), redirects: [data.get("redirect")] });
+        result.replaceChildren(
+          h("p", { class: "notice", text: t("aiaccess.created") }),
+          h("h3", { text: t("aiaccess.mcpUrl") }), copyable(endpoint, "aiaccess-url"),
+          h("h3", { text: t("aiaccess.clientId") }), copyable(res.client.id, "aiaccess-client-id"),
+          h("h3", { text: t("aiaccess.clientSecret") }), copyable(res.secret, "aiaccess-client-secret"),
+          h("p", { class: "muted", text: t("aiaccess.afterwards") }));
+        clients.clients.push(res.client);
+        fillApps(clients.clients);
+      })
+      : h("p", { class: "muted" }, t("aiaccess.askAdmin"), " ", h("code", { text: endpoint })),
+    result);
+
+  const apps = clients ? h("section", { class: "card", id: "aiaccess-apps" },
+    h("h2", { text: t("aiaccess.appsTitle") }),
+    h("p", { class: "muted", text: t("aiaccess.appsNote") }),
+    h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("aiaccess.app") }), h("th", { text: t("aiaccess.redirect") }), h("th", { text: t("aiaccess.since") }), h("th", {}))), appList)) : null;
+
+  // Everybody's own approvals, to see and to withdraw.
+  const approvals = h("section", { class: "card", id: "aiaccess-grants" },
+    h("h2", { text: t("aiaccess.grantsTitle") }),
+    h("p", { class: "muted", text: t("aiaccess.grantsNote") }),
+    grants.grants.length
+      ? h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("aiaccess.app") }), h("th", { text: t("aiaccess.approved") }), h("th", { text: t("aiaccess.lastUsed") }), h("th", {}))),
+        h("tbody", {}, grants.grants.map((g) => h("tr", {},
+          h("td", {}, h("strong", { text: g.name || g.client }), g.self ? [" ", h("span", { class: "badge danger", text: t("aiaccess.selfRegistered") })] : null),
+          h("td", { class: "muted", text: when(g.created) }),
+          h("td", { class: "muted", text: when(g.last_used) }),
+          h("td", {}, h("button", { type: "button", class: "danger", text: t("aiaccess.withdraw"), onclick: async () => {
+            await del("/api/oauth/grants/" + encodeURIComponent(g.client));
+            route();
+          } }))))))
+      : h("p", { class: "muted", text: t("aiaccess.noGrants") }));
+
+  // Local clients: an API token.
   const token = "<TOKEN>";
   const snippets = (tok) => [
     [t("mcp.claudeCode"), `claude mcp add --transport http wikiwikibangbang ${endpoint} --header "Authorization: Bearer ${tok}"`],
     [t("mcp.json"), JSON.stringify({ mcpServers: { wikiwikibangbang: { type: "http", url: endpoint, headers: { Authorization: `Bearer ${tok}` } } } }, null, 2)],
     [t("mcp.stdio"), `WWBB_TOKEN=${tok} wikiwikibangbang mcp -url ${location.origin}`],
   ];
-  const copyable = (text) => {
-    const pre = h("pre", { class: "snippet", text });
-    const button = h("button", { type: "button", class: "secondary", text: t("mcp.copy"), onclick: async () => {
-      try {
-        await navigator.clipboard.writeText(pre.textContent);
-        button.textContent = t("mcp.copied");
-      } catch {
-        button.textContent = t("mcp.copyFailed");
-      }
-    } });
-    return h("div", { class: "copyable" }, pre, button);
-  };
   const setup = h("div", { id: "mcp-setup" });
   const fill = (tok) => setup.replaceChildren(...snippets(tok).map(([label, text]) => h("section", {}, h("h3", { text: label }), copyable(text))));
   fill(token);
+  const local = h("details", { class: "card", id: "aiaccess-token" },
+    h("summary", { text: t("aiaccess.tokenTitle") }),
+    h("p", { class: "muted", text: t("mcp.tokenNote") }),
+    form({ id: "mcp-token" }, [
+      field(t("field.name"), h("input", { name: "name", required: true, value: t("mcp.tokenName") })),
+      field(t("account.scope"), h("select", { name: "scope" },
+        h("option", { value: "full", text: t("mcp.scopeFull") }), h("option", { value: "read", text: t("mcp.scopeRead") }))),
+      field(t("account.days"), h("input", { name: "days", type: "number", min: 1, max: 366, value: 30 })),
+      h("button", { type: "submit", class: "primary", text: t("account.createToken") }),
+    ], async (data, status) => {
+      const res = await post("/api/tokens", { name: data.get("name"), scope: data.get("scope"), days: Number(data.get("days")) });
+      fill(res.secret);
+      status.replaceChildren(h("p", { class: "notice", text: t("mcp.tokenMade") }));
+    }),
+    setup,
+    h("p", { class: "muted" }, t("mcp.tokensAt"), " ", link("#/account", t("nav.account"))));
+
   show(
     h("h1", { text: t("mcp.title") }),
     h("p", { text: t("mcp.intro") }),
-    h("section", { class: "card" },
-      h("h2", { text: t("mcp.step1") }),
-      h("p", { class: "muted", text: t("mcp.endpoint") }),
-      copyable(endpoint)),
-    h("section", { class: "card" },
-      h("h2", { text: t("mcp.step2") }),
-      h("p", { class: "muted", text: t("mcp.tokenNote") }),
-      form({ id: "mcp-token" }, [
-        field(t("field.name"), h("input", { name: "name", required: true, value: t("mcp.tokenName") })),
-        field(t("account.scope"), h("select", { name: "scope" },
-          h("option", { value: "full", text: t("mcp.scopeFull") }), h("option", { value: "read", text: t("mcp.scopeRead") }))),
-        field(t("account.days"), h("input", { name: "days", type: "number", min: 1, max: 366, value: 30 })),
-        h("button", { type: "submit", class: "primary", text: t("account.createToken") }),
-      ], async (data, status) => {
-        const res = await post("/api/tokens", { name: data.get("name"), scope: data.get("scope"), days: Number(data.get("days")) });
-        fill(res.secret);
-        status.replaceChildren(h("p", { class: "notice", text: t("mcp.tokenMade") }));
-      }),
-      h("p", { class: "muted" }, t("mcp.tokensAt"), " ", link("#/account", t("nav.account")))),
-    h("section", { class: "card" },
-      h("h2", { text: t("mcp.step3") }),
-      setup),
+    connect,
+    apps,
+    approvals,
+    local,
     h("section", { class: "card" },
       h("h2", { text: t("mcp.tools", { n: tools.length }) }),
       h("p", { class: "muted", text: t("mcp.toolsNote") }),
       h("ul", { class: "list tools" }, tools.map((tool) => h("li", {}, h("code", { text: tool.name }), " — ", (tool.description || "").split(". ")[0])))),
   );
+}
+
+// oauthView is the consent page an assistant sends a person to (ADR-0068):
+// it names the application, says when nobody vetted it, and returns the
+// person to the application with a code, or with a refusal.
+async function oauthView(params) {
+  const show = screen();
+  if (params.get("error")) {
+    return show(h("section", { class: "card narrow", id: "oauth-consent" },
+      h("h1", { text: t("oauth.title") }), h("p", { class: "error", role: "alert", text: t("oauth.badClient") })));
+  }
+  const keys = ["client_id", "redirect_uri", "state", "code_challenge", "code_challenge_method", "resource"];
+  const req = Object.fromEntries(keys.map((k) => [k, params.get(k) || ""]));
+  let info;
+  try {
+    info = await get("/api/oauth/request?" + new URLSearchParams(req));
+  } catch (err) {
+    return show(h("section", { class: "card narrow", id: "oauth-consent" }, h("h1", { text: t("oauth.title") }), errorBox(err)));
+  }
+  const status = h("div", { class: "status" });
+  const answer = async (deny) => {
+    status.replaceChildren();
+    try {
+      const res = await post("/api/oauth/approve", { ...req, deny });
+      location.href = res.redirect;
+    } catch (err) {
+      status.replaceChildren(errorBox(err));
+    }
+  };
+  show(h("section", { class: "card narrow", id: "oauth-consent" },
+    h("h1", { text: t("oauth.title") }),
+    h("p", { class: "login-lead", text: t("oauth.asks", { name: info.client.name, user: me.user.username }) }),
+    info.client.self ? h("p", { class: "notice warning", id: "oauth-self", text: t("oauth.selfRegistered") }) : null,
+    h("ul", {},
+      h("li", { text: t("oauth.what") }),
+      h("li", { text: t("oauth.only") }),
+      h("li", { text: t("oauth.withdraw") })),
+    h("p", { class: "muted", text: t("oauth.returnsTo", { host: info.redirect_host }) }),
+    h("div", { class: "actions-row" },
+      h("button", { type: "button", class: "primary", id: "oauth-allow", text: t("oauth.allow"), onclick: () => answer(false) }),
+      h("button", { type: "button", class: "secondary", id: "oauth-deny", text: t("oauth.deny"), onclick: () => answer(true) })),
+    status));
 }
 
 // --- administration ----------------------------------------------------------
