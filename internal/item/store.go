@@ -24,9 +24,11 @@ type Store struct {
 	// content, for live commands only (ADR-0058); nil turns it off.
 	assess Assessor
 
-	log      []Event
-	types    map[string][]TypeDef // all versions, oldest first
-	spaces   map[string]*space
+	log    []Event
+	types  map[string][]TypeDef // all versions, oldest first
+	spaces map[string]*space
+	// kanbans are the kanbans of each space, in the order made (ADR-0060).
+	kanbans  map[string][]Kanban
 	items    map[ID]*Item
 	keys     map[string]ID // current and former keys (D2)
 	rels     map[ID]*Relation
@@ -792,6 +794,8 @@ func (s *Store) apply(e Event) {
 		s.applyAttachment(e, touch)
 	case HoldSet, HoldReleased:
 		s.applyHold(e, touch)
+	case KanbanSet, KanbanRemoved:
+		s.applyKanban(e)
 	case Watched, Unwatched:
 		s.applyWatch(e)
 	case RoleRevoked, GroupMemberRemoved, SystemRoleRevoked:

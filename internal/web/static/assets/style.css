@@ -630,3 +630,12 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 @media (max-width: 720px) { .welcome { flex-direction: column-reverse; padding: 20px; } .welcome-art { width: 70%; } }
 .welcome .button:not(.primary) { background: var(--surface); color: var(--accent); }
 .welcome .button:not(.primary):hover { background: var(--accent-soft); }
+
+/* Kanbans (ADR-0060). */
+.kanban-tools { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin: 6px 0 12px; }
+.kanban-tools .inline-form { display: flex; gap: 6px; align-items: center; }
+.kanban-tools .inline-form input { min-width: 16rem; }
+.kanban-admin { margin-left: auto; font-size: 13px; }
+.kanban-off { font-size: 12px; color: var(--muted); }
+#new-kanban .form-row { display: flex; flex-wrap: wrap; gap: 10px; }
+#new-kanban .form-row .field { flex: 1 1 200px; }

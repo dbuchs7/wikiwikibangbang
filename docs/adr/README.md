@@ -72,3 +72,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0057](0057-governance-findings-in-the-bell.md) | Governance findings reach the bell: restrictions as notifications, open findings as a reminder | Accepted | Landed |
 | [0058](0058-data-protection-review-holds-open-items-as-drafts.md) | A data protection review holds open items as drafts until a second person releases them | Accepted | Landed |
 | [0059](0059-alignment-dividers-and-more-marks.md) | Text and pictures are aligned, bodies get dividers and three more marks, and the toolbar shows what applies | Accepted | Landed |
+| [0060](0060-kanbans-are-topics-whose-cards-carry-their-label.md) | Kanbans are named topics of a space whose cards carry the kanban's label | Accepted | Landed |

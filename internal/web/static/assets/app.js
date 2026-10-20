@@ -311,7 +311,7 @@ function renderFooter() {
 const modules = [
   { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"] },
   { id: "new", name: "nav.new", href: "#/new", match: ["new"] },
-  { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks"] },
+  { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban"] },
   { id: "album", name: "nav.album", href: "#/album", match: ["album"] },
   { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"] },
   { id: "notifications", name: "nav.notifications", href: "#/notifications", match: ["notifications"] },
@@ -562,6 +562,8 @@ async function route() {
     switch (section) {
       case "new": return await newView(params);
       case "tasks": return await tasksView(arg, params);
+      case "kanbans": return await kanbansView();
+      case "kanban": return await kanbanView(arg, arg2);
       case "space": return await spaceView(arg);
       case "board": return await boardView(arg, arg2);
       case "links": return await linksView(arg);
@@ -888,6 +890,19 @@ async function boardView(key, typeName) {
     items.push(...page.items);
   }
   const status = h("div", { class: "status" });
+  show(
+    h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("board.crumb", { type: typeName })),
+    h("h1", { text: `${key} · ${typeName}` }),
+    page.next ? h("p", { class: "notice", text: t("board.truncated", { n: items.length }) }) : null,
+    status,
+    boardOf(items, type, status),
+  );
+}
+
+// boardOf lays items of a type with a workflow out in columns of its
+// states (ADR-0036); a card moves by a transition, by button or by
+// dragging it to another column. cardTail adds to each card.
+function boardOf(items, type, status, cardTail) {
   const transitionsFrom = (state) => type.workflow.transitions.filter((tr) => tr.from.includes(state));
   const perform = (it, name) => action(() => post(`/api/items/${it.id}/transitions`, { name }), status);
 
@@ -897,6 +912,7 @@ async function boardView(key, typeName) {
   h("div", { class: "card-title", text: it.title }),
   h("div", { class: "card-actions" }, transitionsFrom(it.state).map((tr) =>
     h("button", { class: "link", text: `${tr.name} → ${tr.to}`, onclick: () => perform(it, tr.name) }))),
+  cardTail ? cardTail(it) : null,
   );
 
   const byID = new Map(items.map((it) => [it.id, it]));
@@ -918,13 +934,7 @@ async function boardView(key, typeName) {
     h("ul", { class: "board-cards" }, cards.map(card)));
     return col;
   };
-  show(
-    h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("board.crumb", { type: typeName })),
-    h("h1", { text: `${key} · ${typeName}` }),
-    page.next ? h("p", { class: "notice", text: t("board.truncated", { n: items.length }) }) : null,
-    status,
-    h("div", { class: "board" }, type.workflow.states.map(column)),
-  );
+  return h("div", { class: "board" }, type.workflow.states.map(column));
 }
 
 // --- tasks -------------------------------------------------------------------
@@ -1081,7 +1091,8 @@ async function tasksView(tab, params) {
   } });
   const tabLink = (id, label) => link(`#/tasks/${id}${query()}`, `${label} (${lists[id].length})`, id === current ? "tab active" : "tab");
   const tabs = h("nav", { class: "tabs", "aria-label": t("tasks.title") },
-    tabLink("mine", t("tasks.mine")), tabLink("unassigned", t("tasks.unassigned")), tabLink("all", t("tasks.all")));
+    tabLink("mine", t("tasks.mine")), tabLink("unassigned", t("tasks.unassigned")), tabLink("all", t("tasks.all")),
+    link("#/kanbans", t("kanban.tab"), "tab", "tab-kanbans"));
   // The tab links carry the filters as they change.
   const relink = () => tabs.querySelectorAll("a").forEach((a) => { a.href = a.getAttribute("href").split("?")[0] + query(); });
   show(
@@ -1098,6 +1109,116 @@ async function tasksView(tab, params) {
     page.next ? h("p", { class: "notice", text: t("tasks.truncated", { n: items.length }) }) : null,
   );
   if (rows.length) apply();
+}
+
+// --- kanbans (ADR-0060) -------------------------------------------------------
+
+// readAll reads every page of an item listing, at most boardMax items.
+async function readAll(base) {
+  let page = await get(base);
+  const items = [...page.items];
+  while (page.next && items.length < boardMax) {
+    page = await get(`${base}&after=${encodeURIComponent(page.next)}`);
+    items.push(...page.items);
+  }
+  return { items, truncated: Boolean(page.next) };
+}
+
+// kanbansView lists the kanbans of one's spaces and makes new ones: a
+// name, a type with a workflow; their cards are the items with its label.
+async function kanbansView() {
+  const show = screen();
+  const [{ kanbans }, { spaces }, { types }] = await Promise.all([get("/api/kanbans"), get("/api/spaces"), get("/api/types")]);
+  const flows = types.filter((ty) => ty.workflow);
+  const editable = spaces.filter((sp) => mayEdit(sp.role));
+  const counts = await Promise.all(kanbans.map((k) =>
+    get(`/api/items?space=${encodeURIComponent(k.space)}&type=${encodeURIComponent(k.type)}&label=${encodeURIComponent(k.label)}&limit=100`)
+      .then((p) => (p.next ? p.items.length + "+" : p.items.length)).catch(() => "?")));
+  const create = editable.length && flows.length ? form({ id: "new-kanban", class: "card" }, [
+    h("h2", { text: t("kanban.new") }),
+    h("div", { class: "form-row" },
+      field(t("col.space"), h("select", { name: "space" }, editable.map((sp) => h("option", { value: sp.key, text: `${sp.key} ${sp.name}`, selected: sp.key === here.space })))),
+      field(t("kanban.name"), h("input", { name: "name", required: true, maxlength: 80, placeholder: t("kanban.namePlaceholder") })),
+      field(t("kanban.type"), h("select", { name: "type" }, flows.map((ty) => h("option", { value: ty.name, text: ty.name, selected: ty.name === "task" }))))),
+    h("details", {}, h("summary", { text: t("kanban.labelMore") }),
+      field(t("kanban.label"), h("input", { name: "label", placeholder: t("kanban.labelPlaceholder") }))),
+    h("button", { type: "submit", class: "primary", text: t("kanban.create") }),
+  ], async (d) => {
+    const { kanban } = await post(`/api/spaces/${encodeURIComponent(d.get("space"))}/kanbans`, { name: d.get("name"), type: d.get("type"), label: (d.get("label") || "").trim() });
+    location.hash = `#/kanban/${encodeURIComponent(kanban.space)}/${kanban.id}`;
+  }) : null;
+  const bySpace = new Map();
+  kanbans.forEach((k, i) => bySpace.set(k.space, [...(bySpace.get(k.space) || []), { ...k, count: counts[i] }]));
+  show(
+    h("div", { class: "page-head" }, h("h1", { text: t("kanban.title") })),
+    h("nav", { class: "tabs", "aria-label": t("tasks.title") },
+      link("#/tasks/mine", t("tasks.mine"), "tab"), link("#/tasks/unassigned", t("tasks.unassigned"), "tab"), link("#/tasks/all", t("tasks.all"), "tab"),
+      link("#/kanbans", t("kanban.tab"), "tab active", "tab-kanbans")),
+    h("p", { class: "muted", text: t("kanban.intro") }),
+    kanbans.length ? h("div", { id: "kanbans" }, [...bySpace].map(([sp, list]) => h("section", {},
+      h("h2", { text: `${sp} · ${spaces.find((x) => x.key === sp)?.name || ""}` }),
+      h("ul", { class: "space-tiles" }, list.map((k) => h("li", {},
+        h("a", { class: "space-tile", href: `#/kanban/${encodeURIComponent(k.space)}/${k.id}` },
+          h("strong", { text: k.name }),
+          h("span", { class: "muted", text: t("kanban.meta", { type: k.type, label: k.label }) }),
+          h("span", { class: "badge", text: t("kanban.cards", { n: k.count }) }))))))))
+      : h("p", { class: "muted", text: t("kanban.none") }),
+    create,
+  );
+}
+
+// kanbanView shows one kanban: its cards in the columns of the type's
+// workflow. Editors add a new card, put an existing item on it, take a
+// card off (the item keeps its other labels and kanbans), rename the
+// kanban or remove it.
+async function kanbanView(space, id) {
+  const show = screen();
+  const [{ kanbans }, { types }, { spaces }] = await Promise.all([get(`/api/kanbans?space=${encodeURIComponent(space)}`), get("/api/types"), get("/api/spaces")]);
+  const k = kanbans.find((x) => x.id === id);
+  if (!k) throw new Error(t("kanban.missing"));
+  here.space = space;
+  const type = types.find((ty) => ty.name === k.type);
+  if (!type?.workflow) throw new Error(t("board.noWorkflow", { type: k.type }));
+  const canEdit = mayEdit(spaces.find((sp) => sp.key === space)?.role);
+  const base = `/api/items?space=${encodeURIComponent(space)}&type=${encodeURIComponent(k.type)}&limit=100`;
+  const [cards, all] = await Promise.all([readAll(`${base}&label=${encodeURIComponent(k.label)}`), canEdit ? readAll(base) : { items: [] }]);
+  const status = h("div", { class: "status" });
+  const setLabels = (it, labels) => put(`/api/items/${it.id}/labels`, { labels });
+  const off = (it) => canEdit ? h("button", { type: "button", class: "link kanban-off", text: t("kanban.takeOff"),
+    onclick: () => action(() => setLabels(it, it.labels.filter((l) => l !== k.label)), status) }) : null;
+  const elsewhere = all.items.filter((it) => !it.labels.includes(k.label));
+  const tools = canEdit ? h("div", { class: "kanban-tools" },
+    form({ id: "kanban-add", class: "inline-form" }, [
+      h("input", { name: "title", required: true, placeholder: t("kanban.newCard"), "aria-label": t("kanban.newCard") }),
+      h("button", { type: "submit", class: "primary", text: t("kanban.add") }),
+    ], async (d) => {
+      const { item } = await post("/api/items", { space, type: k.type, title: d.get("title").trim() });
+      await setLabels(item, [k.label]);
+      route();
+    }),
+    elsewhere.length ? form({ id: "kanban-assign", class: "inline-form" }, [
+      h("select", { name: "item", "aria-label": t("kanban.assign") }, elsewhere.map((it) => h("option", { value: it.id, text: `${it.key} ${it.title}` }))),
+      h("button", { type: "submit", text: t("kanban.assign") }),
+    ], async (d) => {
+      const it = elsewhere.find((x) => x.id === d.get("item"));
+      await setLabels(it, [...it.labels, k.label]);
+      route();
+    }) : null,
+    h("span", { class: "kanban-admin" },
+      h("button", { type: "button", class: "link", text: t("kanban.rename"), onclick: () => {
+        const name = prompt(t("kanban.name"), k.name);
+        if (name && name.trim() !== k.name) action(() => put(`/api/spaces/${encodeURIComponent(space)}/kanbans/${k.id}`, { name }), status);
+      } }), " · ",
+      h("button", { type: "button", class: "link", text: t("kanban.remove"), onclick: () => confirm(t("kanban.removeConfirm", { name: k.name }))
+        && action(async () => { await del(`/api/spaces/${encodeURIComponent(space)}/kanbans/${k.id}`); location.hash = "#/kanbans"; }, status) }))) : null;
+  show(
+    h("p", {}, link("#/tasks", t("nav.tasks")), " / ", link("#/kanbans", t("kanban.tab")), " / " + k.name),
+    h("div", { class: "page-head" }, h("h1", { text: k.name }), h("p", { class: "muted", text: t("kanban.metaLong", { space, type: k.type, label: k.label }) })),
+    tools,
+    cards.truncated ? h("p", { class: "notice", text: t("board.truncated", { n: cards.items.length }) }) : null,
+    status,
+    h("div", { id: "kanban" }, boardOf(cards.items, type, status, off)),
+  );
 }
 
 // albumView shows the images and drawings of every item one may read

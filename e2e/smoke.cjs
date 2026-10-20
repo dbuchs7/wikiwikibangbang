@@ -649,6 +649,36 @@ function check(cond, msg) {
     await page.waitForSelector("h1.item-title");
     check(await page.locator("#hold").count() === 0, "released for everyone");
 
+    step("kanbans: two kanbans on topics; a new card and an existing ticket; one ticket on both; taken off one");
+    await page.goto(base + "/#/tasks");
+    await page.click("#tab-kanbans");
+    await page.fill("#new-kanban [name=name]", "Website relaunch");
+    await page.selectOption("#new-kanban [name=type]", "ticket");
+    await page.click("#new-kanban button[type=submit]");
+    await page.waitForSelector("h1:has-text('Website relaunch')");
+    await page.fill("#kanban-add [name=title]", "Hero image");
+    await page.click("#kanban-add button[type=submit]");
+    await page.waitForSelector("#kanban .board-column[data-state=open] .card-item:has-text('Hero image')");
+    await page.selectOption("#kanban-assign [name=item]", { label: (await page.locator("#kanban-assign option:has-text('Tidy the wiki')").textContent()).trim() });
+    await page.click("#kanban-assign button[type=submit]");
+    await page.waitForSelector("#kanban .card-item:has-text('Tidy the wiki')");
+    await page.goto(base + "/#/kanbans");
+    await page.fill("#new-kanban [name=name]", "Operations");
+    await page.selectOption("#new-kanban [name=type]", "ticket");
+    await page.click("#new-kanban button[type=submit]");
+    await page.waitForSelector("h1:has-text('Operations')");
+    await page.selectOption("#kanban-assign [name=item]", { label: (await page.locator("#kanban-assign option:has-text('Tidy the wiki')").textContent()).trim() });
+    await page.click("#kanban-assign button[type=submit]");
+    await page.waitForSelector("#kanban .card-item:has-text('Tidy the wiki')");
+    await page.goto(base + "/#/kanbans");
+    await page.waitForSelector("#kanbans .space-tile:has-text('Website relaunch'):has-text('2 cards')");
+    await page.waitForSelector("#kanbans .space-tile:has-text('Operations'):has-text('1 card')");
+    await page.click("#kanbans .space-tile:has-text('Website relaunch')");
+    await page.click("#kanban .card-item:has-text('Tidy the wiki') .kanban-off");
+    await page.waitForSelector("#kanban .card-item:has-text('Tidy the wiki')", { state: "detached" });
+    await page.goto(base + "/#/kanbans");
+    await page.waitForSelector("#kanbans .space-tile:has-text('Operations'):has-text('1 card')"); // still on the other kanban
+
     step("administration: groups, a group's role in a space, system roles");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");
