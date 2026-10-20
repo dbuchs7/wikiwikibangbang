@@ -36,3 +36,15 @@ func TestSpaceIcons(t *testing.T) {
 	w.admin.expect("DELETE", "/api/spaces/PLAT/icon", "", http.StatusNoContent)
 	w.bert.expect("GET", "/api/spaces/PLAT/icon", "", http.StatusNotFound)
 }
+
+func TestSpaceIconUploadsAreChecked(t *testing.T) {
+	w := newWorld(t)
+	if r := w.admin.put("/api/spaces/PLAT/icon", "image/png", []byte("x")); r.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("content type: %d", r.Code)
+	}
+	big := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{1}, 3<<20)...)
+	if r := w.admin.put("/api/spaces/PLAT/icon", "application/octet-stream", big); r.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("too large: %d", r.Code)
+	}
+	w.admin.expect("DELETE", "/api/spaces/PLAT/icon", "", http.StatusNoContent) // none set: nothing to do
+}

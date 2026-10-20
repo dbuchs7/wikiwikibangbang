@@ -101,3 +101,26 @@ func TestDeliveredOnlyMovesForward(t *testing.T) {
 		t.Fatal("replayed")
 	}
 }
+
+func TestUnknownAccounts(t *testing.T) {
+	a, _, _ := newAccounts(t)
+	if _, _, err := a.HandReset("nobody"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("hand reset: %v", err)
+	}
+	if err := a.SetEmail("nobody", "a@example.org"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("set email: %v", err)
+	}
+	if err := a.SetDelivered("nobody", 3); !errors.Is(err, ErrNotFound) {
+		t.Errorf("set delivered: %v", err)
+	}
+	if a.Contacts("nobody") != (Contacts{}) || a.Delivered("nobody") != 0 {
+		t.Error("an unknown account has nothing")
+	}
+	u, err := a.CreateUser("Ida", pw)
+	noErr(t, err)
+	if err := a.SetEmail(u.ID, "not an address"); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a bad address: %v", err)
+	}
+	noErr(t, a.SetEmail(u.ID, "ida@example.org"))
+	noErr(t, a.SetEmail(u.ID, "ida@example.org")) // unchanged
+}

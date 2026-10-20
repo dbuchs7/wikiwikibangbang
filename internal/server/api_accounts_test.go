@@ -4,6 +4,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 )
 
 func TestAccountRequestsThroughTheAPI(t *testing.T) {
@@ -115,4 +118,28 @@ func TestUserSearch(t *testing.T) {
 	// Vera only reads, Carla has no role: neither looks people up.
 	w.vera.expect("GET", "/api/users/search?q=b", "", http.StatusForbidden)
 	w.carla.expect("GET", "/api/users/search?q=b", "", http.StatusForbidden)
+}
+
+func TestAccountRequestErrors(t *testing.T) {
+	w := newWorld(t)
+	anon := &client{t: t, h: w.admin.h}
+	w.admin.expect("PUT", "/api/settings/access", `{"accountRequests":true}`, http.StatusOK)
+	w.admin.expect("PUT", "/api/settings/access", `not json`, http.StatusBadRequest)
+	anon.expect("POST", "/api/signup", `not json`, http.StatusBadRequest)
+	b := budget.Default()
+	b.AccountRequests = 1
+	budget.Set(b)
+	defer budget.Set(budget.Default())
+	anon.expect("POST", "/api/signup", `{"username":"gina","password":"gina's password","email":"g@example.org"}`, http.StatusAccepted)
+	anon.expect("POST", "/api/signup", `{"username":"hugo","password":"hugo's password","email":"h@example.org"}`, http.StatusServiceUnavailable)
+	for range auth.MaxFailures {
+		anon.do("POST", "/api/signup", `{"username":"x","password":"a long password","email":"x@example.org"}`)
+	}
+	if r := anon.do("POST", "/api/signup", `{"username":"ivan","password":"ivan's password","email":"i@example.org"}`); r.Code != http.StatusTooManyRequests {
+		t.Fatalf("throttle %d", r.Code)
+	}
+	w.bert.expect("PUT", "/api/me/contacts", `not json`, http.StatusBadRequest)
+	w.admin.expect("PUT", "/api/users/"+w.ids["bert"]+"/email", `{"email":"nope"}`, http.StatusBadRequest)
+	w.admin.expect("PUT", "/api/users/"+w.ids["bert"]+"/email", `not json`, http.StatusBadRequest)
+	w.bert.expect("GET", "/api/users/search?q=a", "", http.StatusOK)
 }

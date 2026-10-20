@@ -22,6 +22,8 @@ type fakeSMTP struct {
 	mu   sync.Mutex
 	got  []string
 	addr *net.TCPAddr
+	// refuse is the command the server refuses, e.g. "RCPT".
+	refuse string
 }
 
 func startSMTP(t *testing.T) *fakeSMTP {
@@ -46,6 +48,9 @@ func startSMTP(t *testing.T) *fakeSMTP {
 
 func (f *fakeSMTP) serve(c net.Conn) {
 	defer c.Close()
+	f.mu.Lock()
+	refuse := f.refuse
+	f.mu.Unlock()
 	r := bufio.NewReader(c)
 	say := func(s string) { io.WriteString(c, s+"\r\n") }
 	say("220 fake")
@@ -56,6 +61,8 @@ func (f *fakeSMTP) serve(c net.Conn) {
 		}
 		cmd := strings.ToUpper(strings.TrimSpace(line))
 		switch {
+		case refuse != "" && strings.HasPrefix(cmd, refuse):
+			say("550 refused")
 		case strings.HasPrefix(cmd, "EHLO"), strings.HasPrefix(cmd, "HELO"):
 			say("250 fake")
 		case cmd == "DATA":
@@ -82,6 +89,12 @@ func (f *fakeSMTP) serve(c net.Conn) {
 			say("250 ok")
 		}
 	}
+}
+
+func (f *fakeSMTP) refusing(cmd string) {
+	f.mu.Lock()
+	f.refuse = cmd
+	f.mu.Unlock()
 }
 
 func (f *fakeSMTP) messages() []string {
@@ -202,5 +215,78 @@ func TestNoMailWithoutConfiguration(t *testing.T) {
 	var none *Notifier
 	if none.Send(context.Background(), auth.Contacts{Slack: "x"}, Message{}) != nil || none.Mail() {
 		t.Fatal("a nil notifier sends nothing")
+	}
+}
+
+func TestMailFailures(t *testing.T) {
+	srv := startSMTP(t)
+	cfg := func(c MailConfig) *Notifier {
+		t.Helper()
+		c.Host, c.From = "127.0.0.1", "wiki@example.org"
+		if c.Port == 0 {
+			c.Port = srv.addr.Port
+		}
+		if c.Security == "" {
+			c.Security = SecurityNone
+		}
+		n, err := New(Config{Mail: &c})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	ctx := context.Background()
+	m := Message{Subject: "x", Text: "y"}
+	// The fake server does not take AUTH, so a login fails.
+	if err := cfg(MailConfig{Username: "u", Password: "p"}).SendMail(ctx, "a@example.org", m); err == nil || !strings.Contains(err.Error(), "login") {
+		t.Errorf("login: %v", err)
+	}
+	if err := cfg(MailConfig{Security: SecurityTLS}).SendMail(ctx, "a@example.org", m); err == nil {
+		t.Error("TLS to a plain server succeeded")
+	}
+	if err := cfg(MailConfig{}).SendMail(ctx, "not an address", m); err == nil {
+		t.Error("a bad recipient was sent to")
+	}
+	srv.refusing("RCPT")
+	if err := cfg(MailConfig{}).SendMail(ctx, "a@example.org", m); err == nil || !strings.Contains(err.Error(), "recipient") {
+		t.Errorf("refused recipient: %v", err)
+	}
+	srv.refusing("MAIL")
+	if err := cfg(MailConfig{}).SendMail(ctx, "a@example.org", m); err == nil || !strings.Contains(err.Error(), "sender") {
+		t.Errorf("refused sender: %v", err)
+	}
+	srv.refusing("")
+	closed, _ := net.Listen("tcp", "127.0.0.1:0")
+	port := closed.Addr().(*net.TCPAddr).Port
+	closed.Close()
+	if err := cfg(MailConfig{Port: port}).SendMail(ctx, "a@example.org", m); err == nil || !strings.Contains(err.Error(), "cannot be reached") {
+		t.Errorf("closed port: %v", err)
+	}
+	if len(srv.messages()) != 0 {
+		t.Fatalf("nothing was delivered: %v", srv.messages())
+	}
+}
+
+func TestStatusAndNames(t *testing.T) {
+	n, err := New(Config{PublicURL: "https://wiki.example.org/", Mail: &MailConfig{Host: "mail.example.org", Port: 587, Security: SecurityStartTLS, From: "Wiki <wiki@example.org>", Password: "secret"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := n.Status()
+	if !st.Mail || st.MailHost != "mail.example.org" || st.PublicURL != "https://wiki.example.org" || n.PublicURL() != st.PublicURL {
+		t.Fatalf("status %+v", st)
+	}
+	if b, _ := json.Marshal(st); strings.Contains(string(b), "secret") {
+		t.Fatal("the status holds no secret")
+	}
+	var none *Notifier
+	if none.Status() != (Status{}) || none.PublicURL() != "" || none.Link("#/") != "" {
+		t.Fatal("a nil notifier has no status")
+	}
+	if helloName("nobody") != "localhost" || helloName("a@b.org") != "b.org" {
+		t.Fatal("hello names")
+	}
+	if got := (Message{Text: "a\n", Link: ""}).body(); got != "a" {
+		t.Fatalf("body %q", got)
 	}
 }

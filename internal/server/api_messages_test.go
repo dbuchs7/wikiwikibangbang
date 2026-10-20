@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/notify"
@@ -139,4 +140,68 @@ func TestTestMessageAndDigest(t *testing.T) {
 	if len(got) != 2 || got[1].Subject != "2 new changes on what you watch" || got[1].Link != "https://wiki.example.org/#/notifications" {
 		t.Fatalf("digest %+v", got)
 	}
+}
+
+func TestMessagesAroundAccountRequests(t *testing.T) {
+	w, box := messagingWorld(t)
+	anon := &client{t: t, h: w.admin.h}
+	w.admin.expect("PUT", "/api/me/contacts", `{"email":"admin@example.org"}`, http.StatusOK)
+	w.bert.expect("GET", "/api/settings/delivery", "", http.StatusForbidden)
+	st := w.admin.expect("GET", "/api/settings/delivery", "", http.StatusOK)
+	if st["status"].(map[string]any)["publicURL"] != "https://wiki.example.org" || st["digestMinutes"] != float64(0) {
+		t.Fatalf("delivery %v", st)
+	}
+	w.bert.expect("GET", "/api/settings/access", "", http.StatusForbidden)
+	w.admin.expect("PUT", "/api/settings/access", `{"accountRequests":true}`, http.StatusOK)
+	if got := w.admin.expect("GET", "/api/settings/access", "", http.StatusOK); got["accountRequests"] != true {
+		t.Fatalf("access %v", got)
+	}
+	anon.expect("POST", "/api/signup", `{"username":"egon","password":"egon's password","email":"egon@example.org"}`, http.StatusAccepted)
+	anon.expect("POST", "/api/signup", `{"username":"fritz","password":"fritz's password","email":"fritz@example.org"}`, http.StatusAccepted)
+	w.deps.Messages.Wait()
+	if got := box.to("admin@example.org"); len(got) != 2 || !strings.Contains(got[0].Subject, "egon") || got[0].Link != "https://wiki.example.org/#/admin" {
+		t.Fatalf("admins are told: %+v", got)
+	}
+	reqs := w.admin.expect("GET", "/api/account-requests", "", http.StatusOK)["requests"].([]any)
+	w.admin.expect("POST", "/api/account-requests/"+reqs[0].(map[string]any)["id"].(string)+"/approve", "", http.StatusCreated)
+	w.admin.expect("DELETE", "/api/account-requests/"+reqs[1].(map[string]any)["id"].(string), "", http.StatusNoContent)
+	w.admin.expect("DELETE", "/api/account-requests/nope", "", http.StatusNotFound)
+	w.deps.Messages.Wait()
+	if got := box.to("egon@example.org"); len(got) != 1 || got[0].Subject != "Your account was approved" {
+		t.Fatalf("approval mail %+v", got)
+	}
+	if got := box.to("fritz@example.org"); len(got) != 1 || !strings.Contains(got[0].Text, "not approved") {
+		t.Fatalf("rejection mail %+v", got)
+	}
+}
+
+func TestMessengerRunsUntilStopped(t *testing.T) {
+	w, _ := messagingWorld(t)
+	m := w.deps.Messages
+	if m.Every() != 0 {
+		t.Fatal("no digest interval in tests")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	tick := make(chan time.Time)
+	done := make(chan struct{})
+	go func() { m.Run(ctx, tick); close(done) }()
+	tick <- time.Now()
+	cancel()
+	<-done
+}
+
+func TestResetRequestsAreThrottled(t *testing.T) {
+	w, _ := messagingWorld(t)
+	anon := &client{t: t, h: w.admin.h}
+	for range auth.MaxFailures {
+		anon.expect("POST", "/api/password-reset", `{"username":"vera"}`, http.StatusAccepted)
+	}
+	r := anon.do("POST", "/api/password-reset", `{"username":"vera"}`)
+	if r.Code != http.StatusTooManyRequests || r.Header().Get("Retry-After") == "" {
+		t.Fatalf("throttle %d %v", r.Code, r.Header())
+	}
+	anon.expect("POST", "/api/password-reset", `not json`, http.StatusBadRequest)
+	anon.expect("POST", "/api/password-reset/confirm", `not json`, http.StatusBadRequest)
+	w.admin.expect("POST", "/api/users/nobody/password-reset", "", http.StatusNotFound)
+	w.deps.Messages.Wait()
 }
