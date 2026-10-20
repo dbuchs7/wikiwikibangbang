@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
@@ -11,6 +12,7 @@ import (
 // reading its comments; the item model decides who may write.
 func commentRoutes(h itemHandlers) []Route {
 	return []Route{
+		{Method: http.MethodGet, Pattern: "/api/comments", Summary: "Comments on what one watches, one's own and those mentioning one by @username, newest first; only narrows to watched, mine or mentions; paged by offset (ADR-0063)", Handler: http.HandlerFunc(h.commentFeed)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/comments", Summary: "The item's comments, oldest first, paged", Handler: http.HandlerFunc(h.listComments)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/comments", Summary: "Comment on the item", Handler: http.HandlerFunc(h.addComment)},
 		{Method: http.MethodPut, Pattern: "/api/items/{ref}/comments/{id}", Summary: "Edit one's own comment", Handler: http.HandlerFunc(h.editComment)},
@@ -163,4 +165,51 @@ func (h itemHandlers) resolveComment(resolved bool) http.HandlerFunc {
 			return nil, x.ResolveComment(it.ID, item.ID(r.PathValue("id")), resolved)
 		})
 	}
+}
+
+type feedEntryJSON struct {
+	Item    item.ID     `json:"item"`
+	Key     string      `json:"key"`
+	Title   string      `json:"title"`
+	Space   string      `json:"space"`
+	Comment commentJSON `json:"comment"`
+	Why     []string    `json:"why"`
+}
+
+// commentFeed is the comment overview (ADR-0063).
+func (h itemHandlers) commentFeed(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, ok := parseLimit(w, q)
+	if !ok {
+		return
+	}
+	only := q.Get("only")
+	switch only {
+	case "", item.FeedWatched, item.FeedMine, item.FeedMentions:
+	default:
+		writeError(w, http.StatusBadRequest, "only is watched, mine or mentions")
+		return
+	}
+	offset := 0
+	if v := q.Get("offset"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			writeError(w, http.StatusBadRequest, "offset must be a number from 0")
+			return
+		}
+		offset = n
+	}
+	p, _ := PrincipalFrom(r.Context())
+	h.read(w, r, func(x *item.Session) (any, error) {
+		list, more := x.CommentFeed(p.Username, only, offset, limit)
+		out := []feedEntryJSON{}
+		for _, e := range list {
+			out = append(out, feedEntryJSON{Item: e.Item, Key: e.Key, Title: e.Title, Space: e.Space, Comment: toCommentJSON(e.Comment), Why: e.Why})
+		}
+		res := map[string]any{"comments": out}
+		if more {
+			res["next"] = offset + len(list)
+		}
+		return res, nil
+	})
 }

@@ -75,3 +75,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0060](0060-kanbans-are-topics-whose-cards-carry-their-label.md) | Kanbans are named topics of a space whose cards carry the kanban's label | Accepted | Landed |
 | [0061](0061-account-requests-and-message-channels-on-accounts.md) | Account requests at the sign-in page and message channels on accounts | Accepted | Landed |
 | [0062](0062-spaces-carry-an-icon-and-show-as-tiles-or-a-list.md) | Spaces carry an icon and show as tiles or a list | Accepted | Landed |
+| [0063](0063-a-comment-overview-across-items.md) | A comment overview across items | Accepted | Landed |

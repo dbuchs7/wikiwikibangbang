@@ -86,6 +86,55 @@ function what(n) {
   }
 }
 
+// commentsView is the comment overview (ADR-0063): comments on what one
+// watches, one's own and those mentioning one by @username, newest first,
+// with a tab for each kind.
+async function commentsView(tab = "") {
+  const show = screen();
+  const kinds = { watched: t("comments.watched"), mine: t("comments.mine"), mentions: t("comments.mentions") };
+  const current = kinds[tab] ? tab : "";
+  const url = (offset) => {
+    const q = new URLSearchParams({ limit: 50 });
+    if (current) q.set("only", current);
+    if (offset) q.set("offset", offset);
+    return "/api/comments?" + q;
+  };
+  const first = await get(url(0));
+  const list = h("ul", { class: "comment-feed", id: "comment-feed" });
+  const more = h("div");
+  const add = async (page) => {
+    await learnNames(page.comments.map((e) => e.comment.author));
+    for (const e of page.comments) {
+      const c = e.comment;
+      list.append(h("li", { class: "comment-entry" + (c.resolved ? " resolved" : "") },
+        avatar(c.author, person(c.author), "", 32),
+        h("div", { class: "comment-entry-main" },
+          h("div", { class: "comment-entry-head" },
+            h("strong", { text: person(c.author) }),
+            h("span", { class: "muted", text: " " + (c.reply ? t("comments.replied") : t("comments.commented")) + " " }),
+            link("#/item/" + encodeURIComponent(e.key), `${e.key} ${e.title}`),
+            h("span", { class: "muted", text: " · " + when(c.created) })),
+          c.anchor ? h("blockquote", { class: "comment-quote", text: c.anchor.quote }) : "",
+          h("p", { class: "comment-text", text: c.text }),
+          h("div", { class: "comment-entry-why" },
+            ...e.why.map((w) => h("span", { class: "chip why-" + w, text: kinds[w] })),
+            c.resolved ? h("span", { class: "chip resolved", text: t("comments.resolved") }) : ""))));
+    }
+    more.replaceChildren();
+    if (page.next) more.append(h("button", { text: t("common.more"), onclick: async () => add(await get(url(page.next))) }));
+  };
+  await add(first);
+  const tabLink = (id, label) => link("#/comments" + (id ? "/" + id : ""), label, id === current ? "tab active" : "tab", "comments-tab-" + (id || "all"));
+  show(
+    h("div", { class: "page-head" }, h("h1", { text: t("comments.title") })),
+    h("p", { class: "muted", text: t("comments.help") }),
+    h("nav", { class: "tabs", "aria-label": t("comments.title") },
+      tabLink("", t("comments.all")), tabLink("watched", kinds.watched), tabLink("mine", kinds.mine), tabLink("mentions", kinds.mentions)),
+    first.comments.length ? list : h("p", { class: "muted", id: "comment-feed-empty", text: t("comments.none") }),
+    more,
+  );
+}
+
 // notificationsView lists what others changed on what one watches, and
 // marks it seen.
 async function notificationsView() {
@@ -313,6 +362,7 @@ const modules = [
   { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"] },
   { id: "new", name: "nav.new", href: "#/new", match: ["new"] },
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban"] },
+  { id: "comments", name: "nav.comments", href: "#/comments", match: ["comments"] },
   { id: "album", name: "nav.album", href: "#/album", match: ["album"] },
   { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"] },
   { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"] },
@@ -579,6 +629,7 @@ async function route() {
       case "item": return await itemView(arg, params);
       case "label": return await labelView(arg);
       case "notifications": return await notificationsView();
+      case "comments": return await commentsView(arg);
       case "album": return albumView();
       case "search": return await searchView(arg || "");
       case "account": return await accountView();

@@ -634,5 +634,16 @@ export default {
   "space.iconHelp": "Erscheint auf der Kachel des Bereichs auf der Startseite: PNG, JPEG, GIF, WebP oder SVG, idealerweise quadratisch.",
   "user.search": "Tippen zum Suchen …",
   "user.unknown": "Niemand heisst «{name}»: Bitte eine Person aus den Vorschlägen wählen.",
-  "new.otherTypes": "Etwas anderes erstellen"
+  "new.otherTypes": "Etwas anderes erstellen",
+  "nav.comments": "Kommentare",
+  "comments.title": "Kommentare",
+  "comments.help": "Kommentare auf abonnierten Seiten und Aufgaben, Ihre eigenen sowie jene, die Sie mit @Benutzername erwähnen.",
+  "comments.all": "Alle",
+  "comments.watched": "Abonniert",
+  "comments.mine": "Meine",
+  "comments.mentions": "Erwähnungen",
+  "comments.commented": "kommentierte",
+  "comments.replied": "antwortete auf",
+  "comments.resolved": "Erledigt",
+  "comments.none": "Hier gibt es noch keine Kommentare."
 };

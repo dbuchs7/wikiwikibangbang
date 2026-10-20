@@ -102,3 +102,24 @@ func TestInlineCommentsThroughTheAPI(t *testing.T) {
 		t.Fatalf("history %s", hist)
 	}
 }
+
+func TestCommentOverview(t *testing.T) {
+	w := newWorld(t)
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Patch","properties":{"priority":"low"}}`, http.StatusCreated)
+	path := "/api/items/" + field(it, "item", "key").(string) + "/comments"
+	w.bert.expect("POST", path, `{"text":"Ready for review, @vera?"}`, http.StatusCreated)
+	w.bert.expect("POST", path, `{"text":"Second thought"}`, http.StatusCreated)
+
+	vera := w.vera.expect("GET", "/api/comments", "", http.StatusOK)["comments"].([]any)
+	if len(vera) != 1 || vera[0].(map[string]any)["why"].([]any)[0] != "mentions" || vera[0].(map[string]any)["title"] != "Patch" {
+		t.Fatalf("vera's overview %v", vera)
+	}
+	mine := w.bert.expect("GET", "/api/comments?only=mine&limit=1", "", http.StatusOK)
+	if len(mine["comments"].([]any)) != 1 || mine["next"] != float64(1) {
+		t.Fatalf("bert's own, paged %v", mine)
+	}
+	w.bert.expect("GET", "/api/comments?only=everything", "", http.StatusBadRequest)
+	if got := w.carla.expect("GET", "/api/comments", "", http.StatusOK)["comments"].([]any); len(got) != 0 {
+		t.Fatalf("an outsider sees %v", got)
+	}
+}

@@ -107,6 +107,18 @@ function check(cond, msg) {
     await page.waitForSelector(".comment-text:has-text('Patched on the staging hosts.')");
     check((await page.textContent(".comment .muted")).includes("you") && (await page.textContent(".comment .muted")).includes("edited"), "own, edited comment");
 
+    step("comment overview: one's own comments, across pages, newest first");
+    await page.evaluate(async () => fetch("/api/items/PLAT-1/comments", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "@bert please verify on production" }) }));
+    await page.click("#app-switcher");
+    await page.click("#drawer-apps a:has-text('Comments')");
+    await page.waitForSelector("#comment-feed li:first-child:has-text('@bert please verify')");
+    await page.click("#comments-tab-mine");
+    await page.waitForSelector("#comment-feed li:has-text('Patched on the staging hosts.') .why-mine");
+    await page.click("#comments-tab-mentions");
+    await page.waitForSelector("#comment-feed-empty");
+    await page.goto(base + "/#/item/PLAT-1");
+
     step("rich text: a second item with formatting, a list, a mention and an embed");
     await page.click("a:has-text('PLAT')");
     await page.fill("#new-item [name=title]", "Runbook");
@@ -223,7 +235,7 @@ function check(cond, msg) {
     await page.click("#app-switcher");
     await page.waitForSelector("#drawer:not([hidden])");
     const modules = (await page.locator("#drawer-apps a").allTextContents()).join(",");
-    check(modules === "Spaces,Create,Tasks,Album,AI assistants (MCP),Governance,Account,Administration", "the modules of an administrator: " + modules);
+    check(modules === "Spaces,Create,Tasks,Comments,Album,AI assistants (MCP),Governance,Account,Administration", "the modules of an administrator: " + modules);
     await page.keyboard.press("Escape");
     await page.waitForSelector("#drawer", { state: "hidden" });
     await page.click("#app-switcher");
@@ -883,6 +895,9 @@ function check(cond, msg) {
     check((await page.textContent(".comment-text")) === "Patched on the staging hosts.", "bert reads the comment");
     check((await page.textContent(".comment .muted")).startsWith("admin · "), "the comment names its author");
     check(await page.$(".comment button:has-text('Edit')") === null, "bert cannot edit admin's comment");
+    await page.goto(base + "/#/comments/mentions");
+    await page.waitForSelector("#comment-feed li:has-text('@bert please verify') .why-mentions");
+    await page.goto(base + "/#/item/PLAT-1");
     check(!(await page.textContent(".comment")).includes("null"), "another's comment shows no stray text");
 
     step("watching: bert watches the item, admin renames it, bert is told");
