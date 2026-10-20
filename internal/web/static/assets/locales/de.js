@@ -635,6 +635,8 @@ export default {
   "design.fontFamily": "Auf den Computern installierte Schrift, zuerst versucht (optional)",
   "design.darkHint": "Der Nachtmodus bleibt eingeschaltet, solange das eigene Stylesheet leer ist oder sein dunkles Aussehen mit @media (prefers-color-scheme: dark) { … } festlegt; ein eigenes Stylesheet ohne solche Regeln schaltet den Nachtmodus für die ganze Instanz aus.",
   "design.darkOff": "Der Nachtmodus ist ausgeschaltet: Das eigene Stylesheet enthält keine Regeln @media (prefers-color-scheme: dark) { … }, deshalb sehen alle das helle Aussehen. Mit solchen Regeln lässt sich ein eigenes dunkles Aussehen anbieten.",
+  "export.pdfHandbook": "PDF mit Unterseiten (Handbuch)",
+  "export.docxHandbook": "Word mit Unterseiten (Handbuch)",
   "export.open": "Exportieren",
   "export.pdf": "PDF (drucken)",
   "export.docx": "Word (.docx)",

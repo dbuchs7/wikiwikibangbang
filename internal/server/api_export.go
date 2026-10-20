@@ -22,7 +22,8 @@ import (
 // the UI prints a page without its surroundings.
 func exportRoutes(h itemHandlers) []Route {
 	return []Route{
-		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/docx", Summary: "The item as a Word document: title, properties and body with its pictures", Handler: http.HandlerFunc(h.exportDOCX)},
+		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/docx", Summary: "The item as a Word document: title, properties and body with its pictures and the items it embeds; children=true adds every page below it, as a handbook", Handler: http.HandlerFunc(h.exportDOCX)},
+		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/html", Summary: "The item as a page to print as PDF, with what it embeds; children=true adds every page below it, as a handbook", Handler: http.HandlerFunc(h.exportHTML)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/tables/{n}", Summary: "The item's n-th table (from 1) as CSV", Handler: http.HandlerFunc(h.exportTable)},
 		{Method: http.MethodGet, Pattern: "/api/items.csv", Summary: "Readable items as CSV, with the filters of /api/items: key, title, space, type, state, labels and every property", Handler: http.HandlerFunc(h.exportItems)},
 		{Method: http.MethodGet, Pattern: "/api/search.csv", Summary: "A full-text search as CSV (q; space, type, state, label), best first", Handler: http.HandlerFunc(h.exportSearch)},
@@ -31,8 +32,8 @@ func exportRoutes(h itemHandlers) []Route {
 
 // exportWords are the labels of an export in each UI language.
 var exportWords = map[string]map[string]string{
-	"de": {"key": "Schlüssel", "title": "Titel", "space": "Bereich", "type": "Typ", "state": "Status", "labels": "Labels", "restricted": "(eingeschränkt)", "table": "Tabelle"},
-	"en": {"key": "Key", "title": "Title", "space": "Space", "type": "Type", "state": "State", "labels": "Labels", "restricted": "(restricted)", "table": "table"},
+	"de": {"key": "Schlüssel", "title": "Titel", "space": "Bereich", "type": "Typ", "state": "Status", "labels": "Labels", "restricted": "(eingeschränkt)", "table": "Tabelle", "contents": "Inhalt"},
+	"en": {"key": "Key", "title": "Title", "space": "Space", "type": "Type", "state": "State", "labels": "Labels", "restricted": "(restricted)", "table": "table", "contents": "Contents"},
 }
 
 func (h itemHandlers) lang(r *http.Request) string {
@@ -97,77 +98,200 @@ func userIDs(items []item.Item, types func(string) item.TypeDef) []auth.UserID {
 	return ids
 }
 
-func (h itemHandlers) exportDOCX(w http.ResponseWriter, r *http.Request) {
+// exportDocument gathers what a page export writes, through the reader's
+// session (D10): the page, with children its whole subtree as a handbook,
+// the items their bodies embed as far as the reader may read them, and
+// their pictures, read as files only when withData is set.
+func (h itemHandlers) exportDocument(r *http.Request, children, withData bool) (export.Document, item.Item, error) {
 	words := exportWords[h.lang(r)]
-	var it item.Item
-	var doc export.Document
-	var files []item.Attachment
+	doc := export.Document{Embeds: map[item.ID]export.Page{}, Restricted: words["restricted"]}
+	var root item.Item
+	type file struct {
+		owner item.ID
+		a     item.Attachment
+	}
+	var files []file
 	var err error
 	h.d.DB.Read(func(s *item.Store) {
 		x := s.As(who(r))
-		if it, err = resolveItem(x, r.PathValue("ref")); err != nil {
+		if root, err = resolveItem(x, r.PathValue("ref")); err != nil {
 			return
 		}
-		td := s.Type(it.Type)
-		names := h.d.DB.Accounts.Usernames(userIDs([]item.Item{it}, s.Type))
-		doc = export.Document{Title: it.Title, Body: it.Body.Blocks,
-			Facts: [][2]string{{words["key"], it.Key}, {words["type"], it.Type}}}
-		if it.State != "" {
-			doc.Facts = append(doc.Facts, [2]string{words["state"], it.State})
+		limit := budget.Get().PageItems
+		type node struct {
+			it    item.Item
+			depth int
 		}
-		for _, f := range td.Fields {
-			if v, ok := it.Properties[f.Name]; ok && v != nil {
-				doc.Facts = append(doc.Facts, [2]string{f.Name, propertyText(v, f.Kind, names)})
+		// The subtree in reading order: depth first, in sibling order.
+		var order []node
+		var walk func(it item.Item, depth int)
+		walk = func(it item.Item, depth int) {
+			order = append(order, node{it, depth})
+			if (!children && depth == 0) || len(order) > limit {
+				return
 			}
-		}
-		if len(it.Labels) > 0 {
-			doc.Facts = append(doc.Facts, [2]string{words["labels"], strings.Join(it.Labels, ", ")})
-		}
-		refs := map[item.ID]string{}
-		for _, b := range it.Body.Blocks {
-			if b.Kind == item.Embed {
-				refs[b.Ref] = words["restricted"]
-				if other, err := x.Get(b.Ref); err == nil {
-					refs[b.Ref] = other.Key + " " + other.Title
+			kids, _ := x.Tree(it.Space, it.ID)
+			for _, k := range kids {
+				kid, err := x.Get(k.Item.ID)
+				if err == nil {
+					walk(kid, depth+1)
 				}
 			}
 		}
-		doc.Ref = func(id item.ID) string { return refs[id] }
-		if kids, err := x.Tree(it.Space, it.ID); err == nil {
-			for _, k := range kids {
-				doc.Children = append(doc.Children, k.Item.Title)
+		walk(root, 0)
+		if len(order) > limit {
+			err = errTooMany
+			return
+		}
+		// The items the bodies embed, a few levels deep.
+		embeds := map[item.ID]item.Item{}
+		next := []item.Item{}
+		for _, n := range order {
+			next = append(next, n.it)
+		}
+		for level := 0; level < 3 && len(next) > 0 && len(embeds) < limit; level++ {
+			var found []item.Item
+			for _, it := range next {
+				for _, b := range it.Body.Blocks {
+					if b.Kind != item.Embed {
+						continue
+					}
+					if _, seen := embeds[b.Ref]; seen {
+						continue
+					}
+					if e, err := x.Get(b.Ref); err == nil {
+						embeds[b.Ref] = e
+						found = append(found, e)
+					}
+				}
 			}
+			next = found
 		}
-		files, err = x.Attachments(it.ID)
+		all := make([]item.Item, 0, len(order)+len(embeds))
+		for _, n := range order {
+			all = append(all, n.it)
+		}
+		for _, e := range embeds {
+			all = append(all, e)
+		}
+		names := h.d.DB.Accounts.Usernames(userIDs(all, s.Type))
+		pageOf := func(it item.Item, depth int) export.Page {
+			p := export.Page{ID: it.ID, Key: it.Key, Title: it.Title, Body: it.Body.Blocks, Depth: depth, Images: map[item.ID]export.Image{},
+				Facts: [][2]string{{words["key"], it.Key}, {words["type"], it.Type}}}
+			if it.State != "" {
+				p.Facts = append(p.Facts, [2]string{words["state"], it.State})
+			}
+			for _, f := range s.Type(it.Type).Fields {
+				if v, ok := it.Properties[f.Name]; ok && v != nil {
+					p.Facts = append(p.Facts, [2]string{f.Name, propertyText(v, f.Kind, names)})
+				}
+			}
+			if len(it.Labels) > 0 {
+				p.Facts = append(p.Facts, [2]string{words["labels"], strings.Join(it.Labels, ", ")})
+			}
+			if kids, err := x.Tree(it.Space, it.ID); err == nil {
+				for _, k := range kids {
+					p.Children = append(p.Children, k.Item.Title)
+				}
+			}
+			shown := map[item.ID]bool{}
+			for _, b := range it.Body.Blocks {
+				if b.Kind == item.Image {
+					shown[b.Ref] = true
+				}
+			}
+			if atts, err := x.Attachments(it.ID); err == nil {
+				for _, a := range atts {
+					if !a.Deleted && shown[a.ID] {
+						p.Images[a.ID] = export.Image{Name: a.Name, Type: a.Type}
+						files = append(files, file{it.ID, a})
+					}
+				}
+			}
+			return p
+		}
+		for _, n := range order {
+			doc.Pages = append(doc.Pages, pageOf(n.it, n.depth))
+		}
+		for id, e := range embeds {
+			doc.Embeds[id] = pageOf(e, 0)
+		}
+		if children {
+			doc.Contents = words["contents"]
+		}
 	})
-	if err != nil {
-		h.fail(w, err)
-		return
+	if err != nil || !withData {
+		return doc, root, err
 	}
-	// The pictures the body shows are read after the store's lock.
-	shown := map[item.ID]bool{}
-	for _, b := range it.Body.Blocks {
-		if b.Kind == item.Image {
-			shown[b.Ref] = true
-		}
-	}
-	doc.Images = map[item.ID]export.Image{}
+	// The pictures are read after the store's lock.
+	data := map[[2]item.ID][]byte{}
 	for _, f := range files {
-		if f.Deleted || !shown[f.ID] {
-			continue
-		}
-		rc, err := h.d.DB.OpenAttachment(it.ID, f.ID)
+		rc, err := h.d.DB.OpenAttachment(f.owner, f.a.ID)
 		if err != nil {
 			continue // shown by its caption alone
 		}
-		data, err := io.ReadAll(io.LimitReader(rc, budget.Get().AttachmentBytes))
+		b, err := io.ReadAll(io.LimitReader(rc, budget.Get().AttachmentBytes))
 		rc.Close()
 		if err == nil {
-			doc.Images[f.ID] = export.Image{Name: f.Name, Type: f.Type, Data: data}
+			data[[2]item.ID{f.owner, f.a.ID}] = b
 		}
+	}
+	fill := func(p export.Page) {
+		for id, img := range p.Images {
+			img.Data = data[[2]item.ID{p.ID, id}]
+			p.Images[id] = img
+		}
+	}
+	for _, p := range doc.Pages {
+		fill(p)
+	}
+	for _, e := range doc.Embeds {
+		fill(e)
+	}
+	return doc, root, nil
+}
+
+// exportFailed answers an export that could not be gathered.
+func (h itemHandlers) exportFailed(w http.ResponseWriter, err error) {
+	if errors.Is(err, errTooMany) {
+		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("a handbook holds at most %d pages", budget.Get().PageItems))
+		return
+	}
+	h.fail(w, err)
+}
+
+func (h itemHandlers) exportDOCX(w http.ResponseWriter, r *http.Request) {
+	children := r.URL.Query().Get("children") == "true"
+	doc, it, err := h.exportDocument(r, children, true)
+	if err != nil {
+		h.exportFailed(w, err)
+		return
 	}
 	attach(w, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", fileName(it.Key, it.Title, ".docx"))
 	if err := export.DOCX(w, doc); err != nil {
+		h.log.Error("export failed", "item", it.ID, "err", err)
+	}
+}
+
+// ExportPolicy is the content security policy of a page's printable form:
+// no script at all, its stylesheet and pictures from this server, and
+// framed only by the UI, which prints it.
+const ExportPolicy = "default-src 'none'; style-src 'self'; img-src 'self'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+
+// exportHTML answers the page, or the handbook, as a page to print: the
+// UI prints it as PDF (ADR-0071).
+func (h itemHandlers) exportHTML(w http.ResponseWriter, r *http.Request) {
+	children := r.URL.Query().Get("children") == "true"
+	doc, it, err := h.exportDocument(r, children, false)
+	if err != nil {
+		h.exportFailed(w, err)
+		return
+	}
+	hd := w.Header()
+	hd.Set("Content-Type", "text/html; charset=utf-8")
+	hd.Set("Content-Security-Policy", ExportPolicy)
+	hd.Set("Cache-Control", "no-store")
+	if err := export.HTML(w, doc, h.lang(r)); err != nil {
 		h.log.Error("export failed", "item", it.ID, "err", err)
 	}
 }

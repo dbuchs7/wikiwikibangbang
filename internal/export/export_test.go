@@ -29,7 +29,8 @@ func pngOf(t *testing.T, w, h int) []byte {
 // that each part of the package is well-formed XML and holds the text, the
 // picture and the link.
 func TestADocumentIsAWellFormedWordFile(t *testing.T) {
-	d := Document{
+	d := Document{Pages: []Page{{
+		ID:    "root",
 		Title: "Runbook <Ops> & more",
 		Facts: [][2]string{{"Key", "OPS-1"}, {"State", "open"}},
 		Body: []item.Block{
@@ -46,12 +47,14 @@ func TestADocumentIsAWellFormedWordFile(t *testing.T) {
 			{Kind: item.Divider}, {Kind: item.TOC}, {Kind: item.Children},
 			{Kind: item.Image, Ref: "pic", Text: "The plan", Width: 50},
 			{Kind: item.Image, Ref: "missing", Text: "gone"},
-			{Kind: item.Embed, Ref: "x"},
+			{Kind: item.Embed, Ref: "x"}, {Kind: item.Embed, Ref: "secret"},
 			{Kind: item.Paragraph, Text: "bad \x01 char"},
 		},
 		Images:   map[item.ID]Image{"pic": {Name: "plan.png", Type: "image/png", Data: pngOf(t, 400, 200)}},
-		Ref:      func(id item.ID) string { return "OPS-9 Linked" },
 		Children: []string{"Child page"},
+	}},
+		Embeds:     map[item.ID]Page{"x": {ID: "x", Key: "OPS-9", Title: "Linked", Body: []item.Block{{Kind: item.Paragraph, Text: "inside the embed"}}}},
+		Restricted: "(restricted)",
 	}
 	var buf bytes.Buffer
 	if err := DOCX(&buf, d); err != nil {
@@ -78,7 +81,7 @@ func TestADocumentIsAWellFormedWordFile(t *testing.T) {
 		}
 	}
 	doc := parts["word/document.xml"]
-	for _, want := range []string{"Runbook &lt;Ops&gt; &amp; more", "Heading2", "<w:b/>", "☑ ", "Äpfel", "OPS-9 Linked", "Child page", "The plan", "w:numId w:val=\"3\"", "<w:drawing>"} {
+	for _, want := range []string{"Runbook &lt;Ops&gt; &amp; more", "Heading2", "<w:b/>", "☑ ", "Äpfel", "OPS-9 Linked", "inside the embed", "(restricted)", "Child page", "The plan", "w:numId w:val=\"3\"", "<w:drawing>"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("the document lacks %q", want)
 		}
@@ -111,5 +114,84 @@ func TestCSVIsSafeForSpreadsheets(t *testing.T) {
 	}
 	if TableRows("  ") != nil {
 		t.Fatal("an empty table has rows")
+	}
+}
+
+// handbook is a root with a chapter, a section below it, and an item
+// embedded in itself.
+func handbook() Document {
+	return Document{
+		Pages: []Page{
+			{ID: "r", Title: "Handbook", Body: []item.Block{{Kind: item.Heading, Level: 1, Text: "Intro"}}},
+			{ID: "c", Title: "Chapter", Depth: 1, Body: []item.Block{{Kind: item.Heading, Level: 1, Text: "Part"}, {Kind: item.Embed, Ref: "loop"}}},
+			{ID: "s", Title: "Section", Depth: 2, Body: []item.Block{{Kind: item.Paragraph, Text: "deep"}}},
+		},
+		Embeds:   map[item.ID]Page{"loop": {ID: "loop", Key: "K-1", Title: "Loop", Body: []item.Block{{Kind: item.Paragraph, Text: "looping"}, {Kind: item.Embed, Ref: "loop"}}}},
+		Contents: "Contents",
+	}
+}
+
+func TestAHandbookHasChaptersAndEmbedsEndInCycles(t *testing.T) {
+	var buf bytes.Buffer
+	if err := DOCX(&buf, handbook()); err != nil {
+		t.Fatal(err)
+	}
+	z, _ := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	var doc string
+	for _, f := range z.File {
+		if f.Name == "word/document.xml" {
+			r, _ := f.Open()
+			data, _ := io.ReadAll(r)
+			doc = string(data)
+		}
+	}
+	for _, want := range []string{"TOCHeading", `<w:pStyle w:val="Heading1"/><w:pageBreakBefore/>`, "Chapter", `<w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t xml:space="preserve">Part`,
+		`<w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t xml:space="preserve">Section`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("the handbook lacks %q", want)
+		}
+	}
+	if n := strings.Count(doc, "looping"); n != 1 {
+		t.Errorf("an item embedded in itself is written %d times, want once", n)
+	}
+	var page bytes.Buffer
+	if err := HTML(&page, handbook(), "en"); err != nil {
+		t.Fatal(err)
+	}
+	h := page.String()
+	for _, want := range []string{`<link rel="stylesheet" href="/assets/export.css">`, `<nav class="contents">`, `<h2 id="p-c" class="page-title depth-1">Chapter</h2>`,
+		`<h3>Part</h3>`, `<h3 id="p-s" class="page-title depth-2">Section</h3>`, "↳ K-1 Loop"} {
+		if !strings.Contains(h, want) {
+			t.Errorf("the HTML lacks %q:\n%s", want, h)
+		}
+	}
+	if strings.Contains(h, "<script") || strings.Contains(h, "style=") || strings.Count(h, "looping") != 1 {
+		t.Errorf("script, inline style or a repeated embed:\n%s", h)
+	}
+}
+
+func TestTheHTMLEscapesAndKeepsSafeLinksOnly(t *testing.T) {
+	d := Document{Pages: []Page{{ID: "p", Title: "<b>x</b>", Body: []item.Block{
+		{Kind: item.Paragraph, Text: "<script>a</script> link bad", Marks: []item.Mark{
+			{Type: item.MarkLink, Start: 19, End: 23, Href: "https://e.org/?a=1&b=\"2\""}, {Type: item.MarkLink, Start: 24, End: 27, Href: "javascript:x"}}},
+		{Kind: item.BulletItem, Text: "one"}, {Kind: item.TaskItem, Text: "two", Checked: true}, {Kind: item.OrderedItem, Text: "three"},
+		{Kind: item.Image, Ref: "i", Text: "pic", Width: 47, Align: "right"},
+		{Kind: item.Table, Text: "a\tb\n<c>\td"}, {Kind: item.CodeBlock, Text: "<x>"}, {Kind: item.Panel, Tone: "bogus", Text: "p"},
+		{Kind: item.Quote, Text: "q", Align: "center"}, {Kind: item.Divider}, {Kind: item.TOC}, {Kind: item.Children},
+	}, Images: map[item.ID]Image{"i": {Name: "i.png"}}, Children: []string{"kid"}}}}
+	var b bytes.Buffer
+	if err := HTML(&b, d, "de"); err != nil {
+		t.Fatal(err)
+	}
+	h := b.String()
+	for _, want := range []string{"&lt;b&gt;x&lt;/b&gt;", "&lt;script&gt;", `<a href="https://e.org/?a=1&amp;b=&#34;2&#34;">link</a>`, "<ul><li>one</li></ul>",
+		`<ul class="tasks"><li><span class="box">☑</span> two</li></ul><ol><li>three</li></ol>`, `<figure class="image w-50 align-right"><img src="/api/items/p/attachments/i"`,
+		"<td>&lt;c&gt;</td>", "<code>&lt;x&gt;</code>", "panel tone-info", `<blockquote class="align-center">`, "<hr>", "<li>kid</li>"} {
+		if !strings.Contains(h, want) {
+			t.Errorf("the HTML lacks %q:\n%s", want, h)
+		}
+	}
+	if strings.Contains(h, "javascript") {
+		t.Error("an unsafe link was written")
 	}
 }

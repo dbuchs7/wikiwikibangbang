@@ -1,0 +1,41 @@
+/* A page, or a handbook of pages, as printed to PDF (ADR-0071). The
+   server writes it without script or inline style; this is its look. */
+@page { size: A4; margin: 2cm 2cm 2.2cm; }
+:root { color-scheme: light; }
+body { margin: 0; color: #111827; background: #fff; font: 11pt/1.5 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; }
+.export { max-width: 17cm; margin: 0 auto; padding: 1cm 0; }
+h1, h2, h3, h4, h5, h6 { line-height: 1.25; break-after: avoid; }
+.doc-title { font-size: 24pt; margin: 0 0 .6em; }
+.page-title.depth-1 { break-before: page; font-size: 18pt; border-bottom: 1px solid #d2d6dd; padding-bottom: .2em; }
+.contents { margin: 1em 0 2em; }
+.contents h2 { font-size: 13pt; }
+.contents ol { list-style: none; padding: 0; }
+.contents li.depth-2 { padding-left: 1.5em; } .contents li.depth-3 { padding-left: 3em; } .contents li.depth-4, .contents li.depth-5, .contents li.depth-6 { padding-left: 4.5em; }
+.contents a { color: inherit; text-decoration: none; }
+.facts { border-collapse: collapse; margin: .4em 0 1em; font-size: 9pt; color: #374151; }
+.facts th { text-align: left; font-weight: 600; padding: 2px 12px 2px 0; }
+.facts td { padding: 2px 0; }
+table { border-collapse: collapse; width: 100%; margin: .6em 0; break-inside: avoid; }
+table:not(.facts) th, table:not(.facts) td { border: 1px solid #bfbfbf; padding: 4px 8px; text-align: left; vertical-align: top; }
+table:not(.facts) th { background: #f2f2f2; }
+blockquote { margin: .6em 0; padding-left: 1em; border-left: 3px solid #bfbfbf; color: #4b5563; font-style: italic; }
+pre { background: #f4f5f7; padding: 8px 10px; white-space: pre-wrap; font-size: 9.5pt; break-inside: avoid; }
+code { font-family: Consolas, ui-monospace, Menlo, monospace; }
+mark { background: #fff1a8; }
+a { color: #0b5cff; }
+hr { border: 0; border-top: 1px solid #bfbfbf; margin: 1em 0; }
+.panel { margin: .6em 0; padding: 6px 12px; border-left: 4px solid #8c8c8c; break-inside: avoid; }
+.panel p { margin: 0; }
+.tone-info { background: #e8f0fe; } .tone-note { background: #f3eefc; } .tone-warning { background: #fff6e0; } .tone-tip { background: #e9f6ec; } .tone-error { background: #fdecea; }
+ul.tasks { list-style: none; padding-left: 1em; }
+.toc { list-style: none; padding-left: 0; color: #374151; } .toc .level-2 { padding-left: 1.5em; } .toc .level-3 { padding-left: 3em; }
+.align-center { text-align: center; } .align-right { text-align: right; } .align-justify { text-align: justify; }
+figure { margin: .8em 0; text-align: center; break-inside: avoid; }
+figure img { max-width: 100%; height: auto; }
+figure.align-left { text-align: left; } figure.align-right { text-align: right; }
+.w-10 img { width: 10%; } .w-20 img { width: 20%; } .w-30 img { width: 30%; } .w-40 img { width: 40%; } .w-50 img { width: 50%; }
+.w-60 img { width: 60%; } .w-70 img { width: 70%; } .w-80 img { width: 80%; } .w-90 img { width: 90%; } .w-100 img { width: 100%; }
+figcaption { font-size: 9pt; color: #6b7280; font-style: italic; }
+.embed { margin: .8em 0; padding: 4px 0 4px 12px; border-left: 2px dotted #bfbfbf; }
+.embed-title { font-weight: 600; color: #404040; margin: .2em 0; }
+.embed.restricted .embed-title { color: #9ca3af; font-weight: normal; }

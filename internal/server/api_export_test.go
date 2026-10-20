@@ -77,3 +77,64 @@ func TestExportsOfPagesAndLists(t *testing.T) {
 	defer budget.Set(budget.Default())
 	w.bert.expect("GET", "/api/items.csv?space=PLAT", "", http.StatusRequestEntityTooLarge)
 }
+
+// TestAHandbookHoldsTheSubpagesAndWhatTheyEmbed: a page with children=true
+// brings every readable page below it, and embedded items come with their
+// content, as far as the reader may read them (D10).
+func TestAHandbookHoldsTheSubpagesAndWhatTheyEmbed(t *testing.T) {
+	w := newWorld(t)
+	mk := func(title, parent, body string) string {
+		t.Helper()
+		p := ""
+		if parent != "" {
+			p = `,"parent":"` + parent + `"`
+		}
+		out := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"page","title":"`+title+`"`+p+`,"body":`+body+`}`, http.StatusCreated)
+		return field(out, "item", "id").(string)
+	}
+	w.admin.expect("POST", "/api/types", `{"name":"page","body":true}`, http.StatusCreated)
+	secret := mk("Secret", "", `[{"kind":"paragraph","text":"only for some"}]`)
+	w.admin.expect("PUT", "/api/items/"+secret+"/restriction", `{"read":["`+w.ids["bert"]+`"]}`, http.StatusOK)
+	shared := mk("Shared part", "", `[{"kind":"paragraph","text":"embedded words"}]`)
+	root := mk("Manual", "", `[{"kind":"paragraph","text":"welcome"}]`)
+	chapter := mk("Chapter one", root, `[{"kind":"embed","ref":"`+shared+`"},{"kind":"embed","ref":"`+secret+`"}]`)
+	mk("Section", chapter, `[{"kind":"paragraph","text":"deep text"}]`)
+
+	page := w.bert.do("GET", "/api/items/"+root+"/export/html?children=true", "").Body.String()
+	for _, want := range []string{"Manual", "Chapter one", "Section", "deep text", "embedded words", "only for some", `<nav class="contents">`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("bert's handbook lacks %q", want)
+		}
+	}
+	vera := w.vera.do("GET", "/api/items/"+root+"/export/html?children=true", "")
+	if vera.Code != http.StatusOK || !strings.Contains(vera.Body.String(), "embedded words") || strings.Contains(vera.Body.String(), "only for some") ||
+		!strings.Contains(vera.Body.String(), "(restricted)") {
+		t.Fatalf("vera's handbook shows what she may not read, or lacks the rest: %s", vera.Body)
+	}
+	if csp := vera.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'none'") || !strings.Contains(csp, "frame-ancestors 'self'") {
+		t.Fatalf("policy: %q", csp)
+	}
+	// Without children only the page itself.
+	if single := w.bert.do("GET", "/api/items/"+root+"/export/html", "").Body.String(); strings.Contains(single, "Chapter one</h2>") {
+		t.Fatal("a single page brought its subpages")
+	}
+	rec := w.bert.do("GET", "/api/items/"+root+"/export/docx?children=true", "")
+	z, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range z.File {
+		if f.Name == "word/document.xml" {
+			r, _ := f.Open()
+			data, _ := io.ReadAll(r)
+			if !strings.Contains(string(data), "deep text") || !strings.Contains(string(data), "embedded words") {
+				t.Fatal("the Word handbook lacks the section or the embed")
+			}
+		}
+	}
+	b := budget.Default()
+	b.PageItems = 2
+	budget.Set(b)
+	defer budget.Set(budget.Default())
+	w.bert.expect("GET", "/api/items/"+root+"/export/docx?children=true", "", http.StatusRequestEntityTooLarge)
+}

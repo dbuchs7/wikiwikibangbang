@@ -26,7 +26,9 @@ Content lives in the wiki; people still need it outside: a page sent as a docume
 
 Chosen option: **2**, the maintainer's choice for PDF.
 
-- **PDF.** *Export → PDF (print)* prints the page; a print stylesheet leaves out the top bar, the tree, the actions and every side card except the properties, and prints light whatever the screen's scheme. The browser's *Save as PDF* gives the file with full fidelity, pictures included.
+- **PDF.** *Export → PDF (print)* prints the page in a printable form the server writes from the same model as the Word document (`GET /api/items/{ref}/export/html`, `export.HTML`): no script, no inline style, its look from `/assets/export.css`, its pictures from the attachments, under a policy of its own that only the UI may frame. The UI loads it in a hidden frame and opens the browser's print dialog, whose *Save as PDF* gives the file. Printing a page directly (Ctrl+P) still works too: a print stylesheet leaves out the surroundings and prints light.
+- **Handbook.** With `children=true` both forms hold the page and every readable page below it, depth first in the tree's order: a list of the pages after the title, each first-level page starting a new page, page titles as headings by depth and the pages' own headings below them. It is bounded by the budget `PageItems` (413 beyond it). *Export* offers *PDF with subpages* and *Word with subpages* on a page that has subpages.
+- **Embedded items.** Where a body embeds an item, both forms write that item's name, facts and body, three levels deep at most; an item embedded in itself is named, not repeated; an item the reader may not read shows as restricted (D10).
 - **Word.** `GET /api/items/{ref}/export/docx` writes an Office Open XML document with `archive/zip` and the standard library only (`internal/export`): the title, a table of key, type, state, properties (people by name) and labels, then the body — headings, paragraphs with bold, italic, underline, strike, highlight, code and links (http, https and mailto only), bullet and numbered lists, tasks, quotes, code, panels with their tone, tables, dividers, pictures of the item (PNG, JPEG, GIF, sized as on the page, with captions), embedded items by key and title or as restricted, a table of contents and the child pages.
 - **CSV.** `GET /api/items/{ref}/tables/{n}` writes a table of a page; `GET /api/items.csv` (the filters of `/api/items`) and `GET /api/search.csv` write lists with key, title, space, type, state, labels and every property of their types. The task list writes its visible, filtered rows in the browser. Every CSV is UTF-8 with a byte order mark, separated by a semicolon for German readers and a comma otherwise, and a cell starting with `=`, `+`, `-`, `@`, a tab or a return gets an apostrophe first, so no spreadsheet runs it. A list export is bounded by the budget `ExportRows` (10 000).
 - **Where.** *Export* on every page offers PDF, Word and each table; search, label, board, space and task lists have a *CSV* button.
@@ -34,8 +36,8 @@ Chosen option: **2**, the maintainer's choice for PDF.
 ### Consequences
 
 - **Positive:** pages leave the wiki as editable Word documents and as faithful PDFs; tables and lists open in spreadsheets; no new dependency, no external program.
-- **Negative / trade-offs accepted:** PDF takes one more step in the browser's print dialog; Word documents show pictures in PNG, JPEG and GIF only (others by their caption); the drawing editor's pictures are PNG and therefore included.
-- **Follow-ups / risks to watch:** exporting a page with its child pages as one document is not built.
+- **Negative / trade-offs accepted:** PDF takes one more step in the browser's print dialog; Word documents show pictures in PNG, JPEG and GIF only (others by their caption); the drawing editor's pictures are PNG and therefore included. (Amended 2026-10-20: the maintainer asked for handbooks with subpages and for embedded content to be exported; PDF moved from printing the page to printing the server's printable form, so both formats carry the same content.)
+- **Follow-ups / risks to watch:** Word's own table of contents (a field updated in Word) is not written; the handbook lists its pages as text.
 
 ## Pros and cons of the options
 

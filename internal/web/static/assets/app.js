@@ -79,18 +79,45 @@ function downloadCSV(name, rows) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-// exportMenu offers a page as PDF (the browser prints it without the
-// surroundings), as a Word document, and each of its tables as CSV.
+// printExport prints a page, or a handbook of it and its subpages, in the
+// printable form the server writes (ADR-0071): a frame loads it and the
+// browser's print dialog saves it as PDF.
+function printExport(path, children) {
+  document.getElementById("export-frame")?.remove();
+  const frame = h("iframe", { id: "export-frame", title: t("export.pdf"), class: "export-frame" });
+  frame.addEventListener("load", () => frame.contentWindow.print());
+  document.body.append(frame);
+  frame.src = path + "/export/html" + (children ? "?children=true" : "");
+}
+
+// exportMenu offers a page as PDF and as a Word document, both with what
+// it embeds, and each of its tables as CSV; a page with subpages also as a
+// handbook with them.
 function exportMenu(item) {
   const path = "/api/items/" + encodeURIComponent(item.id);
   const tables = (item.body || []).filter((b) => b.kind === "table");
-  return h("details", { class: "export-menu", id: "item-export" },
+  const close = (ev) => { ev.target.closest("details").open = false; };
+  const handbook = h("div", { class: "export-handbook" });
+  const menu = h("details", { class: "export-menu", id: "item-export" },
     h("summary", { class: "button", text: t("export.open") }),
     h("div", { class: "export-list" },
-      h("button", { type: "button", class: "link", id: "export-pdf", text: t("export.pdf"), onclick: (ev) => { ev.target.closest("details").open = false; window.print(); } }),
+      h("button", { type: "button", class: "link", id: "export-pdf", text: t("export.pdf"), onclick: (ev) => { close(ev); printExport(path, false); } }),
       h("a", { href: path + "/export/docx", id: "export-docx", download: "", text: t("export.docx") }),
+      handbook,
       tables.map((b, i) => h("a", { href: `${path}/tables/${i + 1}`, class: "export-table", download: "",
         text: t("export.table", { n: i + 1, head: (b.text || "").split("\n")[0].split("\t").slice(0, 3).join(", ") }) }))));
+  // Whether there are subpages is asked when the menu opens.
+  // A download leaves the page where it is; the menu closes with it.
+  menu.addEventListener("click", (ev) => { if (ev.target.closest("a[download]")) setTimeout(() => { menu.open = false; }); });
+  menu.addEventListener("toggle", async () => {
+    if (!menu.open || handbook.dataset.asked) return;
+    handbook.dataset.asked = "1";
+    const kids = await childPagesOf(item)().catch(() => []);
+    if (kids.length) handbook.append(
+      h("button", { type: "button", class: "link", id: "export-pdf-handbook", text: t("export.pdfHandbook"), onclick: (ev) => { close(ev); printExport(path, true); } }),
+      h("a", { href: path + "/export/docx?children=true", id: "export-docx-handbook", download: "", text: t("export.docxHandbook") }));
+  });
+  return menu;
 }
 
 // --- watching (ADR-0046) --------------------------------------------------------
