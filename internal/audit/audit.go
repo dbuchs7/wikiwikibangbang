@@ -47,6 +47,7 @@ const (
 	RoleRevoked     = "role.revoke"
 	SystemRoleTaken = "system-role.revoke"
 	GroupLeft       = "group.remove"
+	DesignChanged   = "design.change"
 	ItemPurged      = "item.purge"
 	ItemRedacted    = "item.redact"
 	BackupCreated   = "backup.create"

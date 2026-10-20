@@ -55,6 +55,9 @@ type Budgets struct {
 	// AvatarBytes is the largest profile picture an account keeps
 	// (ADR-0050); the browser scales a picture down before sending it.
 	AvatarBytes int64
+	// BrandingBytes is the largest logo, background image or font file of
+	// the corporate design (ADR-0052).
+	BrandingBytes int64
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
@@ -72,6 +75,7 @@ func Default() Budgets {
 		LinkCheckLinks:   500,
 		AttachmentBytes:  25 << 20,
 		AvatarBytes:      256 << 10,
+		BrandingBytes:    2 << 20,
 	}
 }
 

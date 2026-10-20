@@ -21,6 +21,10 @@ import (
 // fails until that decision is made.
 var BackupFiles = []string{wal.FileName, KeysFile, AccountsFile, AuditFile}
 
+// OptionalBackupFiles are files a backup contains when they exist: a
+// backup made before they were introduced restores without them.
+var OptionalBackupFiles = []string{SiteFile}
+
 // BackedUpDirs are the directories of a data directory whose files a
 // backup contains, each file under its path relative to the data directory:
 // the content of attachments (ADR-0045).
@@ -90,6 +94,20 @@ func (db *DB) Snapshot() (files []SnapshotFile, err error) {
 	if len(files) != len(BackupFiles) {
 		return files, errors.New("storage: snapshot does not cover every backed-up file")
 	}
+	for _, name := range OptionalBackupFiles {
+		data, err := os.ReadFile(filepath.Join(db.dir, name))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return files, err
+		}
+		sc, err := wal.ReadBytes(data)
+		if err != nil {
+			return files, fmt.Errorf("storage: snapshot of %s: %w", name, err)
+		}
+		files = append(files, SnapshotFile{Name: name, Size: sc.Valid, R: io.NopCloser(bytes.NewReader(data[:sc.Valid]))})
+	}
 	// The attachments the captured log describes. Their files never change,
 	// so they are opened only when read, not all at once. One deleted or
 	// purged since the capture is left out: its content was meant to go.
@@ -140,7 +158,7 @@ func (l *lazyFile) Close() error {
 // (slash-separated, relative to the data directory): one of BackupFiles,
 // or an attachment's file.
 func BackedUpPath(name string) bool {
-	if slices.Contains(BackupFiles, name) {
+	if slices.Contains(BackupFiles, name) || slices.Contains(OptionalBackupFiles, name) {
 		return true
 	}
 	parts := strings.Split(name, "/")
@@ -161,7 +179,7 @@ func (db *DB) Sizes() map[string]int64 {
 	db.mu.Lock()
 	out[wal.FileName], out[KeysFile] = db.log.Size(), db.keys.log.Size()
 	db.mu.Unlock()
-	for _, name := range []string{AccountsFile, AuditFile} {
+	for _, name := range []string{AccountsFile, AuditFile, SiteFile} {
 		if st, err := os.Stat(filepath.Join(db.dir, name)); err == nil {
 			out[name] = st.Size()
 		}
