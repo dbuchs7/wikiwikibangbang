@@ -689,17 +689,41 @@ const mayEdit = (role) => role === "editor" || role === "space-admin";
 
 async function homeView() {
   const show = screen();
-  const [{ spaces }, { types }] = await Promise.all([get("/api/spaces"), get("/api/types")]);
+  const [{ spaces }, { types }, notes, brand] = await Promise.all([get("/api/spaces"), get("/api/types"),
+    get("/api/notifications?limit=1").catch(() => ({ unread: 0 })), get("/branding.json").catch(() => ({}))]);
   const anyEditable = spaces.some((s) => mayEdit(s.role));
+  // A greeting by the time of day, the reader's own clock.
+  const hour = new Date().getHours();
+  const greeting = hour < 11 ? t("home.morning") : hour < 18 ? t("home.day") : t("home.evening");
+  const name = brand.name || "wikiwikibangbang";
+  const quick = (href, title, text, id, extra) => h("a", { class: "home-tile", href, id }, h("strong", { text: title }), h("span", { class: "muted", text }), extra || null);
+  const findings = notes.findings ? notes.findings.sensitive + notes.findings.stale + notes.findings.implausible + (notes.findings.personal || 0) : 0;
   show(
-    h("div", { class: "page-head" },
-      h("h1", { text: t("spaces.title") }),
-      anyEditable ? h("p", { class: "actions" }, link("#/new", t("home.newPage"), "button primary")) : null),
+    h("section", { class: "welcome", id: "welcome" },
+      h("div", { class: "welcome-text" },
+        h("h1", { text: `${greeting}, ${me.user.username}` }),
+        h("p", { class: "welcome-lead", text: t("home.lead", { name }) }),
+        h("p", { class: "actions-row" },
+          anyEditable ? link("#/new", t("home.newPage"), "button primary") : null,
+          link("#/tasks", t("home.myTasks"), "button"),
+          link("#/search/", t("home.search"), "button"))),
+      h("img", { class: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 360, height: 240 })),
+    h("section", { class: "home-tiles", "aria-label": t("home.quick") },
+      quick("#/tasks", t("nav.tasks"), t("home.tasksText"), "home-tasks"),
+      quick("#/notifications", t("nav.notifications"), notes.unread ? t("home.notesUnread", { n: notes.unread }) : t("home.notesNone"), "home-notes",
+        findings ? h("span", { class: "chip", text: t("nav.findingsOpen", { n: findings }) }) : null),
+      quick("#/album", t("nav.album"), t("home.albumText"), "home-album"),
+      quick("#/mcp", t("nav.mcp"), t("home.mcpText"), "home-mcp")),
+    h("h2", { text: t("spaces.title") }),
     spaces.length === 0
-      ? h("p", { class: "muted", text: me.admin ? t("spaces.noneAdmin") : t("spaces.none") })
-      : h("ul", { class: "list spaces" }, spaces.map((s) => h("li", {},
-        link("#/space/" + encodeURIComponent(s.key), s.name), " ", h("span", { class: "muted", text: s.key }), " ",
-        h("span", { class: "badge", text: roleText(s.role) })))),
+      ? h("div", { class: "card first-steps" },
+        h("p", { text: me.admin ? t("spaces.noneAdmin") : t("spaces.none") }),
+        me.admin ? h("ol", {}, h("li", { text: t("home.step1") }), h("li", { text: t("home.step2") }), h("li", { text: t("home.step3") })) : null)
+      : h("ul", { class: "space-tiles spaces" }, spaces.map((s) => h("li", {},
+        h("a", { href: "#/space/" + encodeURIComponent(s.key), class: "space-tile" },
+          h("span", { class: "space-key", text: s.key }),
+          h("strong", { text: s.name }),
+          h("span", { class: "badge", text: roleText(s.role) }))))),
     me.admin ? setupCard(types) : null,
     me.admin ? newSpaceForm(spaces.length === 0) : null,
   );
