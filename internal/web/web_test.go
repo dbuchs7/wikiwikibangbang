@@ -10,7 +10,8 @@ import (
 func TestEmbeddedUIHasEntryPointAndAssets(t *testing.T) {
 	for _, name := range []string{"index.html", "assets/app.js", "assets/api.js", "assets/dom.js", "assets/editor.js", "assets/live.js", "assets/style.css",
 		"assets/brand/logo-black.svg", "assets/brand/logo-white.svg", "favicon.ico", "assets/brand/favicon.svg", "assets/brand/apple-touch-icon.png",
-		"vendor/prosemirror.js", "vendor/prosemirror.LICENSE.txt"} {
+		"vendor/prosemirror.js", "vendor/prosemirror.LICENSE.txt", "draw.html", "assets/draw.js", "assets/draw-boot.js", "assets/draw.css",
+		"vendor/excalidraw.js", "vendor/excalidraw.LICENSE.txt", "vendor/excalidraw-assets/Virgil.woff2"} {
 		if _, err := fs.Stat(FS(), name); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -29,8 +30,9 @@ func TestNoMarkupFromStrings(t *testing.T) {
 		}
 		// The vendored ProseMirror bundle parses pasted HTML into a detached
 		// document, where nothing runs, and keeps only what the editor's
-		// schema allows (ADR-0032). It is third-party code, reviewed when it
-		// is updated, not written here.
+		// schema allows (ADR-0032). Excalidraw runs on a page of its own,
+		// without the UI's session data in its DOM (ADR-0053). Both are
+		// third-party code, reviewed when updated, not written here.
 		if strings.HasPrefix(path, "vendor/") {
 			return nil
 		}

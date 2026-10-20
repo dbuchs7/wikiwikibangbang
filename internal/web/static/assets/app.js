@@ -7,6 +7,7 @@ import { liveBody } from "./live.js";
 import { pageTree, ancestors } from "./tree.js";
 import { renderDiff } from "./diff.js";
 import { commentPlugin } from "./anchors.js";
+import { isDrawing } from "./drawing.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 
 const app = document.getElementById("app");
@@ -165,11 +166,20 @@ function withTree(tree, ...content) {
 const childPagesOf = (item) => async () =>
   (await get(`/api/spaces/${encodeURIComponent(item.space)}/tree?parent=${item.id}`)).items;
 
-// filesOf serves and stores an item's attachments for its body (ADR-0045).
-const filesOf = (item) => ({
-  url: (id) => `/api/items/${item.id}/attachments/${id}`,
-  upload: (file) => upload("/api/items/" + item.id, file),
-});
+// filesOf serves and stores an item's attachments for its body (ADR-0045),
+// and knows which of them are drawings (ADR-0053).
+const filesOf = (item, attachments = []) => {
+  const drawings = new Set(attachments.filter((a) => isDrawing(a.name)).map((a) => a.id));
+  return {
+    url: (id) => `/api/items/${item.id}/attachments/${id}`,
+    upload: async (file) => {
+      const a = await upload("/api/items/" + item.id, file);
+      if (isDrawing(a.name)) drawings.add(a.id);
+      return a;
+    },
+    isDrawing: (id) => drawings.has(id),
+  };
+};
 
 // readOnlyBody shows an item's body without editing it.
 function readOnlyBody(item, embeds) {
@@ -1269,7 +1279,7 @@ async function itemView(ref, params = new URLSearchParams()) {
     canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null);
   let body = null;
   if (type.body) {
-    const b = bodySection(item, embeds.embeds, editing, threads);
+    const b = bodySection(item, embeds.embeds, editing, threads, attachments);
     body = b.element;
     session = b.session;
   }
@@ -1303,14 +1313,14 @@ async function itemView(ref, params = new URLSearchParams()) {
 // commented on highlighted and commenting on a selection offered; or, when
 // editing, in its live session (ADR-0010), where changes reach everyone at
 // once and are saved as one leaves a block.
-function bodySection(item, embeds, editing, threads) {
+function bodySection(item, embeds, editing, threads, attachments) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!editing) {
     const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
       extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined });
     return { element: h("section", { id: "body", class: "reading" }, view.element), session: null };
   }
-  const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item),
+  const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item, attachments),
     extra: [threads.plugin], comment: threads.start });
   onLeave(session.close);
   return { element: h("section", { id: "body", class: "editing" }, session.element), session };

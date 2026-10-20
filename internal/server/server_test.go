@@ -69,6 +69,10 @@ func TestPublicRoutes(t *testing.T) {
 		{"/assets/brand/logo-black.svg", "200", "image/svg+xml", "<title>wikiwikibangbang</title>"},
 		{"/assets/brand/apple-touch-icon.png", "200", "image/png", ""},
 		{"/vendor/prosemirror.LICENSE.txt", "200", "text/plain", "MIT"},
+		{"/draw", "200", "text/html", "/assets/draw.js"},
+		{"/assets/draw.js", "200", "javascript", "exportEmbedScene"},
+		{"/vendor/excalidraw.js", "200", "javascript", ""},
+		{"/vendor/excalidraw.LICENSE.txt", "200", "text/plain", "Copyright (c) 2020 Excalidraw"},
 	}
 	for _, c := range cases {
 		rec := get(t, h, c.path)
@@ -124,6 +128,22 @@ func TestEveryResponseCarriesSecurityHeaders(t *testing.T) {
 		}
 		if hd.Get("X-Content-Type-Options") != "nosniff" {
 			t.Errorf("GET %s: missing nosniff", path)
+		}
+	}
+}
+
+// TestOnlyTheDrawingPageRelaxesThePolicy: the drawing page may take inline
+// styles and be framed by the UI (ADR-0053); everything else keeps the
+// strict policy and may not be framed.
+func TestOnlyTheDrawingPageRelaxesThePolicy(t *testing.T) {
+	h := testHandler(t)
+	draw := get(t, h, "/draw").Header().Get("Content-Security-Policy")
+	if draw != DrawPolicy || !strings.Contains(draw, "frame-ancestors 'self'") || strings.Contains(draw, "script-src") {
+		t.Errorf("drawing page policy %q", draw)
+	}
+	for _, path := range []string{"/", "/assets/draw.js", "/vendor/excalidraw.js"} {
+		if p := get(t, h, path).Header().Get("Content-Security-Policy"); strings.Contains(p, "unsafe-inline") || !strings.Contains(p, "frame-ancestors 'none'") {
+			t.Errorf("GET %s: policy %q", path, p)
 		}
 	}
 }

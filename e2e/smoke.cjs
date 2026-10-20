@@ -429,6 +429,36 @@ function check(cond, msg) {
     await page.waitForFunction(() => { const img = document.querySelector("#body .pm-image img"); return img && img.complete && img.naturalWidth === 1; });
     check(await page.locator("#attachments li").count() === 2, "both files are listed");
 
+    step("drawing: a drawing made in the drawing editor goes into the body, keeps its scene and is edited again");
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .ProseMirror");
+    await page.locator("#body .ProseMirror").click();
+    await page.selectOption("#body .pm-toolbar select:has(option[value=drawing])", "drawing");
+    await page.waitForSelector("dialog.drawing[open] iframe");
+    let drawFrame = page.frameLocator("dialog.drawing iframe");
+    await drawFrame.locator("body[data-state=open] .excalidraw canvas").first().waitFor();
+    await drawFrame.locator("[data-testid=toolbar-rectangle]").click({ force: true }); // the tool is a radio button under its icon
+    const box = await page.locator("dialog.drawing iframe").boundingBox();
+    await page.mouse.move(box.x + box.width / 2 - 120, box.y + box.height / 2 - 60);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2 + 60, { steps: 8 });
+    await page.mouse.up();
+    await drawFrame.locator("body[data-elements='1']").waitFor();
+    await page.click("dialog.drawing button:has-text('Save drawing')");
+    await page.waitForSelector("dialog.drawing", { state: "detached" });
+    await page.waitForFunction(() => document.querySelectorAll("#body .pm-image").length === 2);
+    await page.click("#body .pm-redraw"); // only the drawing can be edited as a drawing
+    await page.waitForSelector("dialog.drawing[open] iframe");
+    drawFrame = page.frameLocator("dialog.drawing iframe");
+    await drawFrame.locator("body[data-state=open][data-elements='1']").waitFor(); // the scene came back from the picture
+    await page.click("dialog.drawing button:has-text('Cancel')");
+    await page.waitForSelector("dialog.drawing", { state: "detached" });
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    await page.waitForFunction(() => { const imgs = [...document.querySelectorAll("#body .pm-image img")]; return imgs.length === 2 && imgs.every((i) => i.complete && i.naturalWidth > 0) && imgs.some((i) => i.naturalWidth > 100); });
+    check(await page.locator("#attachments li:has-text('.drawing.png')").count() === 1, "the drawing is a file of the page");
+    check(await page.locator("#body.reading .pm-redraw").count() === 0, "a drawing is edited only while editing");
+
     step("links: the link check page says when checking is off");
     await page.click("a.brand");
     await page.click("a:has-text('Platform')");

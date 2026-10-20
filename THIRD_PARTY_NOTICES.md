@@ -33,6 +33,19 @@ The web UI embeds a bundle of these JavaScript packages, built from `internal/we
 | rope-sequence | 1.3.4 | MIT |
 | w3c-keyname | 2.2.8 | MIT |
 
+The drawing editor (ADR-0053) is a second bundle, `internal/web/static/vendor/excalidraw.js`, built from the same directory, with the files Excalidraw loads at run time in `excalidraw-assets/` (its fonts, a chunk of libraries and the German translation); `excalidraw.LICENSE.txt` ships next to it with the license texts and the notices of the libraries Excalidraw bundles itself (among them DOMPurify under Apache-2.0 or MPL-2.0, pica, js-yaml and regenerator-runtime under MIT):
+
+| Package | Version | License |
+|---|---|---|
+| @excalidraw/excalidraw | 0.17.6 | MIT |
+| js-tokens | 4.0.0 | MIT |
+| loose-envify | 1.4.0 | MIT |
+| react | 18.3.1 | MIT |
+| react-dom | 18.3.1 | MIT |
+| scheduler | 0.23.2 | MIT |
+
+The fonts Virgil, Cascadia and Assistant, shipped with Excalidraw in `excalidraw-assets/`, are licensed under the SIL Open Font License 1.1.
+
 The web UI's stylesheet, `internal/web/static/assets/style.css`, adapts the palette, type, spacing and component look of the console of [pblumer/atlas](https://github.com/pblumer/atlas) (`api/web/app.css`), licensed under AGPL-3.0-only like this project. No atlas name, logo or font is included.
 
 The wordmark of the logo (`docs/brand`, and its copies in `internal/web/static`) is drawn from the outlines of [Inter](https://rsms.me/inter/) Display by Rasmus Andersson, licensed under the SIL Open Font License 1.1. The outlines are part of the artwork; no font file is included.
