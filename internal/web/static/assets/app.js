@@ -705,29 +705,41 @@ async function loginView() {
   const show = screen();
   const params = new URLSearchParams(location.search);
   const [sso, signup] = await Promise.all([get("/api/oidc").catch(() => ({ enabled: false })), get("/api/signup").catch(() => ({ open: false }))]);
+  const brand = await get("/branding.json").catch(() => ({}));
   const card = h("section", { class: "card narrow", id: "login-card" });
+  // The ways in, in one card: single sign-on first where it is set up,
+  // then username and password, then help for a forgotten password and
+  // for those without an account (ADR-0030, ADR-0061, ADR-0064). Both
+  // links are always there; where a way is not set up, it says whom to
+  // ask instead.
   const signIn = () => card.replaceChildren(
     h("h1", { text: t("login.title") }),
+    h("p", { class: "muted login-lead", text: t("login.lead", { name: brand.name || "wikiwikibangbang" }) }),
     params.get("login_error") ? h("p", { class: "error", text: t("login.failed") }) : "",
+    sso.enabled ? h("a", { class: "button primary login-sso", id: "login-sso", href: "/api/oidc/login" }, lineIcon("M15 7a3 3 0 1 1-3 3M3 21l7.5-7.5M7 17l2 2M9 15l2 2"), h("span", { text: t("login.with", { name: sso.name }) })) : "",
+    sso.enabled ? h("p", { class: "login-or", text: t("login.or") }) : "",
     form({ id: "login" }, [
       field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true })),
       field(t("field.password"), h("input", { name: "password", type: "password", autocomplete: "current-password", required: true })),
-      h("button", { type: "submit", text: t("login.submit") }),
+      h("button", { type: "submit", class: sso.enabled ? "secondary login-submit" : "login-submit", text: t("login.submit") }),
     ], async (data) => {
       await post("/api/login", { username: data.get("username"), password: data.get("password") });
       me = null;
       history.replaceState(null, "", "/#/");
       route();
     }),
-    sso.enabled ? h("p", {}, h("a", { class: "button", href: "/api/oidc/login", text: t("login.with", { name: sso.name }) })) : "",
-    signup.passwordReset ? h("p", { class: "login-more" },
-      h("button", { type: "button", class: "link", id: "forgot-open", text: t("reset.forgot"), onclick: forgotForm })) : "",
-    signup.open ? h("p", { class: "login-more" }, t("signup.question"), " ",
-      h("button", { type: "button", class: "link", id: "signup-open", text: t("signup.open"), onclick: requestForm })) : "",
+    h("div", { class: "login-links" },
+      h("button", { type: "button", class: "link", id: "forgot-open", text: t("reset.forgot"), onclick: forgotForm }),
+      h("span", {}, t("signup.question"), " ", h("button", { type: "button", class: "link", id: "signup-open", text: t("signup.open"), onclick: requestForm }))),
   );
+  // explain stands in for a form whose way is not set up on this server.
+  const explain = (title, text, id) => card.replaceChildren(
+    h("h1", { text: title }),
+    h("p", { class: "notice", id, text }),
+    h("p", { class: "login-more" }, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })));
   // forgotForm asks for a reset link by mail (ADR-0064); the answer does
   // not say whether the account exists.
-  const forgotForm = () => card.replaceChildren(
+  const forgotForm = () => !signup.passwordReset ? explain(t("reset.title"), t("reset.noMail"), "forgot-closed") : card.replaceChildren(
     h("h1", { text: t("reset.title") }),
     h("p", { class: "muted", text: t("reset.help") }),
     form({ id: "forgot" }, [
@@ -744,7 +756,7 @@ async function loginView() {
   );
   // requestForm asks for an account (ADR-0061): the password is chosen
   // now, an administrator approves or rejects the request.
-  const requestForm = () => card.replaceChildren(
+  const requestForm = () => !signup.open ? explain(t("signup.title"), t("signup.closed"), "signup-closed") : card.replaceChildren(
     h("h1", { text: t("signup.title") }),
     h("p", { class: "muted", text: t("signup.help") }),
     form({ id: "signup" }, [
@@ -854,7 +866,9 @@ async function homeView() {
           anyEditable ? link("#/new", t("home.newPage"), "button primary") : null,
           link("#/tasks", t("home.myTasks"), "button"),
           link("#/search/", t("home.search"), "button"))),
-      h("img", { class: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 360, height: 240 })),
+      h("img", { class: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 480, height: 320 }),
+      // The installed version, small, for support questions and releases.
+      me.version ? h("span", { class: "welcome-version", id: "home-version", title: me.revision ? t("home.revision", { revision: me.revision }) : "", text: t("home.version", { version: me.version }) }) : ""),
     h("section", { class: "home-tiles", "aria-label": t("home.quick") },
       quick("#/tasks", t("nav.tasks"), t("home.tasksText"), "home-tasks"),
       quick("#/notifications", t("nav.notifications"), notes.unread ? t("home.notesUnread", { n: notes.unread }) : t("home.notesNone"), "home-notes",
@@ -2338,9 +2352,10 @@ async function mcpView() {
 
 async function adminView() {
   const show = screen();
-  const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }, { requests }, access] = await Promise.all([
+  const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }, { requests }, access, sso, delivery] = await Promise.all([
     get("/api/users"), get("/api/spaces"), get("/api/types"), get("/api/audit?limit=50"), get("/api/groups"), get("/api/system-roles"),
-    get("/api/account-requests"), get("/api/settings/access"),
+    get("/api/account-requests"), get("/api/settings/access"), get("/api/oidc").catch(() => ({ enabled: false })),
+    get("/api/settings/delivery").catch(() => ({ status: {} })),
   ]);
   for (const u of users) names.set(u.id, u.username);
   const status = h("div", { class: "status" });
@@ -2408,7 +2423,19 @@ async function adminView() {
   // are accepted, and the ones waiting for a decision.
   const openBox = h("input", { type: "checkbox", id: "requests-open", checked: access.accountRequests });
   openBox.addEventListener("change", () => action(() => put("/api/settings/access", { accountRequests: openBox.checked }), status));
+  // What the sign-in page offers, and what is missing for the rest.
+  const mailReset = delivery.status?.mail && delivery.status?.publicURL;
+  const setupRow = (id, label, on, text) => h("li", { class: on ? "on" : "off", id },
+    h("span", { class: "setup-dot", "aria-hidden": "true" }), h("strong", { text: label }), h("span", { class: "muted", text }));
+  const loginSetup = h("div", { class: "login-setup" },
+    h("h3", { text: t("loginsetup.title") }),
+    h("p", { class: "muted", text: t("loginsetup.help") }),
+    h("ul", { class: "setup-list" },
+      setupRow("setup-sso", t("loginsetup.sso"), sso.enabled, sso.enabled ? t("loginsetup.ssoOn", { name: sso.name }) : t("loginsetup.ssoOff")),
+      setupRow("setup-reset", t("loginsetup.reset"), mailReset, mailReset ? t("loginsetup.resetOn", { host: delivery.status.mailHost }) : t("loginsetup.resetOff")),
+      setupRow("setup-requests", t("loginsetup.requests"), access.accountRequests, access.accountRequests ? t("loginsetup.requestsOn") : t("loginsetup.requestsOff"))));
   const requestsSection = section("requests", t("requests.title"),
+    loginSetup,
     h("p", { class: "muted", text: t("requests.help") }),
     h("label", { class: "check" }, openBox, " ", t("requests.open")),
     requests.length ? h("table", { id: "account-requests" },

@@ -899,3 +899,28 @@ button.info-btn { min-height: 0; box-shadow: none; margin: 0 0 0 4px; }
 .tree-toggle, .label-remove, button.segment { min-height: 0; box-shadow: none; }
 .admin-sections { min-width: 0; }
 .admin-sections .card { overflow-x: auto; }
+
+/* The sign-in page (ADR-0030, ADR-0061, ADR-0064): single sign-on first,
+   then username and password, then the two ways of help. */
+#login-card h1 { margin-bottom: 4px; }
+.login-lead { margin: 0 0 20px; }
+.login-sso { display: flex; justify-content: center; width: 100%; margin: 0; min-height: 42px; }
+.login-sso svg { width: 18px; height: 18px; }
+.login-or { display: flex; align-items: center; gap: 12px; margin: 18px 0 10px; color: var(--muted); font-size: 13px; }
+.login-or::before, .login-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+#login .field input { width: 100%; }
+.login-submit { width: 100%; justify-content: center; min-height: 42px; margin: 6px 0 0; }
+.login-links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 14px; }
+/* The administration's overview of the sign-in page. */
+.setup-list { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 8px; }
+.setup-list li { display: grid; grid-template-columns: 10px minmax(0, 14rem) minmax(0, 1fr); align-items: baseline; gap: 4px 10px; }
+.setup-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); align-self: center; }
+.setup-list li.on .setup-dot { background: var(--success); }
+.setup-list li.off .setup-dot { background: var(--warning); }
+@media (max-width: 640px) { .setup-list li { grid-template-columns: 10px minmax(0, 1fr); } .setup-list li > .muted { grid-column: 2; } }
+/* The start page: a larger picture, and the installed version in a corner. */
+.welcome { position: relative; overflow: hidden; }
+.welcome-art { width: min(440px, 38vw); }
+.welcome-version { position: absolute; right: 16px; bottom: 12px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
+  padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 75%, transparent); border: 1px solid var(--border); }
+@media (max-width: 720px) { .welcome-art { width: 86%; } .welcome-version { position: static; align-self: flex-start; } }

@@ -666,5 +666,22 @@ export default {
   "contacts.noMailServer": "This server sends no mail; the address is kept for when it does.",
   "common.saving": "Saving…",
   "common.saved": "Saved",
-  "admin.lead": "Spaces, types, people and the settings of the whole installation. The contents lead to each part."
+  "admin.lead": "Spaces, types, people and the settings of the whole installation. The contents lead to each part.",
+  "login.lead": "Sign in to {name}.",
+  "login.or": "or with your username",
+  "reset.noMail": "This server sends no mail, so a reset link cannot be sent to you. Ask an administrator: they can make a link for you to choose a new password, valid for 24 hours.",
+  "signup.closed": "Account requests are switched off on this server. Ask an administrator for an account, or ask them to allow requests here.",
+  "loginsetup.title": "The sign-in page",
+  "loginsetup.help": "What the sign-in page offers. Single sign-on and the password reset by mail are set up in the server's environment; account requests here.",
+  "loginsetup.sso": "Sign-in with a company account (single sign-on)",
+  "loginsetup.ssoOn": "set up: {name}",
+  "loginsetup.ssoOff": "not set up: set WWBB_OIDC_ISSUER, WWBB_OIDC_CLIENT_ID, WWBB_OIDC_CLIENT_SECRET and WWBB_OIDC_REDIRECT_URL",
+  "loginsetup.reset": "Password reset by mail",
+  "loginsetup.resetOn": "set up: mail through {host}",
+  "loginsetup.resetOff": "not set up: set WWBB_SMTP_HOST, WWBB_SMTP_FROM and WWBB_PUBLIC_URL; until then, make reset links in the user list",
+  "loginsetup.requests": "Account requests",
+  "loginsetup.requestsOn": "accepted",
+  "loginsetup.requestsOff": "switched off: the sign-in page asks people to contact an administrator",
+  "home.version": "Version {version}",
+  "home.revision": "Build {revision}"
 };

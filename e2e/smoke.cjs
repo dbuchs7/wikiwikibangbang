@@ -67,8 +67,14 @@ async function mailTo(sink, address) {
   const step = (name) => console.log("·", name);
 
   try {
-    step("login form, wrong password");
+    step("login form: help for a forgotten password and an account is always offered");
     await page.goto(base + "/");
+    await page.waitForSelector("#forgot-open");
+    await page.click("#signup-open"); // requests are off until an administrator allows them
+    await page.waitForSelector("#signup-closed");
+    await page.click("#login-card button:has-text('Back to sign-in')");
+
+    step("login form, wrong password");
     await page.fill("#login [name=username]", "admin");
     await page.fill("#login [name=password]", "wrong password!");
     await page.click("#login button[type=submit]");
@@ -82,6 +88,7 @@ async function mailTo(sink, address) {
     step("start page: a greeting, quick access and the spaces as tiles");
     await page.waitForSelector("#welcome h1:has-text('admin')");
     await page.waitForSelector("#welcome img.welcome-art");
+    await page.waitForSelector("#welcome #home-version:has-text('Version')");
     check(await page.locator(".home-tiles a").count() === 4, "four quick accesses");
 
     step("the footer names the running version");
@@ -770,6 +777,8 @@ async function mailTo(sink, address) {
     step("account requests: someone asks at the sign-in page, an administrator approves, the new account sets its message channels");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");
+    await page.waitForSelector("#setup-reset.on"); // the server under test sends mail
+    await page.waitForSelector("#setup-sso.off");
     await Promise.all([page.waitForResponse((r) => r.url().endsWith("/api/settings/access") && r.request().method() === "PUT"), page.check("#requests-open")]);
     const guestCtx = await browser.newContext();
     const guest = await guestCtx.newPage();
