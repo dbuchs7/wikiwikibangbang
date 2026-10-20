@@ -121,7 +121,9 @@ code { word-break: break-all; }
 #drawer-apps a.active { background: var(--accent-soft); color: var(--accent); }
 
 /* ---------- Content ---------- */
-main { max-width: 1120px; margin: 0 auto; padding: 22px; }
+/* The whole width of the window: a page tree, the text and the side column
+   need it side by side. */
+main { padding: 22px; }
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: var(--shadow); padding: 22px; margin: 0 0 18px;
@@ -203,7 +205,7 @@ table.history td { font-size: 13px; }
 .pm-mention { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
 .ProseMirror-hideselection *::selection { background: transparent; }
 
-.footer { max-width: 1120px; margin: 0 auto; padding: 8px 22px 22px; font-size: 11px; color: var(--muted); }
+.footer { padding: 8px 22px 22px; font-size: 11px; color: var(--muted); }
 .footer:empty { display: none; }
 
 /* ---------- Board (ADR-0036) ---------- */
@@ -256,7 +258,7 @@ td.href { overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12p
 
 /* The page tree (ADR-0041): a sidebar beside a space's views on wide
    screens, a block that folds away above them on narrow ones. */
-.with-tree { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
+.with-tree { display: grid; grid-template-columns: clamp(220px, 16vw, 320px) minmax(0, 1fr); gap: 24px; align-items: start; }
 .tree-box {
   position: sticky; top: 12px; max-height: calc(100vh - var(--topbar-h) - 24px); overflow: auto;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px;
@@ -452,7 +454,7 @@ button.watch-bell:hover { background: var(--row-hover); color: var(--text); bord
 button.watch-bell svg { width: 20px; height: 20px; }
 /* An item: its text, read or edited in place, and a column of what
    belongs to it (ADR-0051). */
-.item-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; align-items: start; }
+.item-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 440px); gap: 20px; align-items: start; }
 .item-main { min-width: 0; }
 .item-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
