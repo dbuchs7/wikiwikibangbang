@@ -282,3 +282,30 @@ func TestOAuthRefusals(t *testing.T) {
 		t.Fatalf("registration without a name: %v", out)
 	}
 }
+
+func TestOAuthReadOnlyApproval(t *testing.T) {
+	w := newWorld(t)
+	h := w.admin.h
+	created := w.admin.expect("POST", "/api/oauth/clients", `{"name":"Claude","redirects":["`+oauthCallback+`"]}`, http.StatusCreated)
+	id, secret := field(created, "client", "id").(string), created["secret"].(string)
+	params := authorizeParams(id)
+	body := strings.Replace(approveBody(t, params, false), `{`, `{"access":"read",`, 1)
+	w.bert.expect("POST", "/api/oauth/approve", strings.Replace(body, `"read"`, `"metrics"`, 1), http.StatusBadRequest)
+	back, _ := url.Parse(w.bert.expect("POST", "/api/oauth/approve", body, http.StatusOK)["redirect"].(string))
+	rec, out := form(t, h, TokenPath, url.Values{"grant_type": {"authorization_code"}, "code": {back.Query().Get("code")},
+		"redirect_uri": {oauthCallback}, "code_verifier": {oauthVerifier}, "resource": {oauthResource}}, id, secret)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("exchange: %d %v", rec.Code, out)
+	}
+	// A read-only approval reads through the tools and changes nothing.
+	agent := &client{t: t, h: h, bearer: out["access_token"].(string)}
+	if text, isErr := agent.tool("list_spaces", `{}`); isErr || !strings.Contains(text, "PLAT") {
+		t.Fatalf("list_spaces read-only: %s", text)
+	}
+	if text, isErr := agent.tool("create_item", `{"space":"PLAT","type":"task","title":"Not allowed","properties":{"priority":"low"}}`); !isErr {
+		t.Fatalf("create_item read-only succeeded: %s", text)
+	}
+	if g := w.bert.expect("GET", "/api/oauth/grants", "", http.StatusOK)["grants"].([]any); g[0].(map[string]any)["scope"] != "read" {
+		t.Fatalf("grants: %v", g)
+	}
+}

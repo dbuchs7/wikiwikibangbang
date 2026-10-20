@@ -2494,9 +2494,10 @@ async function mcpView() {
     h("h2", { text: t("aiaccess.grantsTitle") }),
     h("p", { class: "muted", text: t("aiaccess.grantsNote") }),
     grants.grants.length
-      ? h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("aiaccess.app") }), h("th", { text: t("aiaccess.approved") }), h("th", { text: t("aiaccess.lastUsed") }), h("th", {}))),
+      ? h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("aiaccess.app") }), h("th", { text: t("aiaccess.access") }), h("th", { text: t("aiaccess.approved") }), h("th", { text: t("aiaccess.lastUsed") }), h("th", {}))),
         h("tbody", {}, grants.grants.map((g) => h("tr", {},
           h("td", {}, h("strong", { text: g.name || g.client }), g.self ? [" ", h("span", { class: "badge danger", text: t("aiaccess.selfRegistered") })] : null),
+          h("td", { text: g.scope === "read" ? t("mcp.scopeRead") : t("mcp.scopeFull") }),
           h("td", { class: "muted", text: when(g.created) }),
           h("td", { class: "muted", text: when(g.last_used) }),
           h("td", {}, h("button", { type: "button", class: "danger", text: t("aiaccess.withdraw"), onclick: async () => {
@@ -2567,7 +2568,8 @@ async function oauthView(params) {
   const answer = async (deny) => {
     status.replaceChildren();
     try {
-      const res = await post("/api/oauth/approve", { ...req, deny });
+      const access = document.querySelector("#oauth-consent input[name=access]:checked")?.value || "read";
+      const res = await post("/api/oauth/approve", { ...req, deny, access });
       location.href = res.redirect;
     } catch (err) {
       status.replaceChildren(errorBox(err));
@@ -2577,8 +2579,13 @@ async function oauthView(params) {
     h("h1", { text: t("oauth.title") }),
     h("p", { class: "login-lead", text: t("oauth.asks", { name: info.client.name, user: me.user.username }) }),
     info.client.self ? h("p", { class: "notice warning", id: "oauth-self", text: t("oauth.selfRegistered") }) : null,
+    // The person chooses what the application may do; reading only is
+    // preselected, as the smaller right.
+    h("fieldset", { class: "field", id: "oauth-access" },
+      h("legend", { text: t("oauth.accessLegend") }),
+      h("label", { class: "check" }, h("input", { type: "radio", name: "access", value: "read", checked: true }), t("oauth.accessRead")),
+      h("label", { class: "check" }, h("input", { type: "radio", name: "access", value: "full" }), t("oauth.accessFull"))),
     h("ul", {},
-      h("li", { text: t("oauth.what") }),
       h("li", { text: t("oauth.only") }),
       h("li", { text: t("oauth.withdraw") })),
     h("p", { class: "muted", text: t("oauth.returnsTo", { host: info.redirect_host }) }),

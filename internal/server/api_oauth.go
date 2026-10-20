@@ -217,6 +217,9 @@ func (h oauthHandlers) approve(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		authRequest
 		Deny bool `json:"deny"`
+		// Access is what the person allows: full (read and write, the
+		// default) or read.
+		Access auth.Scope `json:"access"`
 	}
 	if !decode(w, r, &req) {
 		return
@@ -239,7 +242,11 @@ func (h oauthHandlers) approve(w http.ResponseWriter, r *http.Request) {
 	if target == "" {
 		target = resource(r)
 	}
-	code, err := h.d.DB.Accounts.IssueCode(p.User, a.ClientID, a.Redirect, a.Challenge, target)
+	access := req.Access
+	if access == "" {
+		access = auth.ScopeFull
+	}
+	code, err := h.d.DB.Accounts.IssueCode(p.User, a.ClientID, a.Redirect, a.Challenge, target, access)
 	switch {
 	case errors.Is(err, auth.ErrFull):
 		writeError(w, http.StatusServiceUnavailable, "too many approvals are pending; try again in a minute")
@@ -248,7 +255,7 @@ func (h oauthHandlers) approve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.record(audit.Entry{Event: audit.OAuthApproved, Actor: string(p.User), Addr: clientAddr(r), Subject: a.ClientID})
+	h.record(audit.Entry{Event: audit.OAuthApproved, Actor: string(p.User), Addr: clientAddr(r), Subject: a.ClientID, Detail: map[string]string{"scope": string(access)}})
 	writeJSON(w, http.StatusOK, map[string]string{"redirect": back(a.Redirect, url.Values{"code": {code}, "state": {a.State}, "iss": {iss}})})
 }
 
@@ -488,16 +495,17 @@ func (h oauthHandlers) removeClient(w http.ResponseWriter, r *http.Request) {
 func (h oauthHandlers) listGrants(w http.ResponseWriter, r *http.Request) {
 	p, _ := PrincipalFrom(r.Context())
 	type grantJSON struct {
-		Client   string    `json:"client"`
-		Name     string    `json:"name"`
-		Self     bool      `json:"self"`
-		Created  time.Time `json:"created"`
-		LastUsed time.Time `json:"last_used"`
+		Client   string     `json:"client"`
+		Name     string     `json:"name"`
+		Self     bool       `json:"self"`
+		Scope    auth.Scope `json:"scope"`
+		Created  time.Time  `json:"created"`
+		LastUsed time.Time  `json:"last_used"`
 	}
 	out := []grantJSON{}
 	for _, g := range h.d.DB.Accounts.Grants(p.User) {
 		c, _ := h.d.DB.Accounts.OAuthClientByID(g.Client)
-		out = append(out, grantJSON{Client: g.Client, Name: c.Name, Self: c.Self, Created: g.Created, LastUsed: g.LastUsed})
+		out = append(out, grantJSON{Client: g.Client, Name: c.Name, Self: c.Self, Scope: g.Scope, Created: g.Created, LastUsed: g.LastUsed})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"grants": out})
 }

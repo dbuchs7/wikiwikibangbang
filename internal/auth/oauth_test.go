@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 )
@@ -33,10 +34,10 @@ func TestOAuthFlow(t *testing.T) {
 	if _, err := a.CheckAuthorization(cl.ID, "https://evil.example/cb"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("an unregistered redirect: %v", err)
 	}
-	if _, err := a.IssueCode(u.ID, cl.ID, callback, "short", resource); !errors.Is(err, ErrInvalid) {
+	if _, err := a.IssueCode(u.ID, cl.ID, callback, "short", resource, ScopeFull); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("no challenge: %v", err)
 	}
-	code, err := a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource)
+	code, err := a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource, ScopeFull)
 	noErr(t, err)
 	for name, try := range map[string]func() error{
 		"wrong secret": func() error { _, err := a.ExchangeCode(cl.ID, "wrong", code, callback, verifier, resource); return err },
@@ -50,12 +51,12 @@ func TestOAuthFlow(t *testing.T) {
 		}
 	}
 	// The wrong verifier used the code up.
-	code, err = a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource)
+	code, err = a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource, ScopeFull)
 	noErr(t, err)
 	if _, err := a.ExchangeCode(cl.ID, secret, code, callback, verifier, "https://other.example/mcp"); !errors.Is(err, ErrInvalidGrant) {
 		t.Fatalf("another resource: %v", err)
 	}
-	code, err = a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource)
+	code, err = a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource, ScopeFull)
 	noErr(t, err)
 	tok, err := a.ExchangeCode(cl.ID, secret, code, callback, verifier, resource)
 	noErr(t, err)
@@ -112,7 +113,7 @@ func TestOAuthRevokeAndRemove(t *testing.T) {
 	cl, secret, err := a.CreateOAuthClient("Claude", []string{callback}, "", false)
 	noErr(t, err)
 	login := func() OAuthTokens {
-		code, err := a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource)
+		code, err := a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource, ScopeFull)
 		noErr(t, err)
 		tok, err := a.ExchangeCode(cl.ID, secret, code, callback, verifier, resource)
 		noErr(t, err)
@@ -169,7 +170,7 @@ func TestSelfRegistrationIsBounded(t *testing.T) {
 	defer budget.Set(budget.Default())
 	first, s1, err := a.CreateOAuthClient("One", []string{callback}, "", true)
 	noErr(t, err)
-	code, err := a.IssueCode(u.ID, first.ID, callback, challengeOf(verifier), resource)
+	code, err := a.IssueCode(u.ID, first.ID, callback, challengeOf(verifier), resource, ScopeFull)
 	noErr(t, err)
 	_, err = a.ExchangeCode(first.ID, s1, code, callback, verifier, resource)
 	noErr(t, err) // approved: never evicted
@@ -198,19 +199,20 @@ func TestOAuthEdges(t *testing.T) {
 	noErr(t, err)
 	cl, secret, err := a.CreateOAuthClient("Claude", []string{callback}, "", false)
 	noErr(t, err)
+	c.t = c.t.Add(time.Second)
 	pub, _, err := a.CreateOAuthClient("Public", []string{callback}, AuthNone, false)
 	noErr(t, err)
 	if got := a.OAuthClients(); len(got) != 2 || got[0].ID != cl.ID {
 		t.Fatalf("clients, oldest first: %+v", got)
 	}
-	if _, err := a.IssueCode("nobody", cl.ID, callback, challengeOf(verifier), resource); !errors.Is(err, ErrNotFound) {
+	if _, err := a.IssueCode("nobody", cl.ID, callback, challengeOf(verifier), resource, ScopeFull); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown user: %v", err)
 	}
-	if _, err := a.IssueCode(u.ID, "wwbb-none", callback, challengeOf(verifier), resource); !errors.Is(err, ErrInvalidClient) {
+	if _, err := a.IssueCode(u.ID, "wwbb-none", callback, challengeOf(verifier), resource, ScopeFull); !errors.Is(err, ErrInvalidClient) {
 		t.Fatalf("unknown client: %v", err)
 	}
 	// A public client needs no secret; PKCE alone binds the code.
-	code, err := a.IssueCode(u.ID, pub.ID, callback, challengeOf(verifier), resource)
+	code, err := a.IssueCode(u.ID, pub.ID, callback, challengeOf(verifier), resource, ScopeFull)
 	noErr(t, err)
 	tok, err := a.ExchangeCode(pub.ID, "", code, callback, verifier, "")
 	noErr(t, err)
@@ -221,7 +223,7 @@ func TestOAuthEdges(t *testing.T) {
 		t.Fatalf("no secret: %v", err)
 	}
 	// An expired code and an expired refresh token are refused.
-	code, err = a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource)
+	code, err = a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource, ScopeFull)
 	noErr(t, err)
 	c.t = c.t.Add(OAuthCodeLifetime)
 	if _, err := a.ExchangeCode(cl.ID, secret, code, callback, verifier, resource); !errors.Is(err, ErrInvalidGrant) {
@@ -255,5 +257,34 @@ func TestOAuthTokenRequestsAreThrottled(t *testing.T) {
 	}
 	if _, err := a.ThrottleOAuth("203.0.113.10", func() (OAuthTokens, error) { return OAuthTokens{Access: "x"}, nil }); err != nil {
 		t.Fatalf("another address: %v", err)
+	}
+}
+
+func TestOAuthReadOnlyApproval(t *testing.T) {
+	a, j, c := newAccounts(t)
+	u, err := a.CreateUser("Sven", pw)
+	noErr(t, err)
+	cl, secret, err := a.CreateOAuthClient("Claude", []string{callback}, "", false)
+	noErr(t, err)
+	if _, err := a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource, ScopeMetrics); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a metrics scope: %v", err)
+	}
+	code, err := a.IssueCode(u.ID, cl.ID, callback, challengeOf(verifier), resource, ScopeRead)
+	noErr(t, err)
+	tok, err := a.ExchangeCode(cl.ID, secret, code, callback, verifier, resource)
+	noErr(t, err)
+	if p, _, ok := a.OAuthPrincipal(tok.Access); !ok || p.Scope != ScopeRead {
+		t.Fatalf("principal %+v %v", p, ok)
+	}
+	// The scope outlives refreshing and a restart.
+	next, err := a.Refresh(cl.ID, secret, tok.Refresh)
+	noErr(t, err)
+	if p, _, _ := a.OAuthPrincipal(next.Access); p.Scope != ScopeRead {
+		t.Fatalf("after refresh: %+v", p)
+	}
+	b, err := New(j.records, j.append, WithClock(c.now), WithIterations(1000))
+	noErr(t, err)
+	if g := b.Grants(u.ID); len(g) != 1 || g[0].Scope != ScopeRead {
+		t.Fatalf("after a restart: %+v", g)
 	}
 }

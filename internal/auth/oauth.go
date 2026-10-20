@@ -57,8 +57,11 @@ type OAuthClient struct {
 
 // Grant is a person's approval of a client.
 type Grant struct {
-	User     UserID
-	Client   string
+	User   UserID
+	Client string
+	// Scope is what the person allowed: ScopeFull to read and write,
+	// ScopeRead to read only.
+	Scope    Scope
 	Created  time.Time
 	LastUsed time.Time
 }
@@ -77,6 +80,8 @@ type oauthRecord struct {
 	Method    string   `json:"method,omitempty"`
 	// Resource is what a grant's tokens are for.
 	Resource string `json:"resource,omitempty"`
+	// Scope is what the person allowed; empty is ScopeFull.
+	Scope Scope `json:"scope,omitempty"`
 }
 
 const (
@@ -107,6 +112,7 @@ type oauthCode struct {
 	user              UserID
 	client, redirect  string
 	challenge, target string
+	scope             Scope
 	expires           time.Time
 }
 
@@ -114,6 +120,7 @@ type oauthToken struct {
 	user    UserID
 	client  string
 	target  string
+	scope   Scope
 	expires time.Time
 }
 
@@ -169,6 +176,10 @@ func (a *Accounts) applyOAuth(e event) error {
 			g.usedHash = g.refreshHash
 		}
 		g.refreshHash, g.LastUsed, g.expires, g.target = e.Hash, e.At, e.At.Add(OAuthRefreshLifetime), o.Resource
+		g.Scope = o.Scope
+		if g.Scope == "" {
+			g.Scope = ScopeFull
+		}
 	case oauthRevoked:
 		delete(s.grants, grantKey(e.User, o.Client))
 		for k, t := range s.access {
@@ -332,11 +343,15 @@ func (a *Accounts) CheckAuthorization(clientID, redirect string) (OAuthClient, e
 }
 
 // IssueCode records a person's approval in the form of a one-time code
-// bound to the client, the redirect address, the PKCE challenge (S256)
-// and the resource the token is for.
-func (a *Accounts) IssueCode(user UserID, clientID, redirect, challenge, resource string) (string, error) {
+// bound to the client, the redirect address, the PKCE challenge (S256),
+// the resource the token is for and the scope the person allowed:
+// ScopeFull to read and write, ScopeRead to read only.
+func (a *Accounts) IssueCode(user UserID, clientID, redirect, challenge, resource string, scope Scope) (string, error) {
 	if len(challenge) < 43 || len(challenge) > 128 {
 		return "", fmt.Errorf("%w: a code_challenge (S256) is required", ErrInvalid)
+	}
+	if scope != ScopeFull && scope != ScopeRead {
+		return "", fmt.Errorf("%w: an application is allowed to read and write, or to read only", ErrInvalid)
 	}
 	if _, err := a.CheckAuthorization(clientID, redirect); err != nil {
 		return "", err
@@ -359,7 +374,7 @@ func (a *Accounts) IssueCode(user UserID, clientID, redirect, challenge, resourc
 	if err != nil {
 		return "", err
 	}
-	s.codes[hashSecret(raw)] = &oauthCode{user: user, client: clientID, redirect: redirect, challenge: challenge, target: resource, expires: now.Add(OAuthCodeLifetime)}
+	s.codes[hashSecret(raw)] = &oauthCode{user: user, client: clientID, redirect: redirect, challenge: challenge, target: resource, scope: scope, expires: now.Add(OAuthCodeLifetime)}
 	return raw, nil
 }
 
@@ -390,7 +405,7 @@ func (a *Accounts) ExchangeCode(clientID, secret, code, redirect, verifier, reso
 	if verifier == "" || base64.RawURLEncoding.EncodeToString(sum[:]) != k.challenge {
 		return OAuthTokens{}, ErrInvalidGrant
 	}
-	return a.issueTokens(k.user, c.ID, k.target, oauthGranted)
+	return a.issueTokens(k.user, c.ID, k.target, k.scope, oauthGranted)
 }
 
 // Refresh turns a refresh token over: the old one stops, a new pair
@@ -413,7 +428,7 @@ func (a *Accounts) Refresh(clientID, secret, refresh string) (OAuthTokens, error
 			if !a.now().Before(g.expires) {
 				return OAuthTokens{}, ErrInvalidGrant
 			}
-			return a.issueTokens(g.User, c.ID, g.target, oauthRefreshed)
+			return a.issueTokens(g.User, c.ID, g.target, g.Scope, oauthRefreshed)
 		}
 		if g.usedHash != "" && equalStrings(g.usedHash, h) {
 			if err := a.record(event{Kind: oauthRevoked, User: g.User, OAuth: &oauthRecord{Client: c.ID}}); err != nil {
@@ -447,7 +462,7 @@ func (a *Accounts) ThrottleOAuth(addr string, run func() (OAuthTokens, error)) (
 
 // issueTokens records the grant with a new refresh token and makes an
 // access token; callers hold a.mu.
-func (a *Accounts) issueTokens(user UserID, client, target, kind string) (OAuthTokens, error) {
+func (a *Accounts) issueTokens(user UserID, client, target string, scope Scope, kind string) (OAuthTokens, error) {
 	rawA, err := a.newID(32)
 	if err != nil {
 		return OAuthTokens{}, err
@@ -457,15 +472,15 @@ func (a *Accounts) issueTokens(user UserID, client, target, kind string) (OAuthT
 		return OAuthTokens{}, err
 	}
 	access, refresh := OAuthAccessPrefix+rawA, OAuthRefreshPrefix+rawR
-	if err := a.record(event{Kind: kind, User: user, Hash: hashSecret(refresh), OAuth: &oauthRecord{Client: client, Resource: target}}); err != nil {
+	if err := a.record(event{Kind: kind, User: user, Hash: hashSecret(refresh), OAuth: &oauthRecord{Client: client, Resource: target, Scope: scope}}); err != nil {
 		return OAuthTokens{}, err
 	}
-	a.oauth().access[hashSecret(access)] = &oauthToken{user: user, client: client, target: target, expires: a.now().Add(OAuthAccessLifetime)}
+	a.oauth().access[hashSecret(access)] = &oauthToken{user: user, client: client, target: target, scope: scope, expires: a.now().Add(OAuthAccessLifetime)}
 	return OAuthTokens{Access: access, Refresh: refresh, ExpiresIn: OAuthAccessLifetime}, nil
 }
 
 // OAuthPrincipal resolves an access token to the person it acts for, with
-// the resource it was issued for.
+// the scope the person allowed, and the resource it was issued for.
 func (a *Accounts) OAuthPrincipal(token string) (Principal, string, bool) {
 	if !strings.HasPrefix(token, OAuthAccessPrefix) {
 		return Principal{}, "", false
@@ -484,7 +499,7 @@ func (a *Accounts) OAuthPrincipal(token string) (Principal, string, bool) {
 	if _, ok := a.users[t.user]; !ok {
 		return Principal{}, "", false
 	}
-	return a.principal(t.user, ScopeFull, "oauth", ""), t.target, true
+	return a.principal(t.user, t.scope, "oauth", ""), t.target, true
 }
 
 // Grants lists a person's approvals, newest first.

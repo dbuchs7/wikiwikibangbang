@@ -928,6 +928,8 @@ async function mailTo(sink, address) {
     await page.waitForSelector("#oauth-consent h1:has-text('Allow access?')");
     check((await page.textContent("#oauth-consent")).includes("Claude wants to act as you"), "the consent page names the application");
     check(!(await page.$("#oauth-self")), "an application added by an administrator is not marked self-registered");
+    check(await page.isChecked("#oauth-access input[value=read]"), "reading only is preselected");
+    await page.check("#oauth-access input[value=full]");
     await page.click("#oauth-allow");
     await page.waitForURL("https://claude.ai/**");
     const back = new URL(callback);
@@ -950,6 +952,7 @@ async function mailTo(sink, address) {
 
     step("AI access: the person withdraws the approval; local clients still use an API token");
     await page.goto(base + "/#/mcp");
+    await page.waitForSelector("#aiaccess-grants td:has-text('read and write')");
     await page.click("#aiaccess-grants button:has-text('Withdraw')");
     await page.waitForSelector("#aiaccess-grants p:has-text('not approved any application')");
     await page.click("#aiaccess-token summary");
