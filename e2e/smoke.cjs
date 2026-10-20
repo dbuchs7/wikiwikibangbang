@@ -223,7 +223,7 @@ function check(cond, msg) {
     await page.click("#app-switcher");
     await page.waitForSelector("#drawer:not([hidden])");
     const modules = (await page.locator("#drawer-apps a").allTextContents()).join(",");
-    check(modules === "Spaces,Create,Tasks,Album,AI assistants (MCP),Notifications,Governance,Account,Administration", "the modules of an administrator: " + modules);
+    check(modules === "Spaces,Create,Tasks,Album,AI assistants (MCP),Governance,Account,Administration", "the modules of an administrator: " + modules);
     await page.keyboard.press("Escape");
     await page.waitForSelector("#drawer", { state: "hidden" });
     await page.click("#app-switcher");

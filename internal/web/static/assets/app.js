@@ -307,14 +307,14 @@ function renderFooter() {
 
 // modules are offered behind the nine dots, as in the atlas console. match
 // names the route sections that belong to a module, for its highlight.
-// admin marks the modules only administrators see.
+// admin marks the modules only administrators see. The notifications are
+// reached through the bell in the header, not here.
 const modules = [
   { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"] },
   { id: "new", name: "nav.new", href: "#/new", match: ["new"] },
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban"] },
   { id: "album", name: "nav.album", href: "#/album", match: ["album"] },
   { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"] },
-  { id: "notifications", name: "nav.notifications", href: "#/notifications", match: ["notifications"] },
   { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"] },
   { id: "account", name: "nav.account", href: "#/account", match: ["account"] },
   { id: "admin", name: "nav.admin", href: "#/admin", match: ["admin"], admin: true },
