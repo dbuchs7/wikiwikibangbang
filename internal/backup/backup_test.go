@@ -117,7 +117,7 @@ func TestBackupAndRestoreGiveTheSameState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.Format != Format || m.Build != "test" || len(m.Files) != len(storage.BackupFiles) {
+	if m.Format != Format || m.Build != "test" || len(m.Files) != len(storage.BackupFiles)+len(storage.OptionalBackupFiles) {
 		t.Fatalf("manifest %+v", m)
 	}
 	dst := openDB(t, dir)
@@ -287,7 +287,7 @@ func TestBackupsHoldAttachments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(m.Files) != len(storage.BackupFiles)+1 {
+	if len(m.Files) != len(storage.BackupFiles)+len(storage.OptionalBackupFiles)+1 {
 		t.Fatalf("manifest %+v", m.Files)
 	}
 	dst := openDB(t, dir)

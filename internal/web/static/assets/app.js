@@ -549,7 +549,29 @@ async function chooseLanguage() {
   setLanguage(me.language);
 }
 
+// --- corporate design (ADR-0052) -----------------------------------------------
+
+// The product's own logo, kept to come back to when a design's logo goes.
+const productLogo = document.querySelector(".brand picture")?.cloneNode(true);
+
+// applyBranding shows the installation's logo and name; the colours, fonts
+// and background come with /branding.css. reload asks for the stylesheet
+// again after an administrator changed the design.
+async function applyBranding(reload = false) {
+  const b = await get("/branding.json").catch(() => null);
+  if (!b) return;
+  const brand = document.querySelector(".brand");
+  if (b.assets?.logo) {
+    brand.replaceChildren(h("img", { src: "/branding/logo?v=" + encodeURIComponent(b.assets.logo), alt: b.name || "wikiwikibangbang", class: "brand-logo" }));
+  } else if (productLogo) {
+    brand.replaceChildren(productLogo.cloneNode(true));
+  }
+  document.title = b.name ? `${b.name} · wikiwikibangbang` : "wikiwikibangbang";
+  if (reload) document.getElementById("branding-css").href = "/branding.css?v=" + Date.now();
+}
+
 window.addEventListener("hashchange", route);
+applyBranding();
 route();
 
 // --- login -------------------------------------------------------------------
@@ -1812,6 +1834,8 @@ async function adminView() {
       st.replaceChildren(h("p", { class: "notice", text: t("admin.saved", { name }) }));
     }));
 
+  const designSection = section("design", t("design.title"), await designCard());
+
   const importSection = section("import", t("admin.import"),
     h("p", { text: t("admin.importText") }),
     h("pre", { class: "snippet", text: "wikiwikibangbang import -help" }));
@@ -1828,8 +1852,68 @@ async function adminView() {
     h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, sections.map(([el, title]) =>
       h("button", { type: "button", class: "link", text: title, onclick: () => el.scrollIntoView({ block: "start" }) }))),
     status,
-    spacesSection, typesSection, usersSection, groupsSection, grantSection, backupSection, importSection, auditSection,
+    spacesSection, typesSection, usersSection, groupsSection, grantSection, backupSection, designSection, importSection, auditSection,
   );
+}
+
+// designCard sets the corporate design (ADR-0052): name, logo, colours,
+// background, font and an own stylesheet. Files are sent as they are
+// chosen; the rest with Save.
+async function designCard() {
+  const b = await get("/branding.json");
+  const status = h("div", { class: "status" });
+  const colour = (name, label) => {
+    const on = h("input", { type: "checkbox", name: name + "-on", checked: Boolean(b[name]), "aria-label": t("design.use", { what: label }) });
+    const pick = h("input", { type: "color", name, value: b[name] || "#0b5cff", "aria-label": label });
+    return h("div", { class: "field design-colour" }, h("span", { text: label }), h("label", { class: "check" }, on, pick, t("design.useIt")));
+  };
+  const asset = (name, label, accept) => {
+    const picker = h("input", { type: "file", accept, id: "design-" + name, "aria-label": label });
+    picker.addEventListener("change", () => action(async () => {
+      const file = picker.files[0];
+      if (!file) return;
+      const res = await fetch("/api/branding/" + name, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: file });
+      if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error || res.statusText);
+      await applyBranding(true);
+    }, status));
+    const has = b.assets?.[name];
+    return h("div", { class: "design-asset" },
+      h("strong", { text: label }),
+      has && name !== "font" ? h("img", { src: `/branding/${name}?v=${encodeURIComponent(has)}`, alt: "", class: "design-preview" }) : null,
+      h("span", { class: "muted", text: has ? t("design.fileSet") : t("design.fileNone") }),
+      h("label", { class: "upload" }, h("span", { text: t("design.choose") }), picker),
+      has ? h("button", { type: "button", class: "link", text: t("common.delete"), onclick: () => action(async () => { await del("/api/branding/" + name); await applyBranding(true); }, status) }) : null);
+  };
+  const fontNames = { system: t("design.fontSystem"), humanist: t("design.fontHumanist"), serif: t("design.fontSerif"), rounded: t("design.fontRounded"), mono: t("design.fontMono") };
+  const cssPicker = h("input", { type: "file", accept: ".css,text/css", "aria-label": t("design.cssFile") });
+  const cssText = h("textarea", { name: "css", rows: 8, class: "code", spellcheck: "false", "aria-label": t("design.css"), value: b.css || "" });
+  cssPicker.addEventListener("change", async () => { if (cssPicker.files[0]) cssText.value = await cssPicker.files[0].text(); });
+  return h("div", {},
+    h("p", { class: "muted", text: t("design.help") }),
+    h("div", { class: "design-assets" },
+      asset("logo", t("design.logo"), "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"),
+      asset("background", t("design.background"), "image/png,image/jpeg,image/gif,image/webp"),
+      asset("font", t("design.fontFile"), ".woff2,.woff,.ttf,.otf")),
+    form({ id: "design" }, [
+      field(t("design.name"), h("input", { name: "name", value: b.name || "", maxlength: 80 })),
+      h("div", { class: "design-colours" },
+        colour("accent", t("design.accent")), colour("background", t("design.backgroundColour")),
+        colour("headerBackground", t("design.headerBackground")), colour("headerText", t("design.headerText"))),
+      field(t("design.font"), h("select", { name: "font" }, h("option", { value: "", text: t("design.fontDefault") }),
+        Object.entries(fontNames).map(([v, label]) => h("option", { value: v, text: label, selected: b.font === v })),
+        h("option", { value: "upload", text: t("design.fontUpload"), selected: b.font === "upload" }))),
+      field(t("design.fontFamily"), h("input", { name: "fontFamily", value: b.fontFamily || "", placeholder: "Frutiger" })),
+      field(t("design.css"), cssText),
+      h("label", { class: "upload" }, h("span", { text: t("design.cssFile") }), cssPicker),
+      h("button", { type: "submit", class: "primary", text: t("common.save") }),
+    ], async (d, st) => {
+      const pick = (name) => (d.get(name + "-on") ? d.get(name) : "");
+      await put("/api/branding", { name: d.get("name"), accent: pick("accent"), background: pick("background"),
+        headerBackground: pick("headerBackground"), headerText: pick("headerText"), font: d.get("font"), fontFamily: d.get("fontFamily").trim(), css: cssText.value });
+      await applyBranding(true);
+      st.replaceChildren(h("p", { class: "notice", text: t("design.saved") }));
+    }),
+    status);
 }
 
 // membersView lists who holds which role in a space, for its

@@ -465,6 +465,22 @@ function check(cond, msg) {
     await page.click("#groups button[aria-label^='Take bert out']");
     await page.waitForSelector("#admin-groups p:has-text('No groups yet.')");
 
+    step("appearance: a logo, an accent colour and a name give the installation its corporate design");
+    await page.click("#account-button");
+    await page.click("#account-menu a[href='#/admin']");
+    await page.setInputFiles("#design-logo", { name: "logo.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
+    await page.waitForSelector("header .brand img.brand-logo[src^='/branding/logo']");
+    await page.fill("#design [name=name]", "ACME");
+    await page.check("#design [name=accent-on]");
+    await page.fill("#design [name=accent]", "#d40000");
+    await page.click("#design button[type=submit]");
+    await page.waitForSelector("#design .notice");
+    await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() === "#d40000");
+    check((await page.title()).startsWith("ACME"), "the browser title carries the name");
+    await page.click("#admin-design button:has-text('Delete')"); // the product's logo comes back
+    await page.waitForSelector("header .brand picture");
+
     step("AI assistants: a token made on the MCP page lets an assistant write a page with its content");
     await page.click("#app-switcher");
     await page.click("#drawer-apps a:has-text('AI assistants (MCP)')");

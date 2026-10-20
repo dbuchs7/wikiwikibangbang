@@ -64,3 +64,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0049](0049-a-task-inbox-after-atlas.md) | A task inbox built on the item model, after atlas's task list; no atlas code taken over | Accepted | Partial |
 | [0050](0050-profile-pictures-in-the-accounts-journal.md) | Profile pictures are kept in the accounts journal; the header has an account menu | Accepted | Landed |
 | [0051](0051-pages-open-for-reading-and-are-edited-in-place.md) | Pages open for reading and are edited in place; what belongs to a page sits in a column beside it | Accepted | Landed |
+| [0052](0052-corporate-design-in-a-journal-of-its-own.md) | The corporate design is kept in a journal of its own and applied as a stylesheet over the product's | Accepted | Landed |

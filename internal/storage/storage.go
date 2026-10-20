@@ -17,6 +17,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
 )
 
@@ -26,6 +27,10 @@ const AccountsFile = "accounts.wal"
 // AuditFile holds the security audit trail (ADR-0029).
 const AuditFile = "audit.wal"
 
+// SiteFile holds the installation's settings, its corporate design
+// (ADR-0052).
+const SiteFile = "site.wal"
+
 // DB is an open data directory.
 type DB struct {
 	// Store is the item store. It is not safe for concurrent use: callers
@@ -33,6 +38,7 @@ type DB struct {
 	Store    *item.Store
 	Accounts *auth.Accounts
 	Audit    *audit.Trail
+	Site     *site.Settings
 
 	mu       sync.Mutex
 	lock     io.Closer
@@ -40,6 +46,7 @@ type DB struct {
 	keys     *keyring
 	accounts *wal.Log
 	audit    *wal.Log
+	site     *wal.Log
 	dir      string
 }
 
@@ -143,6 +150,14 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 	if db.Audit, err = audit.New(kept, func(b []byte) error { return db.audit.Append(b) }, o.Log, nil); err != nil {
 		return nil, Recovery{}, err
 	}
+	sl, ssc, err := wal.OpenFile(dir, SiteFile)
+	if err != nil {
+		return nil, Recovery{}, err
+	}
+	db.site = sl
+	if db.Site, err = site.New(ssc.Records, sl.Append); err != nil {
+		return nil, Recovery{}, err
+	}
 	rec := recovery(sc, log)
 	if rec.Shredded, err = db.heal(); err != nil {
 		return nil, Recovery{}, fmt.Errorf("storage: destroying leftover keys: %w", err)
@@ -219,6 +234,9 @@ func (db *DB) close() error {
 	}
 	if db.accounts != nil {
 		errs = append(errs, db.accounts.Close())
+	}
+	if db.site != nil {
+		errs = append(errs, db.site.Close())
 	}
 	if db.audit != nil {
 		errs = append(errs, db.audit.Close())
