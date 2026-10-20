@@ -535,3 +535,37 @@ func TestNotifierFromEnv(t *testing.T) {
 		}
 	}
 }
+
+func TestSingleSignOnProvidersFromEnv(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	none, err := ssoFromEnv(env(nil))
+	if err != nil || len(none) != 0 {
+		t.Fatalf("none: %v %v", none, err)
+	}
+	tenant := "72f988bf-86f1-41af-91ab-2d7cd011db47"
+	got, err := ssoFromEnv(env(map[string]string{
+		"WWBB_PUBLIC_URL":      "https://wiki.example.org/",
+		"WWBB_ENTRA_TENANT_ID": tenant, "WWBB_ENTRA_CLIENT_ID": "e", "WWBB_ENTRA_CLIENT_SECRET": "es",
+		"WWBB_GOOGLE_CLIENT_ID": "g", "WWBB_GOOGLE_CLIENT_SECRET": "gs", "WWBB_GOOGLE_DOMAINS": "example.org, example.ch",
+	}))
+	if err != nil || len(got) != 2 {
+		t.Fatalf("entra and google: %v %v", got, err)
+	}
+	if got[0].ID() != "entra" || got[0].Issuer() != "https://login.microsoftonline.com/"+tenant+"/v2.0" || got[0].Kind() != "microsoft" {
+		t.Errorf("entra %s %s", got[0].ID(), got[0].Issuer())
+	}
+	if got[1].ID() != "google" || got[1].Issuer() != "https://accounts.google.com" || len(got[1].Domains()) != 2 {
+		t.Errorf("google %s %v", got[1].Issuer(), got[1].Domains())
+	}
+	for name, m := range map[string]map[string]string{
+		"tenant by name": {"WWBB_PUBLIC_URL": "https://w.example", "WWBB_ENTRA_TENANT_ID": "contoso.onmicrosoft.com", "WWBB_ENTRA_CLIENT_ID": "e", "WWBB_ENTRA_CLIENT_SECRET": "s"},
+		"no tenant":      {"WWBB_PUBLIC_URL": "https://w.example", "WWBB_ENTRA_CLIENT_ID": "e", "WWBB_ENTRA_CLIENT_SECRET": "s"},
+		"no secret":      {"WWBB_PUBLIC_URL": "https://w.example", "WWBB_GOOGLE_CLIENT_ID": "g"},
+		"no callback":    {"WWBB_GOOGLE_CLIENT_ID": "g", "WWBB_GOOGLE_CLIENT_SECRET": "s"},
+		"generic, no ID": {"WWBB_PUBLIC_URL": "https://w.example", "WWBB_OIDC_ISSUER": "https://idp.example"},
+	} {
+		if _, err := ssoFromEnv(env(m)); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}

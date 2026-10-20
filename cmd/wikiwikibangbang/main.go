@@ -21,6 +21,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -193,13 +194,16 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		log.Error("cannot listen", "addr", *addr, "err", err)
 		return 1
 	}
-	provider, err := ssoFromEnv()
+	providers, err := ssoFromEnv(os.Getenv)
 	if err != nil {
 		log.Error("single sign-on is misconfigured", "err", err)
 		return 1
 	}
-	if provider != nil {
-		log.Info("single sign-on enabled", "issuer", provider.Issuer())
+	for _, p := range providers {
+		log.Info("single sign-on enabled", "provider", p.ID(), "issuer", p.Issuer(), "domains", strings.Join(p.Domains(), ","))
+		if p.Kind() == "google" && len(p.Domains()) == 0 {
+			log.Warn("any Google account may sign in and gets an account without roles; set WWBB_GOOGLE_DOMAINS to your domains")
+		}
 	}
 	live := server.NewCollab(db)
 	liveCtx, stopLive := context.WithCancel(ctx)
@@ -224,7 +228,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		// Runs before the data directory closes.
 		defer func() { stopDigest(); <-digestDone; messages.Wait() }()
 	}
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: provider, Collab: live, LinkCheck: links, Messages: messages})
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages})
 	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.Handler(routes, db.Accounts)), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
@@ -355,23 +359,63 @@ func notifierFromEnv(getenv func(string) string) (*notify.Notifier, time.Duratio
 	return n, every, err
 }
 
-// ssoFromEnv configures OpenID Connect (ADR-0030) from the environment, or
-// returns nil when WWBB_OIDC_ISSUER is unset. The client secret is read
-// only from the environment, never from a flag, so it does not show in the
-// process list.
-func ssoFromEnv() (*sso.Provider, error) {
-	issuer := os.Getenv("WWBB_OIDC_ISSUER")
-	if issuer == "" {
-		return nil, nil
+// ssoFromEnv configures single sign-on (ADR-0030, ADR-0066): any of a
+// generic OpenID Connect provider (WWBB_OIDC_*), Microsoft Entra ID
+// (WWBB_ENTRA_*) and Google (WWBB_GOOGLE_*), offered in that order. The
+// callback address is WWBB_OIDC_REDIRECT_URL, else WWBB_PUBLIC_URL with
+// /api/oidc/callback; it is the same for every provider. Client secrets
+// come from the environment only, never a flag.
+func ssoFromEnv(getenv func(string) string) ([]*sso.Provider, error) {
+	redirect := getenv("WWBB_OIDC_REDIRECT_URL")
+	if redirect == "" && getenv("WWBB_PUBLIC_URL") != "" {
+		redirect = strings.TrimRight(getenv("WWBB_PUBLIC_URL"), "/") + "/api/oidc/callback"
 	}
-	return sso.New(sso.Config{
-		Issuer:       issuer,
-		ClientID:     os.Getenv("WWBB_OIDC_CLIENT_ID"),
-		ClientSecret: os.Getenv("WWBB_OIDC_CLIENT_SECRET"),
-		RedirectURL:  os.Getenv("WWBB_OIDC_REDIRECT_URL"),
-		Name:         os.Getenv("WWBB_OIDC_NAME"),
-	}, nil)
+	domains := func(v string) []string {
+		var out []string
+		for _, d := range strings.Split(v, ",") {
+			if d = strings.TrimSpace(d); d != "" {
+				out = append(out, d)
+			}
+		}
+		return out
+	}
+	var cfgs []sso.Config
+	if issuer := getenv("WWBB_OIDC_ISSUER"); issuer != "" {
+		cfgs = append(cfgs, sso.Config{ID: "sso", Issuer: issuer, ClientID: getenv("WWBB_OIDC_CLIENT_ID"), ClientSecret: getenv("WWBB_OIDC_CLIENT_SECRET"),
+			Name: getenv("WWBB_OIDC_NAME"), Domains: domains(getenv("WWBB_OIDC_DOMAINS"))})
+	}
+	if tenant := getenv("WWBB_ENTRA_TENANT_ID"); tenant != "" || getenv("WWBB_ENTRA_CLIENT_ID") != "" {
+		// The issuer of a tenant's v2.0 endpoint names its ID; a domain
+		// name or "common" would not match the issuer in its tokens.
+		if !entraTenant.MatchString(tenant) {
+			return nil, fmt.Errorf("WWBB_ENTRA_TENANT_ID must be the tenant's ID (a GUID such as 72f988bf-86f1-41af-91ab-2d7cd011db47), not %q", tenant)
+		}
+		cfgs = append(cfgs, sso.Config{ID: "entra", Kind: "microsoft", Name: "Microsoft",
+			Issuer:   "https://login.microsoftonline.com/" + strings.ToLower(tenant) + "/v2.0",
+			ClientID: getenv("WWBB_ENTRA_CLIENT_ID"), ClientSecret: getenv("WWBB_ENTRA_CLIENT_SECRET"),
+			Domains: domains(getenv("WWBB_ENTRA_DOMAINS")), UsernameIsVerified: true})
+	}
+	if id := getenv("WWBB_GOOGLE_CLIENT_ID"); id != "" {
+		cfgs = append(cfgs, sso.Config{ID: "google", Kind: "google", Name: "Google", Issuer: "https://accounts.google.com",
+			ClientID: id, ClientSecret: getenv("WWBB_GOOGLE_CLIENT_SECRET"), Domains: domains(getenv("WWBB_GOOGLE_DOMAINS"))})
+	}
+	var out []*sso.Provider
+	for _, c := range cfgs {
+		if c.ID != "sso" && c.ClientSecret == "" {
+			return nil, fmt.Errorf("%s: the client secret is required", c.Name)
+		}
+		c.RedirectURL = redirect
+		p, err := sso.New(c, nil)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", c.ID, err)
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
+
+// entraTenant is a tenant ID.
+var entraTenant = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // defaultDataDir is relative to the working directory, so a binary started
 // from a terminal keeps its data next to where it was started.

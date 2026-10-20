@@ -706,6 +706,8 @@ async function loginView() {
   const params = new URLSearchParams(location.search);
   const [sso, signup] = await Promise.all([get("/api/oidc").catch(() => ({ enabled: false })), get("/api/signup").catch(() => ({ open: false }))]);
   const brand = await get("/branding.json").catch(() => ({}));
+  // Older servers answer one provider without a list.
+  const providers = sso.providers || (sso.enabled ? [{ id: "", name: sso.name }] : []);
   const card = h("section", { class: "card narrow", id: "login-card" });
   // The ways in, in one card: single sign-on first where it is set up,
   // then username and password, then help for a forgotten password and
@@ -715,9 +717,11 @@ async function loginView() {
   const signIn = () => card.replaceChildren(
     h("h1", { text: t("login.title") }),
     h("p", { class: "muted login-lead", text: t("login.lead", { name: brand.name || "wikiwikibangbang" }) }),
-    params.get("login_error") ? h("p", { class: "error", text: t("login.failed") }) : "",
-    sso.enabled ? h("a", { class: "button primary login-sso", id: "login-sso", href: "/api/oidc/login" }, lineIcon("M15 7a3 3 0 1 1-3 3M3 21l7.5-7.5M7 17l2 2M9 15l2 2"), h("span", { text: t("login.with", { name: sso.name }) })) : "",
-    sso.enabled ? h("p", { class: "login-or", text: t("login.or") }) : "",
+    params.get("login_error") ? h("p", { class: "error", role: "alert", text: params.get("login_error") === "domain" ? t("login.domain") : t("login.failed") }) : "",
+    providers.length ? h("div", { class: "login-sso-list" }, ...providers.map((p) =>
+      h("a", { class: "button login-sso login-sso-" + (p.kind || "generic"), id: "login-sso-" + p.id, href: "/api/oidc/login?provider=" + encodeURIComponent(p.id) },
+        providerMark(p.kind), h("span", { text: t("login.with", { name: p.name }) })))) : "",
+    providers.length ? h("p", { class: "login-or", text: t("login.or") }) : "",
     form({ id: "login" }, [
       field(t("field.username"), h("input", { name: "username", autocomplete: "username", required: true })),
       field(t("field.password"), h("input", { name: "password", type: "password", autocomplete: "current-password", required: true })),
@@ -776,6 +780,34 @@ async function loginView() {
   );
   signIn();
   show(card);
+}
+
+// providerMark is the sign of an identity provider on its sign-in button:
+// Microsoft's four squares, Google's G, or a key for any other.
+function providerMark(kind) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const add = (tag, attrs) => {
+    const el = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    svg.append(el);
+  };
+  if (kind === "microsoft") {
+    add("rect", { x: 2, y: 2, width: 9.5, height: 9.5, fill: "#f25022" });
+    add("rect", { x: 12.5, y: 2, width: 9.5, height: 9.5, fill: "#7fba00" });
+    add("rect", { x: 2, y: 12.5, width: 9.5, height: 9.5, fill: "#00a4ef" });
+    add("rect", { x: 12.5, y: 12.5, width: 9.5, height: 9.5, fill: "#ffb900" });
+  } else if (kind === "google") {
+    add("path", { d: "M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z", fill: "#4285f4" });
+    add("path", { d: "M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z", fill: "#34a853" });
+    add("path", { d: "M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1A10 10 0 0 0 2 12c0 1.6.4 3.1 1.1 4.6L6.4 14z", fill: "#fbbc05" });
+    add("path", { d: "M12 5.9c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.4L6.4 10C7.2 7.7 9.4 5.9 12 5.9z", fill: "#ea4335" });
+  } else {
+    add("path", { d: "M15 7a3 3 0 1 1-3 3M3 21l7.5-7.5M7 17l2 2M9 15l2 2", fill: "none", stroke: "currentColor", "stroke-width": 1.8, "stroke-linecap": "round" });
+  }
+  return svg;
 }
 
 // resetView chooses a new password with the token of a reset link
@@ -2431,7 +2463,8 @@ async function adminView() {
     h("h3", { text: t("loginsetup.title") }),
     h("p", { class: "muted", text: t("loginsetup.help") }),
     h("ul", { class: "setup-list" },
-      setupRow("setup-sso", t("loginsetup.sso"), sso.enabled, sso.enabled ? t("loginsetup.ssoOn", { name: sso.name }) : t("loginsetup.ssoOff")),
+      setupRow("setup-sso", t("loginsetup.sso"), sso.enabled, sso.enabled
+        ? t("loginsetup.ssoOn", { name: (sso.providers || [{ name: sso.name }]).map((p) => p.name).join(", ") }) : t("loginsetup.ssoOff")),
       setupRow("setup-reset", t("loginsetup.reset"), mailReset, mailReset ? t("loginsetup.resetOn", { host: delivery.status.mailHost }) : t("loginsetup.resetOff")),
       setupRow("setup-requests", t("loginsetup.requests"), access.accountRequests, access.accountRequests ? t("loginsetup.requestsOn") : t("loginsetup.requestsOff"))));
   const requestsSection = section("requests", t("requests.title"),

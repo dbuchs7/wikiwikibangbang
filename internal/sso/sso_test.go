@@ -137,3 +137,49 @@ func TestPendingLoginsAreBounded(t *testing.T) {
 		t.Fatalf("expired logins were not cleared: %v", err)
 	}
 }
+
+// TestDomains: with domains set, only an identity whose domain the
+// provider asserts signs in (ADR-0066).
+func TestDomains(t *testing.T) {
+	idp := ssotest.New(t, "wiki")
+	login := func(cfg Config, c ssotest.Claims) error {
+		t.Helper()
+		cfg.Issuer, cfg.ClientID, cfg.RedirectURL = idp.URL, "wiki", "http://localhost/api/oidc/callback"
+		p, err := New(cfg, idp.Client())
+		if err != nil {
+			t.Fatal(err)
+		}
+		authURL, state, err := p.Begin(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		cb := idp.Authorize(t, authURL, c)
+		_, err = p.Finish(context.Background(), state, cb.Get("code"))
+		return err
+	}
+	google := Config{ID: "google", Kind: "google", Domains: []string{" Example.ORG "}}
+	for name, tc := range map[string]struct {
+		cfg  Config
+		c    ssotest.Claims
+		want error
+	}{
+		"hosted domain":           {google, ssotest.Claims{Subject: "1", Email: "a@example.org", HostedDomain: "example.org"}, nil},
+		"verified address":        {google, ssotest.Claims{Subject: "2", Email: "a@EXAMPLE.org"}, nil},
+		"other domain":            {google, ssotest.Claims{Subject: "3", Email: "a@gmail.com"}, ErrDomain},
+		"unverified address":      {google, ssotest.Claims{Subject: "4", Email: "a@example.org", EmailUnverified: true}, ErrDomain},
+		"username not trusted":    {google, ssotest.Claims{Subject: "5", PreferredUsername: "a@example.org"}, ErrDomain},
+		"entra principal name":    {Config{ID: "entra", Domains: []string{"example.org"}, UsernameIsVerified: true}, ssotest.Claims{Subject: "6", PreferredUsername: "a@example.org"}, nil},
+		"no domains: any account": {Config{}, ssotest.Claims{Subject: "7", Email: "a@gmail.com"}, nil},
+	} {
+		if err := login(tc.cfg, tc.c); !errors.Is(err, tc.want) {
+			t.Errorf("%s: %v, want %v", name, err, tc.want)
+		}
+	}
+	p, _ := New(Config{Issuer: idp.URL, ClientID: "wiki", RedirectURL: "http://localhost/cb", ID: "google", Kind: "google", Domains: []string{"example.org"}}, nil)
+	if p.ID() != "google" || p.Kind() != "google" || p.Domains()[0] != "example.org" {
+		t.Fatal("accessors")
+	}
+	if d, _ := New(Config{Issuer: idp.URL, ClientID: "wiki", RedirectURL: "http://localhost/cb"}, nil); d.ID() != "sso" {
+		t.Fatal("the default ID")
+	}
+}

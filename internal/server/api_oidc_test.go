@@ -19,7 +19,7 @@ func ssoSetup(t *testing.T) (http.Handler, Deps, *ssotest.IdP) {
 		t.Fatal(err)
 	}
 	d := testDeps(t)
-	d.SSO = p
+	d.SSO = []*sso.Provider{p}
 	if _, err := d.DB.EnsureAdmin("admin", adminPassword); err != nil {
 		t.Fatal(err)
 	}
@@ -149,8 +149,69 @@ func TestSingleSignOnDisabledOrUnreachable(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := testDeps(t)
-	d.SSO = p
+	d.SSO = []*sso.Provider{p}
 	if rec := getWith(Handler(Routes(d), d.DB.Accounts), "/api/oidc/login"); rec.Code != http.StatusBadGateway || strings.Contains(rec.Body.String(), "127.0.0.1") {
 		t.Fatalf("unreachable provider: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestSeveralProviders: Entra ID and Google side by side; each login goes
+// back to the provider that started it; a domain outside the list is
+// refused with its own message (ADR-0066).
+func TestSeveralProviders(t *testing.T) {
+	entra, google := ssotest.New(t, "wiki"), ssotest.New(t, "wiki")
+	mk := func(cfg sso.Config, idp *ssotest.IdP) *sso.Provider {
+		cfg.Issuer, cfg.ClientID, cfg.RedirectURL = idp.URL, "wiki", "http://localhost/api/oidc/callback"
+		p, err := sso.New(cfg, idp.Client())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	d := testDeps(t)
+	d.SSO = []*sso.Provider{
+		mk(sso.Config{ID: "entra", Name: "Microsoft", Kind: "microsoft"}, entra),
+		mk(sso.Config{ID: "google", Name: "Google", Kind: "google", Domains: []string{"example.org"}}, google),
+	}
+	h := Handler(Routes(d), d.DB.Accounts)
+	c := &client{t: t, h: h}
+	info := c.expect("GET", "/api/oidc", "", http.StatusOK)
+	list := info["providers"].([]any)
+	if len(list) != 2 || list[1].(map[string]any)["id"] != "google" || list[1].(map[string]any)["kind"] != "google" || info["name"] != "Microsoft" {
+		t.Fatalf("info %v", info)
+	}
+	start := func(provider string) (*httptest.ResponseRecorder, *http.Cookie) {
+		rec := getWith(h, "/api/oidc/login?provider="+provider)
+		if rec.Code != http.StatusFound {
+			t.Fatalf("start %s: %d", provider, rec.Code)
+		}
+		return rec, cookie(rec, stateCookie)
+	}
+	c.expect("GET", "/api/oidc/login?provider=nope", "", http.StatusNotFound)
+
+	rec, st := start("google")
+	if !strings.HasPrefix(rec.Header().Get("Location"), google.URL) || !strings.HasPrefix(st.Value, "google.") {
+		t.Fatalf("google start %s %s", rec.Header().Get("Location"), st.Value)
+	}
+	cb := google.Authorize(t, rec.Header().Get("Location"), ssotest.Claims{Subject: "g1", Email: "lea@example.org", HostedDomain: "example.org"})
+	if got := getWith(h, "/api/oidc/callback?"+cb.Encode(), st); got.Code != http.StatusFound || got.Header().Get("Location") != "/" || cookie(got, SessionCookie) == nil {
+		t.Fatalf("google login %d %s", got.Code, got.Header().Get("Location"))
+	}
+	rec, st = start("google")
+	cb = google.Authorize(t, rec.Header().Get("Location"), ssotest.Claims{Subject: "g2", Email: "max@gmail.com"})
+	if got := getWith(h, "/api/oidc/callback?"+cb.Encode(), st); got.Header().Get("Location") != "/?login_error=domain" {
+		t.Fatalf("other domain: %s", got.Header().Get("Location"))
+	}
+	rec, st = start("entra")
+	cb = entra.Authorize(t, rec.Header().Get("Location"), ssotest.Claims{Subject: "e1", PreferredUsername: "tom@corp.example"})
+	if got := getWith(h, "/api/oidc/callback?"+cb.Encode(), st); got.Header().Get("Location") != "/" {
+		t.Fatalf("entra login: %s", got.Header().Get("Location"))
+	}
+	// A state bound to one provider is no use with another's name.
+	rec, st = start("entra")
+	cb = entra.Authorize(t, rec.Header().Get("Location"), ssotest.Claims{Subject: "e2"})
+	st.Value = "google" + strings.TrimPrefix(st.Value, "entra")
+	if got := getWith(h, "/api/oidc/callback?"+cb.Encode(), st); got.Header().Get("Location") != "/?login_error=sso" {
+		t.Fatalf("swapped provider: %s", got.Header().Get("Location"))
 	}
 }

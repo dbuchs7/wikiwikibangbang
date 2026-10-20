@@ -58,8 +58,9 @@ type Deps struct {
 	DB *storage.DB
 	// Log receives operational errors; security events go to DB.Audit.
 	Log *slog.Logger
-	// SSO is the OpenID Connect provider, or nil when none is configured.
-	SSO *sso.Provider
+	// SSO are the OpenID Connect providers, none when none is configured;
+	// the login page offers them in this order (ADR-0030, ADR-0066).
+	SSO []*sso.Provider
 	// Collab holds the live editing sessions (ADR-0010); Routes creates
 	// one over DB when it is nil. NewCollab makes one to share, for a
 	// caller that runs its Tick.

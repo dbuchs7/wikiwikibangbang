@@ -78,3 +78,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0063](0063-a-comment-overview-across-items.md) | A comment overview across items | Accepted | Landed |
 | [0064](0064-message-delivery-and-password-reset.md) | Message delivery over the account's channels, and the password reset by mail | Accepted | Landed |
 | [0065](0065-a-uniform-airy-ui-system.md) | A uniform, airy UI system | Accepted | Landed |
+| [0066](0066-several-identity-providers-entra-id-and-google.md) | Several identity providers side by side: Microsoft Entra ID and Google | Accepted | Landed |
