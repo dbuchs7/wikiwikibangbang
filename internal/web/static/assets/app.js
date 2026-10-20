@@ -971,26 +971,86 @@ async function tasksView(tab, params) {
       h("td", {}, link(`#/board/${encodeURIComponent(it.space)}/${encodeURIComponent(it.type)}`, it.space)),
       h("td", { class: "task-actions" }, [claim, ...moves].filter(Boolean).flatMap((b, k) => k ? [" · ", b] : [b])));
   };
-  const tabLink = (id, label) => link(`#/tasks/${id}${space ? "?space=" + encodeURIComponent(space) : ""}`, `${label} (${lists[id].length})`,
-    id === current ? "tab active" : "tab");
-  const spaceFilter = h("select", { "aria-label": t("col.space"), onchange: (ev) => {
-    location.hash = `#/tasks/${current}` + (ev.target.value ? "?space=" + encodeURIComponent(ev.target.value) : "");
-  } }, h("option", { value: "", text: t("tasks.allSpaces") }),
-  [...new Set(open.map((it) => it.space))].sort().map((k) => h("option", { value: k, text: k, selected: k === space })));
+  // Every column can be filtered. The filters apply at once, without
+  // reading the tasks again, and are kept in the address, so a reload or a
+  // shared link shows the same; changing a tab keeps them.
+  const filterNames = ["key", "title", "state", "who", "due", "prio"];
+  const filters = Object.fromEntries(filterNames.map((k) => [k, params.get(k) || ""]));
+  const query = (extra = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries({ space, ...filters, ...extra })) if (v) q.set(k, v);
+    return q.size ? "?" + q : "";
+  };
+  const weekEnd = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  const contains = (text, part) => String(text).toLowerCase().includes(part.trim().toLowerCase());
+  const matches = (it) => {
+    const due = dueOf(it), who = assigneeOf(it);
+    const f = typeOf.get(it.type).f;
+    return contains(it.key, filters.key) && contains(it.title, filters.title)
+      && (!filters.state || it.state === filters.state)
+      && (!filters.who || (filters.who === "-" ? who === "" : who === filters.who))
+      && (!filters.prio || (f.priority && it.properties[f.priority.name] === filters.prio))
+      && ({ "": true, overdue: due && due < today, today: due === today, week: due && due >= today && due <= weekEnd, none: !due }[filters.due] ?? true);
+  };
+  const rows = shown.map((it) => [it, row(it)]);
+  const count = h("p", { class: "muted", id: "tasks-count", role: "status" });
+  const empty = h("p", { class: "muted", text: t("tasks.noneFiltered"), hidden: true });
+  const apply = () => {
+    let n = 0;
+    for (const [it, tr] of rows) n += (tr.hidden = !matches(it)) ? 0 : 1;
+    count.textContent = n === rows.length ? "" : t("tasks.filtered", { n, total: rows.length });
+    empty.hidden = n > 0;
+    reset.hidden = !filterNames.some((k) => filters[k]);
+    history.replaceState(null, "", `#/tasks/${current}${query()}`);
+    relink();
+  };
+  const set = (k) => (ev) => { filters[k] = ev.target.value; apply(); };
+  const distinct = (values) => [...new Set(values.filter((v) => v !== "" && v !== null && v !== undefined))].sort((a, b) => String(a).localeCompare(String(b)));
+  const choose = (k, label, options) => h("select", { "aria-label": t("tasks.filterOf", { column: label }), onchange: set(k) },
+    h("option", { value: "", text: t("tasks.filterAll") }),
+    options.map(([v, text]) => h("option", { value: v, text, selected: v === filters[k] })));
+  const typed = (k, label) => {
+    const input = h("input", { type: "search", value: filters[k], placeholder: t("tasks.filterText"), "aria-label": t("tasks.filterOf", { column: label }) });
+    input.addEventListener("input", set(k));
+    return input;
+  };
+  const whoValues = shown.map(assigneeOf);
+  const filterRow = h("tr", { class: "filters" },
+    h("td", {}, typed("key", t("col.item"))),
+    h("td", {}, typed("title", t("col.title"))),
+    h("td", {}, choose("state", t("col.state"), distinct(shown.map((it) => it.state)).map((v) => [v, v]))),
+    h("td", {}, choose("who", t("tasks.assignee"), [
+      ...(whoValues.includes("") ? [["-", t("tasks.nobody")]] : []),
+      ...distinct(whoValues).map((v) => [v, person(v)])])),
+    h("td", {}, choose("due", t("tasks.due"), [["overdue", t("tasks.dueOverdue")], ["today", t("tasks.dueToday")], ["week", t("tasks.dueWeek")], ["none", t("tasks.dueNone")]])),
+    h("td", {}, choose("prio", t("tasks.priority"), distinct(shown.map((it) => { const f = typeOf.get(it.type).f.priority; return f ? it.properties[f.name] : ""; })).map((v) => [v, v]))),
+    h("td", {}, h("select", { "aria-label": t("tasks.filterOf", { column: t("col.space") }), onchange: (ev) => {
+      location.hash = `#/tasks/${current}${query({ space: ev.target.value })}`;
+    } }, h("option", { value: "", text: t("tasks.allSpaces") }),
+    [...new Set(open.map((it) => it.space))].sort().map((k) => h("option", { value: k, text: k, selected: k === space })))),
+    h("td", {}));
+  const reset = h("button", { type: "button", class: "link", text: t("tasks.filterReset"), hidden: true, onclick: () => {
+    location.hash = `#/tasks/${current}${space ? "?space=" + encodeURIComponent(space) : ""}`;
+  } });
+  const tabLink = (id, label) => link(`#/tasks/${id}${query()}`, `${label} (${lists[id].length})`, id === current ? "tab active" : "tab");
+  const tabs = h("nav", { class: "tabs", "aria-label": t("tasks.title") },
+    tabLink("mine", t("tasks.mine")), tabLink("unassigned", t("tasks.unassigned")), tabLink("all", t("tasks.all")));
+  // The tab links carry the filters as they change.
+  const relink = () => tabs.querySelectorAll("a").forEach((a) => { a.href = a.getAttribute("href").split("?")[0] + query(); });
   show(
     h("div", { class: "page-head" }, h("h1", { text: t("tasks.title") }),
       h("p", { class: "actions" }, link(newHref(space || here.space), t("tasks.new"), "button"))),
-    h("nav", { class: "tabs", "aria-label": t("tasks.title") },
-      tabLink("mine", t("tasks.mine")), tabLink("unassigned", t("tasks.unassigned")), tabLink("all", t("tasks.all")), spaceFilter),
+    tabs,
     status,
     h("section", { id: "tasks" }, shown.length
-      ? h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space"), ""]
-        .map((c) => h("th", { text: c })))),
-      h("tbody", {}, shown.map(row)))
+      ? [h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space"), ""]
+        .map((c) => h("th", { text: c }))), filterRow),
+      h("tbody", {}, rows.map(([, tr]) => tr))), h("p", { class: "tasks-foot" }, count, reset), empty]
       : h("p", { class: "muted", text: current === "mine" ? t("tasks.noneMine") : t("tasks.none") })),
     h("p", { class: "muted", text: t("tasks.conventions") }),
     page.next ? h("p", { class: "notice", text: t("tasks.truncated", { n: items.length }) }) : null,
   );
+  if (rows.length) apply();
 }
 
 // albumView shows the images and drawings of every item one may read
