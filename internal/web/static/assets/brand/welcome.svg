@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 240" role="img" aria-labelledby="t">
+  <title id="t">Pages, a checklist and a conversation, gathered in one place</title>
+  <!-- The welcome illustration of the start page: soft shapes, no text, no external resources. -->
+  <circle cx="190" cy="128" r="104" fill="#eef3ff"/>
+  <circle cx="300" cy="52" r="20" fill="#fde8c8"/>
+  <circle cx="58" cy="190" r="14" fill="#e3f4ea"/>
+  <!-- a page -->
+  <g transform="rotate(-7 128 120)">
+    <rect x="72" y="52" width="112" height="140" rx="10" fill="#ffffff" stroke="#cfd6e4" stroke-width="2"/>
+    <rect x="88" y="72" width="62" height="9" rx="4.5" fill="#5b7cfa"/>
+    <rect x="88" y="94" width="80" height="6" rx="3" fill="#d9dfeb"/>
+    <rect x="88" y="108" width="72" height="6" rx="3" fill="#d9dfeb"/>
+    <rect x="88" y="122" width="78" height="6" rx="3" fill="#d9dfeb"/>
+    <rect x="88" y="142" width="52" height="30" rx="5" fill="#e6ecff"/>
+    <path d="M94 166 l12-12 9 8 13-14 10 18z" fill="#a9b9fb"/>
+  </g>
+  <!-- a checklist -->
+  <g transform="rotate(5 238 132)">
+    <rect x="182" y="78" width="112" height="112" rx="10" fill="#ffffff" stroke="#cfd6e4" stroke-width="2"/>
+    <rect x="198" y="96" width="14" height="14" rx="3" fill="#3fb37f"/>
+    <path d="M201 103 l3.5 3.5 6-7" stroke="#ffffff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="220" y="99" width="58" height="7" rx="3.5" fill="#d9dfeb"/>
+    <rect x="198" y="122" width="14" height="14" rx="3" fill="#3fb37f"/>
+    <path d="M201 129 l3.5 3.5 6-7" stroke="#ffffff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="220" y="125" width="48" height="7" rx="3.5" fill="#d9dfeb"/>
+    <rect x="198" y="148" width="14" height="14" rx="3" fill="none" stroke="#b7c0d1" stroke-width="2"/>
+    <rect x="220" y="151" width="54" height="7" rx="3.5" fill="#d9dfeb"/>
+  </g>
+  <!-- a conversation -->
+  <g>
+    <path d="M232 26 h64 a12 12 0 0 1 12 12 v22 a12 12 0 0 1 -12 12 h-38 l-14 12 v-12 h-12 a12 12 0 0 1 -12 -12 v-22 a12 12 0 0 1 12 -12z" fill="#ffffff" stroke="#cfd6e4" stroke-width="2"/>
+    <circle cx="250" cy="49" r="4" fill="#f0a63a"/>
+    <circle cx="264" cy="49" r="4" fill="#f0a63a"/>
+    <circle cx="278" cy="49" r="4" fill="#f0a63a"/>
+  </g>
+  <!-- sparkles -->
+  <path d="M62 64 l4 10 10 4 -10 4 -4 10 -4 -10 -10 -4 10 -4z" fill="#f0a63a"/>
+  <path d="M324 170 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3z" fill="#5b7cfa"/>
+  <path d="M168 18 l2.5 6 6 2.5 -6 2.5 -2.5 6 -2.5 -6 -6 -2.5 6 -2.5z" fill="#3fb37f"/>
+</svg>

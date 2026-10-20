@@ -36,6 +36,11 @@ function check(cond, msg) {
     await page.click("#login button[type=submit]");
     await page.waitForSelector("text=No spaces yet");
 
+    step("start page: a greeting, quick access and the spaces as tiles");
+    await page.waitForSelector("#welcome h1:has-text('admin')");
+    await page.waitForSelector("#welcome img.welcome-art");
+    check(await page.locator(".home-tiles a").count() === 4, "four quick accesses");
+
     step("the footer names the running version");
     await page.waitForSelector("footer.footer:has-text('wikiwikibangbang')");
 

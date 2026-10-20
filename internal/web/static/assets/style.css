@@ -610,3 +610,23 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .pm-image.pm-image-left figcaption, .pm-image.pm-image-right figcaption { text-align: inherit; }
 .pm-image-align { font-size: 13px; padding: 2px 4px; }
 @media (max-width: 640px) { .pm-image.pm-image-left, .pm-image.pm-image-right { float: none; width: auto !important; margin: 10px 0; } }
+
+/* The start page: a welcome, quick access and the spaces as tiles. */
+.welcome { display: flex; align-items: center; gap: 24px; padding: 28px 32px; margin-bottom: 18px; border-radius: 14px;
+  background: linear-gradient(120deg, var(--surface) 0%, var(--accent-soft) 100%); border: 1px solid var(--border); }
+.welcome-text { flex: 1; min-width: 0; }
+.welcome h1 { margin: 0 0 8px; font-size: 28px; }
+.welcome-lead { margin: 0 0 16px; font-size: 15px; color: var(--muted); max-width: 62ch; }
+.welcome-art { flex: none; width: min(360px, 34vw); height: auto; }
+.home-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.home-tile, .space-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 10px; background: var(--surface);
+  border: 1px solid var(--border); color: var(--text); text-decoration: none; box-shadow: var(--shadow); }
+.home-tile:hover, .space-tile:hover { border-color: var(--accent); text-decoration: none; }
+.home-tile .chip { align-self: flex-start; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #fff4e5; color: #8a5300; }
+.space-tiles { list-style: none; margin: 0 0 22px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.space-key { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--accent); }
+.space-tile .badge { align-self: flex-start; }
+.first-steps ol { margin: 6px 0 0; padding-left: 20px; }
+@media (max-width: 720px) { .welcome { flex-direction: column-reverse; padding: 20px; } .welcome-art { width: 70%; } }
+.welcome .button:not(.primary) { background: var(--surface); color: var(--accent); }
+.welcome .button:not(.primary):hover { background: var(--accent-soft); }
