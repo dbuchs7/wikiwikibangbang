@@ -157,7 +157,6 @@ export default {
   "item.purge": "Endgültig löschen",
   "item.purgeConfirm": "Endgültig löschen? Der Inhalt kann nicht wiederhergestellt werden.",
   "item.restore": "Wiederherstellen",
-  "item.saveTitle": "Titel speichern",
   "item.state": " · Status: {state}",
   "item.transitions": "Übergänge: ",
   "item.trash": "In den Papierkorb",

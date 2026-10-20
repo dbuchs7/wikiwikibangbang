@@ -159,7 +159,6 @@ export default {
   "item.purge": "Delete for good",
   "item.purgeConfirm": "Delete for good? The content cannot be recovered.",
   "item.restore": "Restore",
-  "item.saveTitle": "Save title",
   "item.state": " · state: {state}",
   "item.transitions": "Transitions: ",
   "item.trash": "Move to trash",

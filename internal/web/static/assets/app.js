@@ -1546,11 +1546,17 @@ async function itemView(ref, params = new URLSearchParams()) {
   }
 
   const restricted = (item.restriction?.read?.length || 0) + (item.restriction?.edit?.length || 0) > 0;
+  // While editing, the title is a field saved with Done, or with Enter.
+  const titleInput = editing ? h("input", { name: "title", value: item.title, class: "title", required: true, "aria-label": t("col.title") }) : null;
+  const saveTitle = async () => {
+    const next = titleInput.value.trim();
+    if (next && next !== item.title) {
+      await put(path + "/title", { title: next });
+      item.title = next;
+    }
+  };
   const title = editing
-    ? form({ class: "inline", id: "title" }, [
-      h("input", { name: "title", value: item.title, class: "title", "aria-label": t("col.title") }),
-      h("button", { type: "submit", text: t("item.saveTitle") }),
-    ], async (data) => { await put(path + "/title", { title: data.get("title") }); route(); })
+    ? form({ class: "inline", id: "title" }, [titleInput], saveTitle)
     : h("h1", { class: "item-title" }, restricted ? lockIcon(true) : null, item.title || t("item.erased"));
 
   const props = h("table", { class: "props" }, type.fields.map((f) => {
@@ -1588,6 +1594,14 @@ async function itemView(ref, params = new URLSearchParams()) {
   let session = null;
   const done = h("button", { type: "button", id: "edit-done", class: "primary", text: t("item.done"), onclick: async () => {
     done.disabled = true;
+    // A title that cannot be saved keeps the editor open, with the reason.
+    try {
+      await saveTitle();
+    } catch (err) {
+      status.replaceChildren(errorBox(err));
+      done.disabled = false;
+      return;
+    }
     try { if (session) await session.finish(); } finally { location.hash = itemHref; }
   } });
   const headActions = h("p", { class: "actions" },

@@ -322,8 +322,10 @@ function check(cond, msg) {
     await page.click("#new-item button[type=submit]");
     await page.waitForSelector(".tree a.current:has-text('Created from New')");
     check(await page.locator(".tree li.open > .tree-row a:has-text('Upgrade')").count() === 1, "the new page lies below the page it was created from");
+    await page.fill("#title [name=title]", "Created from New, renamed"); // Done saves the title too
     await page.click("#edit-done"); // a new page opened for writing; Done shows it for reading
     await page.waitForSelector("#body.reading");
+    await page.waitForSelector("h1.item-title:text-is('Created from New, renamed')");
     await page.click("#item-new-child"); // the item's own "new child page"
     await page.waitForSelector("#new-item [name=under]:checked");
     await page.goBack();
