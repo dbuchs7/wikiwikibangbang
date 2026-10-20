@@ -1067,7 +1067,7 @@ func checkBlock(b Block, self ID) error {
 		if err := checkTable(b.Text); err != nil {
 			return err
 		}
-	case TOC, Children:
+	case TOC, Children, Divider:
 		if b.Text != "" || len(b.Marks) > 0 || len(b.Mentions) > 0 {
 			return invalid("a %s block has no text", b.Kind)
 		}
@@ -1087,6 +1087,20 @@ func checkBlock(b Block, self ID) error {
 	if (b.Kind == Panel) != slices.Contains(PanelTones, b.Tone) {
 		return invalid("tone %q: a panel has one of %s, other blocks none", b.Tone, strings.Join(PanelTones, ", "))
 	}
+	if b.Align != "" {
+		switch b.Kind {
+		case Paragraph, Heading, Quote, Panel:
+			if !slices.Contains(TextAligns, b.Align) {
+				return invalid("align %q: text is aligned %s", b.Align, strings.Join(TextAligns, ", "))
+			}
+		case Image:
+			if !slices.Contains(ImageAligns, b.Align) {
+				return invalid("align %q: an image is aligned %s", b.Align, strings.Join(ImageAligns, ", "))
+			}
+		default:
+			return invalid("a %s block has no alignment", b.Kind)
+		}
+	}
 	if b.Width != 0 && (b.Kind != Image || b.Width < 10 || b.Width > 100) {
 		return invalid("width %d: only images have a width, 10 to 100 percent", b.Width)
 	}
@@ -1102,7 +1116,7 @@ func checkBlock(b Block, self ID) error {
 			return invalid("mark %s %d-%d is outside the text of %d characters", m.Type, m.Start, m.End, n)
 		}
 		switch m.Type {
-		case MarkBold, MarkItalic, MarkCode:
+		case MarkBold, MarkItalic, MarkCode, MarkUnderline, MarkStrike, MarkHighlight:
 			if m.Href != "" || m.Ref != "" {
 				return invalid("a %s mark has no target", m.Type)
 			}

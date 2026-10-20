@@ -282,13 +282,19 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
   function normal(b) {
     const out = { kind: b.kind, text: b.text ?? "" };
     if (b.kind === "embed") return { kind: "embed", ref: b.ref };
-    if (b.kind === "toc" || b.kind === "children") return { kind: b.kind };
-    if (b.kind === "image") return b.width ? { kind: "image", text: b.text ?? "", ref: b.ref, width: b.width } : { kind: "image", text: b.text ?? "", ref: b.ref };
+    if (b.kind === "toc" || b.kind === "children" || b.kind === "divider") return { kind: b.kind };
+    if (b.kind === "image") {
+      const img = { kind: "image", text: b.text ?? "", ref: b.ref };
+      if (b.width) img.width = b.width;
+      if (b.align) img.align = b.align;
+      return img;
+    }
     if (b.kind === "heading") out.level = b.level;
     if (b.marks?.length) out.marks = b.marks;
     if (b.mentions?.length) out.mentions = b.mentions;
     if (b.kind === "task" && b.checked) out.checked = true;
     if (b.kind === "panel") out.tone = b.tone;
+    if (b.align) out.align = b.align;
     return out;
   }
 

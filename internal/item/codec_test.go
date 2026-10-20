@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":15,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":16,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -143,8 +143,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	provenance := provenanceLog(t)
 	sizes := imageSizeLog(t)
 	holds := holdLog(t)
+	layout := layoutLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline, access, provenance, sizes, holds) {
+	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline, access, provenance, sizes, holds, layout) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -157,22 +158,23 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v14.golden.jsonl", nil, log},
-		{"events.v14.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v14.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v14.comments.golden.jsonl", fakeSealer{}, comments},
-		{"events.v14.tree.golden.jsonl", fakeSealer{}, tree},
-		{"events.v14.blocks.golden.jsonl", fakeSealer{}, blocks},
-		{"events.v14.labels.golden.jsonl", fakeSealer{}, labels},
-		{"events.v14.attachments.golden.jsonl", fakeSealer{}, files},
-		{"events.v14.attachments.plain.golden.jsonl", nil, files},
-		{"events.v14.watches.golden.jsonl", fakeSealer{}, watches},
-		{"events.v14.inline.golden.jsonl", fakeSealer{}, inline},
-		{"events.v14.revocations.golden.jsonl", nil, access},
-		{"events.v14.provenance.golden.jsonl", fakeSealer{}, provenance},
-		{"events.v14.imagesize.golden.jsonl", fakeSealer{}, sizes},
-		{"events.v14.dataprotection.golden.jsonl", fakeSealer{}, holds},
-		{"events.v14.dataprotection.plain.golden.jsonl", nil, holds},
+		{"events.v15.golden.jsonl", nil, log},
+		{"events.v15.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v15.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v15.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v15.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v15.blocks.golden.jsonl", fakeSealer{}, blocks},
+		{"events.v15.labels.golden.jsonl", fakeSealer{}, labels},
+		{"events.v15.attachments.golden.jsonl", fakeSealer{}, files},
+		{"events.v15.attachments.plain.golden.jsonl", nil, files},
+		{"events.v15.watches.golden.jsonl", fakeSealer{}, watches},
+		{"events.v15.inline.golden.jsonl", fakeSealer{}, inline},
+		{"events.v15.revocations.golden.jsonl", nil, access},
+		{"events.v15.provenance.golden.jsonl", fakeSealer{}, provenance},
+		{"events.v15.imagesize.golden.jsonl", fakeSealer{}, sizes},
+		{"events.v15.dataprotection.golden.jsonl", fakeSealer{}, holds},
+		{"events.v15.dataprotection.plain.golden.jsonl", nil, holds},
+		{"events.v15.layout.golden.jsonl", fakeSealer{}, layout},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -205,7 +207,7 @@ func TestPersistedFormatIsStable(t *testing.T) {
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
 // text), 4 (comments), 5 (sibling order), 6 (block kinds), 7 (labels), 8
-// (attachments), 9 (watches), 10 (inline comments), 11 (revocations), 12 (provenance), 13 (image sizes) — still open and rebuild the same state and history as today's log
+// (attachments), 9 (watches), 10 (inline comments), 11 (revocations), 12 (provenance), 13 (image sizes), 14 (data protection) — still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -306,6 +308,22 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v13.revocations.golden.jsonl"), nil, revocationLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v13.provenance.golden.jsonl"), fakeSealer{}, provenanceLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v13.imagesize.golden.jsonl"), fakeSealer{}, imageSizeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.labels.golden.jsonl"), fakeSealer{}, labelLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.attachments.golden.jsonl"), fakeSealer{}, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.attachments.plain.golden.jsonl"), nil, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.watches.golden.jsonl"), fakeSealer{}, watchLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.inline.golden.jsonl"), fakeSealer{}, inlineCommentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.revocations.golden.jsonl"), nil, revocationLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.provenance.golden.jsonl"), fakeSealer{}, provenanceLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.imagesize.golden.jsonl"), fakeSealer{}, imageSizeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.dataprotection.golden.jsonl"), fakeSealer{}, holdLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v14.dataprotection.plain.golden.jsonl"), nil, holdLog(t))
 }
 
 // provenanceLog copies a file to another item, makes a new version of the
@@ -361,6 +379,25 @@ func holdLog(t *testing.T) []Event {
 	noErr(t, s.As("pat").ReleaseHold(b.ID, HoldRestricted, ""))
 	noErr(t, s.Trash("anna", a.ID))
 	noErr(t, s.Purge("anna", a.ID))
+	return s.Log()
+}
+
+// layoutLog writes aligned text and images, a divider and the marks
+// underline, strike and highlight, so the golden file pins them (ADR-0059).
+func layoutLog(t *testing.T) []Event {
+	s := setup(t)
+	page := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "page", Title: "Layout"}))
+	const plan = "0123456789abcdef0123456789abcdef"
+	if _, err := s.AddAttachment("anna", page.ID, Attachment{ID: plan, Name: "plan.png", Type: "image/png", Size: 3, SHA256: strings.Repeat("ab", 32)}); err != nil {
+		t.Fatal(err)
+	}
+	noErr(t, s.CommitBody("anna", page.ID, Doc{Blocks: []Block{
+		{Kind: Heading, Level: 1, Text: "Centred", Align: "center"},
+		{Kind: Paragraph, Text: "under struck marked", Align: "justify", Marks: []Mark{
+			{Type: MarkUnderline, Start: 0, End: 5}, {Type: MarkStrike, Start: 6, End: 12}, {Type: MarkHighlight, Start: 13, End: 19}}},
+		{Kind: Divider},
+		{Kind: Image, Ref: plan, Text: "Plan", Width: 40, Align: "right"},
+	}}))
 	return s.Log()
 }
 

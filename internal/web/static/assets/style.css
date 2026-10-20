@@ -582,3 +582,31 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .regulation h3 { margin: 0 0 6px; }
 .regulation-form { display: flex; flex-direction: column; gap: 6px; }
 #governance tr.held td { background: #fff8ec; }
+
+/* The fuller editor (ADR-0059): grouped toolbar, pressed states,
+   alignment, divider, highlight and floated pictures. */
+.pm-toolbar .pm-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--border); }
+.pm-toolbar .pm-group:last-of-type { border-right: 0; }
+.pm-toolbar button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.pm-toolbar button:disabled { opacity: .4; }
+.pm-toolbar mark { padding: 0 2px; }
+.pm-ico { display: inline-flex; flex-direction: column; gap: 2px; width: 14px; vertical-align: middle; }
+.pm-ico i { display: block; height: 2px; background: currentColor; border-radius: 1px; }
+.pm-ico i:nth-child(odd) { width: 100%; }
+.pm-ico i:nth-child(even) { width: 64%; }
+.pm-ico-center { align-items: center; }
+.pm-ico-right { align-items: flex-end; }
+.pm-ico-justify i:nth-child(even) { width: 100%; }
+.pm-align-center { text-align: center; }
+.pm-align-right { text-align: right; }
+.pm-align-justify { text-align: justify; hyphens: auto; }
+.pm-editor hr.pm-divider { border: 0; border-top: 1px solid var(--border-strong); margin: 14px 0; }
+.pm-editor hr.pm-divider.ProseMirror-selectednode { border-top-color: var(--accent); }
+.pm-editor mark { background: #fff1a8; color: inherit; padding: 0 1px; border-radius: 2px; }
+@media (prefers-color-scheme: dark) { .pm-editor mark { background: #6b5a00; } }
+.pm-editor .ProseMirror::after { content: ""; display: block; clear: both; }
+.pm-image.pm-image-left { float: left; margin: 4px 18px 8px 0; text-align: left; }
+.pm-image.pm-image-right { float: right; margin: 4px 0 8px 18px; text-align: right; }
+.pm-image.pm-image-left figcaption, .pm-image.pm-image-right figcaption { text-align: inherit; }
+.pm-image-align { font-size: 13px; padding: 2px 4px; }
+@media (max-width: 640px) { .pm-image.pm-image-left, .pm-image.pm-image-right { float: none; width: auto !important; margin: 10px 0; } }

@@ -508,6 +508,24 @@ function check(cond, msg) {
     const kept = await ratio();
     check(Math.abs(kept - 0.3) < 0.03, "the dragged size is kept: " + kept);
 
+    step("editor: text centred and underlined, a divider, a picture floated right; all kept after a reload");
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .ProseMirror");
+    const firstText = page.locator("#body .ProseMirror > p").first();
+    await firstText.click({ clickCount: 3 });
+    await page.click("#body .pm-toolbar button[aria-label^='Underline']");
+    await page.click("#body .pm-toolbar button[aria-label^='Centre']");
+    await page.waitForSelector("#body .pm-toolbar button[aria-label^='Centre'][aria-pressed=true]");
+    await page.selectOption("#body .pm-toolbar select:has(option[value=divider])", "divider");
+    await page.locator("#body .pm-image:has(.pm-redraw) select.pm-image-align").selectOption("right");
+    await page.waitForSelector("#body .pm-image.pm-image-right");
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    await page.reload();
+    await page.waitForSelector("#body.reading p.pm-align-center u");
+    await page.waitForSelector("#body.reading hr.pm-divider");
+    await page.waitForSelector("#body.reading .pm-image.pm-image-right");
+
     step("album: every readable picture in one place; one is copied into another page and stays editable as a drawing");
     await page.goto(base + "/#/album");
     await page.waitForSelector("#album .album-card img");
