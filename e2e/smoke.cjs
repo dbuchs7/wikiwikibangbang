@@ -459,6 +459,34 @@ function check(cond, msg) {
     check(await page.locator("#attachments li:has-text('.drawing.png')").count() === 1, "the drawing is a file of the page");
     check(await page.locator("#body.reading .pm-redraw").count() === 0, "a drawing is edited only while editing");
 
+    step("image size: a picture is set to half the column, then dragged smaller, and keeps its size after a reload");
+    const ratio = () => page.evaluate(() => {
+      const fig = [...document.querySelectorAll("#body .pm-image")].find((f) => f.querySelector("img").naturalWidth > 100);
+      return fig.querySelector(".pm-image-frame").getBoundingClientRect().width / fig.getBoundingClientRect().width;
+    });
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .pm-redraw");
+    const drawingFigure = page.locator("#body .pm-image:has(.pm-redraw)");
+    await drawingFigure.locator("select.pm-image-size").selectOption("50");
+    await page.waitForFunction(() => document.querySelector("#body .pm-image:has(.pm-redraw) select.pm-image-size").value === "50");
+    const half = await ratio();
+    check(Math.abs(half - 0.5) < 0.03, "the picture takes half the column: " + half);
+    await drawingFigure.hover();
+    const grip = await drawingFigure.locator(".pm-resize").boundingBox();
+    const columnWidth = (await drawingFigure.boundingBox()).width;
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2 - columnWidth * 0.2, grip.y + grip.height / 2, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForFunction(() => document.querySelector("#body .pm-image:has(.pm-redraw) select.pm-image-size").value === "30");
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    await page.reload();
+    await page.waitForSelector("#body.reading .pm-image img");
+    await page.waitForFunction(() => [...document.querySelectorAll("#body .pm-image img")].every((i) => i.complete));
+    const kept = await ratio();
+    check(Math.abs(kept - 0.3) < 0.03, "the dragged size is kept: " + kept);
+
     step("album: every readable picture in one place; one is copied into another page and stays editable as a drawing");
     await page.goto(base + "/#/album");
     await page.waitForSelector("#album .album-card img");

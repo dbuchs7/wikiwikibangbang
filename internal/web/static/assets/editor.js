@@ -43,7 +43,8 @@ export const schema = new Schema({
     toc: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-toc" }] },
     children: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-children" }] },
     // An image attachment of the item (ADR-0045), with a plain caption.
-    image: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-image" }, ["figcaption", n.attrs.text]] },
+    // width is percent of the column, 0 for the picture's own size (ADR-0056).
+    image: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" }, width: { default: 0 } }, toDOM: (n) => ["figure", { class: "pm-image" }, ["figcaption", n.attrs.text]] },
     // Content an importer could not convert (ADR-0023), kept as it came and
     // shown as text; it cannot be created in the editor.
     unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, attrs: bid, toDOM: () => ["pre", { class: "pm-unsupported", title: t("editor.unsupported") }, 0] },
@@ -105,7 +106,7 @@ export function nodeFromBlock(b, embeds = []) {
   const id = b.id ?? null;
   if (b.kind === "table") return schema.nodes.table.create({ bid: id, text: b.text || "" });
   if (b.kind === "toc" || b.kind === "children") return schema.nodes[b.kind].create({ bid: id });
-  if (b.kind === "image") return schema.nodes.image.create({ bid: id, ref: b.ref, text: b.text || "" });
+  if (b.kind === "image") return schema.nodes.image.create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0 });
   if (b.kind === "embed") {
     const v = embeds.find((e) => e.ref === b.ref);
     return schema.nodes.embed.create({
@@ -161,7 +162,7 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
   if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
   if (node.type === schema.nodes.toc || node.type === schema.nodes.children) return { kind: node.type.name };
-  if (node.type === schema.nodes.image) return { kind: "image", text: node.attrs.text, ref: node.attrs.ref };
+  if (node.type === schema.nodes.image) return node.attrs.width ? { kind: "image", text: node.attrs.text, ref: node.attrs.ref, width: node.attrs.width } : { kind: "image", text: node.attrs.text, ref: node.attrs.ref };
   let text = "";
   const marks = [];
   const mentions = new Set((node.attrs && node.attrs.mentions) || []);
@@ -338,13 +339,52 @@ function childrenView(node, childPages) {
   return { dom, ...own, update: (n) => n.type === node.type };
 }
 
-// imageView shows an image attachment; an editor edits its caption, and a
-// drawing (ADR-0053) in the drawing editor.
+// imageSizes are the widths offered besides dragging, in percent of the
+// column; 0 is the picture's own size (ADR-0056).
+const imageSizes = [0, 25, 50, 75, 100];
+
+// imageView shows an image attachment; an editor edits its caption and
+// its width, and a drawing (ADR-0053) in the drawing editor.
 function imageView(node, view, getPos, files) {
   const img = h("img", { src: files ? files.url(node.attrs.ref) : "", alt: node.attrs.text, loading: "lazy" });
+  const handle = h("span", { class: "pm-resize", title: t("editor.imageResize"), "aria-hidden": "true" });
+  const frame = h("span", { class: "pm-image-frame" }, img, handle);
   const caption = h("figcaption");
-  const dom = h("figure", { class: "pm-image", contenteditable: "false" }, img, caption);
+  const dom = h("figure", { class: "pm-image", contenteditable: "false" }, frame, caption);
   let shown = null;
+  // The width is set through the style object, which the content security
+  // policy allows (unlike a style attribute). A width in percent applies to
+  // the frame, which is a share of the column; the picture fills it.
+  const showWidth = (w) => {
+    frame.style.width = w ? `${w}%` : "";
+    img.style.width = w ? "100%" : "";
+  };
+  const setWidth = (w) => {
+    const pos = getPos();
+    if (pos === undefined || dom.classList.contains("pm-locked")) return showWidth(node.attrs.width);
+    view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, width: w }));
+  };
+  // Dragging the corner sets the width in steps of 5 percent of the column.
+  handle.addEventListener("pointerdown", (e) => {
+    if (!view.editable) return;
+    e.preventDefault();
+    handle.setPointerCapture(e.pointerId);
+    const column = dom.getBoundingClientRect().width;
+    const start = frame.getBoundingClientRect().width;
+    const x0 = e.clientX;
+    let w = node.attrs.width;
+    const move = (ev) => {
+      w = Math.min(100, Math.max(10, Math.round(((start + ev.clientX - x0) / column) * 20) * 5));
+      showWidth(w);
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      if (w !== node.attrs.width) setWidth(w);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+  });
   // A drawing is edited from its picture and saved as a new attachment; the
   // block then points at it. The former picture stays, as earlier versions
   // of the body show it (ADR-0043).
@@ -382,12 +422,17 @@ function imageView(node, view, getPos, files) {
     }
   };
   const render = () => {
-    const key = node.attrs.ref + node.attrs.text + view.editable;
+    const key = node.attrs.ref + node.attrs.text + node.attrs.width + view.editable;
     if (shown === key) return;
     shown = key;
     img.src = files ? files.url(node.attrs.ref) : "";
     img.alt = node.attrs.text;
+    showWidth(node.attrs.width);
+    dom.classList.toggle("pm-sizable", view.editable);
     if (!view.editable) return caption.replaceChildren(node.attrs.text);
+    const size = h("select", { class: "pm-image-size", "aria-label": t("editor.imageSize"), onchange: (e) => setWidth(Number(e.target.value)) },
+      [...new Set([...imageSizes, node.attrs.width])].sort((a, b) => a - b).map((w) =>
+        h("option", { value: String(w), text: w ? `${w} %` : t("editor.imageOwnSize"), selected: w === node.attrs.width })));
     const input = h("input", { value: node.attrs.text, placeholder: t("editor.caption"), "aria-label": t("editor.caption") });
     input.addEventListener("change", () => {
       const pos = getPos();
@@ -398,7 +443,7 @@ function imageView(node, view, getPos, files) {
     const status = h("span", { class: "error", role: "status" });
     const origin = files?.origin?.(node.attrs.ref);
     // replaceChildren takes nodes and strings only: no arrays, no null.
-    caption.replaceChildren(...[input,
+    caption.replaceChildren(...[input, " ", size,
       ...(files?.isDrawing?.(node.attrs.ref) ? [" ", h("button", { type: "button", class: "link pm-redraw", text: t("draw.edit"), onclick: () => redraw(status) })] : []),
       ...(origin?.newer ? [" ", h("button", { type: "button", class: "link pm-take-over", text: t("att.takeOver", { key: origin.item.key }), onclick: () => takeOver(status, origin) })] : []),
       status]);

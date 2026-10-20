@@ -42,7 +42,9 @@ import (
 //   - 12: an attachment may carry Source, the file it was copied from or is
 //     a new version of, sealed with the rest of it (ADR-0055). Versions 1
 //     to 11 are still read.
-const CodecVersion = 12
+//   - 13: an image block may carry Width, in percent of the text column
+//     (ADR-0056). Versions 1 to 12 are still read.
+const CodecVersion = 13
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

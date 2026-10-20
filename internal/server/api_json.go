@@ -92,10 +92,11 @@ type blockJSON struct {
 	Ref      item.ID        `json:"ref,omitempty"`
 	Checked  bool           `json:"checked,omitempty"`
 	Tone     string         `json:"tone,omitempty"`
+	Width    int            `json:"width,omitempty"`
 }
 
 func toBlockJSON(b item.Block) blockJSON {
-	j := blockJSON{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone}
+	j := blockJSON{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width}
 	for _, m := range b.Marks {
 		j.Marks = append(j.Marks, markJSON{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})
 	}
@@ -120,7 +121,7 @@ func toDoc(blocks []blockJSON, kept func(text string) bool) (item.Doc, error) {
 		default:
 			return d, badInput("block %d: kind must be paragraph, heading, bullet, ordered, quote, code, task, panel, table, toc, children, image or embed", i+1)
 		}
-		blk := item.Block{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone}
+		blk := item.Block{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width}
 		for _, m := range b.Marks {
 			blk.Marks = append(blk.Marks, item.Mark{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})
 			if m.Type == item.MarkMention && m.Ref != "" && !slices.Contains(blk.Mentions, m.Ref) {

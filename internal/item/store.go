@@ -1080,6 +1080,9 @@ func checkBlock(b Block, self ID) error {
 	if (b.Kind == Panel) != slices.Contains(PanelTones, b.Tone) {
 		return invalid("tone %q: a panel has one of %s, other blocks none", b.Tone, strings.Join(PanelTones, ", "))
 	}
+	if b.Width != 0 && (b.Kind != Image || b.Width < 10 || b.Width > 100) {
+		return invalid("width %d: only images have a width, 10 to 100 percent", b.Width)
+	}
 	if b.Kind != Heading && b.Level != 0 || b.Level < 0 || b.Level > 3 {
 		return invalid("level %d: only headings have a level, 1 to 3", b.Level)
 	}
