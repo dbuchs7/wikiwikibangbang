@@ -51,7 +51,9 @@ import (
 //     still read.
 //   - 16: the kinds KanbanSet and KanbanRemoved with the field kanban
 //     (ADR-0060). Versions 1 to 15 are still read.
-const CodecVersion = 16
+//   - 17: the kinds SpaceTrashed, SpaceRestored and SpacePurged (ADR-0069).
+//     Versions 1 to 16 are still read.
+const CodecVersion = 17
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

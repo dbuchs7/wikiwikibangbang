@@ -55,7 +55,7 @@ func (s *Store) Upsert(actor string, u Upsert) (Item, bool, error) {
 	if u.Origin.System == "" || u.Origin.Instance == "" || u.Origin.ExternalID == "" {
 		return Item{}, false, invalid("an imported item needs system, instance and external ID")
 	}
-	if _, ok := s.spaces[u.Space]; !ok {
+	if !s.HasSpace(u.Space) {
 		return Item{}, false, notFound("space %q", u.Space)
 	}
 	td, ok := s.latest(u.Type)
@@ -149,7 +149,7 @@ func (s *Store) Release(actor, managed, space string) error {
 	if managed == "" {
 		return invalid("release needs the sync's tag")
 	}
-	if _, ok := s.spaces[space]; !ok {
+	if !s.HasSpace(space) {
 		return notFound("space %q", space)
 	}
 	var members []ID

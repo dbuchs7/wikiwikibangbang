@@ -278,6 +278,12 @@ const (
 	// it (ADR-0060).
 	KanbanSet     EventKind = "KanbanSet"
 	KanbanRemoved EventKind = "KanbanRemoved"
+	// SpaceTrashed puts a space with everything in it out of sight,
+	// SpaceRestored brings it back, SpacePurged turns its items into
+	// tombstones and keeps only its key (ADR-0069).
+	SpaceTrashed  EventKind = "SpaceTrashed"
+	SpaceRestored EventKind = "SpaceRestored"
+	SpacePurged   EventKind = "SpacePurged"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -295,7 +301,7 @@ type Event struct {
 	Batch int
 
 	TypeDef     *TypeDef // TypeDefined
-	Space       string   // SpaceCreated, ItemCreated, ItemMoved
+	Space       string   // SpaceCreated, ItemCreated, ItemMoved, SpaceTrashed, SpaceRestored, SpacePurged
 	SpaceName   string   // SpaceCreated
 	TypeName    string   // ItemCreated
 	TypeVersion int      // ItemCreated
@@ -312,7 +318,7 @@ type Event struct {
 	From, To   string // Transitioned
 	Body       *Doc   // BodyCommitted
 	Relation   *Relation
-	Members    []ID // ItemTrashed, ItemRestored, ItemPurged: every item affected
+	Members    []ID // ItemTrashed, ItemRestored, ItemPurged, SpacePurged: every item affected
 
 	Group       string       // GroupMemberAdded, GroupMemberRemoved
 	Principal   string       // GroupMemberAdded, RoleGranted, SystemRoleGranted, and their revocations

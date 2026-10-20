@@ -61,6 +61,9 @@ type Journal interface {
 type space struct {
 	name    string
 	nextKey int
+	// state is empty for a live space, else spaceTrashed or spacePurged
+	// (ADR-0069).
+	state string
 }
 
 // Option configures a Store.
@@ -181,7 +184,11 @@ func (s *Store) CreateSpace(actor, key, name string) error {
 	if !spaceKeyRE.MatchString(key) {
 		return invalid("space key %q must be upper-case letters and digits", key)
 	}
-	if _, ok := s.spaces[key]; ok {
+	if sp, ok := s.spaces[key]; ok {
+		if sp.state != "" {
+			// Its items keep their keys as tombstones or in the trash (D7).
+			return invalid("space key %q belonged to a deleted space and is not used again", key)
+		}
 		return invalid("space %q exists", key)
 	}
 	return s.record(actor, Event{Kind: SpaceCreated, Space: key, SpaceName: name})
@@ -259,7 +266,7 @@ func (s *Store) Create(actor string, n NewItem) (Item, error) {
 }
 
 func (s *Store) prepareCreate(n NewItem) (Event, error) {
-	if _, ok := s.spaces[n.Space]; !ok {
+	if !s.HasSpace(n.Space) {
 		return Event{}, notFound("space %q", n.Space)
 	}
 	td, ok := s.latest(n.Type)
@@ -487,7 +494,7 @@ func (s *Store) checkMove(id ID, toSpace string, newParent ID) error {
 	if _, err := s.live(id); err != nil {
 		return err
 	}
-	if _, ok := s.spaces[toSpace]; !ok {
+	if !s.HasSpace(toSpace) {
 		return notFound("space %q", toSpace)
 	}
 	if newParent != "" {
@@ -796,6 +803,8 @@ func (s *Store) apply(e Event) {
 		s.applyHold(e, touch)
 	case KanbanSet, KanbanRemoved:
 		s.applyKanban(e)
+	case SpaceTrashed, SpaceRestored, SpacePurged:
+		s.applySpace(e, touch)
 	case Watched, Unwatched:
 		s.applyWatch(e)
 	case RoleRevoked, GroupMemberRemoved, SystemRoleRevoked:
@@ -931,11 +940,13 @@ func (s *Store) Seq() int {
 	return s.log[len(s.log)-1].Seq
 }
 
-// Spaces lists all spaces, ordered by key.
+// Spaces lists the live spaces, ordered by key.
 func (s *Store) Spaces() []SpaceInfo {
 	out := make([]SpaceInfo, 0, len(s.spaces))
 	for k, sp := range s.spaces {
-		out = append(out, SpaceInfo{Key: k, Name: sp.name})
+		if sp.state == "" {
+			out = append(out, SpaceInfo{Key: k, Name: sp.name})
+		}
 	}
 	slices.SortFunc(out, func(a, b SpaceInfo) int { return strings.Compare(a.Key, b.Key) })
 	return out
@@ -961,8 +972,9 @@ func (s *Store) TypeAt(name string, version int) (TypeDef, bool) {
 	return v[version-1], true
 }
 
-// HasSpace reports whether a space exists.
-func (s *Store) HasSpace(key string) bool { _, ok := s.spaces[key]; return ok }
+// HasSpace reports whether a live space exists; a space in the trash or
+// deleted does not (ADR-0069).
+func (s *Store) HasSpace(key string) bool { sp, ok := s.spaces[key]; return ok && sp.state == "" }
 
 // Type returns the latest version of a type, or the zero TypeDef.
 func (s *Store) Type(name string) TypeDef {
