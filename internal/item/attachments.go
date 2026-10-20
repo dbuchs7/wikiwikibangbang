@@ -18,10 +18,21 @@ type Attachment struct {
 	Type   string // the media type detected from the content
 	Size   int64
 	SHA256 string
+	// Source names the file this one was made from (ADR-0055): a copy of
+	// another item's file, or a new version of a file of the same item. It
+	// is content, sealed with the rest.
+	Source *Source `json:",omitempty"`
 	// Author and Created come from the event that added it.
 	Author  string `json:"-"`
 	Created int64  `json:"-"` // Unix seconds
 	Deleted bool   `json:"-"`
+}
+
+// Source is where a file came from: a file of the same item for a new
+// version (a drawing edited again), of another item for a copy.
+type Source struct {
+	Item       ID
+	Attachment ID
 }
 
 var (
@@ -76,7 +87,10 @@ func (s *Store) AddAttachment(actor string, id ID, a Attachment) (Attachment, er
 	if _, dup := it.attachment(a.ID); dup {
 		return Attachment{}, invalid("attachment %s exists", a.ID)
 	}
-	rec := Attachment{ID: a.ID, Name: a.Name, Type: a.Type, Size: a.Size, SHA256: a.SHA256}
+	if a.Source != nil && (!ValidItemID(string(a.Source.Item)) || !ValidAttachmentID(string(a.Source.Attachment))) {
+		return Attachment{}, invalid("attachment %s: source %v", a.ID, *a.Source)
+	}
+	rec := Attachment{ID: a.ID, Name: a.Name, Type: a.Type, Size: a.Size, SHA256: a.SHA256, Source: a.Source}
 	if err := s.record(actor, Event{Kind: AttachmentAdded, Item: id, Attachment: &rec}); err != nil {
 		return Attachment{}, err
 	}
@@ -110,7 +124,9 @@ func (s *Store) applyAttachment(e Event, touch func(...ID)) {
 		it.Attachments = append(it.Attachments, a)
 	case AttachmentDeleted:
 		if a, ok := it.attachment(e.Attachment.ID); ok {
-			*a = Attachment{ID: a.ID, Author: a.Author, Created: a.Created, Deleted: true}
+			// The source stays, so later versions still trace back through
+			// a deleted one (ADR-0055); it names files, not their content.
+			*a = Attachment{ID: a.ID, Source: a.Source, Author: a.Author, Created: a.Created, Deleted: true}
 		}
 	}
 }
@@ -169,11 +185,94 @@ func (x *Session) CanAttach(id ID) error {
 }
 
 // AddAttachment records a stored file on an item the principal may edit.
+// A source must be a file the principal may read; a copy from another item
+// must have its content, so a mark of origin cannot be made up (ADR-0055).
 func (x *Session) AddAttachment(id ID, a Attachment) (Attachment, error) {
 	if err := x.CanAttach(id); err != nil {
 		return Attachment{}, err
 	}
+	if a.Source != nil {
+		src, err := x.readable(a.Source.Item)
+		if err != nil {
+			return Attachment{}, err
+		}
+		from, ok := src.attachment(a.Source.Attachment)
+		if !ok || (a.Source.Item != id && from.Deleted) {
+			return Attachment{}, notFound("attachment %s of item %s", a.Source.Attachment, a.Source.Item)
+		}
+		if a.Source.Item != id && from.SHA256 != a.SHA256 {
+			return Attachment{}, invalid("a copy of %s must have its content", a.Source.Attachment)
+		}
+	}
 	return x.s.AddAttachment(x.who, id, a)
+}
+
+// FileOrigin is where a copied file came from, as its reader may know it.
+type FileOrigin struct {
+	// Readable is false when the source item is gone or not readable by
+	// the principal; nothing else is told then.
+	Readable bool
+	Item     Item
+	// Latest is the newest version of the source file in its item, when it
+	// is newer than the one copied (a drawing edited since).
+	Latest *Attachment
+}
+
+// FileOrigin returns where a copied file of a readable item came from, and
+// whether its source has a newer version. ok is false for a file that is
+// no copy.
+func (x *Session) FileOrigin(id, attachment ID) (o FileOrigin, ok bool, err error) {
+	it, err := x.readable(id)
+	if err != nil {
+		return FileOrigin{}, false, err
+	}
+	a, found := it.attachment(attachment)
+	if !found || a.Deleted {
+		return FileOrigin{}, false, notFound("attachment %s of item %s", attachment, id)
+	}
+	// A version made in the same item leads back to the copy it began as.
+	for seen := 0; a.Source != nil && a.Source.Item == id && seen < len(it.Attachments); seen++ {
+		prev, found := it.attachment(a.Source.Attachment)
+		if !found {
+			break
+		}
+		a = prev
+	}
+	if a.Source == nil || a.Source.Item == id {
+		return FileOrigin{}, false, nil
+	}
+	src, err := x.readable(a.Source.Item)
+	if err != nil || src.Presence != Live {
+		return FileOrigin{}, true, nil
+	}
+	o = FileOrigin{Readable: true, Item: Item{ID: src.ID, Key: src.Key, Title: src.Title, Space: src.Space, Type: src.Type}}
+	if latest := latestVersion(src, a.Source.Attachment); latest != nil && latest.ID != a.Source.Attachment {
+		l := *latest
+		o.Latest = &l
+	}
+	return o, true, nil
+}
+
+// latestVersion follows the versions of a file within its item and returns
+// the newest that is not deleted, or nil.
+func latestVersion(it *Item, from ID) *Attachment {
+	family := map[ID]bool{from: true}
+	for grew := true; grew; {
+		grew = false
+		for _, a := range it.Attachments {
+			if !family[a.ID] && a.Source != nil && a.Source.Item == it.ID && family[a.Source.Attachment] {
+				family[a.ID], grew = true, true
+			}
+		}
+	}
+	var latest *Attachment
+	for i := range it.Attachments {
+		a := &it.Attachments[i]
+		if family[a.ID] && !a.Deleted && (latest == nil || a.Created >= latest.Created) {
+			latest = a
+		}
+	}
+	return latest
 }
 
 // DeleteAttachment removes a file from an item the principal may edit.

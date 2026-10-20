@@ -155,3 +155,49 @@ func TestAlbumListsReadableImages(t *testing.T) {
 		w.vera.expect("GET", "/api/album"+bad, "", http.StatusBadRequest)
 	}
 }
+
+// TestCopiesThroughTheAPI: an upload names its source; the files of an
+// item say where copies came from and whether the original was changed
+// since, as far as the reader may know (ADR-0055).
+func TestCopiesThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{7}, 100)...)
+	mk := func(title string) (string, string) {
+		it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"`+title+`","properties":{"priority":"low"}}`, http.StatusCreated)
+		return field(it, "item", "key").(string), field(it, "item", "id").(string)
+	}
+	planKey, planID := mk("Plans")
+	_, runID := mk("Runbook")
+	up := func(itemID, query string, content []byte, status int) map[string]any {
+		r := w.bert.upload("/api/items/"+itemID+"/attachments?name=plan.drawing.png"+query, "application/octet-stream", content)
+		if r.Code != status {
+			t.Fatalf("upload %s: %d %s", query, r.Code, r.Body)
+		}
+		var out map[string]any
+		_ = json.Unmarshal(r.Body.Bytes(), &out)
+		return out
+	}
+	v1 := field(up(planID, "", png, http.StatusCreated), "attachment", "id").(string)
+	from := "&sourceItem=" + planID + "&sourceAttachment="
+	up(runID, from+v1, append(png, 1), http.StatusBadRequest) // other content is no copy
+	c := up(runID, from+v1, png, http.StatusCreated)
+	if field(c, "attachment", "origin", "item", "key") != planKey {
+		t.Fatalf("copy %v", c)
+	}
+	origin := func(c *client) map[string]any {
+		list := field(c.expect("GET", "/api/items/"+runID+"/attachments", "", http.StatusOK), "attachments").([]any)
+		o, _ := list[0].(map[string]any)["origin"].(map[string]any)
+		return o
+	}
+	if o := origin(w.vera); o["readable"] != true || o["newer"] != nil {
+		t.Fatalf("a fresh copy: %v", o)
+	}
+	v2 := field(up(planID, from+v1, append(png, 2), http.StatusCreated), "attachment", "id").(string) // drawn again
+	if o := origin(w.vera); o["newer"] == nil || o["newer"].(map[string]any)["id"] != v2 {
+		t.Fatalf("a newer original: %v", o)
+	}
+	w.bert.expect("PUT", "/api/items/"+planID+"/restriction", `{"read":["`+w.ids["bert"]+`"],"edit":[]}`, http.StatusOK)
+	if o := origin(w.vera); o["readable"] != false || o["item"] != nil || o["newer"] != nil {
+		t.Fatalf("an unreadable source tells: %v", o)
+	}
+}

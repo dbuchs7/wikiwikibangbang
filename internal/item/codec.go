@@ -39,7 +39,10 @@ import (
 //     9 are still read.
 //   - 11: the kinds RoleRevoked, GroupMemberRemoved and SystemRoleRevoked
 //     (ADR-0048). Versions 1 to 10 are still read.
-const CodecVersion = 11
+//   - 12: an attachment may carry Source, the file it was copied from or is
+//     a new version of, sealed with the rest of it (ADR-0055). Versions 1
+//     to 11 are still read.
+const CodecVersion = 12
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

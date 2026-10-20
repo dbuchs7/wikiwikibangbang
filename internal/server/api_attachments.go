@@ -20,7 +20,7 @@ import (
 func attachmentRoutes(h itemHandlers) []Route {
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/attachments", Summary: "List the item's files", Handler: http.HandlerFunc(h.listAttachments)},
-		{Method: http.MethodPost, Pattern: "/api/items/{ref}/attachments", Summary: "Upload a file: the body is the content (application/octet-stream), name the file name", Handler: http.HandlerFunc(h.uploadAttachment)},
+		{Method: http.MethodPost, Pattern: "/api/items/{ref}/attachments", Summary: "Upload a file: the body is the content (application/octet-stream), name the file name; sourceItem and sourceAttachment name the file it is a copy or a new version of", Handler: http.HandlerFunc(h.uploadAttachment)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/attachments/{id}", Summary: "Download a file; images show inline, everything else downloads", Handler: http.HandlerFunc(h.downloadAttachment)},
 		{Method: http.MethodDelete, Pattern: "/api/items/{ref}/attachments/{id}", Summary: "Delete a file; its content is destroyed", Handler: http.HandlerFunc(h.deleteAttachment)},
 		{Method: http.MethodGet, Pattern: "/api/album", Summary: "The album: images and drawings of every item one may read, newest first; space, q (name, key or title), kind (image or drawing), offset and limit narrow it", Handler: http.HandlerFunc(h.album)},
@@ -107,6 +107,44 @@ type attachmentJSON struct {
 	// Inline is whether the file shows in the page (an image of a safe
 	// format), rather than only downloads.
 	Inline bool `json:"inline"`
+	// Origin says where a copy came from (ADR-0055), as far as the reader
+	// may know; absent for a file that is no copy.
+	Origin *copyOriginJSON `json:"origin,omitempty"`
+}
+
+type copyOriginJSON struct {
+	// Readable is false when the source is gone or not the reader's to
+	// see; nothing else is told then.
+	Readable bool `json:"readable"`
+	Item     *struct {
+		ID    item.ID `json:"id"`
+		Key   string  `json:"key"`
+		Title string  `json:"title"`
+	} `json:"item,omitempty"`
+	// Newer is the newest version of the source, when it is newer than the
+	// copy (a drawing edited since).
+	Newer *attachmentJSON `json:"newer,omitempty"`
+}
+
+// withOrigin adds where a copy came from.
+func withOrigin(x *item.Session, id item.ID, a attachmentJSON) attachmentJSON {
+	o, ok, err := x.FileOrigin(id, a.ID)
+	if err != nil || !ok {
+		return a
+	}
+	a.Origin = &copyOriginJSON{Readable: o.Readable}
+	if o.Readable {
+		a.Origin.Item = &struct {
+			ID    item.ID `json:"id"`
+			Key   string  `json:"key"`
+			Title string  `json:"title"`
+		}{o.Item.ID, o.Item.Key, o.Item.Title}
+		if o.Latest != nil {
+			n := toAttachmentJSON(*o.Latest)
+			a.Origin.Newer = &n
+		}
+	}
+	return a
 }
 
 func toAttachmentJSON(a item.Attachment) attachmentJSON {
@@ -127,7 +165,7 @@ func (h itemHandlers) listAttachments(w http.ResponseWriter, r *http.Request) {
 		list, err := x.Attachments(it.ID)
 		out := []attachmentJSON{}
 		for _, a := range list {
-			out = append(out, toAttachmentJSON(a))
+			out = append(out, withOrigin(x, it.ID, toAttachmentJSON(a)))
 		}
 		return map[string]any{"attachments": out}, err
 	})
@@ -168,13 +206,16 @@ func (h itemHandlers) uploadAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Name = name
+	if q := r.URL.Query(); q.Get("sourceItem") != "" || q.Get("sourceAttachment") != "" {
+		a.Source = &item.Source{Item: item.ID(q.Get("sourceItem")), Attachment: item.ID(q.Get("sourceAttachment"))}
+	}
 	h.write(w, r, http.StatusCreated, func(x *item.Session, _ *item.Store) (any, error) {
 		got, err := x.AddAttachment(id, a)
 		if err != nil {
 			h.d.DB.DiscardAttachment(id, a.ID)
 			return nil, err
 		}
-		return map[string]attachmentJSON{"attachment": toAttachmentJSON(got)}, nil
+		return map[string]attachmentJSON{"attachment": withOrigin(x, id, toAttachmentJSON(got))}, nil
 	})
 }
 

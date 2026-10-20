@@ -170,16 +170,20 @@ const childPagesOf = (item) => async () =>
 // filesOf serves and stores an item's attachments for its body (ADR-0045),
 // and knows which of them are drawings (ADR-0053).
 const filesOf = (item, attachments = []) => {
-  const drawings = new Set(attachments.filter((a) => isDrawing(a.name)).map((a) => a.id));
+  const known = new Map(attachments.map((a) => [a.id, a]));
   return {
     item: item.id,
     url: (id) => `/api/items/${item.id}/attachments/${id}`,
-    upload: async (file) => {
-      const a = await upload("/api/items/" + item.id, file);
-      if (isDrawing(a.name)) drawings.add(a.id);
+    // source names the file a copy or new version comes from (ADR-0055).
+    upload: async (file, source) => {
+      const a = await upload("/api/items/" + item.id, file, source);
+      known.set(a.id, a);
       return a;
     },
-    isDrawing: (id) => drawings.has(id),
+    isDrawing: (id) => isDrawing(known.get(id)?.name),
+    // origin says where a copy came from, and whether its original is
+    // newer: {readable, item: {id, key, title}, newer}.
+    origin: (id) => known.get(id)?.origin || null,
   };
 };
 
@@ -204,6 +208,10 @@ function attachmentsSection(path, files, live) {
   const row = (a) => h("li", { class: "attachment" },
     h("a", { href: `${path}/attachments/${a.id}`, text: a.name, download: a.inline ? null : a.name, target: a.inline ? "_blank" : null, rel: "noopener" }),
     h("span", { class: "muted", text: ` · ${sizeText(a.size)} · ${person(a.author)} · ${when(a.created)}` }),
+    a.origin ? h("span", { class: "att-origin" }, " · ", a.origin.readable
+      ? [t("att.copyOf"), " ", link("#/item/" + encodeURIComponent(a.origin.item.key), a.origin.item.key)]
+      : t("att.copyOfUnknown"),
+    a.origin.newer ? [" ", h("span", { class: "chip", text: t("att.originChanged") })] : null) : null,
     live ? h("button", { class: "link", text: t("common.delete"), onclick: () => confirm(t("att.deleteConfirm", { name: a.name }))
       && action(() => del(`${path}/attachments/${a.id}`), status) }) : null);
   const picker = live ? h("input", { type: "file", multiple: true, id: "upload", "aria-label": t("att.upload") }) : null;

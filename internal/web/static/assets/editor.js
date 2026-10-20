@@ -355,7 +355,25 @@ function imageView(node, view, getPos, files) {
       if (!res.ok) throw new Error(res.statusText);
       const png = await openDrawing(await res.blob());
       if (!png) return;
-      const a = await files.upload(new File([png], drawingName(node.attrs.text), { type: "image/png" }));
+      // The new picture is a version of the one edited (ADR-0055), so its
+      // copies elsewhere learn of it.
+      const a = await files.upload(new File([png], drawingName(node.attrs.text), { type: "image/png" }), { item: files.item, attachment: node.attrs.ref });
+      const pos = getPos();
+      if (pos === undefined || dom.classList.contains("pm-locked")) throw new Error(t("draw.locked"));
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, ref: a.id }));
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
+  // A copy whose original was changed since takes the newer version over:
+  // copied again, from the same source (ADR-0055).
+  const takeOver = async (status, origin) => {
+    status.textContent = "";
+    try {
+      const src = { item: origin.item.id, attachment: origin.newer.id };
+      const res = await fetch(`/api/items/${src.item}/attachments/${src.attachment}`, { credentials: "same-origin" });
+      if (!res.ok) throw new Error(res.statusText);
+      const a = await files.upload(new File([await res.blob()], origin.newer.name, { type: origin.newer.type }), src);
       const pos = getPos();
       if (pos === undefined || dom.classList.contains("pm-locked")) throw new Error(t("draw.locked"));
       view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, ref: a.id }));
@@ -377,9 +395,13 @@ function imageView(node, view, getPos, files) {
         view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, text: input.value.replace(/[\r\n]+/g, " ") }));
       } else render(shown = null);
     });
-    if (!files?.isDrawing?.(node.attrs.ref)) return caption.replaceChildren(input);
     const status = h("span", { class: "error", role: "status" });
-    caption.replaceChildren(input, " ", h("button", { type: "button", class: "link pm-redraw", text: t("draw.edit"), onclick: () => redraw(status) }), status);
+    const origin = files?.origin?.(node.attrs.ref);
+    // replaceChildren takes nodes and strings only: no arrays, no null.
+    caption.replaceChildren(...[input,
+      ...(files?.isDrawing?.(node.attrs.ref) ? [" ", h("button", { type: "button", class: "link pm-redraw", text: t("draw.edit"), onclick: () => redraw(status) })] : []),
+      ...(origin?.newer ? [" ", h("button", { type: "button", class: "link pm-take-over", text: t("att.takeOver", { key: origin.item.key }), onclick: () => takeOver(status, origin) })] : []),
+      status]);
   };
   render();
   return { dom, ...own, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
@@ -474,7 +496,8 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     try {
       const p = await pickFromAlbum();
       if (!p) return;
-      const a = p.item.id === files.item ? p.attachment : await files.upload(await pictureFile(p));
+      const a = p.item.id === files.item ? p.attachment
+        : await files.upload(await pictureFile(p), { item: p.item.id, attachment: p.attachment.id });
       insertBlock(schema.nodes.image.create({ ref: a.id, text: captionOf(p.attachment.name) }));
     } catch (err) {
       status.textContent = err.message;
