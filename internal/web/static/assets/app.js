@@ -52,6 +52,47 @@ function link(href, text, cls, id) {
   return h("a", { href, text, class: cls || null, id: id || null });
 }
 
+// --- export (ADR-0071) ---------------------------------------------------------
+
+// csvLink downloads a list the server writes as CSV.
+function csvLink(href, id) {
+  return h("a", { href, class: "button secondary csv-link", id: id || null, download: "", text: t("export.csv") });
+}
+
+// downloadCSV saves rows the page already holds as CSV, as the server
+// writes it: UTF-8 with a byte order mark, a semicolon for German, and no
+// cell a spreadsheet would run as a formula.
+function downloadCSV(name, rows) {
+  const sep = language() === "de" ? ";" : ",";
+  const cell = (v) => {
+    let s = String(v ?? "");
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    return /["\r\n]/.test(s) || s.includes(sep) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const text = "\ufeff" + rows.map((r) => r.map(cell).join(sep)).join("\r\n") + "\r\n";
+  // A blob address is set directly: h() admits only addresses of pages.
+  const a = h("a", { download: name });
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// exportMenu offers a page as PDF (the browser prints it without the
+// surroundings), as a Word document, and each of its tables as CSV.
+function exportMenu(item) {
+  const path = "/api/items/" + encodeURIComponent(item.id);
+  const tables = (item.body || []).filter((b) => b.kind === "table");
+  return h("details", { class: "export-menu", id: "item-export" },
+    h("summary", { class: "button", text: t("export.open") }),
+    h("div", { class: "export-list" },
+      h("button", { type: "button", class: "link", id: "export-pdf", text: t("export.pdf"), onclick: (ev) => { ev.target.closest("details").open = false; window.print(); } }),
+      h("a", { href: path + "/export/docx", id: "export-docx", download: "", text: t("export.docx") }),
+      tables.map((b, i) => h("a", { href: `${path}/tables/${i + 1}`, class: "export-table", download: "",
+        text: t("export.table", { n: i + 1, head: (b.text || "").split("\n")[0].split("\t").slice(0, 3).join(", ") }) }))));
+}
+
 // --- watching (ADR-0046) --------------------------------------------------------
 
 // watchButton starts or stops watching; path is the item's or space's.
@@ -214,7 +255,8 @@ async function labelView(label) {
   const page = await get("/api/items?label=" + encodeURIComponent(label));
   show(
     h("p", {}, link("#/", t("nav.spaces")), " / " + t("label.title")),
-    h("h1", {}, labelChip(label)),
+    h("div", { class: "page-head" }, h("h1", {}, labelChip(label)),
+      page.items.length ? h("p", { class: "actions" }, csvLink("/api/items.csv?label=" + encodeURIComponent(label), "label-csv")) : null),
     page.items.length
       ? h("table", { id: "labelled" }, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type")].map((c) => h("th", { text: c })))),
         h("tbody", {}, page.items.map((it) => h("tr", {},
@@ -873,7 +915,8 @@ async function searchView(q) {
   };
   addHits(first);
   show(
-    h("h1", { text: t("search.title") }),
+    h("div", { class: "page-head" }, h("h1", { text: t("search.title") }),
+      first.total.value ? h("p", { class: "actions" }, csvLink("/api/search.csv?q=" + encodeURIComponent(q), "search-csv")) : null),
     h("p", { class: "muted", text: t("search.results", { n: first.total.value, q }) }),
     first.total.value === 0 ? h("p", { text: t("search.none") }) : list,
     more,
@@ -1126,7 +1169,8 @@ async function spaceView(key) {
       h("h1", { text: sp.name }),
       h("p", { class: "actions" },
         create && types.length ? h("button", { class: "primary", id: "space-new-page", text: t("space.newPage"), onclick: toForm }) : null,
-        watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status))),
+        watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status),
+        csvLink("/api/items.csv?space=" + encodeURIComponent(key), "space-csv"))),
     h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance")),
       sp.role === "space-admin" ? link(`#/members/${encodeURIComponent(key)}`, t("members.title")) : null].filter(Boolean).flatMap((b, i) => i ? [" · ", b] : [b])),
     status,
@@ -1165,7 +1209,8 @@ async function boardView(key, typeName) {
   const status = h("div", { class: "status" });
   show(
     h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("board.crumb", { type: typeName })),
-    h("h1", { text: `${key} · ${typeName}` }),
+    h("div", { class: "page-head" }, h("h1", { text: `${key} · ${typeName}` }),
+      h("p", { class: "actions" }, csvLink(`/api/items.csv?space=${encodeURIComponent(key)}&type=${encodeURIComponent(typeName)}`, "board-csv"))),
     page.next ? h("p", { class: "notice", text: t("board.truncated", { n: items.length }) }) : null,
     status,
     boardOf(items, type, status),
@@ -1377,7 +1422,13 @@ async function tasksView(tab, params) {
   const relink = () => tabs.querySelectorAll("a").forEach((a) => { a.href = a.getAttribute("href").split("?")[0] + query(); });
   show(
     h("div", { class: "page-head" }, h("h1", { text: t("tasks.title") }),
-      h("p", { class: "actions" }, link(newHref(space || here.space, "", taskType(types)), t("tasks.new"), "button primary", "tasks-new"))),
+      h("p", { class: "actions" }, link(newHref(space || here.space, "", taskType(types)), t("tasks.new"), "button primary", "tasks-new"),
+        rows.length ? h("button", { type: "button", class: "secondary", id: "tasks-csv", text: t("export.csv"), onclick: () => downloadCSV("tasks.csv", [
+          [t("col.item"), t("col.title"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space")],
+          ...rows.filter(([, tr]) => !tr.hidden).map(([it]) => {
+            const who = assigneeOf(it), f = typeOf.get(it.type).f;
+            return [it.key, it.title, it.state, who ? names.get(who) || who : "", dueOf(it), f.priority ? it.properties[f.priority.name] || "" : "", it.space];
+          })]) }) : null)),
     tabs,
     status,
     h("section", { id: "tasks" }, shown.length
@@ -1910,7 +1961,8 @@ async function itemView(ref, params = new URLSearchParams()) {
   const headActions = h("p", { class: "actions" },
     live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null,
     editing ? done : canEdit ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null,
-    canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null);
+    canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null,
+    !editing ? exportMenu(item) : null);
   let body = null;
   if (type.body) {
     const b = bodySection(item, embeds.embeds, editing, threads, attachments);
@@ -1933,7 +1985,7 @@ async function itemView(ref, params = new URLSearchParams()) {
   const more = reorder.length || actions.length || relocateButtons.length
     ? card("item-actions", h("p", { class: "actions-row" }, reorder, relocateButtons, actions), relocate) : null;
   show(withTree(tree,
-    h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
+    h("p", { class: "crumbs" }, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
     h("div", { class: "page-head" }, title, headActions),
     guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
     item.hold ? await holdBanner(item, path, canEdit) : null,

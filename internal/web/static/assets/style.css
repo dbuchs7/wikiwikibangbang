@@ -897,3 +897,24 @@ a.button.login-sso { display: flex; gap: 10px; }
 /* The consent page's choice of access (ADR-0068). */
 #oauth-access { display: grid; gap: 8px; margin: 16px 0; padding: 0; border: 0; }
 #oauth-access legend { margin-bottom: 8px; padding: 0; font-weight: 600; }
+
+/* Export (ADR-0071): a small menu on a page, and its printed form, which
+   is the page as PDF without the surroundings. */
+.export-menu { position: relative; display: inline-block; }
+.export-menu > summary { list-style: none; cursor: pointer; }
+.export-menu > summary::-webkit-details-marker { display: none; }
+.export-list { position: absolute; right: 0; z-index: 20; display: flex; flex-direction: column; gap: 2px; min-width: 15rem; margin-top: 6px;
+  padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
+.export-list > a, .export-list > button.link { display: block; padding: 6px 10px; border-radius: 6px; text-align: left; color: var(--text); text-decoration: none; }
+.export-list > a:hover, .export-list > button.link:hover { background: var(--row-hover); }
+@media print {
+  :root { color-scheme: light; }
+  body { background: #fff !important; }
+  header.top, #drawer, #footer, .with-tree > :first-child, .crumbs, .page-head .actions, .status, .item-side > :not(#details),
+  #details .actions-row, #details button, .pm-menu, .comment-mark-gutter { display: none !important; }
+  .with-tree, .with-tree-main, .item-layout { display: block !important; margin: 0 !important; padding: 0 !important; }
+  .side-card, .item-main { border: none !important; box-shadow: none !important; background: none !important; }
+  a { color: inherit; text-decoration: underline; }
+  table, figure, .pm-image, pre { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+}

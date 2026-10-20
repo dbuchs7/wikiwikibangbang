@@ -64,6 +64,8 @@ type Budgets struct {
 	// BrandingBytes is the largest logo, background image or font file of
 	// the corporate design (ADR-0052).
 	BrandingBytes int64
+	// ExportRows is the largest list one CSV export writes (ADR-0071).
+	ExportRows int
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
@@ -84,6 +86,7 @@ func Default() Budgets {
 		AttachmentBytes:  25 << 20,
 		AvatarBytes:      256 << 10,
 		BrandingBytes:    2 << 20,
+		ExportRows:       10_000,
 	}
 }
 
