@@ -86,6 +86,9 @@ type Notification struct {
 	Title   string
 	Space   string
 	Created bool // a new item below a watched one
+	// Mentioned reports a comment that names the principal by @username,
+	// told whether or not they watch the item.
+	Mentioned bool
 }
 
 // --- sessions ---------------------------------------------------------------
@@ -139,7 +142,8 @@ func (x *Session) WatchingSpace(space string) bool {
 }
 
 // Notifications returns what others changed on what the principal
-// watches, and the restrictions governance set because of sensitive data
+// watches, the comments that mention them by @username when the session
+// is Named, and the restrictions governance set because of sensitive data
 // on what the principal saved or administers (ADR-0057), newest first, before the event before (all when 0), at most
 // limit; more reports whether older ones follow. Only items the principal
 // may read now count, so a notification never shows what a restriction
@@ -192,6 +196,13 @@ func (x *Session) scan(before, after int, fn func(Notification) bool) {
 			}
 			continue
 		}
+		if x.mentioned(e) {
+			it := x.s.items[e.Item]
+			if !fn(Notification{Seq: e.Seq, At: e.At, Actor: e.Actor, Kind: e.Kind, Item: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Mentioned: true}) {
+				return
+			}
+			continue
+		}
 		if len(watches) == 0 || !notifyKinds[e.Kind] || e.Actor == x.who {
 			continue
 		}
@@ -219,6 +230,25 @@ func (x *Session) scan(before, after int, fn func(Notification) bool) {
 			return
 		}
 	}
+}
+
+// mentioned reports whether e added a comment by someone else that names
+// the principal by @username. The comment is read as it is now, so one
+// deleted or erased since is no longer told.
+func (x *Session) mentioned(e Event) bool {
+	if e.Kind != CommentAdded || x.name == "" || e.Actor == x.who {
+		return false
+	}
+	it := x.s.items[e.Item]
+	if it == nil || it.Presence == Purged || !x.s.canRead(x.who, it) {
+		return false
+	}
+	for _, c := range it.Comments {
+		if c.ID == e.Comment {
+			return !c.Deleted && Mentions(c.Text, x.name)
+		}
+	}
+	return false
 }
 
 // governanceAlert reports whether e is a restriction governance set

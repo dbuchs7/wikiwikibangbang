@@ -307,6 +307,7 @@ function ckanSource() {
     await page.waitForSelector("text=mentions (from the body)");
 
     step("search: the body is found, its markup shows as text");
+    const beforeSearch = await page.evaluate(() => location.hash);
     await page.fill("nav input[name=q]", "alert body");
     await page.press("nav input[name=q]", "Enter");
     await page.waitForSelector(".hits li");
@@ -318,6 +319,22 @@ function ckanSource() {
     await page.fill("nav input[name=q]", "zzzz-nothing");
     await page.press("nav input[name=q]", "Enter");
     await page.waitForSelector("text=Nothing found");
+
+    step("clearing the search field returns to the page before the search; home, back and forward beside the nine dots");
+    await page.fill("nav input[name=q]", ""); // deleting the words keeps the results
+    await page.waitForTimeout(200);
+    check(await page.evaluate(() => location.hash.startsWith("#/search/")), "deleting the words by hand stays on the results");
+    await page.fill("nav input[name=q]", "zzzz-nothing");
+    await page.press("nav input[name=q]", "Escape"); // as the field's ×
+    await page.waitForFunction((h) => location.hash === h, beforeSearch);
+    await page.click("#nav-back");
+    await page.waitForFunction(() => location.hash.startsWith("#/search/"));
+    await page.click("#nav-forward");
+    await page.waitForFunction((h) => location.hash === h, beforeSearch);
+    await page.click("#history-nav #nav-home");
+    await page.waitForFunction(() => location.hash === "#/");
+    await page.goBack();
+    await page.waitForFunction((h) => location.hash === h, beforeSearch);
 
     step("a slow view does not replace the one chosen after it");
     await page.route("**/api/items/PLAT-1", async (r) => { await new Promise((ok) => setTimeout(ok, 1500)); await r.continue(); });
@@ -1011,6 +1028,8 @@ function ckanSource() {
     await page.setInputFiles("#design-logo", { name: "logo.png", mimeType: "image/png",
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
     await page.waitForSelector("header .brand img.brand-logo[src^='/branding/logo']");
+    await page.waitForSelector("head link[rel=icon][href^='/branding/logo']", { state: "attached" });
+    check(await page.locator("head link[rel=icon]").count() === 1, "the logo is the browser's icon");
     await page.fill("#design [name=name]", "ACME");
     await page.check("#design [name=accent-on]");
     await page.fill("#design [name=accent]", "#d40000");
@@ -1045,6 +1064,7 @@ function ckanSource() {
     await page.waitForFunction(() => document.querySelectorAll("#design-contrast li").length === 0);
     await page.click("#admin-design button:has-text('Delete')"); // the product's logo comes back
     await page.waitForSelector("header .brand picture");
+    await page.waitForSelector("head link[rel=icon][href='/favicon.ico']", { state: "attached" });
 
     step("AI access: an administrator registers Claude and gets the three values for its connector");
     await page.click("#app-switcher");
@@ -1326,7 +1346,7 @@ function ckanSource() {
     await page.goto(base + "/#/item/PLAT-1");
     check(!(await page.textContent(".comment")).includes("null"), "another's comment shows no stray text");
 
-    step("watching: bert watches the item, admin renames it, bert is told");
+    step("watching: bert watches the item, admin renames it and mentions bert in a comment, bert is told (ADR-0084)");
     await page.click("#watch[aria-pressed='false'][aria-label='Watch']");
     await page.waitForSelector("#watch[aria-pressed='true'][aria-label='Stop watching']");
     const adminCtx = await browser.newContext();
@@ -1340,10 +1360,19 @@ function ckanSource() {
       method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: "Renamed by admin" }),
     })).status);
     check(renamed === 200, "admin renames the item: " + renamed);
+    // A comment names bert: typing "@be" suggests him, and he is told.
+    await admin.goto(base + "/#/item/PLAT-1");
+    await admin.locator("#add-comment textarea").pressSequentially("Over to @be");
+    await admin.click("#add-comment .mention-list button:text-is('@bert')");
+    check(await admin.inputValue("#add-comment textarea") === "Over to @bert ", "the suggestion completes the name");
+    await admin.locator("#add-comment textarea").pressSequentially("for a check");
+    await admin.click("#add-comment button[type=submit]");
+    await admin.waitForSelector(".comment-text:has-text('Over to @bert for a check')");
     await adminCtx.close();
     await page.reload();
-    await page.waitForSelector("#nav-notifications[aria-label='Notifications (1)'] .count:text-is('1')");
+    await page.waitForSelector("#nav-notifications[aria-label='Notifications (2)'] .count:text-is('2')");
     await page.click("#nav-notifications");
+    await page.waitForSelector("#notifications li.unread:has-text('admin mentioned you in a comment on PLAT-1')");
     await page.waitForSelector("#notifications li.unread:has-text('admin renamed PLAT-1 Renamed by admin')");
     await page.waitForSelector("#nav-notifications[aria-label='Notifications'] .count[hidden]", { state: "attached" }); // seen now
     await page.waitForSelector("#watches a:has-text('PLAT-1')");

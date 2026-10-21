@@ -51,3 +51,20 @@ func TestWatchingThroughTheAPI(t *testing.T) {
 		t.Fatalf("watches after the switch %v", got)
 	}
 }
+
+// A comment that names someone by @username is a notification to them,
+// though they watch nothing (ADR-0084).
+func TestAMentionReachesTheNotifications(t *testing.T) {
+	w := newWorld(t)
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Patch","properties":{"priority":"low"}}`, http.StatusCreated)
+	key := field(it, "item", "key").(string)
+	w.bert.expect("POST", "/api/items/"+key+"/comments", `{"text":"@vera, please review"}`, http.StatusCreated)
+	got := w.vera.expect("GET", "/api/notifications", "", http.StatusOK)
+	list := got["notifications"].([]any)
+	if len(list) != 1 || got["unread"] != 1.0 {
+		t.Fatalf("notifications %v", got)
+	}
+	if n := list[0].(map[string]any); n["kind"] != "CommentAdded" || n["mentioned"] != true || n["key"] != key {
+		t.Fatalf("mention %v", n)
+	}
+}

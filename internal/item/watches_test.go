@@ -131,3 +131,34 @@ func TestCreatorsWatchWhatTheyCreate(t *testing.T) {
 		t.Fatal("a create without Watch watches")
 	}
 }
+
+// A comment that names someone by @username tells them, whether or not
+// they watch the item; a deleted one no longer does (ADR-0084).
+func TestAMentionInACommentIsANotification(t *testing.T) {
+	s := permFixture(t)
+	anna, ben, carl := s.As("anna"), s.As("ben").Named("ben"), s.As("carl").Named("carl")
+	page := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	mustComment(t)(anna.AddComment(page.ID, "no one named"))
+	c := mustComment(t)(anna.AddComment(page.ID, "@Ben, please look"))
+	mustComment(t)(anna.AddComment(page.ID, "@benjamin is someone else"))
+	mustComment(t)(anna.AddComment(page.ID, "@carl may not read this"))
+	got, _ := ben.Notifications(0, 10)
+	if len(got) != 1 || !got[0].Mentioned || got[0].Kind != CommentAdded || got[0].Title != "Runbook" || ben.Unread(0, 10) != 1 {
+		t.Fatalf("ben is told %+v", got)
+	}
+	if got, _ := s.As("ben").Notifications(0, 10); len(got) != 0 {
+		t.Errorf("without a name: %+v", got)
+	}
+	if got, _ := carl.Notifications(0, 10); len(got) != 0 {
+		t.Errorf("one who may not read the item is told %+v", got)
+	}
+	noErr(t, s.GrantRole("root", "PLAT", "ben", Editor))
+	mustComment(t)(ben.AddComment(page.ID, "@ben note to self"))
+	if n := ben.Unread(0, 10); n != 1 {
+		t.Errorf("one's own mention is news: %d", n)
+	}
+	noErr(t, anna.DeleteComment(page.ID, c.ID))
+	if got, _ := ben.Notifications(0, 10); len(got) != 0 {
+		t.Errorf("a deleted comment still tells %+v", got)
+	}
+}

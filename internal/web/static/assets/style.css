@@ -96,6 +96,11 @@ code { word-break: break-all; }
 }
 .icon-btn:hover { background: var(--bg); color: var(--text); border-color: transparent; }
 .icon-btn.grid { color: var(--text); }
+/* Home, back and forward, beside the nine dots. */
+.history-nav { display: inline-flex; align-items: center; gap: 2px; }
+.history-nav[hidden] { display: none; }
+.history-nav .icon-btn { margin: 0; color: var(--text); }
+.history-nav .icon-btn:disabled { opacity: 0.35; cursor: default; background: transparent; }
 #scrim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.25); z-index: 30; }
 #drawer {
   position: fixed; top: 0; left: 0; bottom: 0; width: 260px; z-index: 31;
@@ -1022,3 +1027,12 @@ a.requests-notice:hover { border-color: var(--accent); }
 .catalog-problems { font-size: 13px; }
 .connector-editor { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 4px; }
 .format-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0 12px; max-height: 22rem; overflow: auto; margin-bottom: 12px; }
+
+/* ---------- Mentions in comments (ADR-0084) ---------- */
+.mention-box { position: relative; }
+.mention-box textarea { width: 100%; }
+.mention-list { position: absolute; left: 0; top: 100%; z-index: 15; min-width: 12rem; margin: 2px 0 0; padding: 4px; list-style: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
+.mention-list[hidden] { display: none; }
+.mention-list button { display: block; width: 100%; padding: 4px 8px; text-align: left; }
+.mention-list button:hover, .mention-list button:focus { background: var(--bg); }

@@ -127,7 +127,7 @@ func (m *Messenger) Digest(ctx context.Context) {
 		var latest, unread, newest int
 		m.db.Read(func(s *item.Store) {
 			latest = s.Seq()
-			x := s.As(string(u.ID))
+			x := s.As(string(u.ID)).Named(u.Username)
 			if unread = x.Unread(after, unreadCap); unread > 0 {
 				if list, _ := x.Notifications(0, 1); len(list) > 0 {
 					newest = list[0].Seq
