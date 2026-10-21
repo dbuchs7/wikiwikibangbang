@@ -936,3 +936,9 @@ a.button.login-sso { display: flex; gap: 10px; }
 .export-frame { position: fixed; right: 0; bottom: 0; width: 1px; height: 1px; border: 0; opacity: 0; }
 .export-handbook:empty { display: none; }
 .export-handbook { display: contents; }
+
+/* Account requests among an administrator's open work (ADR-0061). */
+a.requests-notice { display: block; margin: 0 0 18px; color: inherit; text-decoration: none; }
+a.requests-notice:hover { border-color: var(--accent); }
+.requests-card { margin: 0 0 18px; border-left: 3px solid var(--warning); }
+.requests-card h2 { margin-top: 0; }

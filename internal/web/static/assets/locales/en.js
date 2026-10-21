@@ -808,5 +808,8 @@ export default {
   "envhelp.ssoVars": "Microsoft: WWBB_ENTRA_TENANT_ID, WWBB_ENTRA_CLIENT_ID, WWBB_ENTRA_CLIENT_SECRET; Google: WWBB_GOOGLE_CLIENT_ID, WWBB_GOOGLE_CLIENT_SECRET, WWBB_GOOGLE_DOMAINS; with WWBB_PUBLIC_URL.",
   "envhelp.backup": "Automatic backups:",
   "envhelp.backupVars": "WWBB_BACKUP_PASSPHRASE (at least 12 characters). For remote destinations also: WebDAV and FTPS WWBB_BACKUP_PASSWORD (and WWBB_BACKUP_USERNAME if the user is not in the address); S3 WWBB_BACKUP_ACCESS_KEY and WWBB_BACKUP_SECRET_KEY; SFTP WWBB_BACKUP_SSH_KEY (path to a key file without a passphrase) or WWBB_BACKUP_PASSWORD, with WWBB_BACKUP_SSH_HOST_KEY (the server's SHA256:… fingerprint; “Test destination” shows it when it is missing). For servers with their own certificate: WWBB_BACKUP_CA_FILE (path to the certificate file).",
-  "envhelp.restart": "Changed environment variables take effect only after the server or container restarts. This page then shows “set up”."
+  "envhelp.restart": "Changed environment variables take effect only after the server or container restarts. This page then shows “set up”.",
+  "requests.waiting": {"one": "{n} account request waits for your decision", "other": "{n} account requests wait for your decision"},
+  "requests.waitingHelp": "Approving creates the account with the chosen password; rejecting discards the request. The settings are under Administration → Account requests.",
+  "requests.homeHint": "Approve or reject them under Tasks."
 };

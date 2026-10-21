@@ -595,6 +595,22 @@ function avatar(id, name, tag, size = 32) {
   return box;
 }
 
+// setRequests records how many account requests wait, as a view that
+// read them found, and updates the dot on the account button, which was
+// drawn before the view.
+function setRequests(n) {
+  me.requests = n;
+  const button = document.getElementById("account-button");
+  if (button) showRequests(button);
+}
+
+function showRequests(button) {
+  const waiting = me.admin && me.requests > 0;
+  button.classList.toggle("pending", waiting);
+  button.title = t("nav.accountOf", { name: me.user.username }) + (waiting ? " · " + t("nav.requestsWaiting", { n: me.requests }) : "");
+  button.setAttribute("aria-label", button.title);
+}
+
 // accountMenu is the account's button in the header: the profile picture
 // or initials, opening a menu with the account, the AI assistants, the
 // administration for administrators, and signing out.
@@ -604,11 +620,7 @@ function accountMenu() {
   avatar(me.user.id, me.user.username, me.avatar));
   // Account requests waiting for an administrator show as a dot
   // (ADR-0061).
-  if (me.admin && me.requests) {
-    button.classList.add("pending");
-    button.title += " · " + t("nav.requestsWaiting", { n: me.requests });
-    button.setAttribute("aria-label", button.title);
-  }
+  showRequests(button);
   const item = (href, text) => h("a", { href, role: "menuitem", text, tabindex: "-1" });
   const roles = [me.admin ? t("admin.roleAdmin") : null, me.erasure ? t("admin.roleErasure") : null].filter(Boolean);
   const menu = h("div", { id: "account-menu", class: "menu", role: "menu", hidden: true, "aria-label": t("nav.account") },
@@ -973,8 +985,10 @@ const mayEdit = (role) => role === "editor" || role === "space-admin";
 
 async function homeView() {
   const show = screen();
-  const [{ spaces }, { types }, notes, brand] = await Promise.all([get("/api/spaces"), get("/api/types"),
-    get("/api/notifications?limit=1").catch(() => ({ unread: 0 })), get("/branding.json").catch(() => ({}))]);
+  const [{ spaces }, { types }, notes, brand, { requests }] = await Promise.all([get("/api/spaces"), get("/api/types"),
+    get("/api/notifications?limit=1").catch(() => ({ unread: 0 })), get("/branding.json").catch(() => ({})),
+    me.admin ? get("/api/account-requests").catch(() => ({ requests: [] })) : { requests: [] }]);
+  if (me.admin) setRequests(requests.length);
   const anyEditable = spaces.some((s) => mayEdit(s.role));
   // A greeting by the time of day, the reader's own clock.
   const hour = new Date().getHours();
@@ -994,8 +1008,13 @@ async function homeView() {
       h("img", { class: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 480, height: 320 }),
       // The installed version, small, for support questions and releases.
       me.version ? h("span", { class: "welcome-version", id: "home-version", title: me.revision ? t("home.revision", { revision: me.revision }) : "", text: t("home.version", { version: me.version }) }) : ""),
+    // Account requests wait on an administrator (ADR-0061): said first,
+    // and decided under the tasks.
+    requests.length ? h("a", { class: "notice requests-notice", href: "#/tasks", id: "home-requests" },
+      h("strong", { text: t("requests.waiting", { n: requests.length }) }), " ", t("requests.homeHint")) : "",
     h("section", { class: "home-tiles", "aria-label": t("home.quick") },
-      quick("#/tasks", t("nav.tasks"), t("home.tasksText"), "home-tasks"),
+      quick("#/tasks", t("nav.tasks"), t("home.tasksText"), "home-tasks",
+        requests.length ? h("span", { class: "chip", text: t("nav.requestsWaiting", { n: requests.length }) }) : null),
       quick("#/notifications", t("nav.notifications"), notes.unread ? t("home.notesUnread", { n: notes.unread }) : t("home.notesNone"), "home-notes",
         findings ? h("span", { class: "chip", text: t("nav.findingsOpen", { n: findings }) }) : null),
       quick("#/album", t("nav.album"), t("home.albumText"), "home-album"),
@@ -1318,9 +1337,41 @@ function taskFields(type) {
 // whose type has a workflow and that are not in its last state, in three
 // lists — assigned to me, unassigned, all — overdue and urgent first. One
 // takes a task over or gives it back, and moves it on by its transitions.
+// requestsCard shows administrators the account requests waiting for a
+// decision (ADR-0061) among their open work, to approve or reject there.
+// The requests are not items: they belong to no space and only
+// administrators may see them, so they are read from their own list.
+async function requestsCard() {
+  if (!me.admin) return "";
+  const { requests } = await get("/api/account-requests").catch(() => ({ requests: [] }));
+  setRequests(requests.length);
+  if (!requests.length) return "";
+  const status = h("div", { class: "status" });
+  const decide = (fn) => async () => {
+    try {
+      if (await fn() !== false) route();
+    } catch (err) {
+      status.replaceChildren(errorBox(err));
+    }
+  };
+  return h("section", { class: "card requests-card", id: "tasks-requests" },
+    h("h2", { text: t("requests.waiting", { n: requests.length }) }),
+    h("p", { class: "muted", text: t("requests.waitingHelp") }),
+    h("table", {},
+      h("thead", {}, h("tr", {}, [t("field.username"), t("contacts.email"), t("signup.reason"), t("requests.when"), ""].map((c) => h("th", { text: c })))),
+      h("tbody", {}, requests.map((rq) => h("tr", { "data-username": rq.username },
+        h("td", {}, h("strong", { text: rq.username })), h("td", { text: rq.email }), h("td", { class: "muted", text: rq.reason }),
+        h("td", { class: "muted", text: when(rq.created) }),
+        h("td", { class: "task-actions" },
+          h("button", { type: "button", class: "approve", text: t("requests.approve"), onclick: decide(() => post(`/api/account-requests/${rq.id}/approve`)) }), " · ",
+          h("button", { type: "button", class: "link", text: t("requests.reject"),
+            onclick: decide(() => confirm(t("requests.rejectConfirm", { name: rq.username })) ? del(`/api/account-requests/${rq.id}`) : false) })))))),
+    status);
+}
+
 async function tasksView(tab, params) {
   const show = screen();
-  const [{ types }, { spaces }] = await Promise.all([get("/api/types"), get("/api/spaces")]);
+  const [{ types }, { spaces }, requests] = await Promise.all([get("/api/types"), get("/api/spaces"), requestsCard()]);
   const typeOf = new Map(types.filter((ty) => ty.workflow).map((ty) => [ty.name, { ty, f: taskFields(ty) }]));
   let page = await get("/api/items?limit=100");
   const items = [...page.items];
@@ -1463,6 +1514,7 @@ async function tasksView(tab, params) {
             return [it.key, it.title, it.state, who ? names.get(who) || who : "", dueOf(it), f.priority ? it.properties[f.priority.name] || "" : "", it.space];
           })]) }) : null)),
     tabs,
+    requests,
     status,
     h("section", { id: "tasks" }, shown.length
       ? [h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space"), ""]

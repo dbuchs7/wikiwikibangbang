@@ -827,7 +827,17 @@ async function mailTo(sink, address) {
     await page.waitForSelector("#account-button.pending");
     await page.waitForSelector("#account-requests tr[data-username=dana]");
     check(await page.locator("#account-requests tr[data-username=dana] td").nth(2).textContent() === hostile, "the note of a request shows as text");
-    await page.click("#account-requests tr[data-username=dana] button.approve");
+    // The request waits on the start page and is decided under the tasks.
+    await page.goto(base + "/#/");
+    await page.waitForSelector("#home-requests:has-text('1 account request')");
+    await page.waitForSelector("#home-tasks .chip");
+    await page.click("#home-requests");
+    await page.waitForSelector("#tasks-requests tr[data-username=dana]");
+    check(await page.locator("#tasks-requests tr[data-username=dana] td").nth(2).textContent() === hostile, "the note of a request shows as text among the tasks");
+    await page.click("#tasks-requests tr[data-username=dana] button.approve");
+    await page.waitForSelector("#tasks-requests", { state: "detached" });
+    await page.waitForFunction(() => !document.querySelector("#account-button.pending"));
+    await page.goto(base + "/#/admin");
     await page.waitForSelector("#no-requests");
     await page.waitForSelector("#users tr:has-text('dana'):has-text('dana@example.org')");
     await guest.click("#signup-sent ~ p button");
