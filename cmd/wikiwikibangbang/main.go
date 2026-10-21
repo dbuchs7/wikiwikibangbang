@@ -30,6 +30,7 @@ import (
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/autobackup"
 	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
+	"github.com/dbuchs7/wikiwikibangbang/internal/backup/dest"
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
@@ -473,8 +474,8 @@ func check(args []string, stdout, stderr io.Writer) int {
 func restore(args []string, stdout, stderr io.Writer) int {
 	fs := newFlags("restore", stderr)
 	var from fileFlags
-	fs.Var(&from, "from", "a backup file, repeated for a full backup and the incremental ones after it, or a directory of automatic backups")
-	at := fs.String("at", "", "with -from a directory: the backup to restore, by file name (default: the newest)")
+	fs.Var(&from, "from", "a backup file, repeated for a full backup and the incremental ones after it, or a directory or remote destination of automatic backups (https://, s3://, ftps://, sftp://; credentials from the environment as for the server)")
+	at := fs.String("at", "", "with -from a directory or destination: the backup to restore, by file name (default: the newest)")
 	dataDir := fs.String("data-dir", defaultDataDir, "the new data directory; must not exist or be empty")
 	passFile := fs.String("passphrase-file", "", "file whose first line is the passphrase (default: $WWBB_BACKUP_PASSPHRASE)")
 	if err := fs.Parse(args); err != nil {
@@ -498,14 +499,35 @@ func restore(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "restore: set WWBB_BACKUP_PASSPHRASE or -passphrase-file")
 		return 2
 	}
-	paths, err := chainOf(from, *at)
-	if err != nil {
-		fmt.Fprintln(stderr, "restore:", err)
-		return 1
-	}
+	var paths []string
 	var chain []backup.Source
-	for _, p := range paths {
-		chain = append(chain, func() (io.ReadCloser, error) { return os.Open(p) })
+	if _, isDir := dest.Directory(from[0]); len(from) == 1 && !isDir && dest.Check(from[0]) == nil {
+		// A remote destination of automatic backups (ADR-0073), with its
+		// credentials from the environment as for the server.
+		tg, err := dest.Open(from[0], os.Getenv)
+		var names []string
+		if err == nil {
+			names, err = tg.List(context.Background())
+		}
+		if err == nil {
+			paths, err = pickChain(names, *at, from[0])
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, "restore:", err)
+			return 1
+		}
+		for _, name := range paths {
+			chain = append(chain, func() (io.ReadCloser, error) { return tg.Open(context.Background(), name) })
+		}
+	} else {
+		var err error
+		if paths, err = chainOf(from, *at); err != nil {
+			fmt.Fprintln(stderr, "restore:", err)
+			return 1
+		}
+		for _, p := range paths {
+			chain = append(chain, func() (io.ReadCloser, error) { return os.Open(p) })
+		}
 	}
 	m, err := backup.RestoreChain(chain, pass, *dataDir)
 	if err != nil {
@@ -563,6 +585,21 @@ func chainOf(from []string, at string) ([]string, error) {
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
+	picked, err := pickChain(names, want, dir)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for _, name := range picked {
+		paths = append(paths, filepath.Join(dir, name))
+	}
+	return paths, nil
+}
+
+// pickChain names the backups to restore among the files of a
+// destination, in order: the newest backup, or the one want names, with
+// the backups it builds on.
+func pickChain(names []string, want, dir string) ([]string, error) {
 	versions := backup.Versions(names)
 	if len(versions) == 0 {
 		return nil, fmt.Errorf("%s holds no automatic backups", dir)
@@ -582,14 +619,14 @@ func chainOf(from []string, at string) ([]string, error) {
 	} else {
 		upTo = len(v.Backups) - 1
 	}
-	var paths []string
+	var out []string
 	for i, b := range v.Backups[:upTo+1] {
 		if b.Seq != i {
 			return nil, fmt.Errorf("the backups before %s are not all in %s; backup %d of its chain is missing", v.Backups[upTo].File, dir, i)
 		}
-		paths = append(paths, filepath.Join(dir, b.File))
+		out = append(out, b.File)
 	}
-	return paths, nil
+	return out, nil
 }
 
 // healthcheck lets a container runtime probe the server without a shell or

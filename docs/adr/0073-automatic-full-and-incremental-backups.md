@@ -1,9 +1,9 @@
 # ADR-0073: Automatic full and incremental backups to a destination
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-10-21
-- **Deciders:** Project initiators (the maintainer asked for automatic backups with a system default of every 14 days, up to ten kept versions, full and incremental backups and a destination such as FTP, a file server, a NAS or the cloud; and chose daily incremental backups, set under Administration, with secrets from the environment, 2026-10-21)
+- **Deciders:** Project initiators (the maintainer asked for automatic backups with a system default of every 14 days, up to ten kept versions, full and incremental backups and a destination such as FTP, a file server, a NAS or the cloud; and chose daily incremental backups, set under Administration, with secrets from the environment, to a local path, WebDAV, S3-compatible storage, FTPS and SFTP, 2026-10-21)
 
 ## Context and problem statement
 
@@ -44,15 +44,27 @@ A file the base lists and the new manifest does not was deleted and is removed o
 
 **State.** Which backup the next incremental one builds on is kept in `backups.json` beside the data, not in the data's backups: a restored instance has none and starts with a full backup. An incremental backup is taken only when the whole chain up to its base is still at the destination, and the destination is the one the chain was written to; otherwise the backup becomes a full one.
 
-**Secrets.** The passphrase comes from `WWBB_BACKUP_PASSPHRASE` (at least 12 characters); without it nothing is backed up and the page says so. A destination address that holds a password is refused; credentials of remote destinations will come from the environment as well.
+**Secrets.** The passphrase comes from `WWBB_BACKUP_PASSPHRASE` (at least 12 characters); without it nothing is backed up and the page says so. A destination address that holds a password is refused. A remote destination's credentials come from the environment as well: `WWBB_BACKUP_USERNAME` (unless the address names the user) and `WWBB_BACKUP_PASSWORD`, `WWBB_BACKUP_ACCESS_KEY` and `WWBB_BACKUP_SECRET_KEY` for S3, `WWBB_BACKUP_SSH_KEY` (a key file) and `WWBB_BACKUP_SSH_HOST_KEY` for SFTP, and `WWBB_BACKUP_CA_FILE` for a server whose certificate the system does not trust, such as a NAS that signs its own.
 
-**Destinations.** A directory of the server by absolute path: a mounted file server or NAS, or a volume in a container. It must exist — a missing mount fails the backup instead of filling the server's own disk — and lie outside the data directory, where backups would back up backups and be lost with the data. A file is written under a `.part` name and renamed when complete. WebDAV, S3-compatible storage, FTPS and SFTP follow as further kinds of address; until then the implementation is partial.
+**Destinations.** The kind is named by the address; only encrypted connections are used, so `http://` and `ftp://` are refused:
+
+| Address | Kind | How a backup is stored |
+|---|---|---|
+| `/path` or `file:///path` | a directory of the server: a mounted file server or NAS, or a volume in a container | written as `name.part`, renamed when complete |
+| `https://user@host/folder` | WebDAV (Basic authentication over TLS) | `PUT` of `name.part`, then `MOVE` |
+| `s3://bucket/folder?endpoint=https://…&region=…` | S3-compatible storage, path-style, signature version 4 | one `PUT`, or a multipart upload in parts of 16 MiB that is aborted on failure; the object appears only when complete |
+| `ftps://user@host/folder` | FTP with explicit TLS (`AUTH TLS`), data connections encrypted (`PROT P`) and offering to resume the control connection's TLS session, passive mode (`EPSV`, then `PASV`) | `STOR` of `name.part`, then `RNFR`/`RNTO` |
+| `sftp://user@host/folder` | SFTP version 3 over SSH | written as `name.part`, renamed when complete |
+
+A directory must exist — a missing mount fails the backup instead of filling the server's own disk — and lie outside the data directory, where backups would back up backups and be lost with the data; a remote folder must exist too. An SFTP server must present the host key whose SHA-256 fingerprint `WWBB_BACKUP_SSH_HOST_KEY` holds; without it the connection is refused and the error names the fingerprint the server presented, to be checked and set — trust on first use would accept whoever answers first. A backup is streamed to the destination without knowing its length; only S3 needs a length per request, hence its parts held in memory. `restore -from` takes a remote address too, with the credentials from the environment.
+
+SFTP needs an SSH implementation; it comes from `golang.org/x/crypto/ssh` (BSD-3-Clause, maintained by the Go project), the project's first dependency outside OIDC. The SFTP protocol on top, a few packet types, is implemented here, as are WebDAV, the S3 signature and FTPS, on the standard library.
 
 ### Consequences
 
 - **Positive:** backups happen without anybody remembering; a daily backup costs about what changed that day; the files at the destination explain themselves; a restore needs no server and no index.
 - **Negative / trade-offs accepted:** restoring the newest state needs every backup of its chain — a lost file in the middle loses the backups after it (which is why the newest `keep` versions are kept whole, and why a gap makes the next backup a full one); each incremental backup reads the logs once more to compare their start; two instances writing to the same directory would prune each other's versions.
-- **Follow-ups / risks to watch:** remote destinations (WebDAV, S3, FTPS, SFTP, the last needing an SSH library); a notification to administrators when backups fail repeatedly; a destination that is very slow to list holds the administration page for up to 15 seconds.
+- **Follow-ups / risks to watch:** the remote destinations are tested against fakes that follow the protocols, not against every server: a WebDAV server that refuses uploads of unknown length (411), an FTPS server that insists on a resumption Go's TLS does not offer, or an SSH key protected by a passphrase are not supported yet; a notification to administrators when backups fail repeatedly; a destination that is very slow to list holds the administration page for up to 15 seconds.
 
 ## Pros and cons of the options
 

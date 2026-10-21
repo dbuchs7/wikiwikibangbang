@@ -646,6 +646,18 @@ func TestRestoreAChain(t *testing.T) {
 			t.Errorf("%s: exit %d", name, code)
 		}
 	}
+	// A remote destination needs its credentials from the environment.
+	if code, _, errOut := runCmd(t, context.Background(), "restore", "-data-dir", filepath.Join(t.TempDir(), "r"), "-from", "s3://bucket/wiki?endpoint=https://127.0.0.1:1"); code != 1 || !strings.Contains(errOut, "WWBB_BACKUP_ACCESS_KEY") {
+		t.Errorf("a remote destination without keys: exit %d %q", code, errOut)
+	}
+	t.Setenv("WWBB_BACKUP_ACCESS_KEY", "a")
+	t.Setenv("WWBB_BACKUP_SECRET_KEY", "b")
+	if code, _, errOut := runCmd(t, context.Background(), "restore", "-data-dir", filepath.Join(t.TempDir(), "r"), "-from", "s3://bucket/wiki?endpoint=https://127.0.0.1:1"); code != 1 || !strings.Contains(errOut, "s3:") {
+		t.Errorf("an unreachable remote destination: exit %d %q", code, errOut)
+	}
+	if paths, err := pickChain(names, names[1], "remote"); err != nil || len(paths) != 2 || paths[1] != names[1] {
+		t.Errorf("picked %v %v", paths, err)
+	}
 	os.Remove(filepath.Join(dir, names[0]))
 	if code, _, errOut := runCmd(t, context.Background(), "restore", "-data-dir", filepath.Join(t.TempDir(), "r"), "-from", dir); code != 1 || !strings.Contains(errOut, "missing") {
 		t.Errorf("a chain without its full backup: exit %d %q", code, errOut)

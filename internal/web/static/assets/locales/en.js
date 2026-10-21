@@ -761,8 +761,8 @@ export default {
   "autobackup.noPassphrase": "No passphrase is set. Set {env} in the server's environment to at least {n} characters and restart it; without it nothing is backed up.",
   "autobackup.enabled": "Back up automatically",
   "autobackup.destination": "Destination",
-  "autobackup.destinationExample": "/volume1/backup/wikiwikibangbang",
-  "autobackup.destinationHelp": "A directory of the server by its absolute path, e.g. a mounted file server or NAS. In a container it is a mounted volume. The directory must exist.",
+  "autobackup.destinationExample": "/backup  ·  https://nas:5006/backup  ·  s3://bucket/wiki?endpoint=https://…  ·  ftps://wiki@nas/backup  ·  sftp://wiki@nas/volume1/backup",
+  "autobackup.destinationHelp": "A directory of the server by its absolute path (e.g. a mounted file server, NAS or a volume in a container), or a remote destination: WebDAV as https://user@server/folder, S3-compatible storage as s3://bucket/folder?endpoint=https://…&region=…, FTPS as ftps://user@server/folder, SFTP as sftp://user@server/folder. The folder must exist. Passwords and keys are not set here but in the server's environment (see the info icon).",
   "autobackup.fullDays": "Full backup every … days",
   "autobackup.incrementalDays": "Incremental backup every … days (0 = none)",
   "autobackup.keep": "Versions to keep",
@@ -807,6 +807,6 @@ export default {
   "envhelp.sso": "Single sign-on:",
   "envhelp.ssoVars": "Microsoft: WWBB_ENTRA_TENANT_ID, WWBB_ENTRA_CLIENT_ID, WWBB_ENTRA_CLIENT_SECRET; Google: WWBB_GOOGLE_CLIENT_ID, WWBB_GOOGLE_CLIENT_SECRET, WWBB_GOOGLE_DOMAINS; with WWBB_PUBLIC_URL.",
   "envhelp.backup": "Automatic backups:",
-  "envhelp.backupVars": "WWBB_BACKUP_PASSPHRASE (at least 12 characters).",
+  "envhelp.backupVars": "WWBB_BACKUP_PASSPHRASE (at least 12 characters). For remote destinations also: WebDAV and FTPS WWBB_BACKUP_PASSWORD (and WWBB_BACKUP_USERNAME if the user is not in the address); S3 WWBB_BACKUP_ACCESS_KEY and WWBB_BACKUP_SECRET_KEY; SFTP WWBB_BACKUP_SSH_KEY (path to a key file without a passphrase) or WWBB_BACKUP_PASSWORD, with WWBB_BACKUP_SSH_HOST_KEY (the server's SHA256:… fingerprint; “Test destination” shows it when it is missing). For servers with their own certificate: WWBB_BACKUP_CA_FILE (path to the certificate file).",
   "envhelp.restart": "Changed environment variables take effect only after the server or container restarts. This page then shows “set up”."
 };

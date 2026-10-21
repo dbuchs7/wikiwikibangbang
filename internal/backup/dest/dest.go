@@ -1,9 +1,12 @@
 // Package dest stores backups at a destination (ADR-0073): a directory of
-// the server, which may be a mounted file server or NAS.
+// the server, which may be a mounted file server or NAS, a WebDAV folder,
+// an S3-compatible bucket, or a directory on an FTPS or SFTP server.
 //
 // A destination is set by an address that holds no secret; the
 // credentials a destination needs come from the server's environment, so
-// they are in neither the data nor its backups.
+// they are in neither the data nor its backups. Only encrypted
+// connections are used: plain HTTP and FTP are refused, because they would
+// carry the password in the clear.
 package dest
 
 import (
@@ -13,9 +16,11 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Target is where backups are stored.
@@ -37,6 +42,27 @@ var ErrInvalid = errors.New("invalid destination")
 // Env reads the server's environment.
 type Env func(string) string
 
+// The environment variables that hold a destination's credentials.
+const (
+	UsernameEnv  = "WWBB_BACKUP_USERNAME"
+	PasswordEnv  = "WWBB_BACKUP_PASSWORD"
+	AccessKeyEnv = "WWBB_BACKUP_ACCESS_KEY"
+	SecretKeyEnv = "WWBB_BACKUP_SECRET_KEY"
+	SSHKeyEnv    = "WWBB_BACKUP_SSH_KEY"
+	HostKeyEnv   = "WWBB_BACKUP_SSH_HOST_KEY"
+	CAFileEnv    = "WWBB_BACKUP_CA_FILE"
+)
+
+// dialTimeout bounds connecting to a remote destination.
+const dialTimeout = 30 * time.Second
+
+// address is a parsed destination.
+type address struct {
+	kind string // "dir", "webdav", "s3", "ftps", "sftp"
+	dir  string // the directory: local, or the path on a remote server
+	url  *url.URL
+}
+
 // Check tells whether an address names a destination, without reaching it.
 func Check(destination string) error {
 	_, err := parse(destination)
@@ -46,42 +72,91 @@ func Check(destination string) error {
 // Open opens the destination an address names, with the credentials env
 // holds.
 func Open(destination string, env Env) (Target, error) {
-	path, err := parse(destination)
+	a, err := parse(destination)
 	if err != nil {
 		return nil, err
 	}
-	return local{dir: path}, nil
+	if env == nil {
+		env = func(string) string { return "" }
+	}
+	switch a.kind {
+	case "webdav":
+		return newWebDAV(a, env)
+	case "s3":
+		return newS3(a, env)
+	case "ftps":
+		return newFTPS(a, env)
+	case "sftp":
+		return newSFTP(a, env)
+	}
+	return local{dir: a.dir}, nil
 }
 
 // Directory is the directory of the server an address names, if it names
 // one.
 func Directory(destination string) (string, bool) {
-	path, err := parse(destination)
-	return path, err == nil
+	a, err := parse(destination)
+	return a.dir, err == nil && a.kind == "dir"
 }
 
-func parse(destination string) (string, error) {
+func parse(destination string) (address, error) {
 	d := strings.TrimSpace(destination)
 	if d == "" {
-		return "", fmt.Errorf("%w: no destination is set", ErrInvalid)
+		return address{}, fmt.Errorf("%w: no destination is set", ErrInvalid)
 	}
 	if strings.HasPrefix(d, "file://") {
 		u, err := url.Parse(d)
 		if err != nil || u.Host != "" && u.Host != "localhost" {
-			return "", fmt.Errorf("%w: a file address names a directory of this server, file:///path", ErrInvalid)
+			return address{}, fmt.Errorf("%w: a file address names a directory of this server, file:///path", ErrInvalid)
 		}
 		d = u.Path
 	}
 	if u, err := url.Parse(d); err == nil && u.Scheme != "" && len(u.Scheme) > 1 {
-		if _, ok := u.User.Password(); ok {
-			return "", fmt.Errorf("%w: the address holds a password; set it in the server's environment instead", ErrInvalid)
-		}
-		return "", fmt.Errorf("%w: %s is not a kind of destination this server knows", ErrInvalid, u.Scheme)
+		return parseURL(u)
 	}
 	if !filepath.IsAbs(d) {
-		return "", fmt.Errorf("%w: a directory is given by its absolute path", ErrInvalid)
+		return address{}, fmt.Errorf("%w: a directory is given by its absolute path; a remote destination by an address such as https://, s3://, ftps:// or sftp://", ErrInvalid)
 	}
-	return filepath.Clean(d), nil
+	return address{kind: "dir", dir: filepath.Clean(d)}, nil
+}
+
+func parseURL(u *url.URL) (address, error) {
+	if _, ok := u.User.Password(); ok {
+		return address{}, fmt.Errorf("%w: the address holds a password; set %s in the server's environment instead", ErrInvalid, PasswordEnv)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	switch scheme {
+	case "http", "ftp":
+		return address{}, fmt.Errorf("%w: %s is not encrypted and would carry the password in the clear; use https:// (WebDAV) or ftps://", ErrInvalid, scheme)
+	case "https", "s3", "ftps", "sftp":
+	default:
+		return address{}, fmt.Errorf("%w: %s is not a kind of destination this server knows; use a directory, https:// (WebDAV), s3://, ftps:// or sftp://", ErrInvalid, u.Scheme)
+	}
+	if u.Hostname() == "" {
+		return address{}, fmt.Errorf("%w: the address names no server", ErrInvalid)
+	}
+	a := address{kind: scheme, url: u}
+	if scheme == "https" {
+		a.kind = "webdav"
+	}
+	dir := path.Clean("/" + u.Path)
+	switch a.kind {
+	case "s3":
+		if u.Query().Get("endpoint") == "" {
+			return address{}, fmt.Errorf("%w: an s3 address names its endpoint, s3://bucket/folder?endpoint=https://s3.example.com&region=eu-central-1", ErrInvalid)
+		}
+		ep, err := url.Parse(u.Query().Get("endpoint"))
+		if err != nil || ep.Scheme != "https" || ep.Host == "" {
+			return address{}, fmt.Errorf("%w: the s3 endpoint is an https:// address", ErrInvalid)
+		}
+		dir = strings.Trim(path.Clean("/"+u.Path), "/")
+	case "sftp", "ftps":
+		if u.RawQuery != "" {
+			return address{}, fmt.Errorf("%w: a %s address takes no parameters", ErrInvalid, scheme)
+		}
+	}
+	a.dir = dir
+	return a, nil
 }
 
 // validName keeps a stored file inside its destination.

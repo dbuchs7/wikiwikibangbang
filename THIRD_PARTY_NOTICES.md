@@ -13,8 +13,9 @@ wikiwikibangbang is licensed under AGPL-3.0-only (see `LICENSE`). The binary inc
 | github.com/prometheus/client_model | v0.6.2 | Apache-2.0 |
 | github.com/prometheus/common | v0.70.1 | Apache-2.0 |
 | github.com/prometheus/procfs | v0.21.1 | Apache-2.0 |
+| golang.org/x/crypto | v0.58.0 | BSD-3-Clause |
 | golang.org/x/oauth2 | v0.37.0 | BSD-3-Clause |
-| golang.org/x/sys | v0.47.0 | BSD-3-Clause |
+| golang.org/x/sys | v0.49.0 | BSD-3-Clause |
 | google.golang.org/protobuf | v1.36.11 | BSD-3-Clause |
 
 The web UI embeds a bundle of these JavaScript packages, built from `internal/web/vendor` (ADR-0032); `internal/web/static/vendor/prosemirror.LICENSE.txt` ships next to it:

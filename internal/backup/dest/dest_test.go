@@ -26,6 +26,32 @@ func TestAddresses(t *testing.T) {
 	if err := Check("https://user:secret@host/dav"); !strings.Contains(err.Error(), "password") {
 		t.Errorf("a password in the address: %v", err)
 	}
+	for _, ok := range []string{"https://wiki@nas.example.org:5006/backups", "s3://bucket/wiki?endpoint=https://s3.example.com&region=eu-central-1",
+		"ftps://wiki@nas.example.org/backups", "sftp://wiki@nas.example.org:2222/volume1/backups"} {
+		if err := Check(ok); err != nil {
+			t.Errorf("%q: %v", ok, err)
+		}
+		if _, isDir := Directory(ok); isDir {
+			t.Errorf("%q is taken for a directory", ok)
+		}
+	}
+	for bad, want := range map[string]string{
+		"http://nas/dav":                "not encrypted",
+		"ftp://nas/dir":                 "not encrypted",
+		"s3://bucket":                   "endpoint",
+		"s3://bucket?endpoint=http://x": "https",
+		"sftp://wiki@nas/dir?x=1":       "no parameters",
+		"https:///dav":                  "no server",
+		"gopher://nas/x":                "not a kind",
+		"sftp://wiki:secret@nas/dir":    "password",
+	} {
+		if err := Check(bad); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: %v, want %q", bad, err, want)
+		}
+	}
+	if d, ok := Directory(dir); !ok || d != filepath.Clean(dir) {
+		t.Errorf("directory %q %v", d, ok)
+	}
 	if _, err := Open("relative", nil); err == nil {
 		t.Error("a relative path opened")
 	}
