@@ -1590,20 +1590,152 @@ async function kanbansView() {
 // kanban or remove it.
 async function kanbanView(space, id) {
   const show = screen();
-  const [{ kanbans }, { types }, { spaces }] = await Promise.all([get(`/api/kanbans?space=${encodeURIComponent(space)}`), get("/api/types"), get("/api/spaces")]);
-  const k = kanbans.find((x) => x.id === id);
-  if (!k) throw new Error(t("kanban.missing"));
+  const kpath = `/api/spaces/${encodeURIComponent(space)}/kanbans/${encodeURIComponent(id)}`;
+  const [{ types }, { spaces }, board] = await Promise.all([get("/api/types"), get("/api/spaces"), get(kpath + "/board")]);
+  const k = board.kanban;
   here.space = space;
   const type = types.find((ty) => ty.name === k.type);
   if (!type?.workflow) throw new Error(t("board.noWorkflow", { type: k.type }));
   const canEdit = mayEdit(spaces.find((sp) => sp.key === space)?.role);
   const base = `/api/items?space=${encodeURIComponent(space)}&type=${encodeURIComponent(k.type)}&limit=100`;
   const [cards, all] = await Promise.all([readAll(`${base}&label=${encodeURIComponent(k.label)}`), canEdit ? readAll(base) : { items: [] }]);
+  const byID = new Map(cards.items.map((it) => [it.id, it]));
+  const fieldOf = (name) => type.fields.find((f) => f.name === name);
+  await learnNames(cards.items.flatMap((it) => k.cardFields.filter((n) => fieldOf(n)?.kind === "user").map((n) => it.properties[n]).filter(Boolean)));
   const status = h("div", { class: "status" });
+  const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const setLabels = (it, labels) => put(`/api/items/${it.id}/labels`, { labels });
-  const off = (it) => canEdit ? h("button", { type: "button", class: "link kanban-off", text: t("kanban.takeOff"),
-    onclick: () => action(() => setLabels(it, it.labels.filter((l) => l !== k.label)), status) }) : null;
   const elsewhere = all.items.filter((it) => !it.labels.includes(k.label));
+
+  // A move the workflow lacks is reported; an administrator can add it to
+  // the type at once (ADR-0076).
+  const moveFailed = (err, it, col, missing) => {
+    status.replaceChildren(errorBox(err), missing && me.admin
+      ? h("p", {}, h("button", { type: "button", class: "secondary", id: "kanban-add-transition", text: t("kanban.addTransition", { from: it.state, to: col.state, type: k.type }),
+        onclick: () => action(async () => {
+          await post(`/api/types/${encodeURIComponent(k.type)}/transitions`, { from: it.state, to: col.state });
+          await post(kpath + "/place", { card: it.id, column: col.id });
+        }, status) }))
+      : missing ? h("p", { class: "muted", text: t("kanban.askAdmin") }) : "");
+  };
+  const place = async (it, col, before) => {
+    if (col.state && col.state !== it.state && !type.workflow.transitions.some((tr) => tr.to === col.state && tr.from.includes(it.state))) {
+      moveFailed(new Error(t("kanban.noTransition", { type: k.type, from: it.state, to: col.state })), it, col, true);
+      return;
+    }
+    try {
+      await post(kpath + "/place", { card: it.id, column: col.id, before: before || "" });
+      route();
+    } catch (err) {
+      moveFailed(err, it, col, Boolean(col.state) && /no transition from/.test(err.message));
+    }
+  };
+
+  // What a card shows besides its key and title, as the kanban says.
+  const valueText = (it, name) => {
+    if (name === "state") return it.state;
+    if (name === "labels") return it.labels.filter((l) => l !== k.label).join(", ");
+    const f = fieldOf(name), v = it.properties[name];
+    if (v === undefined || v === null || v === "") return "";
+    if (f?.kind === "user") return person(v);
+    if (f?.kind === "date") return String(v).slice(0, 10);
+    if (f?.kind === "bool") return v ? "✓" : "–";
+    return String(v);
+  };
+  const select = (it) => {
+    history.replaceState(null, "", `#/kanban/${encodeURIComponent(space)}/${encodeURIComponent(id)}?card=${encodeURIComponent(it.key)}`);
+    layout.querySelectorAll(".card-item.selected").forEach((el) => el.classList.remove("selected"));
+    layout.querySelector(`.card-item[data-id="${it.id}"]`)?.classList.add("selected");
+    openDetail(it);
+  };
+  const cardEl = (it) => {
+    const facts = k.cardFields.map((n) => [n, valueText(it, n)]).filter(([, v]) => v);
+    const li = h("li", { class: "card-item", draggable: canEdit ? "true" : "false", "data-id": it.id, tabindex: "0",
+      ondragstart: (ev) => { ev.dataTransfer.setData("text/plain", it.id); ev.dataTransfer.effectAllowed = "move"; },
+      onclick: (ev) => { if (!ev.target.closest("a, button")) select(it); },
+      onkeydown: (ev) => { if (ev.key === "Enter" && ev.target === li) select(it); } },
+    h("div", { class: "card-key", text: it.key }),
+    h("div", { class: "card-title", text: it.title }),
+    facts.length ? h("dl", { class: "card-facts" }, facts.flatMap(([n, v]) => [h("dt", { text: n }), h("dd", { text: v })])) : "",
+    canEdit ? h("button", { type: "button", class: "link kanban-off", text: t("kanban.takeOff"),
+      onclick: () => action(() => setLabels(it, it.labels.filter((l) => l !== k.label)), status) }) : "");
+    return li;
+  };
+  const columnEl = (col) => {
+    const list = h("ul", { class: "board-cards" }, (col.cards || []).map((cid) => byID.get(cid)).filter(Boolean).map(cardEl));
+    const el = h("section", { class: "board-column" + (col.state ? "" : " own-column"), "data-state": col.state || "", "data-column": col.id,
+      ondragover: (ev) => { if (!canEdit) return; ev.preventDefault(); el.classList.add("drop"); },
+      ondragleave: () => el.classList.remove("drop"),
+      ondrop: (ev) => {
+        ev.preventDefault();
+        el.classList.remove("drop");
+        const it = byID.get(ev.dataTransfer.getData("text/plain"));
+        if (!it) return;
+        // Dropped on a card: before it; elsewhere in the column: last.
+        const target = ev.target.closest(".card-item");
+        const before = target && target.dataset.id !== it.id ? target.dataset.id : "";
+        place(it, col, before);
+      } },
+    h("h2", {}, col.name, col.state && col.name !== col.state ? h("span", { class: "muted column-state", text: ` · ${col.state}` }) : "",
+      h("span", { class: "muted", text: ` ${(col.cards || []).length}` })),
+    list);
+    return el;
+  };
+
+  // The details of a card beside the board: its fields, state, labels and
+  // text, as on its own page; changes are saved at once.
+  const detail = h("aside", { class: "kanban-detail", id: "kanban-detail", hidden: true, "aria-label": t("kanban.details") });
+  const openDetail = async (it) => {
+    detail.hidden = false;
+    detail.replaceChildren(h("p", { class: "muted", text: t("kanban.loading") }));
+    let item, embeds;
+    try {
+      [{ item }, { embeds }] = await Promise.all([get("/api/items/" + it.id), get(`/api/items/${it.id}/embeds`)]);
+    } catch (err) {
+      detail.replaceChildren(errorBox(err));
+      return;
+    }
+    const path = "/api/items/" + item.id;
+    const editable = canEdit && !item.managed;
+    const saved = h("span", { class: "save-mark", role: "status" });
+    const props = h("table", { class: "props" }, type.fields.map((f) => {
+      const input = propertyInput(f, item.properties[f.name]);
+      input.disabled = !editable;
+      if (editable) {
+        input.addEventListener("change", async () => {
+          saved.textContent = t("common.saving");
+          try {
+            await put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: readProperty(f, input) });
+            saved.textContent = "✓ " + t("common.saved");
+            route();
+          } catch (err) {
+            saved.textContent = err.message;
+          }
+        });
+      }
+      return h("tr", { "data-field": f.name }, h("th", { text: f.name }), h("td", {}, input));
+    }));
+    const transitions = editable ? type.workflow.transitions.filter((tr) => tr.from.includes(item.state))
+      .map((tr) => h("button", { type: "button", class: "secondary", text: `${tr.name} → ${tr.to}`, onclick: () => action(() => post(path + "/transitions", { name: tr.name }), status) })) : [];
+    detail.replaceChildren(
+      h("div", { class: "kanban-detail-head" },
+        h("span", { class: "muted", text: item.key }),
+        h("button", { type: "button", class: "link", id: "kanban-detail-close", "aria-label": t("common.close"), text: "×", onclick: () => {
+          detail.hidden = true;
+          layout.querySelectorAll(".card-item.selected").forEach((el) => el.classList.remove("selected"));
+          history.replaceState(null, "", `#/kanban/${encodeURIComponent(space)}/${encodeURIComponent(id)}`);
+        } })),
+      h("h2", {}, link("#/item/" + encodeURIComponent(item.key), item.title || item.key)),
+      h("p", {}, h("span", { class: "chip", text: item.state }), " ", saved),
+      transitions.length ? h("p", { class: "actions-row" }, transitions) : "",
+      type.fields.length ? props : "",
+      labelsLine(path, item, editable, status),
+      type.body ? h("section", { class: "kanban-detail-body" }, item.body.length ? readOnlyBody(item, embeds) : h("p", { class: "muted", text: t("item.noBody") })) : "",
+      h("p", {}, link("#/item/" + encodeURIComponent(item.key), t("kanban.openItem"), "button")));
+  };
+
+  // Columns and what cards show are set on the kanban (ADR-0076).
+  const settings = canEdit ? kanbanSettings(k, type, board.columns, kpath, status) : "";
   const tools = canEdit ? h("div", { class: "kanban-tools" },
     form({ id: "kanban-add", class: "inline-form" }, [
       h("input", { name: "title", required: true, placeholder: t("kanban.newCard"), "aria-label": t("kanban.newCard") }),
@@ -1624,18 +1756,64 @@ async function kanbanView(space, id) {
     h("span", { class: "kanban-admin" },
       h("button", { type: "button", class: "link", text: t("kanban.rename"), onclick: () => {
         const name = prompt(t("kanban.name"), k.name);
-        if (name && name.trim() !== k.name) action(() => put(`/api/spaces/${encodeURIComponent(space)}/kanbans/${k.id}`, { name }), status);
+        if (name && name.trim() !== k.name) action(() => put(kpath, { name }), status);
       } }), " · ",
       h("button", { type: "button", class: "link", text: t("kanban.remove"), onclick: () => confirm(t("kanban.removeConfirm", { name: k.name }))
-        && action(async () => { await del(`/api/spaces/${encodeURIComponent(space)}/kanbans/${k.id}`); location.hash = "#/kanbans"; }, status) }))) : null;
+        && action(async () => { await del(kpath); location.hash = "#/kanbans"; }, status) }))) : null;
+  const layout = h("div", { class: "kanban-layout" },
+    h("div", { id: "kanban" }, h("div", { class: "board" }, board.columns.map(columnEl))),
+    detail);
   show(
     h("p", {}, link("#/tasks", t("nav.tasks")), " / ", link("#/kanbans", t("kanban.tab")), " / " + k.name),
     h("div", { class: "page-head" }, h("h1", { text: k.name }), h("p", { class: "muted", text: t("kanban.metaLong", { space, type: k.type, label: k.label }) })),
     tools,
+    settings,
     cards.truncated ? h("p", { class: "notice", text: t("board.truncated", { n: cards.items.length }) }) : null,
     status,
-    h("div", { id: "kanban" }, boardOf(cards.items, type, status, off)),
+    layout,
   );
+  const chosen = params.get("card") && cards.items.find((it) => it.key === params.get("card"));
+  if (chosen) select(chosen);
+}
+
+// kanbanSettings sets a kanban's columns — the workflow's states, renamed
+// and ordered, and columns of its own — and the fields its cards show
+// (ADR-0076).
+function kanbanSettings(k, type, columns, kpath, status) {
+  const rows = h("ol", { class: "kanban-columns-edit", id: "kanban-columns" });
+  const fill = (cols) => rows.replaceChildren(...cols.map((c, i) => {
+    const name = h("input", { value: c.name, "aria-label": t("kanban.columnName"), required: true, maxlength: 40 });
+    name.addEventListener("input", () => { c.name = name.value; });
+    const move = (d) => () => { const j = i + d; if (j < 0 || j >= cols.length) return; [cols[i], cols[j]] = [cols[j], cols[i]]; fill(cols); };
+    return h("li", { "data-column": c.id || "" }, name,
+      h("span", { class: "muted", text: c.state ? t("kanban.stateColumn", { state: c.state }) : t("kanban.ownColumn") }),
+      h("button", { type: "button", class: "link", text: "↑", "aria-label": t("kanban.up"), onclick: move(-1) }),
+      h("button", { type: "button", class: "link", text: "↓", "aria-label": t("kanban.down"), onclick: move(1) }),
+      c.state ? "" : h("button", { type: "button", class: "link danger", text: t("kanban.removeColumn"), onclick: () => { cols.splice(i, 1); fill(cols); } }));
+  }));
+  const cols = columns.map((c) => ({ id: c.id, name: c.name, state: c.state || "" }));
+  fill(cols);
+  const newColumn = h("input", { id: "kanban-new-column", placeholder: t("kanban.newColumn"), "aria-label": t("kanban.newColumn"), maxlength: 40 });
+  const choices = [...type.fields.map((f) => f.name), "labels", "state"];
+  const boxes = choices.map((n) => h("input", { type: "checkbox", value: n, checked: k.cardFields.includes(n) }));
+  return h("details", { class: "card kanban-settings", id: "kanban-settings" },
+    h("summary", { text: t("kanban.settings") }),
+    h("h3", { text: t("kanban.cardFields") }),
+    h("p", { class: "muted", text: t("kanban.cardFieldsHelp") }),
+    h("div", { class: "format-list", id: "kanban-card-fields" }, choices.map((n, i) => h("label", { class: "check" }, boxes[i], " ", n))),
+    h("h3", { text: t("kanban.columns") }),
+    h("p", { class: "muted", text: t("kanban.columnsHelp") }),
+    rows,
+    h("p", { class: "inline-form" }, newColumn, h("button", { type: "button", id: "kanban-add-column", text: t("kanban.addColumn"), onclick: () => {
+      if (!newColumn.value.trim()) return;
+      cols.push({ name: newColumn.value.trim(), state: "" });
+      newColumn.value = "";
+      fill(cols);
+    } })),
+    h("p", { class: "actions-row" }, h("button", { type: "button", class: "primary", id: "kanban-settings-save", text: t("common.save"), onclick: () => action(() => put(kpath, {
+      name: k.name, cardFields: boxes.filter((b) => b.checked).map((b) => b.value),
+      columns: cols.map((c) => ({ id: c.state ? "" : c.id || "", name: c.name.trim(), state: c.state })),
+    }), status) })));
 }
 
 // albumView shows the images and drawings of every item one may read

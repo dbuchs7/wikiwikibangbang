@@ -215,6 +215,37 @@ table.history td { font-size: 13px; }
 }
 .card-title { margin: 2px 0 4px; overflow-wrap: anywhere; }
 .card-actions { font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+/* A kanban's board with the details of a card beside it, and its settings
+   (ADR-0076). */
+.kanban-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.kanban-layout:has(.kanban-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); }
+.kanban-detail {
+  position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 14px 16px;
+}
+.kanban-detail-head { display: flex; justify-content: space-between; align-items: center; }
+.kanban-detail-head button { font-size: 20px; line-height: 1; }
+.kanban-detail h2 { margin: 4px 0 8px; overflow-wrap: anywhere; }
+.kanban-detail .props { width: 100%; }
+.kanban-detail .props input, .kanban-detail .props select, .kanban-detail .props textarea { width: 100%; }
+.kanban-detail-body { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+.card-item.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.card-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.card-key { font-size: 11px; color: var(--muted); }
+.card-facts { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; margin: 4px 0; font-size: 12px; }
+.card-facts dt { color: var(--muted); }
+.card-facts dd { margin: 0; overflow-wrap: anywhere; }
+.board-column.own-column { border-style: dashed; }
+.kanban-settings { margin: 8px 0 14px; }
+.kanban-settings summary { cursor: pointer; font-weight: 600; }
+.kanban-columns-edit { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.kanban-columns-edit li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.kanban-columns-edit input { width: 14rem; }
+@media (max-width: 900px) {
+  .kanban-layout:has(.kanban-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
+  .kanban-detail { position: static; max-height: none; }
+}
 
 /* ---------- Governance (ADR-0040) ---------- */
 input.days { width: 6rem; padding: 4px 8px; }
