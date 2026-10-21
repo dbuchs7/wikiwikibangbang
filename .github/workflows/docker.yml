@@ -34,7 +34,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # The tags are needed to name a build after the release it is.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: docker/setup-qemu-action@v3
 
@@ -59,13 +62,22 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
+      # A release is named by its tag; a build of main on a released commit
+      # by that release too; any other build by the last release, the
+      # commits since and its commit, e.g. 0.5.4+3.g75672f2.
       - name: Version for the binary
         id: version
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          elif tag="$(git describe --tags --exact-match --match 'v[0-9]*' 2>/dev/null)"; then
+            echo "value=${tag#v}" >> "$GITHUB_OUTPUT"
+          elif described="$(git describe --tags --match 'v[0-9]*' 2>/dev/null)"; then
+            # v0.5.4-3-g75672f2 -> 0.5.4+3.g75672f2
+            base="${described%-*-g*}"; rest="${described#"${base}"-}"
+            echo "value=${base#v}+${rest%%-*}.${rest#*-}" >> "$GITHUB_OUTPUT"
           else
             echo "value=0.0.0-dev+${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
           fi
