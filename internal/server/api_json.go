@@ -16,6 +16,16 @@ type fieldJSON struct {
 	Kind     item.FieldKind `json:"kind"`
 	Required bool           `json:"required,omitempty"`
 	Values   []string       `json:"values,omitempty"`
+	// Unique and Recommended are rules of the catalog (ADR-0074).
+	Unique      bool `json:"unique,omitempty"`
+	Recommended bool `json:"recommended,omitempty"`
+}
+
+// reviewJSON is a type's rule for checking its items again (ADR-0074).
+type reviewJSON struct {
+	EveryDays int    `json:"everyDays"`
+	Field     string `json:"field"`
+	Owner     string `json:"owner,omitempty"`
 }
 
 type transitionJSON struct {
@@ -37,12 +47,16 @@ type typeJSON struct {
 	Fields   []fieldJSON   `json:"fields"`
 	Workflow *workflowJSON `json:"workflow,omitempty"`
 	Body     bool          `json:"body"`
+	Review   *reviewJSON   `json:"review,omitempty"`
 }
 
 func toTypeJSON(td item.TypeDef) typeJSON {
 	t := typeJSON{Name: td.Name, Version: td.Version, Body: td.Body, Fields: []fieldJSON{}}
 	for _, f := range td.Fields {
-		t.Fields = append(t.Fields, fieldJSON{Name: f.Name, Kind: f.Kind, Required: f.Required, Values: f.Values})
+		t.Fields = append(t.Fields, fieldJSON{Name: f.Name, Kind: f.Kind, Required: f.Required, Values: f.Values, Unique: f.Unique, Recommended: f.Recommended})
+	}
+	if r := td.Review; r != nil {
+		t.Review = &reviewJSON{EveryDays: r.EveryDays, Field: r.Field, Owner: r.Owner}
 	}
 	if wf := td.Workflow; wf != nil {
 		t.Workflow = &workflowJSON{Initial: wf.Initial, States: wf.States, Transitions: []transitionJSON{}}
@@ -56,7 +70,10 @@ func toTypeJSON(td item.TypeDef) typeJSON {
 func (t typeJSON) toTypeDef() item.TypeDef {
 	td := item.TypeDef{Name: t.Name, Body: t.Body}
 	for _, f := range t.Fields {
-		td.Fields = append(td.Fields, item.FieldDef{Name: f.Name, Kind: f.Kind, Required: f.Required, Values: f.Values})
+		td.Fields = append(td.Fields, item.FieldDef{Name: f.Name, Kind: f.Kind, Required: f.Required, Values: f.Values, Unique: f.Unique, Recommended: f.Recommended})
+	}
+	if r := t.Review; r != nil {
+		td.Review = &item.Review{EveryDays: r.EveryDays, Field: r.Field, Owner: r.Owner}
 	}
 	if wf := t.Workflow; wf != nil {
 		td.Workflow = &item.Workflow{Initial: wf.Initial, States: wf.States}

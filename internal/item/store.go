@@ -173,6 +173,9 @@ func (s *Store) DefineType(actor string, td TypeDef) error {
 	if err := td.validate(); err != nil {
 		return err
 	}
+	if err := s.duplicatesAmong(td); err != nil {
+		return err
+	}
 	td.Version = len(s.types[td.Name]) + 1
 	return s.record(actor, Event{Kind: TypeDefined, TypeDef: &td})
 }
@@ -293,6 +296,9 @@ func (s *Store) prepareCreate(n NewItem) (Event, error) {
 			return Event{}, invalid("field %q is required", f.Name)
 		}
 	}
+	if err := s.duplicate(n.Space, td, "", n.Properties); err != nil {
+		return Event{}, err
+	}
 	return Event{
 		Kind: ItemCreated, Item: s.newID(), Space: n.Space, TypeName: td.Name, TypeVersion: td.Version,
 		Parent: n.Parent, Title: n.Title, Props: maps.Clone(n.Properties),
@@ -387,6 +393,9 @@ func (s *Store) SetProperty(actor string, id ID, field string, value any) error 
 	}
 	td, _ := s.latest(it.Type)
 	if err := checkProps(td, Props{field: value}); err != nil {
+		return err
+	}
+	if err := s.duplicate(it.Space, td, id, Props{field: value}); err != nil {
 		return err
 	}
 	return s.record(actor, Event{Kind: PropertySet, Item: id, Field: field, Value: value})
@@ -509,7 +518,7 @@ func (s *Store) checkMove(id ID, toSpace string, newParent ID) error {
 			return invalid("cannot move an item below itself")
 		}
 	}
-	return nil
+	return s.duplicatesMoving(id, toSpace)
 }
 
 // CommitBody commits a new version of an item's body.
@@ -640,6 +649,13 @@ func (s *Store) Restore(actor string, id ID) error {
 	}
 	if p := s.items[id].Parent; p != "" && s.items[p].Presence != Live {
 		return invalid("restore the parent %s first", s.items[p].Key)
+	}
+	for _, m := range members {
+		it := s.items[m]
+		td, _ := s.latest(it.Type)
+		if err := s.duplicate(it.Space, td, m, it.Properties); err != nil {
+			return err
+		}
 	}
 	return s.record(actor, Event{Kind: ItemRestored, Item: id, Members: members})
 }
@@ -870,6 +886,9 @@ type Query struct {
 	IncludeDeleted bool
 	// Label requires the item to carry this label (ADR-0044).
 	Label string
+	// WhereText requires each named property to read as the given text
+	// (FormatValue), as the API's where filter gives it (ADR-0074).
+	WhereText map[string]string
 }
 
 // Find returns copies of the matching items in creation order.
@@ -881,7 +900,8 @@ func (s *Store) Find(q Query) []Item {
 			(q.Space != "" && it.Space != q.Space) ||
 			(q.State != "" && it.State != q.State) ||
 			(q.Parent != "" && it.Parent != q.Parent) ||
-			(q.Label != "" && !slices.Contains(it.Labels, q.Label)) {
+			(q.Label != "" && !slices.Contains(it.Labels, q.Label)) ||
+			!whereMatches(it, q.WhereText) {
 			continue
 		}
 		match := true

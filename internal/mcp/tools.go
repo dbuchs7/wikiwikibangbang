@@ -79,14 +79,21 @@ var tools = []tool{
 	{Name: "list_spaces", Description: "List the spaces the caller holds a role in.", Method: "GET", Path: "/api/spaces"},
 	{Name: "list_types", Description: "List the item types with their fields and workflows; read it before creating an item or setting a property.",
 		Method: "GET", Path: "/api/types"},
-	{Name: "find_items", Description: "Find readable items by space, type, state or parent, paged. The answer's total says whether it is exact.",
+	{Name: "find_items", Description: "Find readable items by space, type, state, parent, label or a property's value, paged. The answer's total says whether it is exact. " +
+		"To keep a catalog in step with another system, find an item by the identifier it has there with where, before creating it.",
 		Method: "GET", Path: "/api/items", Params: append([]param{
 			{"space", str, inQuery, false, "A space key, e.g. PLAT."},
 			{"type", str, inQuery, false, "A type name, e.g. task."},
 			{"state", str, inQuery, false, "A workflow state, e.g. open."},
 			{"parent", str, inQuery, false, "The ID of the containing item."},
 			{"label", str, inQuery, false, "A label the items carry, e.g. runbook."},
+			{"where", str, inQuery, false, "A property's value, as <field>=<value>, e.g. source-id=4f2a; a date as YYYY-MM-DD."},
 		}, paging...)},
+	{Name: "get_governance", Description: "The governance check of a space: sensitive data, stale items, implausible values and empty recommended fields, and items due for review, " +
+		"each with the person responsible. Fix what can be fixed, e.g. a missing contact; a review is a person's decision.",
+		Method: "GET", Path: "/api/spaces/{space}/governance", Params: []param{
+			{"space", str, inPath, true, "The space key."},
+		}},
 	{Name: "search_items", Description: "Full-text search over readable items, best match first, paged.",
 		Method: "GET", Path: "/api/search", Params: append([]param{
 			{"q", str, inQuery, true, "Words to find; every word must occur."},

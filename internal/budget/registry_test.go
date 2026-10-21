@@ -31,6 +31,7 @@ var classified = map[string]string{
 	"internal/backup/dest.maxListing": "a backup destination's listing or error answer (ADR-0073), read and parsed; " +
 		"not a caller's input to this server, it guards against a destination that misbehaves",
 	"internal/backup/dest/remote.go:2048": "the start of a destination's error answer, quoted in the error message (ADR-0073)",
+	"internal/item.maxURL":                "the shape of a url field (ADR-0074), like the length of a username; what a request carries is bounded by RequestBody",
 	"internal/auth.MaxFailures":           "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
 	"internal/auth.MaxTokenLifetime":      "a security policy (ADR-0027): how long an API token may live",
 	"internal/auth.MaxReasonLength":       "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",

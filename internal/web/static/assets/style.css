@@ -942,3 +942,7 @@ a.requests-notice { display: block; margin: 0 0 18px; color: inherit; text-decor
 a.requests-notice:hover { border-color: var(--accent); }
 .requests-card { margin: 0 0 18px; border-left: 3px solid var(--warning); }
 .requests-card h2 { margin-top: 0; }
+
+/* Catalogs (ADR-0074): where a mirrored item is kept, and web addresses. */
+.notice.origin { margin: 0 0 14px; }
+.prop-link { margin-left: 6px; white-space: nowrap; }

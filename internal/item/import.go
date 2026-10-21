@@ -112,6 +112,9 @@ func (s *Store) Upsert(actor string, u Upsert) (Item, bool, error) {
 			reflect.DeepEqual(it.Properties, nonNil(u.Properties)) && *it.Origin == origin {
 			return it.clone(), false, nil
 		}
+		if err := s.duplicate(u.Space, td, id, u.Properties); err != nil {
+			return Item{}, false, err
+		}
 		e.Item = id
 		if err := s.record(actor, e); err != nil {
 			return Item{}, false, err
@@ -126,6 +129,9 @@ func (s *Store) Upsert(actor string, u Upsert) (Item, bool, error) {
 	}
 	if e.To == "" && td.Workflow != nil {
 		e.To = td.Workflow.Initial
+	}
+	if err := s.duplicate(u.Space, td, "", u.Properties); err != nil {
+		return Item{}, false, err
 	}
 	e.Item = s.newID()
 	if err := s.record(actor, e); err != nil {

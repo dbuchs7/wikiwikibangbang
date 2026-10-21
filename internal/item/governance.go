@@ -122,6 +122,9 @@ type Report struct {
 	// need of protection (ADR-0058): held ones waiting for review, and
 	// restricted ones, which are assessed but not held.
 	Personal []PersonalData
+	// Reviews lists the items whose type asks for a periodic review and
+	// that are due (ADR-0074).
+	Reviews []ReviewDue
 }
 
 // PersonalData is an item whose content holds indicators of a regulation.
@@ -193,6 +196,16 @@ func (x *Session) Governance(space string, now time.Time, staleAfter time.Durati
 	slices.SortFunc(items, func(a, b *Item) int { return a.created - b.created })
 	for _, it := range items {
 		responsible, last := x.s.lastEditor(it.ID)
+		td, _ := x.s.latest(it.Type)
+		// A type with a review rule names an owner, who answers for the
+		// item whoever changed it last, e.g. a synchronisation (ADR-0074).
+		if o := owner(td, it); o != "" {
+			responsible = o
+		}
+		if rd, due := reviewDue(td, it, now); due {
+			rd.Responsible = responsible
+			rep.Reviews = append(rep.Reviews, rd)
+		}
 		x.s.sensitiveIn(it, responsible, &rep)
 		if now.Sub(last) > staleAfter {
 			rep.Stale = append(rep.Stale, StaleItem{Item: it.ID, Key: it.Key, Title: it.Title, LastChange: last, Responsible: responsible})
@@ -265,6 +278,9 @@ func (s *Store) implausible(it *Item, now time.Time) []string {
 		if f.Required && it.Properties[f.Name] == nil {
 			out = append(out, fmt.Sprintf("required field %q is empty", f.Name))
 		}
+		if f.Recommended && !f.Required && it.Properties[f.Name] == nil {
+			out = append(out, fmt.Sprintf("recommended field %q is empty", f.Name))
+		}
 	}
 	if td.Body && td.Workflow == nil && bodyEmpty(it.Body) {
 		out = append(out, "the body is empty")
@@ -324,6 +340,11 @@ func (x *Session) Findings(now time.Time, staleAfter time.Duration) Report {
 		for _, f := range rep.Implausible {
 			if f.Responsible == x.who {
 				mine.Implausible = append(mine.Implausible, f)
+			}
+		}
+		for _, f := range rep.Reviews {
+			if f.Responsible == x.who {
+				mine.Reviews = append(mine.Reviews, f)
 			}
 		}
 		// A hold is the business of whoever may release it and of whoever

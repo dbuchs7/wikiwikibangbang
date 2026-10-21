@@ -811,5 +811,19 @@ export default {
   "envhelp.restart": "Changed environment variables take effect only after the server or container restarts. This page then shows “set up”.",
   "requests.waiting": {"one": "{n} account request waits for your decision", "other": "{n} account requests wait for your decision"},
   "requests.waitingHelp": "Approving creates the account with the chosen password; rejecting discards the request. The settings are under Administration → Account requests.",
-  "requests.homeHint": "Approve or reject them under Tasks."
+  "requests.homeHint": "Approve or reject them under Tasks.",
+  "gov.colReview": "Review",
+  "gov.reviews": {"one": "{n} item due for review", "other": "{n} items due for review"},
+  "gov.infoReview": "Types with a review rule ask for their items to be checked regularly, e.g. every year. An item is due when it was never checked, or too long ago. The person in the item's owner field is responsible.",
+  "gov.lastReview": "Reviewed",
+  "gov.reviewedDue": "on {last}, due since {due}",
+  "gov.neverReviewed": "never reviewed",
+  "gov.lastReviewed": "last reviewed on {date}",
+  "gov.markReviewed": "Mark as reviewed",
+  "item.openLink": "Open ↗",
+  "item.origin": "Mirrored from {system}.",
+  "item.originOpen": "Open the entry in the system of record ↗",
+  "item.managed": "It is maintained there and read-only here until the cut-over.",
+  "links.field": "{key} · field {field}",
+  "links.origin": "{key} · entry in the system of record"
 };

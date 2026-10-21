@@ -708,6 +708,27 @@ async function mailTo(sink, address) {
     await page.waitForSelector("#governance h2:has-text('Not changed')");
     await page.waitForSelector("#governance h2:has-text('Implausible')");
 
+    step("catalog: a url field opens its address, a unique field refuses a second value, and a review is recorded from the governance check (ADR-0074)");
+    // Through the page's own session, outside the page: the refused
+    // request is expected and must not count as a console error.
+    const api = (path, data) => page.request.post(base + path, { data });
+    check((await api("/api/types", { name: "interface", body: false,
+      fields: [{ name: "source-id", kind: "text", unique: true }, { name: "specification", kind: "url" },
+        { name: "contact", kind: "text", recommended: true }, { name: "owner", kind: "user" }, { name: "reviewed", kind: "date" }],
+      review: { everyDays: 365, field: "reviewed", owner: "owner" } })).status() === 201, "a catalog type is defined");
+    const created = await api("/api/items", { space: "PLAT", type: "interface", title: "Weather API", properties: { "source-id": "meteo-1", specification: "https://example.org/openapi.json" } });
+    const catalog = { key: (await created.json()).item.key,
+      twice: (await api("/api/items", { space: "PLAT", type: "interface", title: "Again", properties: { "source-id": "meteo-1" } })).status() };
+    check(catalog.twice === 400, "a second item with the same unique value is refused");
+    await page.goto(base + "/#/item/" + catalog.key);
+    await page.waitForSelector("tr[data-field=specification] a.prop-link[href='https://example.org/openapi.json'][target=_blank]");
+    check(await page.getAttribute("tr[data-field=specification] input", "type") === "url", "a url field takes a web address");
+    await page.goto(base + "/#/governance/PLAT");
+    await page.waitForSelector(`#governance tr[data-key='${catalog.key}'] button.mark-reviewed`);
+    await page.waitForSelector("#governance td:has-text('recommended field \"contact\" is empty')");
+    await page.click(`#governance tr[data-key='${catalog.key}'] button.mark-reviewed`);
+    await page.waitForSelector(`#governance tr[data-key='${catalog.key}']`, { state: "detached" });
+
     step("governance in the bell: a password saved in a page restricts it, the bell tells, the finding stays listed until resolved");
     const leaked = await page.evaluate(async () => {
       const r = await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },

@@ -433,8 +433,12 @@ func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	where, ok := parseWhere(w, q)
+	if !ok {
+		return
+	}
 	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")),
-		IncludeDeleted: q.Get("deleted") == "true", Label: q.Get("label")}
+		IncludeDeleted: q.Get("deleted") == "true", Label: q.Get("label"), WhereText: where}
 	h.read(w, r, func(x *item.Session) (any, error) {
 		all := x.Find(query)
 		page, res, err := paged(all, func(it item.Item) item.ID { return it.ID }, item.ID(q.Get("after")), limit)
@@ -450,6 +454,26 @@ func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// parseWhere reads the where conditions of a listing (ADR-0074): each
+// where=<field>=<value> requires the field to read as the value, a date as
+// YYYY-MM-DD; e.g. where=source-id=abc finds an item by its identifier in
+// another system.
+func parseWhere(w http.ResponseWriter, q url.Values) (map[string]string, bool) {
+	if len(q["where"]) == 0 {
+		return nil, true
+	}
+	out := map[string]string{}
+	for _, c := range q["where"] {
+		name, value, ok := strings.Cut(c, "=")
+		if !ok || name == "" {
+			writeError(w, http.StatusBadRequest, "where is <field>=<value>")
+			return nil, false
+		}
+		out[name] = value
+	}
+	return out, true
+}
+
 // searchItems answers a full-text search (ADR-0033).
 func (h itemHandlers) searchItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -457,7 +481,11 @@ func (h itemHandlers) searchItems(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Label: q.Get("label")}
+	where, ok := parseWhere(w, q)
+	if !ok {
+		return
+	}
+	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Label: q.Get("label"), WhereText: where}
 	h.read(w, r, func(x *item.Session) (any, error) {
 		start := time.Now()
 		all, err := x.Search(q.Get("q"), query)

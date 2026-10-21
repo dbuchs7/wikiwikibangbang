@@ -11,8 +11,11 @@ import (
 func governanceRoutes(h itemHandlers) []Route {
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/spaces/{space}/governance",
-			Summary: "Check a space: sensitive data, items unchanged for staleDays (365), implausible values; what one may read",
+			Summary: "Check a space: sensitive data, items unchanged for staleDays (365), implausible values and empty recommended fields, items due for review; what one may read",
 			Handler: http.HandlerFunc(h.governance)},
+		{Method: http.MethodPost, Pattern: "/api/items/{ref}/reviewed",
+			Summary: "Record that an item was checked today: its type's review field is set to today's date (ADR-0074)",
+			Handler: http.HandlerFunc(h.markReviewed)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/hold/release",
 			Summary: "End an item's data protection review: outcome restricted (reading is restricted to people or groups) or false-alarm (with a reason); not by who saved the findings",
 			Handler: http.HandlerFunc(h.releaseHold)},
@@ -44,6 +47,45 @@ type implausibleJSON struct {
 	Title       string  `json:"title"`
 	Problem     string  `json:"problem"`
 	Responsible string  `json:"responsible,omitempty"`
+}
+
+// reviewDueJSON is an item due to be checked again (ADR-0074); lastReview is
+// absent for one never reviewed.
+type reviewDueJSON struct {
+	Item        item.ID    `json:"item"`
+	Key         string     `json:"key"`
+	Title       string     `json:"title"`
+	LastReview  *time.Time `json:"lastReview,omitempty"`
+	Due         *time.Time `json:"due,omitempty"`
+	Responsible string     `json:"responsible,omitempty"`
+}
+
+func toReviewsJSON(rs []item.ReviewDue) []reviewDueJSON {
+	out := []reviewDueJSON{}
+	for _, r := range rs {
+		j := reviewDueJSON{Item: r.Item, Key: r.Key, Title: r.Title, Responsible: r.Responsible}
+		if !r.LastReview.IsZero() {
+			last, due := r.LastReview, r.Due
+			j.LastReview, j.Due = &last, &due
+		}
+		out = append(out, j)
+	}
+	return out
+}
+
+// markReviewed records a review of an item (ADR-0074).
+func (h itemHandlers) markReviewed(w http.ResponseWriter, r *http.Request) {
+	h.write(w, r, http.StatusOK, func(x *item.Session, _ *item.Store) (any, error) {
+		it, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		if err := x.MarkReviewed(it.ID, time.Now()); err != nil {
+			return nil, err
+		}
+		got, err := x.Get(it.ID)
+		return map[string]itemJSON{"item": toItemJSON(got)}, err
+	})
 }
 
 // personalJSON is an item holding indicators of a data protection
@@ -123,6 +165,7 @@ func (h itemHandlers) governance(w http.ResponseWriter, r *http.Request) {
 		}
 		out["sensitive"], out["stale"], out["implausible"] = sens, stale, impl
 		out["personal"] = toPersonalJSON(rep.Personal)
+		out["reviews"] = toReviewsJSON(rep.Reviews)
 		return out, nil
 	})
 }
