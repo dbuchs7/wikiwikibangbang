@@ -403,7 +403,6 @@ export default {
   "home.evening": "Guten Abend",
   "home.lead": "Willkommen bei {name}: das Wissen, die Aufgaben und die Entscheidungen Ihres Teams an einem Ort. Beginnen Sie mit einem Bereich unten, legen Sie eine Seite an oder sehen Sie nach, was auf Sie wartet.",
   "home.myTasks": "Meine Aufgaben",
-  "home.search": "Suchen",
   "home.quick": "Schnellzugriff",
   "home.tasksText": "Offene Arbeit in Ihren Bereichen",
   "home.notesUnread": {"one": "{n} ungelesene Änderung", "other": "{n} ungelesene Änderungen"},

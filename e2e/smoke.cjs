@@ -1207,10 +1207,12 @@ function ckanSource() {
     const frame = await (await page.waitForSelector("#export-frame")).contentFrame();
     await frame.waitForSelector("h2.page-title:text-is('Runbook template')");
     check(await frame.isVisible("nav.contents"), "the printable handbook lists its pages");
-    // The start page's search button leads to the search without a term:
-    // the page asks for one instead of failing.
+    // The search without a term asks for one instead of failing; the start
+    // page has no search button of its own, the top bar searches.
     await page.goto(base + "/#/");
-    await page.click("#welcome a[href='#/search/']");
+    await page.waitForSelector("#welcome");
+    check(await page.locator("#welcome a[href='#/search/']").count() === 0, "the start page has no search button");
+    await page.goto(base + "/#/search/");
     await page.waitForSelector("#search-page input:focus");
     await page.waitForSelector("#search-hint");
     check(await page.locator(".error").count() === 0, "an empty search is no error");

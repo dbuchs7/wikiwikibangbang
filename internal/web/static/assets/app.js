@@ -1020,8 +1020,7 @@ async function homeView() {
         h("p", { class: "welcome-lead", text: t("home.lead", { name }) }),
         h("p", { class: "actions-row" },
           anyEditable ? link("#/new", t("home.newPage"), "button primary") : null,
-          link("#/tasks", t("home.myTasks"), "button"),
-          link("#/search/", t("home.search"), "button"))),
+          link("#/tasks", t("home.myTasks"), "button"))),
       h("img", { class: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 480, height: 320 }),
       // The installed version, small, for support questions and releases.
       me.version ? h("span", { class: "welcome-version", id: "home-version", title: me.revision ? t("home.revision", { revision: me.revision }) : "", text: t("home.version", { version: me.version }) }) : ""),

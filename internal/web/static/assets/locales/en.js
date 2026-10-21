@@ -405,7 +405,6 @@ export default {
   "home.evening": "Good evening",
   "home.lead": "Welcome to {name}: the knowledge, tasks and decisions of your team, in one place. Start with a space below, create a page, or see what is waiting for you.",
   "home.myTasks": "My tasks",
-  "home.search": "Search",
   "home.quick": "Quick access",
   "home.tasksText": "Open work across your spaces",
   "home.notesUnread": {"one": "{n} unread change", "other": "{n} unread changes"},
