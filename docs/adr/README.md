@@ -89,3 +89,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0074](0074-catalogs-kept-in-step-with-other-systems.md) | Catalogs kept in step with other systems | Accepted | Landed |
 | [0075](0075-mirroring-the-interfaces-of-opendata-swiss.md) | Mirroring the interfaces of opendata.swiss into a catalog | Accepted | Landed |
 | [0076](0076-kanban-columns-card-fields-and-free-moves.md) | A kanban keeps its own columns, card fields and card order; moves stay workflow transitions | Accepted | Landed |
+| [0077](0077-connectors-keep-catalogs-in-step-with-their-sources.md) | Connectors keep catalog spaces in step with their sources | Accepted | Landed |

@@ -980,4 +980,5 @@ a.requests-notice:hover { border-color: var(--accent); }
 .catalog-run { margin: 6px 0; }
 .catalog-run summary { cursor: pointer; }
 .catalog-problems { font-size: 13px; }
+.connector-editor { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 4px; }
 .format-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0 12px; max-height: 22rem; overflow: auto; margin-bottom: 12px; }

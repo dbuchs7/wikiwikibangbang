@@ -112,10 +112,14 @@ type event struct {
 	Access *Access `json:"access,omitempty"`
 	// Backup is set by BackupSet (ADR-0073).
 	Backup *Backup `json:"backup,omitempty"`
-	// OpenData is set by OpenDataSet (ADR-0075).
-	OpenData *OpenData `json:"openData,omitempty"`
-	Type     string    `json:"type,omitempty"`
-	Data     []byte    `json:"data,omitempty"`
+	// OpenData is set by OpenDataSet (ADR-0075), which a connector
+	// replaced (ADR-0077).
+	OpenData *openData `json:"openData,omitempty"`
+	// Connector is set by ConnectorSet; ConnectorRemoved names it in
+	// Asset (ADR-0077).
+	Connector *Connector `json:"connector,omitempty"`
+	Type      string     `json:"type,omitempty"`
+	Data      []byte     `json:"data,omitempty"`
 }
 
 const (
@@ -131,6 +135,9 @@ const (
 	backupSet = "BackupSet"
 
 	openDataSet = "OpenDataSet"
+
+	connectorSet     = "ConnectorSet"
+	connectorRemoved = "ConnectorRemoved"
 )
 
 // Settings is safe for concurrent use.
@@ -146,12 +153,12 @@ type Settings struct {
 	matchers    []matcher
 	access      Access
 	backup      *Backup
-	openData    *OpenData
+	connectors  map[string]Connector
 }
 
 // New rebuilds the settings from records and journals later changes.
 func New(records [][]byte, j Journal) (*Settings, error) {
-	s := &Settings{journal: j, now: time.Now, assets: map[string]Asset{}, regulations: map[string]Regulation{}}
+	s := &Settings{journal: j, now: time.Now, assets: map[string]Asset{}, regulations: map[string]Regulation{}, connectors: map[string]Connector{}}
 	for i, r := range records {
 		var e event
 		if err := json.Unmarshal(r, &e); err != nil {
@@ -203,8 +210,14 @@ func (s *Settings) apply(e event) error {
 		if e.OpenData == nil {
 			return errors.New("an open data event without settings")
 		}
-		o := *e.OpenData
-		s.openData = &o
+		s.connectors[OpenDataSwiss] = e.OpenData.connector()
+	case connectorSet:
+		if e.Connector == nil {
+			return errors.New("a connector event without a connector")
+		}
+		s.connectors[e.Connector.ID] = *e.Connector
+	case connectorRemoved:
+		delete(s.connectors, e.Asset)
 	default:
 		return fmt.Errorf("unknown event %q", e.Kind)
 	}

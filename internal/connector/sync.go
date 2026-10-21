@@ -1,4 +1,4 @@
-package opendata
+package connector
 
 import (
 	"errors"
@@ -13,11 +13,18 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
 
-// System names the source in an item's origin (ADR-0023).
-const System = "opendata.swiss"
+// Actor is who a connector's changes are recorded as, e.g.
+// sync:opendata.swiss. The connector's ID names the source in an item's
+// origin (ADR-0023).
+func Actor(c site.Connector) string { return "sync:" + c.ID }
 
-// Actor is who the synchronisation's changes are recorded as.
-const Actor = "sync:opendata.swiss"
+// instance names the source's installation in an item's origin.
+func instance(c site.Connector) string {
+	if c.CKAN != nil {
+		return c.CKAN.BaseURL
+	}
+	return ""
+}
 
 // TypeName is the type of the catalog's entries.
 const TypeName = "interface"
@@ -46,7 +53,7 @@ const (
 	FieldReviewed      = "reviewed"
 )
 
-// TypeDef is the type the synchronisation defines when the space has none:
+// TypeDef is the type a connector defines when the space has none:
 // an entry is identified by its source ID, has a publisher, should have an
 // owner here, a contact and a specification, and is reviewed every year
 // (ADR-0074).
@@ -77,10 +84,11 @@ type Change struct {
 
 // Result is what a run did, or with DryRun would do.
 type Result struct {
-	DryRun   bool      `json:"dryRun"`
-	Started  time.Time `json:"started"`
-	Seconds  float64   `json:"seconds"`
-	Datasets int       `json:"datasets"`
+	Connector string    `json:"connector"`
+	DryRun    bool      `json:"dryRun"`
+	Started   time.Time `json:"started"`
+	Seconds   float64   `json:"seconds"`
+	Datasets  int       `json:"datasets"`
 	// Formats are the source's formats the run read, as it writes them.
 	Formats   []string `json:"formats"`
 	Entries   int      `json:"entries"`
@@ -121,13 +129,13 @@ func (r *Result) count(kind, key, title string) {
 }
 
 // ErrNoSpace is a synchronisation into a space that does not exist.
-var ErrNoSpace = errors.New("opendata: the catalog's space does not exist")
+var ErrNoSpace = errors.New("connector: the catalog's space does not exist")
 
 // Apply brings the space in step with the entries: new ones are created,
 // changed ones updated, and those the source no longer publishes are
 // withdrawn. With dry, nothing is written.
-func Apply(db *storage.DB, cfg site.OpenData, entries []Entry, dry bool) (Result, error) {
-	res := Result{DryRun: dry, Entries: len(entries), Problems: []string{}, Examples: []Change{}}
+func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Result, error) {
+	res := Result{Connector: cfg.ID, DryRun: dry, Entries: len(entries), Problems: []string{}, Examples: []Change{}}
 	var existing map[string]item.Item
 	var typeErr error
 	hasSpace, hasType := false, false
@@ -135,7 +143,7 @@ func Apply(db *storage.DB, cfg site.OpenData, entries []Entry, dry bool) (Result
 		hasSpace = s.HasSpace(cfg.Space)
 		existing = map[string]item.Item{}
 		for _, it := range s.Find(item.Query{Space: cfg.Space, Type: TypeName}) {
-			if it.Origin != nil && it.Origin.System == System && it.Origin.Instance == cfg.BaseURL {
+			if it.Origin != nil && it.Origin.System == cfg.ID && it.Origin.Instance == instance(cfg) {
 				existing[it.Origin.ExternalID] = it
 			}
 		}
@@ -150,7 +158,7 @@ func Apply(db *storage.DB, cfg site.OpenData, entries []Entry, dry bool) (Result
 		return res, typeErr
 	}
 	if !hasType && !dry {
-		if err := db.Write(func(s *item.Store) error { return s.DefineType(Actor, TypeDef()) }); err != nil {
+		if err := db.Write(func(s *item.Store) error { return s.DefineType(Actor(cfg), TypeDef()) }); err != nil {
 			return res, err
 		}
 	}
@@ -173,7 +181,7 @@ func Apply(db *storage.DB, cfg site.OpenData, entries []Entry, dry bool) (Result
 			var it item.Item
 			err := db.Write(func(s *item.Store) error {
 				var err error
-				it, _, err = s.Upsert(Actor, u)
+				it, _, err = s.Upsert(Actor(cfg), u)
 				return err
 			})
 			if err != nil {
@@ -210,7 +218,7 @@ func Apply(db *storage.DB, cfg site.OpenData, entries []Entry, dry bool) (Result
 		u := item.Upsert{Origin: *it.Origin, Space: it.Space, Type: it.Type, Parent: it.Parent, Title: it.Title,
 			Properties: it.Properties, State: Withdrawn}
 		if !dry {
-			if err := db.Write(func(s *item.Store) error { _, _, err := s.Upsert(Actor, u); return err }); err != nil {
+			if err := db.Write(func(s *item.Store) error { _, _, err := s.Upsert(Actor(cfg), u); return err }); err != nil {
 				res.problem("%s: %v", it.Key, err)
 				continue
 			}
@@ -229,24 +237,24 @@ func fits(td item.TypeDef) error {
 		for _, f := range td.Fields {
 			if f.Name == name {
 				if f.Kind != kind {
-					return fmt.Errorf("opendata: the field %q of type %q is %s, not %s", name, TypeName, f.Kind, kind)
+					return fmt.Errorf("connector: the field %q of type %q is %s, not %s", name, TypeName, f.Kind, kind)
 				}
 				found = true
 			}
 		}
 		if !found {
-			return fmt.Errorf("opendata: type %q has no field %q", TypeName, name)
+			return fmt.Errorf("connector: type %q has no field %q", TypeName, name)
 		}
 	}
 	if td.Workflow == nil || !slices.Contains(td.Workflow.States, Active) || !slices.Contains(td.Workflow.States, Withdrawn) {
-		return fmt.Errorf("opendata: type %q needs the states %s and %s", TypeName, Active, Withdrawn)
+		return fmt.Errorf("connector: type %q needs the states %s and %s", TypeName, Active, Withdrawn)
 	}
 	return nil
 }
 
 // upsertFor is the import of an entry: the source's fields over what the
 // item holds, the catalog's own fields kept.
-func upsertFor(cfg site.OpenData, e Entry, old item.Item, had bool) item.Upsert {
+func upsertFor(cfg site.Connector, e Entry, old item.Item, had bool) item.Upsert {
 	props := item.Props{}
 	if had {
 		props = maps.Clone(old.Properties)
@@ -284,7 +292,7 @@ func upsertFor(cfg site.OpenData, e Entry, old item.Item, had bool) item.Upsert 
 		props[FieldPublisher] = "unknown"
 	}
 	u := item.Upsert{
-		Origin: item.Origin{System: System, Instance: cfg.BaseURL, ExternalID: e.SourceID, ExternalKey: e.Dataset, URL: e.DatasetURL},
+		Origin: item.Origin{System: cfg.ID, Instance: instance(cfg), ExternalID: e.SourceID, ExternalKey: e.Dataset, URL: e.DatasetURL},
 		Space:  cfg.Space, Type: TypeName, Title: e.Title, Properties: props, State: Active,
 	}
 	if had {
