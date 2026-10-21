@@ -2971,6 +2971,7 @@ async function adminView() {
     }),
     autoBackupCard());
 
+  const catalogSection = section("catalog", t("catalog.title"), catalogCard(spaces, users));
   const designSection = section("design", t("design.title"), await designCard());
   const regulationsSection = section("regulations", t("dp.adminTitle"), await regulationsCard());
 
@@ -3006,7 +3007,7 @@ async function adminView() {
     h("div", { class: "admin-layout" },
       h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, ...tocLinks),
       h("div", { class: "admin-sections" },
-        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, designSection, regulationsSection, importSection, auditSection)),
+        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, catalogSection, designSection, regulationsSection, importSection, auditSection)),
   );
 }
 
@@ -3150,6 +3151,79 @@ function infoButton(help) {
   } }, infoIcon());
 }
 
+// catalogCard sets up the synchronisation of a catalog of interfaces with
+// opendata.swiss and shows how its runs went (ADR-0075). A dry run reports
+// what a run would change; while one runs the card looks again.
+function catalogCard(spaces, users) {
+  const card = h("div", { id: "catalog-sync" }, h("p", { class: "muted", text: t("autobackup.loading") }));
+  let timer = 0;
+  const list = (v) => v.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+  const load = async () => {
+    clearTimeout(timer);
+    if (!card.isConnected && timer) return;
+    let data;
+    try {
+      data = await get("/api/catalog/opendata");
+    } catch (err) {
+      card.replaceChildren(errorBox(err));
+      return;
+    }
+    const { settings: s, status: st } = data;
+    const runStatus = h("div", { class: "status", id: "catalog-run-status" });
+    const run = (dryRun, id, text) => h("button", { type: "button", class: dryRun ? "secondary" : "primary", id, disabled: st.running || !s.space, text, onclick: async () => {
+      runStatus.replaceChildren();
+      try {
+        await post("/api/catalog/opendata/run", { dryRun });
+        await load();
+      } catch (err) {
+        runStatus.replaceChildren(errorBox(err));
+      }
+    } });
+    const result = (r) => h("details", { class: "catalog-run", open: r === st.history[0] },
+      h("summary", {}, h("strong", { text: r.dryRun ? t("catalog.dryRun") : t("catalog.run") }), " · ", when(r.started), " · ",
+        r.error ? h("span", { class: "error", text: r.error })
+          : t("catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn })),
+      r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn") }[x.kind] }), " ",
+        x.key ? link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`) : x.title))) : "",
+      r.problems.length ? h("ul", { class: "catalog-problems" }, r.problems.map((p) => h("li", { class: "muted", text: p }))) : "");
+    card.replaceChildren(
+      h("p", { class: "muted", text: t("catalog.note") }),
+      form({ id: "catalog-settings" }, [
+        h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: s.enabled }), " ", t("catalog.enabled")),
+        field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
+          spaces.map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === s.space })))),
+        field(t("catalog.formats"), h("input", { name: "formats", value: s.formats.join(", ") })),
+        h("p", { class: "muted", text: t("catalog.formatsHelp", { defaults: data.defaults.formats.join(", ") }) }),
+        field(t("catalog.organizations"), h("input", { name: "organizations", value: s.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
+        h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
+        field(t("catalog.steward"), h("select", { name: "steward" }, h("option", { value: "", text: "—" }),
+          users.map((u) => h("option", { value: u.id, text: u.username, selected: u.id === s.steward })))),
+        h("p", { class: "muted", text: t("catalog.stewardHelp") }),
+        field(t("catalog.interval"), h("input", { name: "intervalHours", type: "number", min: 1, max: 744, required: true, value: s.intervalHours })),
+        h("details", {}, h("summary", { text: t("catalog.source") }),
+          field(t("catalog.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: s.baseURL })),
+          field(t("catalog.portalURL"), h("input", { name: "portalURL", type: "url", required: true, value: s.portalURL }))),
+        h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", text: t("autobackup.save") })),
+      ], async (d) => {
+        await put("/api/catalog/opendata/settings", {
+          enabled: d.get("enabled") === "on", space: d.get("space"), formats: list(d.get("formats")), organizations: list(d.get("organizations")),
+          steward: d.get("steward"), intervalHours: Number(d.get("intervalHours")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(),
+        });
+        await load();
+        card.querySelector("#catalog-settings .status")?.replaceChildren(h("p", { class: "notice", text: t("autobackup.saved") }));
+      }),
+      h("p", { id: "catalog-next" }, st.running ? t("catalog.running") : st.next ? t("catalog.next", { when: when(st.next) }) : t("catalog.off")),
+      h("div", { class: "actions-row" }, run(true, "catalog-dry-run", t("catalog.dryRunNow")), run(false, "catalog-run-now", t("catalog.runNow")),
+        s.space ? link("#/space/" + encodeURIComponent(s.space), t("catalog.openSpace"), "button") : ""),
+      runStatus,
+      st.history.length ? h("div", { id: "catalog-history" }, st.history.map(result)) : h("p", { class: "muted", text: t("catalog.noRuns") }),
+    );
+    if (st.running) timer = setTimeout(load, 1500);
+  };
+  load();
+  return card;
+}
+
 // autoBackupCard sets up automatic backups and shows how they went
 // (ADR-0073). It fills itself, because listing the destination may take
 // a while; while a backup runs it looks again every few seconds.
@@ -3284,22 +3358,35 @@ async function designCard() {
     const pick = h("input", { type: "color", name, value: b[name] || "#0b5cff", "aria-label": label });
     return h("div", { class: "field design-colour" }, h("span", { text: label }), h("label", { class: "check" }, on, pick, t("design.useIt")));
   };
-  const asset = (name, label, accept) => {
+  // An asset is uploaded or deleted on its own and only its block is
+  // drawn again: the rest of the form keeps what was typed into it.
+  const asset = (name, label, accept, has = b.assets?.[name]) => {
+    const box = h("div", { class: "design-asset" });
+    const change = (fn) => async () => {
+      status.replaceChildren();
+      try {
+        await fn();
+        await applyBranding(true);
+        const now = await get("/branding.json");
+        box.replaceWith(asset(name, label, accept, now.assets?.[name]));
+      } catch (err) {
+        status.replaceChildren(errorBox(err));
+      }
+    };
     const picker = h("input", { type: "file", accept, id: "design-" + name, "aria-label": label });
-    picker.addEventListener("change", () => action(async () => {
+    picker.addEventListener("change", change(async () => {
       const file = picker.files[0];
       if (!file) return;
       const res = await fetch("/api/branding/" + name, { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: file });
       if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error || res.statusText);
-      await applyBranding(true);
-    }, status));
-    const has = b.assets?.[name];
-    return h("div", { class: "design-asset" },
+    }));
+    box.append(
       h("strong", { text: label }),
-      has && name !== "font" ? h("img", { src: `/branding/${name}?v=${encodeURIComponent(has)}`, alt: "", class: "design-preview" }) : null,
+      has && name !== "font" ? h("img", { src: `/branding/${name}?v=${encodeURIComponent(has)}`, alt: "", class: "design-preview" }) : "",
       h("span", { class: "muted", text: has ? t("design.fileSet") : t("design.fileNone") }),
       h("label", { class: "upload" }, h("span", { text: t("design.choose") }), picker),
-      has ? h("button", { type: "button", class: "link", text: t("common.delete"), onclick: () => action(async () => { await del("/api/branding/" + name); await applyBranding(true); }, status) }) : null);
+      has ? h("button", { type: "button", class: "link", text: t("common.delete"), onclick: change(() => del("/api/branding/" + name)) }) : "");
+    return box;
   };
   const fontNames = { system: t("design.fontSystem"), humanist: t("design.fontHumanist"), serif: t("design.fontSerif"), rounded: t("design.fontRounded"), mono: t("design.fontMono") };
   const cssPicker = h("input", { type: "file", accept: ".css,text/css", "aria-label": t("design.cssFile") });

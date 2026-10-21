@@ -1,7 +1,7 @@
 # ADR-0074: Catalogs kept in step with other systems
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-10-21
 - **Deciders:** Project initiators (the maintainer asked for a space of interfaces, kept current by AI agents over MCP and by a synchronisation, first as a mirror of opendata.swiss and later as the master; every entry with an owner and ideally a contact, checked by the governance check, 2026-10-21)
 
@@ -45,7 +45,7 @@ Chosen option: **2**, because the rules are few and general, and enforcing them 
 
 - **Positive:** a catalog can be kept in step by repeated runs of a synchronisation or an agent without duplicates; its entries carry checked links; every entry has a person who answers for it and is asked to check it again.
 - **Negative / trade-offs accepted:** the uniqueness check scans the items of the type in the space on every change (fast enough for tens of thousands of items; an index would follow if needed); `where` compares text and does not search ranges.
-- **Follow-ups / risks to watch:** the synchronisation with opendata.swiss itself, which mirrors its interfaces into a catalog and keeps the fields only the catalog holds (owner, contact, review); the cut-over to the catalog as the master (`Release`, ADR-0023).
+- **Follow-ups / risks to watch:** the synchronisation with opendata.swiss (ADR-0075); the cut-over to the catalog as the master.
 
 ## Pros and cons of the options
 

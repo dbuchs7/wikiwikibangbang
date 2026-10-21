@@ -56,8 +56,26 @@ async function mailTo(sink, address) {
   throw new Error("no mail to " + address);
 }
 
+// ckanSource answers package_search like the CKAN API of opendata.swiss,
+// with one data set that publishes an API and a CSV file (ADR-0075).
+function ckanSource() {
+  const server = require("http").createServer((req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ success: true, result: { count: 1, results: [{
+      id: "d1", name: "luftqualitaet", title: { de: "Luftqualität", fr: "Qualité de l'air" },
+      organization: { name: "bafu", title: { de: "Bundesamt für Umwelt" } },
+      contact_points: [{ name: "Luft", email: "luft@example.org" }],
+      resources: [{ id: "r-air", format: "API", url: "https://air.example.org/v1", documentation: ["https://air.example.org/docs"] },
+        { id: "r-csv", format: "CSV", url: "https://air.example.org/data.csv" }],
+    }] } }));
+  });
+  server.listen(0, "127.0.0.1");
+  return server;
+}
+
 (async () => {
   const sink = mailSink(process.env.SMTP_SINK_PORT);
+  const ckan = ckanSource();
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const page = await browser.newPage();
   const problems = [];
@@ -712,13 +730,13 @@ async function mailTo(sink, address) {
     // Through the page's own session, outside the page: the refused
     // request is expected and must not count as a console error.
     const api = (path, data) => page.request.post(base + path, { data });
-    check((await api("/api/types", { name: "interface", body: false,
+    check((await api("/api/types", { name: "service", body: false,
       fields: [{ name: "source-id", kind: "text", unique: true }, { name: "specification", kind: "url" },
         { name: "contact", kind: "text", recommended: true }, { name: "owner", kind: "user" }, { name: "reviewed", kind: "date" }],
       review: { everyDays: 365, field: "reviewed", owner: "owner" } })).status() === 201, "a catalog type is defined");
-    const created = await api("/api/items", { space: "PLAT", type: "interface", title: "Weather API", properties: { "source-id": "meteo-1", specification: "https://example.org/openapi.json" } });
+    const created = await api("/api/items", { space: "PLAT", type: "service", title: "Weather API", properties: { "source-id": "meteo-1", specification: "https://example.org/openapi.json" } });
     const catalog = { key: (await created.json()).item.key,
-      twice: (await api("/api/items", { space: "PLAT", type: "interface", title: "Again", properties: { "source-id": "meteo-1" } })).status() };
+      twice: (await api("/api/items", { space: "PLAT", type: "service", title: "Again", properties: { "source-id": "meteo-1" } })).status() };
     check(catalog.twice === 400, "a second item with the same unique value is refused");
     await page.goto(base + "/#/item/" + catalog.key);
     await page.waitForSelector("tr[data-field=specification] a.prop-link[href='https://example.org/openapi.json'][target=_blank]");
@@ -1144,6 +1162,24 @@ async function mailTo(sink, address) {
     const tasksText = require("fs").readFileSync(await tasks.path(), "utf8");
     check(tasksText.includes(exported + ",Price list"), "the task list as CSV: " + JSON.stringify(tasksText.slice(0, 300)));
 
+    step("catalog sync: a dry run reports, a run mirrors the source's API into a catalog space, linked to its data set (ADR-0075)");
+    check((await page.request.post(base + "/api/spaces", { data: { key: "APIS", name: "Interfaces" } })).status() === 201, "the catalog's space is created");
+    await page.goto(base + "/#/admin");
+    await page.waitForSelector("#catalog-settings");
+    await page.selectOption("#catalog-settings [name=space]", "APIS");
+    await page.click("#catalog-settings details summary");
+    await page.fill("#catalog-settings [name=baseURL]", `http://127.0.0.1:${ckan.address().port}/api/3/action`);
+    await page.click("#catalog-settings button[type=submit]");
+    await page.waitForSelector("#catalog-settings >> text=Saved.");
+    await page.click("#catalog-dry-run");
+    await page.waitForSelector("#catalog-history .catalog-run:has-text('Dry run'):has-text('1 new')");
+    await page.click("#catalog-run-now");
+    await page.waitForSelector("#catalog-history .catalog-run:has-text('Sync'):has-text('1 new') a");
+    await page.click("#catalog-history .catalog-run a");
+    await page.waitForSelector("#item-origin a[href='https://opendata.swiss/de/dataset/luftqualitaet']");
+    check(await page.inputValue("tr[data-field=publisher] input") === "Bundesamt für Umwelt", "the publisher is taken from the source");
+    check(await page.inputValue("tr[data-field=contact] input") === "Luft <luft@example.org>", "the contact is taken from the source");
+
     step("spaces: an administrator deletes a space into the trash, restores it, and deletes it for good");
     await page.goto(base + "/#/admin");
     await page.fill("#new-space [name=key]", "TMP");
@@ -1214,5 +1250,6 @@ async function mailTo(sink, address) {
   } finally {
     await browser.close();
     sink.close();
+    ckan.close();
   }
 })();
