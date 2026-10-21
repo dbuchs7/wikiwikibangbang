@@ -3905,6 +3905,30 @@ async function designCard() {
       has ? h("button", { type: "button", class: "link", text: t("common.delete"), onclick: change(() => del("/api/branding/" + name)) }) : "");
     return box;
   };
+  // A ready-made theme (ADR-0085), shown with its header, page and accent
+  // colours; the colours and font below apply over it.
+  const themes = {
+    "": { name: t("design.themeNone"), note: t("design.themeNoneNote"), colours: ["#ffffff", "#f5f6f8", "#0b5cff"] },
+    ocean: { name: t("design.theme.ocean"), note: t("design.theme.oceanNote"), colours: ["#0a6c8f", "#eef6f9", "#16a3b8"] },
+    forest: { name: t("design.theme.forest"), note: t("design.theme.forestNote"), colours: ["#24452b", "#f3f5ef", "#b9d98a"] },
+    sunset: { name: t("design.theme.sunset"), note: t("design.theme.sunsetNote"), colours: ["#f97316", "#fff7f0", "#e11d48"] },
+    berry: { name: t("design.theme.berry"), note: t("design.theme.berryNote"), colours: ["#ffffff", "#f7f3fb", "#7e22ce"] },
+    swiss: { name: t("design.theme.swiss"), note: t("design.theme.swissNote"), colours: ["#ffffff", "#111111", "#d52b1e"] },
+    night: { name: t("design.theme.night"), note: t("design.theme.nightNote"), colours: ["#070a10", "#121722", "#22d3ee"] },
+    comic: { name: t("design.theme.comic"), note: t("design.theme.comicNote"), colours: ["#ffd23f", "#fff6d6", "#e3262f"] },
+    sketch: { name: t("design.theme.sketch"), note: t("design.theme.sketchNote"), colours: ["#fffefa", "#2b2b2b", "#2856b6"] },
+  };
+  const themePicker = h("fieldset", { class: "design-themes", id: "design-themes" }, h("legend", { text: t("design.theme") }),
+    ["", ...(b.themes || [])].filter((id) => themes[id]).map((id) => {
+      const preview = h("span", { class: "theme-preview", "aria-hidden": "true" }, ...themes[id].colours.map((c) => {
+        const dot = h("span");
+        dot.style.background = c;
+        return dot;
+      }));
+      return h("label", { class: "theme-choice theme-" + (id || "none") },
+        h("input", { type: "radio", name: "theme", value: id, checked: (b.theme || "") === id }),
+        preview, h("strong", { text: themes[id].name }), h("span", { class: "muted", text: themes[id].note }));
+    }));
   const fontNames = { system: t("design.fontSystem"), humanist: t("design.fontHumanist"), serif: t("design.fontSerif"), rounded: t("design.fontRounded"), mono: t("design.fontMono") };
   const cssPicker = h("input", { type: "file", accept: ".css,text/css", "aria-label": t("design.cssFile") });
   const cssText = h("textarea", { name: "css", rows: 8, class: "code", spellcheck: "false", "aria-label": t("design.css"), value: b.css || "" });
@@ -3916,6 +3940,7 @@ async function designCard() {
       asset("background", t("design.background"), "image/png,image/jpeg,image/gif,image/webp"),
       asset("font", t("design.fontFile"), ".woff2,.woff,.ttf,.otf")),
     form({ id: "design" }, [
+      themePicker,
       field(t("design.name"), h("input", { name: "name", value: b.name || "", maxlength: 80 })),
       h("div", { class: "design-colours" },
         colour("accent", t("design.accent")), colour("background", t("design.backgroundColour")),
@@ -3932,7 +3957,7 @@ async function designCard() {
     ], async (d, st) => {
       const pick = (name) => (d.get(name + "-on") ? d.get(name) : "");
       const saved = await put("/api/branding", { name: d.get("name"), accent: pick("accent"), background: pick("background"),
-        headerBackground: pick("headerBackground"), headerText: pick("headerText"), font: d.get("font"), fontFamily: d.get("fontFamily").trim(), css: cssText.value });
+        headerBackground: pick("headerBackground"), headerText: pick("headerText"), font: d.get("font"), fontFamily: d.get("fontFamily").trim(), theme: d.get("theme") || "", css: cssText.value });
       showContrast(saved.contrast || []);
       document.getElementById("design-dark").textContent = saved.dark === false ? t("design.darkOff") : t("design.darkHint");
       await applyBranding(true);

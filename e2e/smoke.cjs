@@ -1065,6 +1065,16 @@ function ckanSource() {
     await page.click("#admin-design button:has-text('Delete')"); // the product's logo comes back
     await page.waitForSelector("header .brand picture");
     await page.waitForSelector("head link[rel=icon][href='/favicon.ico']", { state: "attached" });
+    // A ready-made theme applies under the design; the comic one has no
+    // dark scheme (ADR-0085).
+    await page.click("#design-themes label.theme-comic");
+    await page.click("#design button[type=submit]");
+    await page.waitForSelector("#design-dark:has-text('The dark scheme is off')");
+    check((await (await page.request.get(base + "/branding.css")).text()).includes("/* The theme comic"), "the theme is in the design's stylesheet");
+    check((await (await page.request.get(base + "/branding.json")).json()).theme === "comic", "the theme is kept");
+    await page.click("#design-themes label.theme-none");
+    await page.click("#design button[type=submit]");
+    await page.waitForSelector("#design-dark:has-text('stays on')");
 
     step("AI access: an administrator registers Claude and gets the three values for its connector");
     await page.click("#app-switcher");

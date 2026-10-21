@@ -703,6 +703,13 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .segmented .segment { border: 0; border-radius: 0; background: var(--surface); color: var(--text); padding: 4px 12px; font-size: 13px; }
 .segmented .segment[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink, #fff); }
 .space-tile-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* Every tile is the same size, with or without an icon: the head keeps
+   the icon's height, and every row of tiles is as tall as the tallest. */
+.space-tiles { grid-auto-rows: 1fr; }
+.space-tiles > li { display: flex; }
+.space-tiles .space-tile { flex: 1; }
+.space-tiles .space-tile-head { min-height: 48px; }
+.space-tiles .space-tile .badge { margin-top: auto; }
 .space-icon { flex: none; border-radius: 8px; object-fit: contain; background: var(--surface); }
 .space-icon-24 { width: 24px; height: 24px; border-radius: 5px; }
 .space-icon-48 { width: 48px; height: 48px; }
@@ -1036,3 +1043,16 @@ a.requests-notice:hover { border-color: var(--accent); }
 .mention-list[hidden] { display: none; }
 .mention-list button { display: block; width: 100%; padding: 4px 8px; text-align: left; }
 .mention-list button:hover, .mention-list button:focus { background: var(--bg); }
+
+/* ---------- Ready-made themes to choose from (ADR-0085) ---------- */
+.design-themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 0 0 16px; padding: 0; border: 0; }
+.design-themes legend { font-weight: 600; margin-bottom: 8px; }
+.theme-choice { display: flex; flex-direction: column; gap: 4px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); cursor: pointer; }
+.theme-choice:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.theme-choice input { position: absolute; opacity: 0; pointer-events: none; }
+.theme-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-choice .muted { font-size: 12px; }
+.theme-preview { display: flex; height: 28px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 4px; }
+.theme-preview span { flex: 1; }
+.theme-preview span:first-child { flex: 2; }

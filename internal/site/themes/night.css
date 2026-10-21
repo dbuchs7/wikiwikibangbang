@@ -1,0 +1,19 @@
+/* Night: always dark, with a cyan glow. It has no light scheme. */
+:root {
+  color-scheme: dark;
+  --bg: #0a0d14; --surface: #121722; --surface-2: #161c29; --border: #222a3a; --border-strong: #2f3a50;
+  --text: #e6ebf5; --muted: #8e99ad;
+  --accent: #22d3ee; --accent-hover: #67e8f9; --accent-soft: #0d2a33; --accent-ink: #04141a;
+  --danger: #ff6b6b; --danger-hover: #ff8f8f; --danger-soft: #3a1414;
+  --success: #34d399; --success-soft: #0f2e24; --warning: #fbbf24; --warning-soft: #33280c;
+  --row-hover: #161c29; --radius: 12px; --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 0 0 1px rgba(34, 211, 238, 0.35), 0 14px 34px rgba(0, 0, 0, 0.6);
+}
+.top { background: #070a10; border-bottom: 1px solid #1b2433; }
+.top .brand picture img { filter: brightness(0) invert(1); }
+.home-tile:hover, .space-tile:hover { border-color: var(--accent); box-shadow: 0 0 18px rgba(34, 211, 238, 0.25); }
+button, .button { box-shadow: 0 0 12px rgba(34, 211, 238, 0.25); }
+button.link { box-shadow: none; }
+.diff-add { background: #0f2e24; }
+.pm-editor mark { background: #5a4a00; }

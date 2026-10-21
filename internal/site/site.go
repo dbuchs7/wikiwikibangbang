@@ -62,6 +62,9 @@ type Design struct {
 	// FontFamily names a font installed on the readers' computers, tried
 	// before Font, e.g. "Frutiger".
 	FontFamily string `json:"fontFamily"`
+	// Theme is a ready-made theme (ADR-0085), one of Themes, or empty
+	// for the product's own look. The fields above apply over it.
+	Theme string `json:"theme,omitempty"`
 	// CSS is an own stylesheet, applied after everything else.
 	CSS string `json:"css"`
 }
@@ -85,6 +88,9 @@ func (d Design) Validate() error {
 		if c != "" && !colour.MatchString(c) {
 			return fmt.Errorf("%w: %s must be a colour like #1a2b3c", ErrInvalid, name)
 		}
+	}
+	if d.Theme != "" && !slices.Contains(Themes, d.Theme) {
+		return fmt.Errorf("%w: %q is not a theme (%s)", ErrInvalid, d.Theme, strings.Join(Themes, ", "))
 	}
 	if _, ok := Fonts[d.Font]; d.Font != "" && d.Font != "upload" && !ok {
 		return fmt.Errorf("%w: font %q", ErrInvalid, d.Font)
@@ -336,11 +342,11 @@ func tag(data []byte) string {
 var darkRules = regexp.MustCompile(`prefers-color-scheme\s*:\s*dark`)
 
 // DarkMode reports whether the UI offers its dark scheme (ADR-0070): it
-// does unless the installation's own stylesheet replaces the look without
-// saying how it looks in the dark, which it says with a
-// @media (prefers-color-scheme: dark) rule.
+// does unless the theme or the installation's own stylesheet replaces the
+// look without saying how it looks in the dark, which it says with a
+// @media (prefers-color-scheme: dark) rule (ADR-0085).
 func (d Design) DarkMode() bool {
-	return strings.TrimSpace(d.CSS) == "" || darkRules.MatchString(d.CSS)
+	return ThemeDark(d.Theme) && (strings.TrimSpace(d.CSS) == "" || darkRules.MatchString(d.CSS))
 }
 
 func (s *Settings) Stylesheet() string {
@@ -363,6 +369,9 @@ func (s *Settings) Stylesheet() string {
 			return strings.TrimPrefix(strings.ReplaceAll(rules, "\n  ", "\n"), "  ")
 		}
 		return "@media (prefers-color-scheme: light) {\n" + rules + "}\n"
+	}
+	if css := ThemeCSS(d.Theme); css != "" {
+		fmt.Fprintf(&b, "/* The theme %s (ADR-0085). */\n%s\n", d.Theme, css)
 	}
 	if hasFont {
 		fmt.Fprintf(&b, "@font-face { font-family: \"Corporate\"; src: url(\"/branding/font?v=%s\"); font-display: swap; }\n", font.Tag)
@@ -420,7 +429,7 @@ func (s *Settings) Stylesheet() string {
 		fmt.Fprintf(&light, "  .top { background: %s; }\n", d.HeaderBackground)
 	}
 	if d.HeaderText != "" {
-		fmt.Fprintf(&light, "  .top, .top .brand, #nav > a, #nav > button.link, #app-switcher, #nav-notifications { color: %s; }\n", d.HeaderText)
+		fmt.Fprintf(&light, "  .top, .top .brand, #nav > a, #nav > button.link, .top .icon-btn, #nav-notifications { color: %s; }\n", d.HeaderText)
 	}
 	if light.Len() > 0 {
 		b.WriteString(lightOnly(light.String()))

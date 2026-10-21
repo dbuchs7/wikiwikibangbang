@@ -1,0 +1,22 @@
+/* Sunset: warm orange and coral on cream, round; light and dark. */
+:root {
+  --bg: #fff7f0; --surface: #ffffff; --surface-2: #fffaf5; --border: #f3e0d2; --border-strong: #e8c9b2;
+  --text: #2d1b14; --muted: #7a5c4f;
+  --accent: #c2410c; --accent-hover: #9a3412; --accent-soft: #ffedd5; --accent-ink: #ffffff;
+  --row-hover: #fff3ea; --radius: 18px; --radius-sm: 12px;
+  --font-sans: ui-rounded, "SF Pro Rounded", "Nunito", system-ui, sans-serif;
+}
+.top { background: linear-gradient(90deg, #f97316, #e11d48); border-bottom: 0; }
+.top, .top .brand, .top .icon-btn, #nav > a, #nav > button.link, #nav-notifications { color: #ffffff; }
+.top .icon-btn:hover { background: rgba(255, 255, 255, 0.18); color: #ffffff; }
+.top .brand picture img { filter: brightness(0) invert(1); }
+#nav-new { background: #ffffff; border-color: #ffffff; color: #c2410c; }
+button, .button, #nav-new { border-radius: 999px; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a100c; --surface: #241712; --surface-2: #2b1c16; --border: #3a2820; --border-strong: #4d362b;
+    --text: #fbe9df; --muted: #c4a293;
+    --accent: #fb923c; --accent-hover: #fdba74; --accent-soft: #3d2316; --accent-ink: #1a0d06; --row-hover: #2b1c16;
+  }
+  .top { background: linear-gradient(90deg, #7c2d12, #881337); }
+}

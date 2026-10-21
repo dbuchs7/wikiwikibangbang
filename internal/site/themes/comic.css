@@ -1,0 +1,47 @@
+/* Comic: bold ink outlines, hard offset shadows and bright pop colours,
+   as in a comic book. Light only. Comic Neue ships with the UI
+   (assets/fonts, SIL Open Font License 1.1). */
+@font-face { font-family: "Comic Neue"; src: url("/assets/fonts/comic-neue-400.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Comic Neue"; src: url("/assets/fonts/comic-neue-700.woff2") format("woff2"); font-weight: 700 900; font-display: swap; }
+:root {
+  --bg: #fff6d6; --surface: #ffffff; --surface-2: #fffbea; --border: #111111; --border-strong: #111111;
+  --text: #111111; --muted: #3d3d3d;
+  --accent: #e3262f; --accent-hover: #b81d25; --accent-soft: #ffe1e1; --accent-ink: #ffffff;
+  --row-hover: #fff3c4; --radius: 14px; --radius-sm: 10px;
+  --shadow: 4px 4px 0 #111111; --shadow-lg: 7px 7px 0 #111111;
+  --font-sans: "Comic Neue", "Comic Sans MS", "Chalkboard SE", "Comic Relief", "Marker Felt", system-ui, sans-serif;
+}
+body {
+  background-color: #fff6d6;
+  /* Halftone dots, as printed. */
+  background-image: radial-gradient(rgba(227, 38, 47, 0.13) 1.5px, transparent 1.6px);
+  background-size: 14px 14px;
+}
+.top { background: #ffd23f; border-bottom: 3px solid #111111; }
+.top .icon-btn { color: #111111; }
+.card, .welcome, .home-tile, .space-tile, .tree-box, .board-column, .card-item, .comment-entry {
+  border: 3px solid #111111; box-shadow: var(--shadow);
+}
+.home-tile:hover, .space-tile:hover { transform: translate(-2px, -2px) rotate(-0.4deg); box-shadow: var(--shadow-lg); }
+button, .button {
+  border: 3px solid #111111; border-radius: 12px; box-shadow: 3px 3px 0 #111111;
+  text-transform: uppercase; letter-spacing: 0.03em; font-weight: 800;
+}
+button:hover, .button:hover { border-color: #111111; transform: translate(-1px, -1px); box-shadow: 4px 4px 0 #111111; }
+button:active, .button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #111111; }
+button.link { border: 0; box-shadow: none; text-transform: none; letter-spacing: 0; font-weight: 700; transform: none; }
+/* The header's icons and the segmented switches stay flat. */
+.icon-btn, .icon-btn:hover, .icon-btn:active, .segmented .segment {
+  border: 0; box-shadow: none; transform: none; text-transform: none; letter-spacing: 0;
+}
+input, select, textarea { border: 2px solid #111111; border-radius: 10px; }
+#nav .search input { border: 2px solid #111111; background-color: #ffffff; }
+h1, h2 { font-weight: 900; letter-spacing: 0.01em; }
+h1 {
+  display: inline-block; padding: 4px 14px; background: #3fa9f5; color: #ffffff;
+  border: 3px solid #111111; box-shadow: 4px 4px 0 #111111; transform: rotate(-1deg);
+  text-shadow: 2px 2px 0 #111111;
+}
+.badge, .chip { border: 2px solid #111111; font-weight: 700; }
+/* A comment is a speech bubble. */
+.comment-text { position: relative; padding: 8px 12px; background: #ffffff; border: 2px solid #111111; border-radius: 14px; }

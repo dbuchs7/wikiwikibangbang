@@ -59,3 +59,7 @@ Strongest form: the stylesheet is the only place that knows whether a dark look 
 
 - Good: right by default; no extra setting.
 - Bad: implicit, and a mention in a comment counts.
+
+## Links
+
+- amended by [ADR-0085](0085-ready-made-themes-under-the-corporate-design.md) (a theme without a dark look turns the dark scheme off too)

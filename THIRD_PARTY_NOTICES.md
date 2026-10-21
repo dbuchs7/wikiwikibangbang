@@ -47,6 +47,8 @@ The drawing editor (ADR-0053) is a second bundle, `internal/web/static/vendor/ex
 
 The fonts Virgil, Cascadia and Assistant, shipped with Excalidraw in `excalidraw-assets/`, are licensed under the SIL Open Font License 1.1.
 
+The comic theme (ADR-0085) uses the font Comic Neue, Google Fonts release v9 (Copyright 2014 The Comic Neue Project Authors), from the package @fontsource/comic-neue 5.3.0, licensed under the SIL Open Font License 1.1; `internal/web/static/assets/fonts/comic-neue.LICENSE.txt` ships next to it. The sketch theme uses Virgil from the Excalidraw assets above.
+
 The web UI's stylesheet, `internal/web/static/assets/style.css`, adapts the palette, type, spacing and component look of the console of [pblumer/atlas](https://github.com/pblumer/atlas) (`api/web/app.css`), licensed under AGPL-3.0-only like this project. No atlas name, logo or font is included.
 
 The wordmark of the logo (`docs/brand`, and its copies in `internal/web/static`) is drawn from the outlines of [Inter](https://rsms.me/inter/) Display by Rasmus Andersson, licensed under the SIL Open Font License 1.1. The outlines are part of the artwork; no font file is included.

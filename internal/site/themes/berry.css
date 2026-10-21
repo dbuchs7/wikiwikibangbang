@@ -1,0 +1,23 @@
+/* Berry: violet and magenta, pill shapes and soft shadows; light and dark. */
+:root {
+  --bg: #f7f3fb; --surface: #ffffff; --surface-2: #fbf8fd; --border: #e9def3; --border-strong: #d6c3e8;
+  --text: #24123a; --muted: #6d5a80;
+  --accent: #7e22ce; --accent-hover: #6b21a8; --accent-soft: #f3e8ff; --accent-ink: #ffffff;
+  --row-hover: #f8f2fd; --radius: 22px; --radius-sm: 14px;
+  --shadow: 0 2px 8px rgba(76, 29, 149, 0.08);
+  --shadow-lg: 0 16px 40px rgba(76, 29, 149, 0.18);
+}
+.top { background: #ffffff; border-bottom: 2px solid #ead7fb; }
+button, .button, input, select, #nav-new { border-radius: 999px; }
+textarea { border-radius: 18px; }
+.badge, .chip { border-radius: 999px; }
+h1 { color: #6b21a8; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #140b1e; --surface: #1d1129; --surface-2: #231532; --border: #33204a; --border-strong: #46305f;
+    --text: #f1e7fb; --muted: #b9a3cf;
+    --accent: #c084fc; --accent-hover: #d8b4fe; --accent-soft: #2e1a47; --accent-ink: #160a22; --row-hover: #231532;
+  }
+  .top { background: #1d1129; border-bottom-color: #33204a; }
+  h1 { color: #e9d5ff; }
+}
