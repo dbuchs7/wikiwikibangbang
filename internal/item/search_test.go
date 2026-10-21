@@ -45,21 +45,22 @@ func searchFixture(t *testing.T) (*Store, map[string]Item) {
 	return s, items
 }
 
-func TestSearchMatchesEveryTermAnywhere(t *testing.T) {
+func TestSearchMatchesAnyTermAnywhere(t *testing.T) {
 	s, _ := searchFixture(t)
 	ben := s.As("ben")
 	cases := []struct {
 		query string
 		want  []string
 	}{
-		{"database", []string{"PLAT-1", "PLAT-2"}},     // the title ranks first
-		{"DATABASE replica", []string{"PLAT-1"}},       // case-folded, every term must match
-		{"replic", []string{"PLAT-1"}},                 // a term matches inside words
-		{"storage layer", []string{"PLAT-3"}},          // text properties are searched
-		{"straße", []string{"PLAT-2"}},                 // ß and ss are the same letter
-		{"database nothing-like-this", nil},            // no partial matches
-		{"plat-2", []string{"PLAT-2"}},                 // a key finds its item first
-		{"  restart,  primary!  ", []string{"PLAT-1"}}, // punctuation separates terms
+		{"database", []string{"PLAT-1", "PLAT-2"}},                   // the title ranks first
+		{"DATABASE replica", []string{"PLAT-1", "PLAT-2"}},           // case-folded; every term first, then some (ADR-0083)
+		{"replic", []string{"PLAT-1"}},                               // a term matches inside words
+		{"storage layer", []string{"PLAT-3"}},                        // text properties are searched
+		{"straße", []string{"PLAT-2"}},                               // ß and ss are the same letter
+		{"database nothing-like-this", []string{"PLAT-1", "PLAT-2"}}, // some terms suffice
+		{"plat-2", []string{"PLAT-2", "PLAT-3", "PLAT-1"}},           // a key finds its item first
+		{"  restart,  primary!  ", []string{"PLAT-1"}},               // punctuation separates terms
+		{"nothing-like-this", nil},
 	}
 	for _, c := range cases {
 		hits, err := ben.Search(c.query, Query{})
@@ -69,6 +70,15 @@ func TestSearchMatchesEveryTermAnywhere(t *testing.T) {
 		if got := hitKeys(hits); !slices.Equal(got, c.want) {
 			t.Errorf("%q: got %v, want %v", c.query, got, c.want)
 		}
+	}
+	// A hit says which words it holds and which not, as typed.
+	hits, _ := ben.Search("Database REPLICA Quorum", Query{})
+	if len(hits) != 2 || !slices.Equal(hits[0].Matched, []string{"Database", "REPLICA"}) || !slices.Equal(hits[0].Missing, []string{"Quorum"}) ||
+		!slices.Equal(hits[1].Matched, []string{"Database"}) || !slices.Equal(hits[1].Missing, []string{"REPLICA", "Quorum"}) {
+		t.Fatalf("matched and missing: %+v", hits)
+	}
+	if hits[0].Stars != 2 || hits[1].Stars != 1 {
+		t.Errorf("partial hits: %d and %d stars", hits[0].Stars, hits[1].Stars)
 	}
 }
 
@@ -254,7 +264,11 @@ func TestHitsAreRatedWithStars(t *testing.T) {
 	phrase := mk("Bäume", "Die rote Buche wächst langsam.")
 	oneBlock := mk("Wald", "Eine Buche hat im Herbst rote Blätter.")
 	spread := mk("Notiz", "rote", "eine Buche")
-	want := map[ID]int{exact.ID: 5, inTitle.ID: 4, someTitle.ID: 3, phrase.ID: 3, oneBlock.ID: 2, spread.ID: 1}
+	partial := mk("Eiche", "Eine rote Eiche")
+	// ADR-0083: whole words count; every word as a whole word in the title
+	// is five stars, in one block or as typed four, anywhere three; part
+	// of the words two or one.
+	want := map[ID]int{exact.ID: 5, inTitle.ID: 5, someTitle.ID: 3, phrase.ID: 4, oneBlock.ID: 4, spread.ID: 3, partial.ID: 2}
 	hits, err := s.As("anna").Search("rote Buche", Query{})
 	noErr(t, err)
 	if len(hits) != len(want) {
@@ -264,6 +278,25 @@ func TestHitsAreRatedWithStars(t *testing.T) {
 		if h.Stars != want[h.Item.ID] {
 			t.Errorf("%q: %d stars, want %d", h.Item.Title, h.Stars, want[h.Item.ID])
 		}
+	}
+	if hits[len(hits)-1].Item.ID != partial.ID {
+		t.Errorf("a hit without every word is not last: %v", hitKeys(hits))
+	}
+	// One word: whole in the text four stars, inside a word three.
+	one := must(s.As("anna").Search("Blätter", Query{}))
+	for _, h := range one {
+		if h.Stars != 4 {
+			t.Errorf("%q for Blätter: %d stars", h.Item.Title, h.Stars)
+		}
+	}
+	for _, h := range must(s.As("anna").Search("blätt", Query{})) {
+		if h.Stars != 3 {
+			t.Errorf("%q for a part of a word: %d stars", h.Item.Title, h.Stars)
+		}
+	}
+	// The only hit with every word is five stars.
+	if only := must(s.As("anna").Search("langsam", Query{})); len(only) != 1 || only[0].Stars != 5 {
+		t.Errorf("the only hit: %+v", only)
 	}
 	// The key typed in full is five stars.
 	byKey, err := s.As("anna").Search(spread.Key, Query{})

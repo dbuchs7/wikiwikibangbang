@@ -63,3 +63,7 @@ Strongest form: explainable per star and stable across searches.
 
 - Good: predictable, cheap.
 - Bad: a second rule beside the score, which the order then has to follow.
+
+## Links
+
+- amended by [ADR-0083](0083-search-finds-any-word-and-names-the-words-of-each-hit.md) (any word finds a hit; new star rules; the words of each hit)

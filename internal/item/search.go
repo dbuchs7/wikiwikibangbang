@@ -27,16 +27,21 @@ type Hit struct {
 	// Comment is the comment the snippet comes from, or empty when it
 	// comes from the body (ADR-0035).
 	Comment ID
-	// Stars rate, from 1 to 5, how well the item answers the search on its
-	// own, not compared with the other hits (ADR-0072): 5 the key or the
-	// whole title, 4 every term in the title, 3 some in the title or the
-	// words as typed in the text, 2 every term in one block, 1 the terms
-	// spread over the item.
+	// Stars rate, from 1 to 5, how well the item answers the search
+	// (ADR-0072, ADR-0083): 5 the key, the whole title, every word as a
+	// whole word in the title, or the only hit with every word; 4 every
+	// word in the title, or every word as a whole word and either in one
+	// block or as typed; 3 every word somewhere; 2 at least half of the
+	// words; 1 fewer.
 	Stars int
+	// Matched and Missing are the words of the search, as typed, that the
+	// item holds and that it does not (ADR-0083).
+	Matched, Missing []string
 }
 
-// Search returns the readable items in which every term of text occurs,
-// best first: by stars, then by score (ADR-0033, ADR-0072). q narrows the candidates as in Find.
+// Search returns the readable items in which a term of text occurs, best
+// first: by stars, then by how many terms they hold, then by score
+// (ADR-0033, ADR-0072, ADR-0083). q narrows the candidates as in Find.
 //
 // It scans the live state instead of keeping an index: content that is
 // purged or redacted leaves memory with the item, so no copy of it
@@ -46,6 +51,7 @@ func (x *Session) Search(text string, q Query) ([]Hit, error) {
 	if err != nil {
 		return nil, err
 	}
+	shown := typedWords(text, terms)
 	phrase := " " + strings.Join(wordsOf(text), " ") + " "
 	wholeKey := strings.ToUpper(strings.TrimSpace(text))
 	var hits []Hit
@@ -62,14 +68,28 @@ func (x *Session) Search(text string, q Query) ([]Hit, error) {
 			continue
 		}
 		if h, ok := m.match(it, terms, wholeKey); ok {
-			h.Stars = stars(it, terms, phrase, it.Key == wholeKey)
+			h.Stars = m.stars(it, terms, phrase, it.Key == wholeKey)
+			for i, f := range m.found {
+				if f.any {
+					h.Matched = append(h.Matched, shown[i])
+				} else {
+					h.Missing = append(h.Missing, shown[i])
+				}
+			}
 			hits = append(hits, h)
 		}
+	}
+	// The only hit that holds every word is the answer (ADR-0083).
+	if len(hits) == 1 && len(hits[0].Missing) == 0 {
+		hits[0].Stars = 5
 	}
 	slices.SortFunc(hits, func(a, b Hit) int {
 		// The stars come first, so the order never contradicts them.
 		if a.Stars != b.Stars {
 			return b.Stars - a.Stars
+		}
+		if len(a.Matched) != len(b.Matched) {
+			return len(b.Matched) - len(a.Matched)
 		}
 		if a.Score != b.Score {
 			return b.Score - a.Score
@@ -136,49 +156,119 @@ func spaced(text string) string {
 	return string(out)
 }
 
-// stars rates a hit (ADR-0072). It runs for hits only, so its allocations
-// stay with the results, not with every item searched.
-func stars(it *Item, terms []string, phrase string, wholeKey bool) int {
-	title := spaced(it.Title)
-	if wholeKey || title == phrase {
-		return 5
-	}
-	inTitle := 0
-	for _, t := range terms {
-		if strings.Contains(title, t) {
-			inTitle++
+// typedWords are the terms as the search typed them, for showing: the
+// first spelling of each term (ADR-0083).
+func typedWords(text string, terms []string) []string {
+	out := slices.Clone(terms)
+	set := make([]bool, len(terms))
+	for _, w := range strings.FieldsFunc(text, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		if i := slices.Index(terms, fold(w)); i >= 0 && !set[i] {
+			out[i], set[i] = w, true
 		}
 	}
-	if inTitle == len(terms) {
-		return 4
+	return out
+}
+
+// wordRuneAt reports whether the rune that starts at b[i] is a letter or a
+// digit; outside b counts as not.
+func wordRuneAt(b []byte, i int) bool {
+	if i < 0 || i >= len(b) {
+		return false
 	}
-	texts := make([]string, 0, len(it.Body.Blocks)+len(it.Properties))
-	for _, b := range it.Body.Blocks {
-		texts = append(texts, spaced(b.Text))
+	r, _ := utf8.DecodeRune(b[i:])
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+// wordRuneBefore reports whether the rune that ends at b[i] is a letter or
+// a digit.
+func wordRuneBefore(b []byte, i int) bool {
+	if i <= 0 {
+		return false
 	}
-	for _, v := range it.Properties {
-		if s, ok := v.(string); ok {
-			texts = append(texts, spaced(s))
+	r, _ := utf8.DecodeLastRune(b[:i])
+	return unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+// containsWord reports whether t occurs in b as a whole word, not inside
+// a longer one.
+func containsWord(b, t []byte) bool {
+	for at := 0; ; {
+		i := bytes.Index(b[at:], t)
+		if i < 0 {
+			return false
 		}
+		i += at
+		if !wordRuneBefore(b, i) && !wordRuneAt(b, i+len(t)) {
+			return true
+		}
+		at = i + 1
 	}
-	oneBlock := false
-	for _, x := range texts {
-		if strings.Contains(x, phrase) {
-			return 3
+}
+
+// stars rates a hit after match (ADR-0072, ADR-0083). It works on what
+// match found per term and per region, so rating many hits stays cheap.
+func (m *matcher) stars(it *Item, terms []string, phrase string, keyTyped bool) int {
+	n, found, whole, title, titleWhole := len(terms), 0, 0, 0, 0
+	for _, f := range m.found {
+		if f.any {
+			found++
 		}
-		all := true
-		for _, t := range terms {
-			all = all && strings.Contains(x, t)
+		if f.whole {
+			whole++
 		}
-		oneBlock = oneBlock || all
+		if f.title {
+			title++
+		}
+		if f.titleWhole {
+			titleWhole++
+		}
 	}
 	switch {
-	case inTitle > 0:
+	case keyTyped || spaced(it.Title) == phrase || titleWhole == n:
+		return 5
+	case found == n && title == n:
+		return 4
+	case whole == n && m.oneRegion(phrase):
+		return 4
+	case found == n:
 		return 3
-	case oneBlock:
+	case 2*found >= n:
 		return 2
 	}
 	return 1
+}
+
+// oneRegion reports whether one region holds every term as a whole word,
+// or the words as typed, in their order.
+func (m *matcher) oneRegion(phrase string) bool {
+	for i, r := range m.regions {
+		if m.whole[i] == len(m.found) {
+			return true
+		}
+		if m.count[i] == len(m.found) && strings.Contains(spacedFolded(m.buf[r.start:r.end]), phrase) {
+			return true
+		}
+	}
+	return false
+}
+
+// spacedFolded is spaced for text that is folded already.
+func spacedFolded(b []byte) string {
+	out := make([]byte, 0, len(b)+2)
+	out = append(out, ' ')
+	for i := 0; i < len(b); {
+		r, n := utf8.DecodeRune(b[i:])
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			out = append(out, b[i:i+n]...)
+		} else if out[len(out)-1] != ' ' {
+			out = append(out, ' ')
+		}
+		i += n
+	}
+	if out[len(out)-1] != ' ' {
+		out = append(out, ' ')
+	}
+	return string(out)
 }
 
 func searchTerms(text string) ([]string, error) {
@@ -216,18 +306,29 @@ type region struct {
 	score      int // what a term found here adds
 	block      int // body block index, or -1
 	comment    int // comment index, or -1
+	title      bool
 }
 
-// matcher folds one item after another into the same buffer.
+// found is where one term occurs in the item being matched.
+type found struct {
+	any, whole        bool // anywhere; as a whole word anywhere
+	title, titleWhole bool // in the title; as a whole word there
+}
+
+// matcher folds one item after another into the same buffer, and keeps
+// per term and per region what it found, for the stars.
 type matcher struct {
 	buf     []byte
 	regions []region
+	found   []found
+	count   []int // per region: the terms it holds
+	whole   []int // per region: the terms it holds as whole words
 }
 
 func (m *matcher) add(text string, score, block, comment int) {
 	start := len(m.buf)
 	m.buf = appendFold(m.buf, text)
-	m.regions = append(m.regions, region{start, len(m.buf), score, block, comment})
+	m.regions = append(m.regions, region{start, len(m.buf), score, block, comment, len(m.regions) == 0})
 }
 
 func (m *matcher) match(it *Item, terms []string, wholeKey string) (Hit, bool) {
@@ -250,14 +351,30 @@ func (m *matcher) match(it *Item, terms []string, wholeKey string) (Hit, bool) {
 	if it.Key == wholeKey {
 		h.Score += scoreKey
 	}
+	m.found = append(m.found[:0], make([]found, len(terms))...)
+	m.count = append(m.count[:0], make([]int, len(m.regions))...)
+	m.whole = append(m.whole[:0], make([]int, len(m.regions))...)
+	hit := false
 	snippetBlock, snippetComment := -1, -1
-	for _, t := range terms {
-		found, inBody, inProps, inComments := false, false, false, false
-		for _, r := range m.regions {
-			if !bytes.Contains(m.buf[r.start:r.end], []byte(t)) {
+	for ti, t := range terms {
+		inBody, inProps, inComments := false, false, false
+		f := &m.found[ti]
+		for ri, r := range m.regions {
+			text := m.buf[r.start:r.end]
+			if !bytes.Contains(text, []byte(t)) {
 				continue
 			}
-			found = true
+			whole := containsWord(text, []byte(t))
+			f.any, hit = true, true
+			m.count[ri]++
+			if whole {
+				f.whole = true
+				m.whole[ri]++
+			}
+			if r.title {
+				f.title = true
+				f.titleWhole = f.titleWhole || whole
+			}
 			switch {
 			case r.block >= 0:
 				if !inBody {
@@ -284,9 +401,9 @@ func (m *matcher) match(it *Item, terms []string, wholeKey string) (Hit, bool) {
 				h.Score += r.score
 			}
 		}
-		if !found {
-			return Hit{}, false
-		}
+	}
+	if !hit {
+		return Hit{}, false
 	}
 	switch {
 	case snippetBlock >= 0:

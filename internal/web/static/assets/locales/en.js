@@ -47,6 +47,8 @@ export default {
   "search.starsHint": "Relevance {n} of 5: 5 the key or the whole title, 4 every term in the title, 3 some in the title or the words as typed in the text, 2 every term in one paragraph, 1 the terms spread over the page",
   "search.results": { "one": "{n} result for “{q}”", "other": "{n} results for “{q}”" },
   "search.title": "Search",
+  "search.matched": "Found:",
+  "search.missing": "Not found:",
   "search.go": "Search",
   "search.prompt": "Type what you are looking for: words of a title, a text, a comment, or a key such as PLAT-12.",
   "search.needsTerm": "A search needs at least one letter or digit.",
