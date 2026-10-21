@@ -795,5 +795,18 @@ export default {
   "autobackup.parts": "Files",
   "autobackup.incomplete": "incomplete: a backup of the chain is missing",
   "autobackup.restoreTitle": "Restore",
-  "autobackup.restoreHelp": "With the server stopped, into a new data directory: from a directory the command takes the newest version with all its incremental backups; -at <file> picks an earlier backup."
+  "autobackup.restoreHelp": "With the server stopped, into a new data directory: from a directory the command takes the newest version with all its incremental backups; -at <file> picks an earlier backup.",
+  "envhelp.title": "Where are these settings made?",
+  "envhelp.what": "These settings are environment variables of the server. They are not entered on this page but where the server or its container is started, so that passwords and keys are in neither the data nor its backups.",
+  "envhelp.synology": "Synology (Container Manager)",
+  "envhelp.synologySteps": "Stop the container, choose “Edit” and add one line per setting where the environment variables are listed (name e.g. WWBB_SMTP_HOST, value e.g. smtp.example.org). Save and start the container again. If the container runs as a project, the settings belong in its compose file (see below). The labels may differ slightly between DSM versions.",
+  "envhelp.compose": "In docker-compose.yml under environment, then docker compose up -d:",
+  "envhelp.variables": "The variables",
+  "envhelp.mail": "Mail (password reset, notifications):",
+  "envhelp.mailVars": "WWBB_SMTP_HOST, WWBB_SMTP_PORT (587, or 465 with WWBB_SMTP_SECURITY=tls), WWBB_SMTP_USERNAME, WWBB_SMTP_PASSWORD, WWBB_SMTP_FROM and WWBB_PUBLIC_URL (the address the wiki is reached at).",
+  "envhelp.sso": "Single sign-on:",
+  "envhelp.ssoVars": "Microsoft: WWBB_ENTRA_TENANT_ID, WWBB_ENTRA_CLIENT_ID, WWBB_ENTRA_CLIENT_SECRET; Google: WWBB_GOOGLE_CLIENT_ID, WWBB_GOOGLE_CLIENT_SECRET, WWBB_GOOGLE_DOMAINS; with WWBB_PUBLIC_URL.",
+  "envhelp.backup": "Automatic backups:",
+  "envhelp.backupVars": "WWBB_BACKUP_PASSPHRASE (at least 12 characters).",
+  "envhelp.restart": "Changed environment variables take effect only after the server or container restarts. This page then shows “set up”."
 };

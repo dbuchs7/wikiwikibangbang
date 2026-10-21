@@ -807,6 +807,9 @@ async function mailTo(sink, address) {
     await page.click("#account-menu a[href='#/admin']");
     await page.waitForSelector("#setup-reset.on"); // the server under test sends mail
     await page.waitForSelector("#setup-sso.off");
+    // What is not set up says where it is set: the server's environment.
+    await page.click("#setup-sso .info-button");
+    await page.waitForSelector("#login-env-help[open] >> text=WWBB_SMTP_HOST");
     await Promise.all([page.waitForResponse((r) => r.url().endsWith("/api/settings/access") && r.request().method() === "PUT"), page.check("#requests-open")]);
     const guestCtx = await browser.newContext();
     const guest = await guestCtx.newPage();

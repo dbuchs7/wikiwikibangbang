@@ -793,5 +793,18 @@ export default {
   "autobackup.parts": "Dateien",
   "autobackup.incomplete": "unvollständig: ein Backup der Kette fehlt",
   "autobackup.restoreTitle": "Wiederherstellen",
-  "autobackup.restoreHelp": "Bei gestopptem Server in ein neues Datenverzeichnis: Aus einem Verzeichnis nimmt der Befehl die neueste Version mit allen Inkrementen; -at <Datei> wählt ein früheres Backup."
+  "autobackup.restoreHelp": "Bei gestopptem Server in ein neues Datenverzeichnis: Aus einem Verzeichnis nimmt der Befehl die neueste Version mit allen Inkrementen; -at <Datei> wählt ein früheres Backup.",
+  "envhelp.title": "Wo trägt man diese Angaben ein?",
+  "envhelp.what": "Diese Angaben sind Umgebungsvariablen des Servers. Sie werden nicht auf dieser Seite eingetragen, sondern dort, wo der Server bzw. sein Container gestartet wird. So stehen Passwörter und Schlüssel weder in den Daten noch in deren Backups.",
+  "envhelp.synology": "Synology (Container Manager)",
+  "envhelp.synologySteps": "Container stoppen, «Bearbeiten» wählen und im Bereich der Umgebungsvariablen je Angabe eine Zeile hinzufügen (Name z. B. WWBB_SMTP_HOST, Wert z. B. smtp.example.org). Speichern und den Container wieder starten. Läuft der Container als Projekt, gehören die Angaben in dessen Compose-Datei (siehe unten). Die Bezeichnungen können je nach DSM-Version leicht abweichen.",
+  "envhelp.compose": "In der Datei docker-compose.yml unter environment, danach docker compose up -d:",
+  "envhelp.variables": "Die Variablen",
+  "envhelp.mail": "E-Mail (Passwort zurücksetzen, Benachrichtigungen):",
+  "envhelp.mailVars": "WWBB_SMTP_HOST, WWBB_SMTP_PORT (587, oder 465 mit WWBB_SMTP_SECURITY=tls), WWBB_SMTP_USERNAME, WWBB_SMTP_PASSWORD, WWBB_SMTP_FROM und WWBB_PUBLIC_URL (die Adresse, unter der das Wiki erreichbar ist).",
+  "envhelp.sso": "Single Sign-on:",
+  "envhelp.ssoVars": "Microsoft: WWBB_ENTRA_TENANT_ID, WWBB_ENTRA_CLIENT_ID, WWBB_ENTRA_CLIENT_SECRET; Google: WWBB_GOOGLE_CLIENT_ID, WWBB_GOOGLE_CLIENT_SECRET, WWBB_GOOGLE_DOMAINS; dazu WWBB_PUBLIC_URL.",
+  "envhelp.backup": "Automatische Sicherung:",
+  "envhelp.backupVars": "WWBB_BACKUP_PASSPHRASE (mindestens 12 Zeichen).",
+  "envhelp.restart": "Geänderte Umgebungsvariablen gelten erst nach einem Neustart des Servers bzw. Containers. Danach zeigt diese Seite «eingerichtet»."
 };
