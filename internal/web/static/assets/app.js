@@ -2887,7 +2887,8 @@ async function adminView() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       st.replaceChildren(h("p", { class: "notice", text: t("admin.saved", { name }) }));
-    }));
+    }),
+    autoBackupCard());
 
   const designSection = section("design", t("design.title"), await designCard());
   const regulationsSection = section("regulations", t("dp.adminTitle"), await regulationsCard());
@@ -3020,6 +3021,103 @@ async function regulationsCard() {
 // designCard sets the corporate design (ADR-0052): name, logo, colours,
 // background, font and an own stylesheet. Files are sent as they are
 // chosen; the rest with Save.
+// autoBackupCard sets up automatic backups and shows how they went
+// (ADR-0073). It fills itself, because listing the destination may take
+// a while; while a backup runs it looks again every few seconds.
+function autoBackupCard() {
+  const card = h("div", { id: "autobackup" }, h("h3", { text: t("autobackup.title") }), h("p", { class: "muted", text: t("autobackup.loading") }));
+  let timer = 0;
+  const kindText = (k) => k === "incremental" ? t("autobackup.incremental") : t("autobackup.full");
+  const load = async () => {
+    clearTimeout(timer);
+    if (!card.isConnected && timer) return;
+    let data;
+    try {
+      data = await get("/api/backups");
+    } catch (err) {
+      card.replaceChildren(h("h3", { text: t("autobackup.title") }), errorBox(err));
+      return;
+    }
+    const { settings: s, status: st } = data;
+    const destination = h("input", { name: "destination", id: "autobackup-destination", value: s.destination, placeholder: t("autobackup.destinationExample") });
+    const checkStatus = h("div", { class: "status", id: "autobackup-check" });
+    const runStatus = h("div", { class: "status", id: "autobackup-run-status" });
+    const run = (kind) => h("button", { type: "button", class: "secondary", id: "autobackup-run-" + kind, disabled: !!st.running || !s.destination,
+      text: t("autobackup.runNow", { kind: kindText(kind) }), onclick: async () => {
+        runStatus.replaceChildren();
+        try {
+          await post("/api/backups/run", { kind });
+          await load();
+        } catch (err) {
+          runStatus.replaceChildren(errorBox(err));
+        }
+      } });
+    card.replaceChildren(
+      h("h3", { text: t("autobackup.title") }),
+      h("p", { class: "muted", text: t("autobackup.note") }),
+      st.passphrase ? "" : h("p", { class: "notice warning", id: "autobackup-passphrase", text: t("autobackup.noPassphrase", { env: data.passphraseEnv, n: data.minPassphrase }) }),
+      form({ id: "autobackup-settings" }, [
+        h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: s.enabled }), " ", t("autobackup.enabled")),
+        field(t("autobackup.destination"), destination),
+        h("p", { class: "muted", text: t("autobackup.destinationHelp") }),
+        field(t("autobackup.fullDays"), h("input", { name: "fullDays", type: "number", min: 1, max: 365, required: true, value: s.fullDays })),
+        field(t("autobackup.incrementalDays"), h("input", { name: "incrementalDays", type: "number", min: 0, max: 364, required: true, value: s.incrementalDays })),
+        field(t("autobackup.keep"), h("input", { name: "keep", type: "number", min: 1, max: data.maxVersions, required: true, value: s.keep })),
+        h("p", { class: "muted", text: t("autobackup.keepHelp", { n: data.maxVersions }) }),
+        h("div", { class: "actions-row" },
+          h("button", { type: "submit", class: "primary", text: t("autobackup.save") }),
+          h("button", { type: "button", class: "secondary", id: "autobackup-check-button", text: t("autobackup.check"), onclick: async () => {
+            checkStatus.replaceChildren(h("p", { class: "muted", text: t("autobackup.checking") }));
+            try {
+              const res = await post("/api/backups/check", { destination: destination.value });
+              checkStatus.replaceChildren(res.ok
+                ? h("p", { class: "notice", text: t("autobackup.checkOk") })
+                : h("p", { class: "error", text: t("autobackup.checkFailed", { error: res.error }) }));
+            } catch (err) {
+              checkStatus.replaceChildren(errorBox(err));
+            }
+          } })),
+        checkStatus,
+      ], async (d, status) => {
+        await put("/api/backups/settings", {
+          enabled: d.get("enabled") === "on", destination: d.get("destination").trim(),
+          fullDays: Number(d.get("fullDays")), incrementalDays: Number(d.get("incrementalDays")), keep: Number(d.get("keep")),
+        });
+        await load();
+        card.querySelector("#autobackup-settings .status")?.replaceChildren(h("p", { class: "notice", text: t("autobackup.saved") }));
+      }),
+      h("p", { id: "autobackup-next" }, st.running
+        ? t("autobackup.running", { kind: kindText(st.running) })
+        : st.next ? t("autobackup.next", { when: when(st.next), kind: kindText(st.nextKind) }) : t("autobackup.off")),
+      h("div", { class: "actions-row" }, run("full"), run("incremental")),
+      runStatus,
+      h("h4", { text: t("autobackup.history") }),
+      st.history.length ? h("table", { id: "autobackup-history" },
+        h("thead", {}, h("tr", {}, [t("autobackup.when"), t("autobackup.kind"), t("autobackup.file"), t("autobackup.size"), t("autobackup.outcome")].map((x) => h("th", { text: x })))),
+        h("tbody", {}, st.history.map((r) => h("tr", {},
+          h("td", { text: when(r.at) }), h("td", { text: kindText(r.kind) }), h("td", {}, r.file ? h("code", { text: r.file }) : ""),
+          h("td", { text: r.size ? sizeText(r.size) : "" }),
+          h("td", { class: r.error ? "error" : "", text: r.error || t("autobackup.ok", { s: Math.max(1, Math.round(r.seconds)) }) })))))
+        : h("p", { class: "muted", text: t("autobackup.noHistory") }),
+      h("h4", { text: t("autobackup.versions") }),
+      st.storedError ? h("p", { class: "error", text: t("autobackup.listFailed", { error: st.storedError }) }) : "",
+      st.versions.length ? h("table", { id: "autobackup-versions" },
+        h("thead", {}, h("tr", {}, [t("autobackup.created"), t("autobackup.latest"), t("autobackup.parts"), ""].map((x) => h("th", { text: x })))),
+        h("tbody", {}, st.versions.map((v) => h("tr", {},
+          h("td", { text: when(v.created) }), h("td", { text: when(v.latest) }), h("td", { text: String(v.backups.length) }),
+          h("td", { class: v.complete ? "muted" : "error", text: v.complete ? "" : t("autobackup.incomplete") })))))
+        : h("p", { class: "muted", text: t("autobackup.noVersions") }),
+      h("details", {},
+        h("summary", { text: t("autobackup.restoreTitle") }),
+        h("p", { class: "muted", text: t("autobackup.restoreHelp") }),
+        h("pre", { class: "snippet", text: `${data.passphraseEnv}='…' wikiwikibangbang restore -from ${s.destination || "/path/to/backups"} -data-dir data-restored` })),
+    );
+    if (st.running) timer = setTimeout(load, 2000);
+  };
+  load();
+  return card;
+}
+
 async function designCard() {
   const b = await get("/branding.json");
   const status = h("div", { class: "status" });

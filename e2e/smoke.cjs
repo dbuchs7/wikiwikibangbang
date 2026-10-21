@@ -139,6 +139,22 @@ async function mailTo(sink, address) {
     check(saved.subarray(0, 8).toString() === "WWBBBAK1", "the download is an encrypted backup");
     if (process.env.BACKUP_OUT) require("fs").writeFileSync(process.env.BACKUP_OUT, saved);
 
+    if (process.env.AUTOBACKUP_DIR) {
+      step("administration: an automatic backup goes to its destination (ADR-0073)");
+      await page.waitForSelector("#autobackup-settings");
+      await page.fill("#autobackup-destination", process.env.AUTOBACKUP_DIR);
+      await page.fill("#autobackup-settings [name=keep]", "2");
+      await page.click("#autobackup-settings button[type=submit]");
+      await page.waitForSelector("#autobackup-settings >> text=Saved.");
+      await page.click("#autobackup-check-button");
+      await page.waitForSelector("#autobackup-check >> text=The destination works");
+      await page.click("#autobackup-run-full");
+      await page.waitForSelector("#autobackup-history td:has-text('succeeded')");
+      await page.waitForSelector("#autobackup-versions tbody tr");
+      const stored = require("fs").readdirSync(process.env.AUTOBACKUP_DIR);
+      check(stored.length === 1 && /-000-full\.wwbb$/.test(stored[0]), "the destination holds one full backup: " + stored.join(", "));
+    }
+
     step("create an item with a hostile title");
     await page.click("a.brand");
     await page.click("a:has-text('Platform')");

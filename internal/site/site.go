@@ -110,6 +110,8 @@ type event struct {
 	Regulation *Regulation `json:"regulation,omitempty"`
 	// Access is set by AccessSet (ADR-0061).
 	Access *Access `json:"access,omitempty"`
+	// Backup is set by BackupSet (ADR-0073).
+	Backup *Backup `json:"backup,omitempty"`
 	Type   string  `json:"type,omitempty"`
 	Data   []byte  `json:"data,omitempty"`
 }
@@ -123,6 +125,8 @@ const (
 	regulationRemoved = "RegulationRemoved"
 
 	accessSet = "AccessSet"
+
+	backupSet = "BackupSet"
 )
 
 // Settings is safe for concurrent use.
@@ -137,6 +141,7 @@ type Settings struct {
 	regulations map[string]Regulation
 	matchers    []matcher
 	access      Access
+	backup      *Backup
 }
 
 // New rebuilds the settings from records and journals later changes.
@@ -183,6 +188,12 @@ func (s *Settings) apply(e event) error {
 			return errors.New("an access event without settings")
 		}
 		s.access = *e.Access
+	case backupSet:
+		if e.Backup == nil {
+			return errors.New("a backup event without settings")
+		}
+		b := *e.Backup
+		s.backup = &b
 	default:
 		return fmt.Errorf("unknown event %q", e.Kind)
 	}

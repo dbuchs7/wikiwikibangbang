@@ -85,3 +85,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0070](0070-an-own-stylesheet-without-a-dark-look-turns-the-dark-scheme-off.md) | An own stylesheet without a dark look turns the dark scheme off | Accepted | Landed |
 | [0071](0071-exporting-pages-and-lists.md) | Exporting pages as PDF and Word, tables and lists as CSV | Accepted | Landed |
 | [0072](0072-search-hits-rated-with-stars.md) | Search hits rated with up to five stars | Accepted | Landed |
+| [0073](0073-automatic-full-and-incremental-backups.md) | Automatic full and incremental backups to a destination | Accepted | Partial |

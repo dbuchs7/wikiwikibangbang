@@ -34,6 +34,9 @@ var BackedUpDirs = []string{AttachmentsDir}
 // purpose, with the reason.
 var NotBackedUp = map[string]string{
 	"LOCK": "the directory lock of the running process",
+	BackupStateFile: "which automatic backup the next incremental one builds on (ADR-0073); " +
+		"a restored instance starts with a full backup",
+	BackupStateFile + ".tmp": "the state of automatic backups while it is replaced",
 }
 
 // SnapshotFile is one file of a consistent snapshot: Size bytes of R.
@@ -41,6 +44,10 @@ type SnapshotFile struct {
 	Name string
 	Size int64
 	R    io.ReadCloser
+	// At reads the same bytes at any offset, for a log, so an incremental
+	// backup can compare its start and take only what was appended
+	// (ADR-0073); nil for an attachment's file, which never changes.
+	At io.ReaderAt
 }
 
 // Snapshot captures the data directory at one point in time, without
@@ -67,7 +74,7 @@ func (db *DB) Snapshot() (files []SnapshotFile, err error) {
 		if err != nil {
 			return err
 		}
-		files = append(files, SnapshotFile{Name: name, Size: size, R: limitCloser{io.LimitReader(f, size), f}})
+		files = append(files, SnapshotFile{Name: name, Size: size, R: limitCloser{io.LimitReader(f, size), f}, At: f})
 		return nil
 	}
 	db.mu.Lock()
@@ -89,7 +96,8 @@ func (db *DB) Snapshot() (files []SnapshotFile, err error) {
 		if err != nil {
 			return files, fmt.Errorf("storage: snapshot of %s: %w", name, err)
 		}
-		files = append(files, SnapshotFile{Name: name, Size: sc.Valid, R: io.NopCloser(bytes.NewReader(data[:sc.Valid]))})
+		r := bytes.NewReader(data[:sc.Valid])
+		files = append(files, SnapshotFile{Name: name, Size: sc.Valid, R: io.NopCloser(r), At: r})
 	}
 	if len(files) != len(BackupFiles) {
 		return files, errors.New("storage: snapshot does not cover every backed-up file")
@@ -106,7 +114,8 @@ func (db *DB) Snapshot() (files []SnapshotFile, err error) {
 		if err != nil {
 			return files, fmt.Errorf("storage: snapshot of %s: %w", name, err)
 		}
-		files = append(files, SnapshotFile{Name: name, Size: sc.Valid, R: io.NopCloser(bytes.NewReader(data[:sc.Valid]))})
+		r := bytes.NewReader(data[:sc.Valid])
+		files = append(files, SnapshotFile{Name: name, Size: sc.Valid, R: io.NopCloser(r), At: r})
 	}
 	// The attachments the captured log describes. Their files never change,
 	// so they are opened only when read, not all at once. One deleted or
@@ -185,4 +194,42 @@ func (db *DB) Sizes() map[string]int64 {
 		}
 	}
 	return out
+}
+
+// Dir is the data directory.
+func (db *DB) Dir() string { return db.dir }
+
+// BackupStateFile records the automatic backups (ADR-0073).
+const BackupStateFile = "backups.json"
+
+// BackupState returns the state of automatic backups, or nil before the
+// first.
+func (db *DB) BackupState() ([]byte, error) {
+	data, err := os.ReadFile(filepath.Join(db.dir, BackupStateFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	return data, err
+}
+
+// SetBackupState replaces the state of automatic backups; a crash leaves
+// the old state or the new one.
+func (db *DB) SetBackupState(data []byte) error {
+	path := filepath.Join(db.dir, BackupStateFile)
+	f, err := os.OpenFile(path+".tmp", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(path + ".tmp")
+		return err
+	}
+	return os.Rename(path+".tmp", path)
 }

@@ -54,6 +54,10 @@ const (
 	ItemPurged        = "item.purge"
 	ItemRedacted      = "item.redact"
 	BackupCreated     = "backup.create"
+	// BackupFailed and BackupChanged are automatic backups that failed
+	// and changes to their schedule (ADR-0073).
+	BackupFailed  = "backup.failed"
+	BackupChanged = "backup.change"
 	// The account requests and contacts (ADR-0061).
 	AccountRequested = "account.request"
 	AccountApproved  = "account.approve"
