@@ -91,3 +91,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0076](0076-kanban-columns-card-fields-and-free-moves.md) | A kanban keeps its own columns, card fields and card order; moves stay workflow transitions | Accepted | Landed |
 | [0077](0077-connectors-keep-catalogs-in-step-with-their-sources.md) | Connectors keep catalog spaces in step with their sources | Accepted | Landed |
 | [0078](0078-protecting-items-for-people-and-groups.md) | Protecting an item for people and groups from its page | Accepted | Landed |
+| [0079](0079-owner-and-details-lead-the-main-column.md) | Owner and details lead the main column of an item's page | Accepted | Landed |

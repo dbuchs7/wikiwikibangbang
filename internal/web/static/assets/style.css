@@ -493,6 +493,16 @@ button.watch-bell svg { width: 20px; height: 20px; }
    belongs to it (ADR-0051). */
 .item-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 440px); gap: 20px; align-items: start; }
 .item-main { min-width: 0; }
+/* The owner and details in the main column (ADR-0079): label and value
+   side by side, in as many columns as the width allows. */
+.item-main > #details { margin-bottom: 16px; }
+.item-main > #details > h2 { font-size: 15px; margin: 0 0 8px; }
+#details table.props { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 0 28px; width: 100%; margin: 0 0 8px; }
+#details table.props tr { display: grid; grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+#details table.props th { text-align: left; font-weight: 500; color: var(--muted); padding: 0; overflow-wrap: anywhere; }
+#details table.props td { padding: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+#details table.props td input, #details table.props td select { width: 100%; }
+#details table.props td:last-child:empty { display: none; }
 .item-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
 .side-card > h2, .item-side > section > h2 { font-size: 15px; margin: 0 0 8px; }
