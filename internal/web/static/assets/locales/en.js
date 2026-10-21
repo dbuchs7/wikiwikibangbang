@@ -47,6 +47,9 @@ export default {
   "search.starsHint": "Relevance {n} of 5: 5 the key or the whole title, 4 every term in the title, 3 some in the title or the words as typed in the text, 2 every term in one paragraph, 1 the terms spread over the page",
   "search.results": { "one": "{n} result for “{q}”", "other": "{n} results for “{q}”" },
   "search.title": "Search",
+  "search.go": "Search",
+  "search.prompt": "Type what you are looking for: words of a title, a text, a comment, or a key such as PLAT-12.",
+  "search.needsTerm": "A search needs at least one letter or digit.",
 
   "spaces.none": "You have no role in any space yet. Ask an administrator.",
   "spaces.noneAdmin": "No spaces yet. Create the first one below.",
@@ -402,7 +405,6 @@ export default {
   "home.evening": "Good evening",
   "home.lead": "Welcome to {name}: the knowledge, tasks and decisions of your team, in one place. Start with a space below, create a page, or see what is waiting for you.",
   "home.myTasks": "My tasks",
-  "home.search": "Search",
   "home.quick": "Quick access",
   "home.tasksText": "Open work across your spaces",
   "home.notesUnread": {"one": "{n} unread change", "other": "{n} unread changes"},

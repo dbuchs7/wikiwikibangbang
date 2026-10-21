@@ -45,6 +45,9 @@ export default {
   "search.starsHint": "Relevanz {n} von 5: 5 Schlüssel oder ganzer Titel, 4 alle Begriffe im Titel, 3 einige im Titel oder die Wörter wie eingegeben im Text, 2 alle Begriffe in einem Absatz, 1 die Begriffe über die Seite verteilt",
   "search.results": { "one": "{n} Treffer für «{q}»", "other": "{n} Treffer für «{q}»" },
   "search.title": "Suche",
+  "search.go": "Suchen",
+  "search.prompt": "Geben Sie ein, wonach Sie suchen: Wörter aus Titel, Text oder Kommentar, oder einen Schlüssel wie PLAT-12.",
+  "search.needsTerm": "Eine Suche braucht mindestens einen Buchstaben oder eine Ziffer.",
 
   "spaces.none": "Sie haben noch in keinem Bereich eine Rolle. Wenden Sie sich an eine Administratorin oder einen Administrator.",
   "spaces.noneAdmin": "Noch keine Bereiche. Erstellen Sie unten den ersten.",
@@ -400,7 +403,6 @@ export default {
   "home.evening": "Guten Abend",
   "home.lead": "Willkommen bei {name}: das Wissen, die Aufgaben und die Entscheidungen Ihres Teams an einem Ort. Beginnen Sie mit einem Bereich unten, legen Sie eine Seite an oder sehen Sie nach, was auf Sie wartet.",
   "home.myTasks": "Meine Aufgaben",
-  "home.search": "Suchen",
   "home.quick": "Schnellzugriff",
   "home.tasksText": "Offene Arbeit in Ihren Bereichen",
   "home.notesUnread": {"one": "{n} ungelesene Änderung", "other": "{n} ungelesene Änderungen"},

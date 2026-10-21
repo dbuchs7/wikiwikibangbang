@@ -197,6 +197,9 @@ table.history td { font-size: 13px; }
 .pm-mention { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
 .ProseMirror-hideselection *::selection { background: transparent; }
 
+.search-page { display: flex; gap: 8px; max-width: 40rem; margin: 8px 0 12px; }
+.search-page input { flex: 1; }
+
 .footer { padding: 8px 22px 22px; font-size: 11px; color: var(--muted); }
 .footer:empty { display: none; }
 

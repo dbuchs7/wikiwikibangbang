@@ -942,6 +942,21 @@ function stars(n) {
 
 async function searchView(q) {
   const show = screen();
+  // Without a letter or digit there is nothing to search for (the server
+  // refuses it): the page asks for a term, as the start page's search
+  // button leads here empty.
+  const box = h("form", { class: "search search-page", id: "search-page", role: "search", onsubmit: (ev) => {
+    ev.preventDefault();
+    const typed = new FormData(ev.target).get("q").trim();
+    if (typed) location.hash = "#/search/" + encodeURIComponent(typed);
+  } }, h("input", { name: "q", type: "search", value: q, placeholder: t("nav.search"), "aria-label": t("nav.search") }),
+  h("button", { type: "submit", class: "primary", text: t("search.go") }));
+  if (!/[\p{L}\p{N}]/u.test(q)) {
+    show(h("div", { class: "page-head" }, h("h1", { text: t("search.title") })), box,
+      h("p", { class: "muted", id: "search-hint", text: q.trim() ? t("search.needsTerm") : t("search.prompt") }));
+    box.querySelector("input").focus();
+    return;
+  }
   const url = (after) => `/api/search?q=${encodeURIComponent(q)}&limit=50${after ? "&after=" + encodeURIComponent(after) : ""}`;
   const first = await get(url());
   const list = h("ol", { class: "list hits" });
@@ -963,6 +978,7 @@ async function searchView(q) {
   show(
     h("div", { class: "page-head" }, h("h1", { text: t("search.title") }),
       first.total.value ? h("p", { class: "actions" }, csvLink("/api/search.csv?q=" + encodeURIComponent(q), "search-csv")) : null),
+    box,
     h("p", { class: "muted", text: t("search.results", { n: first.total.value, q }) }),
     first.total.value === 0 ? h("p", { text: t("search.none") }) : list,
     more,
@@ -1004,8 +1020,7 @@ async function homeView() {
         h("p", { class: "welcome-lead", text: t("home.lead", { name }) }),
         h("p", { class: "actions-row" },
           anyEditable ? link("#/new", t("home.newPage"), "button primary") : null,
-          link("#/tasks", t("home.myTasks"), "button"),
-          link("#/search/", t("home.search"), "button"))),
+          link("#/tasks", t("home.myTasks"), "button"))),
       h("img", { class: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 480, height: 320 }),
       // The installed version, small, for support questions and releases.
       me.version ? h("span", { class: "welcome-version", id: "home-version", title: me.revision ? t("home.revision", { revision: me.revision }) : "", text: t("home.version", { version: me.version }) }) : ""),
