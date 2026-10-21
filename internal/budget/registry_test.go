@@ -26,6 +26,8 @@ var ceilingCalls = map[string]int{
 var classified = map[string]string{
 	"internal/export.maxEmbedDepth": "the shape of an export (ADR-0071): how deep embedded items are written inside each other, " +
 		"like a heading level; what an export gathers is bounded by PageItems",
+	"internal/site.MaxBackupVersions": "a retention policy (ADR-0073): how many backup versions an administrator may keep " +
+		"at the destination, not something the server holds in memory",
 	"internal/auth.MaxFailures":      "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
 	"internal/auth.MaxTokenLifetime": "a security policy (ADR-0027): how long an API token may live",
 	"internal/auth.MaxReasonLength":  "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",
@@ -33,8 +35,10 @@ var classified = map[string]string{
 		"so the bound may not differ between them",
 	"internal/backup.maxIterations": "part of the backup format: the work factor a header may demand " +
 		"must not depend on the restoring server's environment",
-	"internal/backup/backup.go:1 << 20": "the manifest of a backup, read by the restore command from its own format",
-	"cmd/settingscheck/main.go:4 << 20": "a command-line client reading GitHub's answer, not this server's input",
+	"internal/backup.maxManifest": "part of the backup format: the manifest of a backup, which lists every file, " +
+		"read by the restore command from its own format",
+	"internal/backup/backup.go:maxManifest": "the same bound, where the manifest is read",
+	"cmd/settingscheck/main.go:4 << 20":     "a command-line client reading GitHub's answer, not this server's input",
 	"internal/mcp.maxAnswer": "the MCP adapter reading an answer of the API it calls; the API's own budgets bound " +
 		"what it sends, this only guards the adapter against a server that misbehaves",
 	"internal/mcp/client.go:maxAnswer": "the same bound, where the adapter reads",

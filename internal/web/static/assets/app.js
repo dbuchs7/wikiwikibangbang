@@ -2790,16 +2790,21 @@ async function adminView() {
   openBox.addEventListener("change", () => action(() => put("/api/settings/access", { accountRequests: openBox.checked }), status));
   // What the sign-in page offers, and what is missing for the rest.
   const mailReset = delivery.status?.mail && delivery.status?.publicURL;
-  const setupRow = (id, label, on, text) => h("li", { class: on ? "on" : "off", id },
-    h("span", { class: "setup-dot", "aria-hidden": "true" }), h("strong", { text: label }), h("span", { class: "muted", text }));
+  // Single sign-on and mail are set in the server's environment; the help
+  // says where, and every row still missing one opens it.
+  const loginHelp = envHelp("login-env-help");
+  const setupRow = (id, label, on, text, env) => h("li", { class: on ? "on" : "off", id },
+    h("span", { class: "setup-dot", "aria-hidden": "true" }), h("strong", { text: label }),
+    h("span", { class: "muted" }, text, !on && env ? [" ", infoButton(loginHelp)] : ""));
   const loginSetup = h("div", { class: "login-setup" },
     h("h3", { text: t("loginsetup.title") }),
-    h("p", { class: "muted", text: t("loginsetup.help") }),
+    h("p", { class: "muted" }, t("loginsetup.help"), " ", infoButton(loginHelp)),
     h("ul", { class: "setup-list" },
       setupRow("setup-sso", t("loginsetup.sso"), sso.enabled, sso.enabled
-        ? t("loginsetup.ssoOn", { name: (sso.providers || [{ name: sso.name }]).map((p) => p.name).join(", ") }) : t("loginsetup.ssoOff")),
-      setupRow("setup-reset", t("loginsetup.reset"), mailReset, mailReset ? t("loginsetup.resetOn", { host: delivery.status.mailHost }) : t("loginsetup.resetOff")),
-      setupRow("setup-requests", t("loginsetup.requests"), access.accountRequests, access.accountRequests ? t("loginsetup.requestsOn") : t("loginsetup.requestsOff"))));
+        ? t("loginsetup.ssoOn", { name: (sso.providers || [{ name: sso.name }]).map((p) => p.name).join(", ") }) : t("loginsetup.ssoOff"), true),
+      setupRow("setup-reset", t("loginsetup.reset"), mailReset, mailReset ? t("loginsetup.resetOn", { host: delivery.status.mailHost }) : t("loginsetup.resetOff"), true),
+      setupRow("setup-requests", t("loginsetup.requests"), access.accountRequests, access.accountRequests ? t("loginsetup.requestsOn") : t("loginsetup.requestsOff"))),
+    loginHelp);
   const requestsSection = section("requests", t("requests.title"),
     loginSetup,
     h("p", { class: "muted", text: t("requests.help") }),
@@ -2887,7 +2892,8 @@ async function adminView() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
       st.replaceChildren(h("p", { class: "notice", text: t("admin.saved", { name }) }));
-    }));
+    }),
+    autoBackupCard());
 
   const designSection = section("design", t("design.title"), await designCard());
   const regulationsSection = section("regulations", t("dp.adminTitle"), await regulationsCard());
@@ -3020,6 +3026,152 @@ async function regulationsCard() {
 // designCard sets the corporate design (ADR-0052): name, logo, colours,
 // background, font and an own stylesheet. Files are sent as they are
 // chosen; the rest with Save.
+// envHelp says where the settings that live in the server's environment
+// are made: they are not entered in the UI, so that passwords and keys are
+// in neither the data nor its backups.
+function envHelp(id) {
+  const snippet = (text) => h("pre", { class: "snippet", text });
+  return h("details", { class: "env-help", id },
+    h("summary", {}, infoIcon(), " ", t("envhelp.title")),
+    h("p", { text: t("envhelp.what") }),
+    h("h4", { text: t("envhelp.synology") }),
+    h("p", { text: t("envhelp.synologySteps") }),
+    h("h4", { text: "Docker Compose" }),
+    h("p", { class: "muted", text: t("envhelp.compose") }),
+    snippet([
+      "services:",
+      "  wikiwikibangbang:",
+      "    image: ghcr.io/dbuchs7/wikiwikibangbang:latest",
+      "    environment:",
+      "      WWBB_PUBLIC_URL: https://wiki.example.org",
+      "      WWBB_SMTP_HOST: smtp.example.org",
+      "      WWBB_SMTP_PORT: \"587\"",
+      "      WWBB_SMTP_USERNAME: wiki@example.org",
+      "      WWBB_SMTP_PASSWORD: \"…\"",
+      "      WWBB_SMTP_FROM: \"Wiki <wiki@example.org>\"",
+      "      WWBB_BACKUP_PASSPHRASE: \"…\"",
+    ].join("\n")),
+    h("h4", { text: "docker run" }),
+    snippet("docker run -d -p 8080:8080 -v wikiwikibangbang-data:/data \\\n  -e WWBB_PUBLIC_URL=https://wiki.example.org \\\n  -e WWBB_SMTP_HOST=smtp.example.org -e WWBB_SMTP_PORT=587 \\\n  -e WWBB_SMTP_USERNAME=wiki@example.org -e WWBB_SMTP_PASSWORD='…' \\\n  -e WWBB_SMTP_FROM='Wiki <wiki@example.org>' \\\n  ghcr.io/dbuchs7/wikiwikibangbang:latest"),
+    h("h4", { text: t("envhelp.variables") }),
+    h("ul", { class: "env-vars" },
+      h("li", {}, h("strong", { text: t("envhelp.mail") }), " ", t("envhelp.mailVars")),
+      h("li", {}, h("strong", { text: t("envhelp.sso") }), " ", t("envhelp.ssoVars")),
+      h("li", {}, h("strong", { text: t("envhelp.backup") }), " ", t("envhelp.backupVars"))),
+    h("p", { class: "muted", text: t("envhelp.restart") }));
+}
+
+// infoIcon is the small round i that marks help.
+function infoIcon() {
+  return h("span", { class: "info-icon", "aria-hidden": "true", text: "i" });
+}
+
+// infoButton opens a help block and brings it into view.
+function infoButton(help) {
+  return h("button", { type: "button", class: "info-button", title: t("envhelp.title"), "aria-label": t("envhelp.title"), onclick: () => {
+    help.open = true;
+    help.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  } }, infoIcon());
+}
+
+// autoBackupCard sets up automatic backups and shows how they went
+// (ADR-0073). It fills itself, because listing the destination may take
+// a while; while a backup runs it looks again every few seconds.
+function autoBackupCard() {
+  const card = h("div", { id: "autobackup" }, h("h3", { text: t("autobackup.title") }), h("p", { class: "muted", text: t("autobackup.loading") }));
+  let timer = 0;
+  const kindText = (k) => k === "incremental" ? t("autobackup.incremental") : t("autobackup.full");
+  const load = async () => {
+    clearTimeout(timer);
+    if (!card.isConnected && timer) return;
+    let data;
+    try {
+      data = await get("/api/backups");
+    } catch (err) {
+      card.replaceChildren(h("h3", { text: t("autobackup.title") }), errorBox(err));
+      return;
+    }
+    const { settings: s, status: st } = data;
+    const destination = h("input", { name: "destination", id: "autobackup-destination", value: s.destination, placeholder: t("autobackup.destinationExample") });
+    const checkStatus = h("div", { class: "status", id: "autobackup-check" });
+    const runStatus = h("div", { class: "status", id: "autobackup-run-status" });
+    const run = (kind) => h("button", { type: "button", class: "secondary", id: "autobackup-run-" + kind, disabled: !!st.running || !s.destination,
+      text: t("autobackup.runNow", { kind: kindText(kind) }), onclick: async () => {
+        runStatus.replaceChildren();
+        try {
+          await post("/api/backups/run", { kind });
+          await load();
+        } catch (err) {
+          runStatus.replaceChildren(errorBox(err));
+        }
+      } });
+    card.replaceChildren(
+      h("h3", { text: t("autobackup.title") }),
+      h("p", { class: "muted", text: t("autobackup.note") }),
+      st.passphrase ? "" : h("div", { class: "notice warning", id: "autobackup-passphrase" },
+        h("p", { text: t("autobackup.noPassphrase", { env: data.passphraseEnv, n: data.minPassphrase }) }), envHelp("backup-env-help")),
+      form({ id: "autobackup-settings" }, [
+        h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: s.enabled }), " ", t("autobackup.enabled")),
+        field(t("autobackup.destination"), destination),
+        h("p", { class: "muted", text: t("autobackup.destinationHelp") }),
+        field(t("autobackup.fullDays"), h("input", { name: "fullDays", type: "number", min: 1, max: 365, required: true, value: s.fullDays })),
+        field(t("autobackup.incrementalDays"), h("input", { name: "incrementalDays", type: "number", min: 0, max: 364, required: true, value: s.incrementalDays })),
+        field(t("autobackup.keep"), h("input", { name: "keep", type: "number", min: 1, max: data.maxVersions, required: true, value: s.keep })),
+        h("p", { class: "muted", text: t("autobackup.keepHelp", { n: data.maxVersions }) }),
+        h("div", { class: "actions-row" },
+          h("button", { type: "submit", class: "primary", text: t("autobackup.save") }),
+          h("button", { type: "button", class: "secondary", id: "autobackup-check-button", text: t("autobackup.check"), onclick: async () => {
+            checkStatus.replaceChildren(h("p", { class: "muted", text: t("autobackup.checking") }));
+            try {
+              const res = await post("/api/backups/check", { destination: destination.value });
+              checkStatus.replaceChildren(res.ok
+                ? h("p", { class: "notice", text: t("autobackup.checkOk") })
+                : h("p", { class: "error", text: t("autobackup.checkFailed", { error: res.error }) }));
+            } catch (err) {
+              checkStatus.replaceChildren(errorBox(err));
+            }
+          } })),
+        checkStatus,
+      ], async (d, status) => {
+        await put("/api/backups/settings", {
+          enabled: d.get("enabled") === "on", destination: d.get("destination").trim(),
+          fullDays: Number(d.get("fullDays")), incrementalDays: Number(d.get("incrementalDays")), keep: Number(d.get("keep")),
+        });
+        await load();
+        card.querySelector("#autobackup-settings .status")?.replaceChildren(h("p", { class: "notice", text: t("autobackup.saved") }));
+      }),
+      h("p", { id: "autobackup-next" }, st.running
+        ? t("autobackup.running", { kind: kindText(st.running) })
+        : st.next ? t("autobackup.next", { when: when(st.next), kind: kindText(st.nextKind) }) : t("autobackup.off")),
+      h("div", { class: "actions-row" }, run("full"), run("incremental")),
+      runStatus,
+      h("h4", { text: t("autobackup.history") }),
+      st.history.length ? h("table", { id: "autobackup-history" },
+        h("thead", {}, h("tr", {}, [t("autobackup.when"), t("autobackup.kind"), t("autobackup.file"), t("autobackup.size"), t("autobackup.outcome")].map((x) => h("th", { text: x })))),
+        h("tbody", {}, st.history.map((r) => h("tr", {},
+          h("td", { text: when(r.at) }), h("td", { text: kindText(r.kind) }), h("td", {}, r.file ? h("code", { text: r.file }) : ""),
+          h("td", { text: r.size ? sizeText(r.size) : "" }),
+          h("td", { class: r.error ? "error" : "", text: r.error || t("autobackup.ok", { s: Math.max(1, Math.round(r.seconds)) }) })))))
+        : h("p", { class: "muted", text: t("autobackup.noHistory") }),
+      h("h4", { text: t("autobackup.versions") }),
+      st.storedError ? h("p", { class: "error", text: t("autobackup.listFailed", { error: st.storedError }) }) : "",
+      st.versions.length ? h("table", { id: "autobackup-versions" },
+        h("thead", {}, h("tr", {}, [t("autobackup.created"), t("autobackup.latest"), t("autobackup.parts"), ""].map((x) => h("th", { text: x })))),
+        h("tbody", {}, st.versions.map((v) => h("tr", {},
+          h("td", { text: when(v.created) }), h("td", { text: when(v.latest) }), h("td", { text: String(v.backups.length) }),
+          h("td", { class: v.complete ? "muted" : "error", text: v.complete ? "" : t("autobackup.incomplete") })))))
+        : h("p", { class: "muted", text: t("autobackup.noVersions") }),
+      h("details", {},
+        h("summary", { text: t("autobackup.restoreTitle") }),
+        h("p", { class: "muted", text: t("autobackup.restoreHelp") }),
+        h("pre", { class: "snippet", text: `${data.passphraseEnv}='…' wikiwikibangbang restore -from ${s.destination || "/path/to/backups"} -data-dir data-restored` })),
+    );
+    if (st.running) timer = setTimeout(load, 2000);
+  };
+  load();
+  return card;
+}
+
 async function designCard() {
   const b = await get("/branding.json");
   const status = h("div", { class: "status" });

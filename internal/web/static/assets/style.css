@@ -875,6 +875,15 @@ button.info-btn { min-height: 0; box-shadow: none; margin: 0 0 0 4px; }
 .setup-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--border-strong); align-self: center; }
 .setup-list li.on .setup-dot { background: var(--success); }
 .setup-list li.off .setup-dot { background: var(--warning); }
+.info-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.15em; height: 1.15em; border-radius: 50%;
+  border: 1.5px solid var(--accent); color: var(--accent); font: italic 700 0.8em/1 Georgia, serif; flex: none; }
+.info-button { background: none; border: 0; padding: 0 2px; cursor: pointer; line-height: 1; vertical-align: -0.15em; font-size: inherit; }
+.info-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 50%; }
+.env-help { margin: 0 0 18px; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.env-help summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.env-help h4 { margin: 14px 0 4px; }
+.env-vars { padding-left: 18px; }
+.env-vars li { margin: 4px 0; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .setup-list li { grid-template-columns: 10px minmax(0, 1fr); } .setup-list li > .muted { grid-column: 2; } }
 /* The start page: a larger picture, and the installed version in a corner. */
 .welcome { position: relative; overflow: hidden; }

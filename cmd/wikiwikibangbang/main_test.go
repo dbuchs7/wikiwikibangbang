@@ -569,3 +569,85 @@ func TestSingleSignOnProvidersFromEnv(t *testing.T) {
 		}
 	}
 }
+
+// restore finds the chain of automatic backups in a directory, or the one
+// an incremental backup belongs to (ADR-0073).
+func TestRestoreAChain(t *testing.T) {
+	backup.Iterations = 1000
+	t.Setenv("WWBB_BACKUP_PASSPHRASE", "a long passphrase")
+	db, _, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	dir := t.TempDir()
+	at := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	var base *backup.Manifest
+	var names []string
+	for i, key := range []string{"ONE", "TWO", "THREE"} {
+		if err := db.Store.CreateSpace("admin", key, key); err != nil {
+			t.Fatal(err)
+		}
+		files, err := db.Snapshot()
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, _ := backup.NewID()
+		chain := id
+		if base != nil {
+			chain = base.Chain
+		}
+		name := backup.FileName(at.Add(time.Duration(i)*time.Hour), chain, i)
+		out, _ := os.Create(filepath.Join(dir, name))
+		m, err := backup.WriteBackup(out, files, backup.Options{Passphrase: "a long passphrase", Build: "test", Now: at, ID: id, Base: base})
+		out.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		base, names = &m, append(names, name)
+	}
+	spaces := func(target string) int {
+		t.Helper()
+		r, _, err := storage.Open(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		return len(r.Store.Spaces())
+	}
+	for name, c := range map[string]struct {
+		args []string
+		want int
+	}{
+		"the directory":         {[]string{"-from", dir}, 3},
+		"the directory, at":     {[]string{"-from", dir, "-at", names[1]}, 2},
+		"an incremental backup": {[]string{"-from", filepath.Join(dir, names[1])}, 2},
+		"the full backup":       {[]string{"-from", filepath.Join(dir, names[0])}, 1},
+		"files in order":        {[]string{"-from", filepath.Join(dir, names[0]), "-from", filepath.Join(dir, names[1]), "-from", filepath.Join(dir, names[2])}, 3},
+	} {
+		target := filepath.Join(t.TempDir(), "r")
+		code, out, errOut := runCmd(t, context.Background(), append([]string{"restore", "-data-dir", target}, c.args...)...)
+		if code != 0 {
+			t.Fatalf("%s: exit %d %q", name, code, errOut)
+		}
+		if got := spaces(target); got != c.want {
+			t.Errorf("%s: %d spaces, want %d (%s)", name, got, c.want, out)
+		}
+	}
+	empty := t.TempDir()
+	for name, args := range map[string][]string{
+		"-at with files":     {"-from", filepath.Join(dir, names[0]), "-from", filepath.Join(dir, names[1]), "-at", names[1]},
+		"-at with a file":    {"-from", filepath.Join(dir, names[0]), "-at", names[1]},
+		"-at unknown":        {"-from", dir, "-at", "nothing.wwbb"},
+		"an empty directory": {"-from", empty},
+		"a missing file":     {"-from", filepath.Join(dir, "missing.wwbb")},
+	} {
+		if code, _, _ := runCmd(t, context.Background(), append([]string{"restore", "-data-dir", filepath.Join(t.TempDir(), "r")}, args...)...); code != 1 {
+			t.Errorf("%s: exit %d", name, code)
+		}
+	}
+	os.Remove(filepath.Join(dir, names[0]))
+	if code, _, errOut := runCmd(t, context.Background(), "restore", "-data-dir", filepath.Join(t.TempDir(), "r"), "-from", dir); code != 1 || !strings.Contains(errOut, "missing") {
+		t.Errorf("a chain without its full backup: exit %d %q", code, errOut)
+	}
+}

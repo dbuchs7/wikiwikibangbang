@@ -15,10 +15,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/autobackup"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
@@ -76,6 +78,9 @@ type Deps struct {
 	Messages *Messenger
 	// OAuthRegistration opens dynamic client registration (ADR-0068).
 	OAuthRegistration bool
+	// Backups takes automatic backups (ADR-0073); Routes creates one that
+	// reads the process environment when it is nil.
+	Backups *autobackup.Runner
 }
 
 // MetricsPath serves the operational metrics. It is the only path a token
@@ -118,6 +123,9 @@ func Routes(d Deps) []Route {
 	if d.Messages == nil {
 		d.Messages = NewMessenger(nil, d.DB, d.Log, 0)
 	}
+	if d.Backups == nil && d.DB != nil {
+		d.Backups = autobackup.New(d.DB, os.Getenv, buildinfo.Get().String(), d.Log)
+	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},
@@ -138,6 +146,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, itemRoutes(d)...)
 	routes = append(routes, mcpRoutes()...)
 	routes = append(routes, oauthRoutes(d)...)
+	routes = append(routes, autoBackupRoutes(d)...)
 	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
 		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}

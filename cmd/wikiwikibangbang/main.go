@@ -21,12 +21,14 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/autobackup"
 	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
@@ -239,7 +241,15 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		// Runs before the data directory closes.
 		defer func() { stopDigest(); <-digestDone; messages.Wait() }()
 	}
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration})
+	// Automatic backups (ADR-0073) follow the schedule set under
+	// Administration; a backup running at shutdown is abandoned before the
+	// data directory closes, and the destination keeps no half of it.
+	backups := autobackup.New(db, os.Getenv, buildinfo.Get().String(), log)
+	backupCtx, stopBackups := context.WithCancel(ctx)
+	backupDone := make(chan struct{})
+	go func() { backups.Loop(backupCtx); close(backupDone) }()
+	defer func() { stopBackups(); <-backupDone; backups.Close() }()
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration, Backups: backups})
 	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.WithPublicURL(notifier.PublicURL(), server.Handler(routes, db.Accounts))), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1
@@ -455,19 +465,22 @@ func check(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// restore unpacks a backup made through POST /api/backup (ADR-0034) into a
-// new data directory. The passphrase comes from WWBB_BACKUP_PASSPHRASE or a
-// file, never from a flag, which would show in the process list and the
+// restore unpacks a backup into a new data directory: one made through
+// POST /api/backup (ADR-0034), or an automatic one with the backups it
+// builds on (ADR-0073). The passphrase comes from WWBB_BACKUP_PASSPHRASE or
+// a file, never from a flag, which would show in the process list and the
 // shell history.
 func restore(args []string, stdout, stderr io.Writer) int {
 	fs := newFlags("restore", stderr)
-	from := fs.String("from", "", "the backup file")
+	var from fileFlags
+	fs.Var(&from, "from", "a backup file, repeated for a full backup and the incremental ones after it, or a directory of automatic backups")
+	at := fs.String("at", "", "with -from a directory: the backup to restore, by file name (default: the newest)")
 	dataDir := fs.String("data-dir", defaultDataDir, "the new data directory; must not exist or be empty")
 	passFile := fs.String("passphrase-file", "", "file whose first line is the passphrase (default: $WWBB_BACKUP_PASSPHRASE)")
 	if err := fs.Parse(args); err != nil {
 		return parseFailed(err)
 	}
-	if *from == "" {
+	if len(from) == 0 {
 		fmt.Fprintln(stderr, "restore: -from is required")
 		return 2
 	}
@@ -485,19 +498,98 @@ func restore(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "restore: set WWBB_BACKUP_PASSPHRASE or -passphrase-file")
 		return 2
 	}
-	f, err := os.Open(*from)
+	paths, err := chainOf(from, *at)
 	if err != nil {
 		fmt.Fprintln(stderr, "restore:", err)
 		return 1
 	}
-	defer f.Close()
-	m, err := backup.Restore(f, pass, *dataDir)
+	var chain []backup.Source
+	for _, p := range paths {
+		chain = append(chain, func() (io.ReadCloser, error) { return os.Open(p) })
+	}
+	m, err := backup.RestoreChain(chain, pass, *dataDir)
 	if err != nil {
 		fmt.Fprintln(stderr, "restore:", err)
 		return 1
+	}
+	if len(paths) > 1 {
+		fmt.Fprintf(stdout, "applied %d backups: %s\n", len(paths), strings.Join(paths, ", "))
 	}
 	fmt.Fprintf(stdout, "restored a backup of %s (%s) into %s\n", m.Created.Format(time.RFC3339), m.Build, *dataDir)
 	return 0
+}
+
+// fileFlags collects repeated -from values.
+type fileFlags []string
+
+func (f *fileFlags) String() string { return strings.Join(*f, ",") }
+
+func (f *fileFlags) Set(v string) error {
+	*f = append(*f, v)
+	return nil
+}
+
+// chainOf names the files to restore, in order. Several files are taken
+// as given. A directory gives the newest automatic backup in it, or the
+// one at names, with the backups it builds on; so does an incremental
+// backup given alone, from its own directory.
+func chainOf(from []string, at string) ([]string, error) {
+	if len(from) > 1 {
+		if at != "" {
+			return nil, errors.New("-at goes with -from a directory")
+		}
+		return from, nil
+	}
+	dir, want := from[0], at
+	fi, err := os.Stat(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.IsDir() {
+		if at != "" {
+			return nil, errors.New("-at goes with -from a directory")
+		}
+		n, ok := backup.ParseName(filepath.Base(dir))
+		if !ok || n.Seq == 0 {
+			return from, nil
+		}
+		dir, want = filepath.Dir(dir), n.File
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	versions := backup.Versions(names)
+	if len(versions) == 0 {
+		return nil, fmt.Errorf("%s holds no automatic backups", dir)
+	}
+	v, upTo := versions[len(versions)-1], -1
+	if want != "" {
+		for _, c := range versions {
+			for i, b := range c.Backups {
+				if b.File == want {
+					v, upTo = c, i
+				}
+			}
+		}
+		if upTo < 0 {
+			return nil, fmt.Errorf("%s is not an automatic backup in %s", want, dir)
+		}
+	} else {
+		upTo = len(v.Backups) - 1
+	}
+	var paths []string
+	for i, b := range v.Backups[:upTo+1] {
+		if b.Seq != i {
+			return nil, fmt.Errorf("the backups before %s are not all in %s; backup %d of its chain is missing", v.Backups[upTo].File, dir, i)
+		}
+		paths = append(paths, filepath.Join(dir, b.File))
+	}
+	return paths, nil
 }
 
 // healthcheck lets a container runtime probe the server without a shell or
