@@ -40,7 +40,9 @@ var DefaultOpenData = OpenData{
 	IntervalHours: 24,
 }
 
-var formatRE = regexp.MustCompile(`^[A-Z0-9][A-Z0-9 _.:/-]{0,39}$`)
+// formatRE accepts a format as publishers name it, e.g. "WMS",
+// "ESRI REST" or "OGC API – FEATURES", kept in capitals.
+var formatRE = regexp.MustCompile(`^[\p{Lu}\p{N}][\p{Lu}\p{N} _.:/()+&–-]{0,59}$`)
 
 var orgRE = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,99}$`)
 
@@ -55,8 +57,8 @@ func (o OpenData) Validate() error {
 	switch {
 	case o.Enabled && o.Space == "":
 		return fmt.Errorf("%w: the synchronisation needs a space", ErrInvalid)
-	case len(o.Formats) == 0 || len(o.Formats) > 30:
-		return fmt.Errorf("%w: name 1 to 30 formats", ErrInvalid)
+	case len(o.Formats) == 0 || len(o.Formats) > 60:
+		return fmt.Errorf("%w: name 1 to 60 formats", ErrInvalid)
 	case len(o.Organizations) > 200:
 		return fmt.Errorf("%w: name at most 200 organizations", ErrInvalid)
 	case o.IntervalHours < 1 || o.IntervalHours > 24*31:
@@ -64,7 +66,7 @@ func (o OpenData) Validate() error {
 	}
 	for _, f := range o.Formats {
 		if !formatRE.MatchString(f) {
-			return fmt.Errorf("%w: %q is not a format in capitals, e.g. WMS", ErrInvalid, f)
+			return fmt.Errorf("%w: %q is not a format, e.g. WMS or ESRI REST", ErrInvalid, f)
 		}
 	}
 	for _, org := range o.Organizations {

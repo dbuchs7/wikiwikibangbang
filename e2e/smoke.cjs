@@ -61,11 +61,11 @@ async function mailTo(sink, address) {
 function ckanSource() {
   const server = require("http").createServer((req, res) => {
     res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ success: true, result: { count: 1, results: [{
+    res.end(JSON.stringify({ success: true, result: { count: 1, facets: { res_format: { api: 1, CSV: 1 } }, results: [{
       id: "d1", name: "luftqualitaet", title: { de: "Luftqualität", fr: "Qualité de l'air" },
       organization: { name: "bafu", title: { de: "Bundesamt für Umwelt" } },
       contact_points: [{ name: "Luft", email: "luft@example.org" }],
-      resources: [{ id: "r-air", format: "API", url: "https://air.example.org/v1", documentation: ["https://air.example.org/docs"] },
+      resources: [{ id: "r-air", format: "api", url: "https://air.example.org/v1", documentation: ["https://air.example.org/docs"] },
         { id: "r-csv", format: "CSV", url: "https://air.example.org/data.csv" }],
     }] } }));
   });
@@ -1169,6 +1169,13 @@ function ckanSource() {
     await page.selectOption("#catalog-settings [name=space]", "APIS");
     await page.click("#catalog-settings details summary");
     await page.fill("#catalog-settings [name=baseURL]", `http://127.0.0.1:${ckan.address().port}/api/3/action`);
+    // The source's formats are listed to choose from; its own spelling,
+    // here "api", is matched.
+    await page.click("#catalog-source-formats");
+    await page.waitForSelector("#catalog-formats label:has-text('api') input:checked");
+    await page.click("#catalog-formats label:has-text('CSV') input");
+    check((await page.inputValue("#catalog-settings [name=formats]")).split(", ").includes("CSV"), "ticking a format adds it to the list");
+    await page.click("#catalog-formats label:has-text('CSV') input");
     await page.click("#catalog-settings button[type=submit]");
     await page.waitForSelector("#catalog-settings >> text=Saved.");
     await page.click("#catalog-dry-run");

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -61,14 +62,42 @@ func (f *fakeCKAN) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"success":false,"error":{"message":"Search error"}}`)
 		return
 	}
+	// Like the portal's search, formats are compared exactly.
+	fq := r.URL.Query().Get("fq")
+	var matching []string
+	facets := map[string]int{}
+	for _, raw := range f.datasets {
+		var d struct {
+			Resources []struct {
+				Format string `json:"format"`
+			} `json:"resources"`
+		}
+		json.Unmarshal([]byte(raw), &d)
+		seen, hit := map[string]bool{}, !strings.Contains(fq, "res_format")
+		for _, res := range d.Resources {
+			if res.Format != "" && !seen[res.Format] {
+				seen[res.Format] = true
+				facets[res.Format]++
+			}
+			hit = hit || strings.Contains(fq, strconv.Quote(res.Format))
+		}
+		if hit {
+			matching = append(matching, raw)
+		}
+	}
+	if r.URL.Query().Get("rows") == "0" {
+		data, _ := json.Marshal(facets)
+		fmt.Fprintf(w, `{"success":true,"result":{"count":%d,"results":[],"facets":{"res_format":%s}}}`, len(matching), data)
+		return
+	}
 	start, _ := strconv.Atoi(r.URL.Query().Get("start"))
 	rows, _ := strconv.Atoi(r.URL.Query().Get("rows"))
-	end := min(start+rows, len(f.datasets))
+	end := min(start+rows, len(matching))
 	page := []string{}
-	if start < len(f.datasets) {
-		page = f.datasets[start:end]
+	if start < len(matching) {
+		page = matching[start:end]
 	}
-	fmt.Fprintf(w, `{"success":true,"result":{"count":%d,"results":[%s]}}`, len(f.datasets), strings.Join(page, ","))
+	fmt.Fprintf(w, `{"success":true,"result":{"count":%d,"results":[%s]}}`, len(matching), strings.Join(page, ","))
 }
 
 func TestEntriesReadTheShapesOfThePortal(t *testing.T) {
@@ -176,8 +205,11 @@ func TestTheCatalogFollowsTheSource(t *testing.T) {
 	if err != nil || dry.New != 4 || dry.Datasets != 3 || len(f.items(t)) != 0 || len(dry.Examples) != 4 {
 		t.Fatalf("dry run %+v %v", dry, err)
 	}
-	if !strings.Contains(f.ckan.queries[0], `res_format:("API" OR "WMS"`) {
-		t.Errorf("query %s", f.ckan.queries[0])
+	if f.ckan.queries[0] != "" || !strings.Contains(f.ckan.queries[1], `"wfs_srvc"`) || !strings.Contains(f.ckan.queries[1], `"rest"`) {
+		t.Errorf("queries %q", f.ckan.queries)
+	}
+	if !slices.Equal(dry.Formats, []string{"API", "WMS", "rest", "wfs_srvc"}) {
+		t.Errorf("formats read %v", dry.Formats)
 	}
 	res, err := f.r.Run(ctx, false, "admin")
 	if err != nil || res.New != 4 || res.Changed != 0 {
@@ -283,6 +315,27 @@ func TestRunsThatCannotWork(t *testing.T) {
 	if q := query([]string{"API"}, []string{"bfs", "bafu"}); q != `res_format:("API") AND organization:("bfs" OR "bafu")` {
 		t.Errorf("query %s", q)
 	}
+	if ds, err := NewClient("http://127.0.0.1:1").Datasets(ctx, nil, nil); ds != nil || err != nil {
+		t.Errorf("no formats: %v %v", ds, err)
+	}
+
+	// No format of the list in the source: the run says which there are.
+	cfg.Formats = []string{"SOAP"}
+	f.db.Site.SetOpenData("admin", cfg)
+	res, err := f.r.Run(ctx, true, "")
+	if err != nil || res.Entries != 0 || len(res.Problems) != 1 || !strings.Contains(res.Problems[0], "API (2)") {
+		t.Errorf("no matching format: %+v %v", res, err)
+	}
+	formats, err := f.r.SourceFormats(ctx, cfg.BaseURL, nil)
+	if err != nil || len(formats) != 5 || formats[0] != (FormatCount{"API", 2}) {
+		t.Errorf("source formats %v %v", formats, err)
+	}
+	if got := describe(formats, 2); !strings.Contains(got, "and 3 more") {
+		t.Errorf("describe %s", got)
+	}
+	if describe(nil, 3) != "none" {
+		t.Error("describe of nothing")
+	}
 }
 
 // The schedule runs when due; one run at a time; Close waits.
@@ -325,4 +378,28 @@ func TestTheSchedule(t *testing.T) {
 	ctx2, cancel := context.WithCancel(ctx)
 	cancel()
 	f.r.Loop(ctx2)
+}
+
+// Formats reads facets in either shape CKAN answers them, and Match
+// takes the source's spelling for the wanted formats.
+func TestFormatsAndMatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("fq") == `organization:("fail")` {
+			fmt.Fprint(w, `{"success":false}`)
+			return
+		}
+		fmt.Fprint(w, `{"success":true,"result":{"search_facets":{"res_format":{"items":[{"name":"WMS-Dienst","count":7},{"name":"api","count":3},{"name":"","count":9}]}}}}`)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	got, err := c.Formats(context.Background(), nil)
+	if err != nil || len(got) != 2 || got[0] != (FormatCount{"WMS-Dienst", 7}) {
+		t.Fatalf("formats %v %v", got, err)
+	}
+	if m := Match(got, []string{"API", "WMS-DIENST", "WFS"}); !slices.Equal(m, []string{"WMS-Dienst", "api"}) {
+		t.Errorf("match %v", m)
+	}
+	if _, err := c.Formats(context.Background(), []string{"fail"}); err == nil {
+		t.Error("a failing source")
+	}
 }

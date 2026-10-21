@@ -18,6 +18,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -202,26 +203,124 @@ func NewClient(base string) Client {
 	}}
 }
 
-// query is the search for data sets with a resource in one of the
-// formats, of one of the organizations if any are named.
-func query(formats, orgs []string) string {
-	quote := func(in []string) string {
-		out := make([]string, len(in))
-		for i, s := range in {
-			out[i] = strconv.Quote(s)
-		}
-		return strings.Join(out, " OR ")
+// orgQuery limits a search to organizations, or is empty.
+func orgQuery(orgs []string) string {
+	if len(orgs) == 0 {
+		return ""
 	}
+	return "organization:(" + quote(orgs) + ")"
+}
+
+func quote(in []string) string {
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = strconv.Quote(s)
+	}
+	return strings.Join(out, " OR ")
+}
+
+// query is the search for data sets with a resource in one of the
+// formats, of one of the organizations if any are named. The formats are
+// the source's own values, as the search compares them exactly.
+func query(formats, orgs []string) string {
 	fq := "res_format:(" + quote(formats) + ")"
-	if len(orgs) > 0 {
-		fq += " AND organization:(" + quote(orgs) + ")"
+	if o := orgQuery(orgs); o != "" {
+		fq += " AND " + o
 	}
 	return fq
 }
 
+// FormatCount is a resource format the source uses, with the number of
+// data sets that have a resource in it.
+type FormatCount struct {
+	Format string `json:"format"`
+	Count  int    `json:"count"`
+}
+
+// Formats returns the resource formats of the source's data sets, of the
+// organizations if any are named, the most frequent first: what the
+// source calls its formats, which a run's formats are matched against.
+func (c Client) Formats(ctx context.Context, orgs []string) ([]FormatCount, error) {
+	q := url.Values{"rows": {"0"}, "facet.field": {`["res_format"]`}, "facet.limit": {"-1"}}
+	if o := orgQuery(orgs); o != "" {
+		q.Set("fq", o)
+	}
+	var answer struct {
+		Success bool `json:"success"`
+		Error   *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Result struct {
+			Facets       map[string]map[string]int `json:"facets"`
+			SearchFacets map[string]struct {
+				Items []struct {
+					Name  string `json:"name"`
+					Count int    `json:"count"`
+				} `json:"items"`
+			} `json:"search_facets"`
+		} `json:"result"`
+	}
+	if err := c.get(ctx, "/package_search?"+q.Encode(), &answer); err != nil {
+		return nil, err
+	}
+	if !answer.Success {
+		return nil, failure(answer.Error)
+	}
+	counts := map[string]int{}
+	for name, n := range answer.Result.Facets["res_format"] {
+		counts[name] = n
+	}
+	for _, it := range answer.Result.SearchFacets["res_format"].Items {
+		counts[it.Name] = max(counts[it.Name], it.Count)
+	}
+	out := []FormatCount{}
+	for name, n := range counts {
+		if strings.TrimSpace(name) != "" {
+			out = append(out, FormatCount{Format: name, Count: n})
+		}
+	}
+	slices.SortFunc(out, func(a, b FormatCount) int {
+		if a.Count != b.Count {
+			return b.Count - a.Count
+		}
+		return strings.Compare(a.Format, b.Format)
+	})
+	return out, nil
+}
+
+// Match picks the source's formats that the wanted ones name, compared
+// without regard to case and with the usual spellings of publishers
+// (aliases).
+func Match(available []FormatCount, wanted []string) []string {
+	want := map[string]bool{}
+	for _, f := range wanted {
+		want[normalFormat(f)] = true
+	}
+	var out []string
+	for _, a := range available {
+		if want[normalFormat(a.Format)] {
+			out = append(out, a.Format)
+		}
+	}
+	return out
+}
+
+func failure(e *struct {
+	Message string `json:"message"`
+}) error {
+	if e != nil && e.Message != "" {
+		return errors.New("opendata: " + e.Message)
+	}
+	return errors.New("opendata: the source reports a failure")
+}
+
 // Datasets returns every data set with a resource in one of the formats,
-// of the organizations if any are named, in a stable order.
+// as the source writes them (see Formats and Match), of the organizations
+// if any are named, in a stable order.
 func (c Client) Datasets(ctx context.Context, formats, orgs []string) ([]Dataset, error) {
+	if len(formats) == 0 {
+		return nil, nil
+	}
 	var out []Dataset
 	for start := 0; ; start += pageRows {
 		q := url.Values{"fq": {query(formats, orgs)}, "rows": {strconv.Itoa(pageRows)}, "start": {strconv.Itoa(start)}, "sort": {"name asc"}}
@@ -239,11 +338,7 @@ func (c Client) Datasets(ctx context.Context, formats, orgs []string) ([]Dataset
 			return nil, err
 		}
 		if !answer.Success {
-			msg := "the source reports a failure"
-			if answer.Error != nil && answer.Error.Message != "" {
-				msg = answer.Error.Message
-			}
-			return nil, errors.New("opendata: " + msg)
+			return nil, failure(answer.Error)
 		}
 		out = append(out, answer.Result.Results...)
 		switch {

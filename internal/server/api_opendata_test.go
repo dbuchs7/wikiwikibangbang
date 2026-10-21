@@ -11,7 +11,7 @@ import (
 
 func TestCatalogSyncThroughTheAPI(t *testing.T) {
 	ckan := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"success":true,"result":{"count":1,"results":[{"id":"d1","name":"wetter","title":{"de":"Wetter"},
+		fmt.Fprint(w, `{"success":true,"result":{"count":1,"facets":{"res_format":{"API":1,"CSV":4}},"results":[{"id":"d1","name":"wetter","title":{"de":"Wetter"},
 			"organization":{"name":"meteo","title":{"de":"Meteo"}},"resources":[{"id":"r1","format":"API","url":"https://api.example/v1"}]}]}}`)
 	}))
 	defer ckan.Close()
@@ -34,6 +34,14 @@ func TestCatalogSyncThroughTheAPI(t *testing.T) {
 	w.admin.expect("PUT", "/api/catalog/opendata/settings", `{`, http.StatusBadRequest)
 	w.admin.expect("PUT", "/api/catalog/opendata/settings", settings("PLAT", w.ids["bert"], `"api"`), http.StatusOK)
 
+	formats := w.admin.expect("GET", "/api/catalog/opendata/formats", "", http.StatusOK)
+	if jsonOf(formats) != `{"formats":[{"count":4,"format":"CSV"},{"count":1,"format":"API"}]}` {
+		t.Fatalf("formats %s", jsonOf(formats))
+	}
+	w.bert.expect("GET", "/api/catalog/opendata/formats", "", http.StatusForbidden)
+	w.admin.expect("GET", "/api/catalog/opendata/formats?baseURL="+ckan.URL+"&organizations=meteo,%20bafu", "", http.StatusOK)
+	w.admin.expect("GET", "/api/catalog/opendata/formats?baseURL=ftp://x", "", http.StatusBadRequest)
+	w.admin.expect("GET", "/api/catalog/opendata/formats?baseURL=http://127.0.0.1:1", "", http.StatusBadGateway)
 	w.admin.expect("POST", "/api/catalog/opendata/run", `{`, http.StatusBadRequest)
 	w.admin.expect("POST", "/api/catalog/opendata/run", `{"dryRun":false}`, http.StatusAccepted)
 	deadline := time.Now().Add(20 * time.Second)

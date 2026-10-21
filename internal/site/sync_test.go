@@ -41,7 +41,7 @@ func TestOpenDataSettingsAreKeptAndReplayed(t *testing.T) {
 			}
 		},
 		"too many formats": func(o *OpenData) {
-			for i := range 31 {
+			for i := range 61 {
 				o.Formats = append(o.Formats, fmt.Sprintf("F%d", i))
 			}
 		},

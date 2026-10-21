@@ -850,5 +850,10 @@ export default {
   "catalog.counts": "{datasets} Datensätze, {entries} Schnittstellen: {created} neu, {changed} geändert, {unchanged} unverändert, {withdrawn} zurückgezogen",
   "catalog.kind.new": "neu",
   "catalog.kind.changed": "geändert",
-  "catalog.kind.withdrawn": "zurückgezogen"
+  "catalog.kind.withdrawn": "zurückgezogen",
+  "catalog.showFormats": "Formate der Quelle anzeigen",
+  "catalog.loadingFormats": "Die Formate werden bei der Quelle abgefragt …",
+  "catalog.formatsPick": "{n} Formate kommen in der Quelle vor, mit der Zahl der Datensätze. Kreuzen Sie an, was eine Schnittstelle ist; die Liste oben passt sich an. Danach «Speichern» und «Probelauf».",
+  "catalog.noFormats": "Die Quelle nennt keine Formate.",
+  "catalog.formatsRead": "Gelesene Formate der Quelle: {list}"
 };
