@@ -517,3 +517,46 @@ func TestSeveralConnectors(t *testing.T) {
 		t.Errorf("an unknown kind: %+v %v", res, err)
 	}
 }
+
+// Publishers the source does not know are named in the report: all of
+// them unknown, the run reads nothing; some, it reads the others.
+func TestUnknownPublishersAreReported(t *testing.T) {
+	f := setup(t)
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/organization_list") {
+			fmt.Fprint(w, `{"success":true,"result":["meteoschweiz","swisstopo"]}`)
+			return
+		}
+		queries = append(queries, r.URL.Query().Get("fq"))
+		f.ckan.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	cfg := f.cfg
+	cfg.CKAN.BaseURL = srv.URL + "/api/3/action"
+	cfg.CKAN.Organizations = []string{"schweizerische", "eidgenossenschaft"}
+	f.db.Site.SetConnector("admin", cfg)
+	ctx := context.Background()
+	res, err := f.r.Run(ctx, id, true, "")
+	if err != nil || res.Datasets != 0 || len(queries) != 0 || len(res.Problems) != 1 ||
+		!strings.Contains(res.Problems[0], "no organization schweizerische, eidgenossenschaft") {
+		t.Fatalf("all unknown: %+v %v %q", res, err, queries)
+	}
+	if _, err := f.r.SourceFormats(ctx, id, cfg.CKAN.BaseURL, cfg.CKAN.Organizations); !errors.Is(err, ErrUnknownOrganization) {
+		t.Errorf("formats of unknown publishers: %v", err)
+	}
+	cfg.CKAN.Organizations = []string{"meteoschweiz", "bfs"}
+	f.db.Site.SetConnector("admin", cfg)
+	res, err = f.r.Run(ctx, id, true, "")
+	if err != nil || len(queries) == 0 || !slices.ContainsFunc(res.Problems, func(p string) bool { return strings.Contains(p, "no organization bfs") }) {
+		t.Errorf("one unknown: %+v %v", res, err)
+	}
+	if got, err := NewClient(srv.URL+"/api/3/action", "").UnknownOrganizations(ctx, []string{"swisstopo"}); err != nil || got != nil {
+		t.Errorf("a known one: %v %v", got, err)
+	}
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"success":false}`) }))
+	defer failing.Close()
+	if _, err := NewClient(failing.URL, "").UnknownOrganizations(ctx, []string{"x"}); err == nil {
+		t.Error("a source that refuses the list")
+	}
+}

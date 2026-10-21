@@ -218,6 +218,10 @@ func (h authHandlers) connectorFormats(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), formatsTimeout)
 	defer cancel()
 	formats, err := h.d.Connectors.SourceFormats(ctx, c.ID, c.CKAN.BaseURL, c.CKAN.Organizations)
+	if errors.Is(err, connector.ErrUnknownOrganization) {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

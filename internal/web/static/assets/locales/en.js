@@ -884,7 +884,7 @@ export default {
   "catalog.formats": "Formats that count as an interface",
   "catalog.formatsHelp": "Comma separated, default: {defaults}. Downloads such as CSV or JSON files are not included.",
   "catalog.organizations": "Only these publishers (optional)",
-  "catalog.organizationsHelp": "The organizations' names in the source, comma separated; empty takes all.",
+  "catalog.organizationsHelp": "The publishers' short names as in their address in the source, e.g. bundesamt-fur-statistik-bfs from …/organization/bundesamt-fur-statistik-bfs; not their full names. Comma separated; empty takes all.",
   "catalog.steward": "Owner of new entries",
   "catalog.stewardHelp": "Set as the owner of new entries until someone else is responsible; this person gets the governance findings.",
   "catalog.interval": "Sync every … hours",
