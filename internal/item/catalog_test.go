@@ -173,3 +173,22 @@ func TestWebLinksOfFieldsAndOrigins(t *testing.T) {
 		t.Fatalf("links %+v", links)
 	}
 }
+
+// A state is finished when it is the workflow's last or no transition
+// leaves it (ADR-0082).
+func TestFinishedStates(t *testing.T) {
+	decision := &Workflow{Initial: "proposed", States: []string{"proposed", "accepted", "rejected"},
+		Transitions: []Transition{{Name: "accept", From: []string{"proposed"}, To: "accepted"}, {Name: "reject", From: []string{"proposed"}, To: "rejected"}}}
+	task := &Workflow{Initial: "open", States: []string{"open", "done"},
+		Transitions: []Transition{{Name: "finish", From: []string{"open"}, To: "done"}, {Name: "reopen", From: []string{"done"}, To: "open"}}}
+	for _, c := range []struct {
+		wf    *Workflow
+		state string
+		want  bool
+	}{{decision, "proposed", false}, {decision, "accepted", true}, {decision, "rejected", true}, {decision, "unknown", false},
+		{task, "open", false}, {task, "done", true}, {nil, "x", false}, {&Workflow{}, "x", false}} {
+		if got := c.wf.Finished(c.state); got != c.want {
+			t.Errorf("%s: %v, want %v", c.state, got, c.want)
+		}
+	}
+}

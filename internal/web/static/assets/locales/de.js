@@ -546,7 +546,7 @@ export default {
   "tasks.due": "Fällig",
   "tasks.priority": "Priorität",
   "tasks.noneMine": "Ihnen ist nichts zugewiesen. Übernehmen Sie eine Aufgabe unter Nicht zugewiesen.",
-  "tasks.conventions": "Aufgeführt sind die Einträge vom Typ task sowie jedes Typs mit Workflow und einem Personenfeld namens assignee oder einem Datumsfeld namens due oder deadline, die nicht im letzten Status ihres Workflows sind. Das Feld assignee (oder das erste Personenfeld) nennt, wer daran arbeitet, das Feld due oder deadline das Fälligkeitsdatum, eine Auswahl namens priority die Dringlichkeit von tief bis hoch. Katalogeinträge sind keine Aufgaben.",
+  "tasks.conventions": "Aufgeführt sind die Einträge vom Typ task sowie jedes Typs mit Workflow und einem Personenfeld namens assignee oder einem Datumsfeld namens due oder deadline, die nicht erledigt sind, also weder im letzten Status ihres Workflows noch in einem Status, aus dem kein Übergang führt, wie eine angenommene Entscheidung. Das Feld assignee (oder das erste Personenfeld) nennt, wer daran arbeitet, das Feld due oder deadline das Fälligkeitsdatum, eine Auswahl namens priority die Dringlichkeit von tief bis hoch. Katalogeinträge sind keine Aufgaben.",
   "tasks.filterOf": "{column} filtern",
   "tasks.filterAll": "Alle",
   "tasks.filterText": "Filtern",

@@ -548,7 +548,7 @@ export default {
   "tasks.due": "Due",
   "tasks.priority": "Priority",
   "tasks.noneMine": "Nothing is assigned to you. Take over a task under Unassigned.",
-  "tasks.conventions": "Listed are the items of the type task, and of every type with a workflow and a user field named assignee or a date field named due or deadline, that are not in their workflow's last state. The assignee field (or the first user field) is who works on it, the due or deadline field its due date, an enum named priority its urgency, from low to high. Catalog entries are not tasks.",
+  "tasks.conventions": "Listed are the items of the type task, and of every type with a workflow and a user field named assignee or a date field named due or deadline, that are not finished: in their workflow's last state, or in a state no transition leaves, such as an accepted decision. The assignee field (or the first user field) is who works on it, the due or deadline field its due date, an enum named priority its urgency, from low to high. Catalog entries are not tasks.",
   "tasks.filterOf": "Filter {column}",
   "tasks.filterAll": "All",
   "tasks.filterText": "Filter",
