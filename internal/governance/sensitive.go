@@ -31,13 +31,17 @@ type detector struct {
 	value int
 	// valid confirms a candidate the pattern alone cannot judge.
 	valid func(string) bool
+	// may is a cheap test that is true for every text the pattern can
+	// match; a text it rejects is not searched (ADR-0081). Most text holds
+	// no sensitive data, and the patterns cost far more than the tests.
+	may func(string) bool
 }
 
 var detectors = []detector{
-	{kind: "password", value: 2, valid: plausiblePassword,
+	{kind: "password", value: 2, valid: plausiblePassword, may: mayHoldPassword,
 		re: regexp.MustCompile(`(?i)\b(passwor[dt]|pwd|passcode|kennwort)\s*[:=]\s*(\S+)`)},
-	{kind: "private-key", re: regexp.MustCompile(`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----`)},
-	{kind: "access-token", re: regexp.MustCompile(
+	{kind: "private-key", may: func(t string) bool { return strings.Contains(t, "PRIVATE KEY-----") }, re: regexp.MustCompile(`-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----`)},
+	{kind: "access-token", may: mayHoldToken, re: regexp.MustCompile(
 		`\bAKIA[0-9A-Z]{16}\b` + // cloud access key ID
 			`|\bgh[pousr]_[A-Za-z0-9]{36,}` + // repository host tokens
 			`|\bgithub_pat_[A-Za-z0-9_]{50,}` +
@@ -45,9 +49,9 @@ var detectors = []detector{
 			`|\bsk-[A-Za-z0-9_-]{20,}` + // API secret keys
 			`|\bwwbb_[A-Za-z0-9+/_=-]{20,}` + // this server's own API tokens
 			`|\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`)}, // signed tokens
-	{kind: "iban", valid: validIBAN,
+	{kind: "iban", valid: validIBAN, may: mayHoldIBAN,
 		re: regexp.MustCompile(`\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}\b`)},
-	{kind: "card-number", valid: validCard,
+	{kind: "card-number", valid: validCard, may: func(t string) bool { return digits(t) >= 13 },
 		re: regexp.MustCompile(`\b\d(?:[ -]?\d){12,18}\b`)},
 }
 
@@ -55,6 +59,9 @@ var detectors = []detector{
 func Sensitive(text string) []Finding {
 	var out []Finding
 	for _, d := range detectors {
+		if d.may != nil && !d.may(text) {
+			continue
+		}
 		for _, m := range d.re.FindAllStringSubmatchIndex(text, -1) {
 			start, end := m[2*d.value], m[2*d.value+1]
 			if d.valid != nil && !d.valid(text[start:end]) {
@@ -146,3 +153,58 @@ func validCard(s string) bool {
 	}
 	return sum%10 == 0
 }
+
+// mayHoldPassword: a keyword, in any case, and a ":" or "=" after it. A
+// long s, which the pattern folds to s, sends the text to the pattern.
+func mayHoldPassword(t string) bool {
+	if !strings.ContainsAny(t, ":=") {
+		return false
+	}
+	if strings.ContainsRune(t, 'ſ') {
+		return true
+	}
+	l := strings.ToLower(t)
+	for _, k := range []string{"passwor", "pwd", "passcode", "kennwort"} {
+		if strings.Contains(l, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// tokenStarts begin every kind of access token the pattern knows.
+var tokenStarts = []string{"AKIA", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_",
+	"xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "sk-", "wwbb_", "eyJ"}
+
+func mayHoldToken(t string) bool {
+	for _, s := range tokenStarts {
+		if strings.Contains(t, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// mayHoldIBAN: two capital letters followed by two digits, as an IBAN
+// begins.
+func mayHoldIBAN(t string) bool {
+	for i := 0; i+3 < len(t); i++ {
+		if isUpper(t[i]) && isUpper(t[i+1]) && isDigit(t[i+2]) && isDigit(t[i+3]) {
+			return true
+		}
+	}
+	return false
+}
+
+func digits(t string) int {
+	n := 0
+	for i := 0; i < len(t); i++ {
+		if isDigit(t[i]) {
+			n++
+		}
+	}
+	return n
+}
+
+func isUpper(b byte) bool { return b >= 'A' && b <= 'Z' }
+func isDigit(b byte) bool { return b >= '0' && b <= '9' }

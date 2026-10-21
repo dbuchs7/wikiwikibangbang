@@ -93,3 +93,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0078](0078-protecting-items-for-people-and-groups.md) | Protecting an item for people and groups from its page | Accepted | Landed |
 | [0079](0079-owner-and-details-lead-the-main-column.md) | Owner and details lead the main column of an item's page | Accepted | Landed |
 | [0080](0080-one-page-per-data-set-written-from-the-source.md) | One catalog page per data set, written from everything the source says | Accepted | Landed |
+| [0081](0081-the-server-stays-fast-with-tens-of-thousands-of-items.md) | The server stays fast with tens of thousands of items | Accepted | Landed |

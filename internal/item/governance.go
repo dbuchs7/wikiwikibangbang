@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/governance"
@@ -183,6 +184,13 @@ var dueField = regexp.MustCompile(`(?i)due|deadline|f(ä|ae)llig`)
 // now, and implausible values. A space in which the principal holds no
 // role is not found.
 func (x *Session) Governance(space string, now time.Time, staleAfter time.Duration) (Report, error) {
+	return x.governance(space, now, staleAfter, "")
+}
+
+// governance is the report of a space; with only set, it holds only the
+// findings only answers for and the holds, which is what the bell needs
+// (ADR-0081): the others are not worked out.
+func (x *Session) governance(space string, now time.Time, staleAfter time.Duration, only string) (Report, error) {
 	var rep Report
 	if x.s.spaceRole(x.who, space) < Viewer {
 		return rep, notFound("space %q", space)
@@ -194,6 +202,7 @@ func (x *Session) Governance(space string, now time.Time, staleAfter time.Durati
 		}
 	}
 	slices.SortFunc(items, func(a, b *Item) int { return a.created - b.created })
+	plans := map[string]*plausibility{}
 	for _, it := range items {
 		responsible, last := x.s.lastEditor(it.ID)
 		td, _ := x.s.latest(it.Type)
@@ -201,6 +210,19 @@ func (x *Session) Governance(space string, now time.Time, staleAfter time.Durati
 		// item whoever changed it last, e.g. a synchronisation (ADR-0074).
 		if o := owner(td, it); o != "" {
 			responsible = o
+		}
+		if only != "" && responsible != only {
+			if it.Hold != nil {
+				if pd, ok := x.personal(it, responsible); ok {
+					rep.Personal = append(rep.Personal, pd)
+				}
+			}
+			continue
+		}
+		plan := plans[it.Type]
+		if plan == nil {
+			plan = planFor(td)
+			plans[it.Type] = plan
 		}
 		if rd, due := reviewDue(td, it, now); due {
 			rd.Responsible = responsible
@@ -210,7 +232,7 @@ func (x *Session) Governance(space string, now time.Time, staleAfter time.Durati
 		if now.Sub(last) > staleAfter {
 			rep.Stale = append(rep.Stale, StaleItem{Item: it.ID, Key: it.Key, Title: it.Title, LastChange: last, Responsible: responsible})
 		}
-		for _, p := range x.s.implausible(it, now) {
+		for _, p := range plan.implausible(it, now) {
 			rep.Implausible = append(rep.Implausible, Implausible{Item: it.ID, Key: it.Key, Title: it.Title, Problem: p, Responsible: responsible})
 		}
 		if pd, ok := x.personal(it, responsible); ok {
@@ -236,25 +258,94 @@ func (x *Session) personal(it *Item, responsible string) (PersonalData, bool) {
 	return pd, len(pd.Findings) > 0
 }
 
-func (s *Store) sensitiveIn(it *Item, responsible string, rep *Report) {
-	add := func(where, text string) {
-		for _, f := range governance.Sensitive(text) {
-			rep.Sensitive = append(rep.Sensitive, SensitiveFinding{Item: it.ID, Key: it.Key, Title: it.Title, Where: where,
-				Kind: f.Kind, Masked: f.Masked, Responsible: responsible, Restricted: len(it.Restriction.Read) > 0})
-		}
-	}
-	add("title", it.Title)
-	names := slices.Sorted(maps.Keys(it.Properties))
-	for _, n := range names {
+// sensitiveMemo remembers which texts of each item hold sensitive data,
+// with the index of the last event that touched the item when it was
+// scanned (ADR-0081). Scanning every item's text on every report took
+// most of the time of a page with thousands of items; an item is scanned
+// again only once it changed. It keeps where findings are, never the
+// text, so nothing of a redacted or purged item stays in it.
+type sensitiveMemo struct {
+	mu sync.Mutex
+	m  map[ID]sensitiveSeen
+}
+
+type sensitiveSeen struct {
+	at    int      // the item's last touching event when scanned; -1 for none
+	where []string // the texts with findings
+}
+
+// texts are an item's texts by where they are, in report order.
+func (it *Item) texts() [][2]string {
+	out := [][2]string{{"title", it.Title}}
+	for _, n := range slices.Sorted(maps.Keys(it.Properties)) {
 		if v, ok := it.Properties[n].(string); ok {
-			add("property "+n, v)
+			out = append(out, [2]string{"property " + n, v})
 		}
 	}
 	for i, b := range it.Body.Blocks {
-		add(fmt.Sprintf("block %d", i+1), b.Text)
+		out = append(out, [2]string{fmt.Sprintf("block %d", i+1), b.Text})
 	}
 	for i, c := range it.Comments {
-		add(fmt.Sprintf("comment %d", i+1), c.Text)
+		out = append(out, [2]string{fmt.Sprintf("comment %d", i+1), c.Text})
+	}
+	return out
+}
+
+// LiveItems returns the IDs of the live items, for work done on them in
+// parts (ADR-0081).
+func (s *Store) LiveItems() []ID {
+	var out []ID
+	for id, it := range s.items {
+		if it.Presence == Live {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// ScanSensitive scans the items for sensitive data that were not scanned
+// since they last changed, so that a report or the bell finds the work
+// done (ADR-0081). It changes no state, only what reports remember.
+func (s *Store) ScanSensitive(ids []ID) {
+	var rep Report
+	for _, id := range ids {
+		if it, ok := s.items[id]; ok && it.Presence == Live {
+			s.sensitiveIn(it, "", &rep)
+		}
+	}
+}
+
+func (s *Store) sensitiveIn(it *Item, responsible string, rep *Report) {
+	at := -1
+	if t := s.touching[it.ID]; len(t) > 0 {
+		at = t[len(t)-1]
+	}
+	s.sensitive.mu.Lock()
+	seen, ok := s.sensitive.m[it.ID]
+	s.sensitive.mu.Unlock()
+	if ok && seen.at == at && len(seen.where) == 0 {
+		return // most items: scanned, nothing found, unchanged since
+	}
+	texts := it.texts()
+	if !ok || seen.at != at {
+		seen = sensitiveSeen{at: at}
+		for _, t := range texts {
+			if len(governance.Sensitive(t[1])) > 0 {
+				seen.where = append(seen.where, t[0])
+			}
+		}
+		s.sensitive.mu.Lock()
+		s.sensitive.m[it.ID] = seen
+		s.sensitive.mu.Unlock()
+	}
+	for _, t := range texts {
+		if !slices.Contains(seen.where, t[0]) {
+			continue
+		}
+		for _, f := range governance.Sensitive(t[1]) {
+			rep.Sensitive = append(rep.Sensitive, SensitiveFinding{Item: it.ID, Key: it.Key, Title: it.Title, Where: t[0],
+				Kind: f.Kind, Masked: f.Masked, Responsible: responsible, Restricted: len(it.Restriction.Read) > 0})
+		}
 	}
 }
 
@@ -262,16 +353,35 @@ func (s *Store) sensitiveIn(it *Item, responsible string, rep *Report) {
 // item is not in its workflow's last state; a required field of the
 // type's latest version left empty; an article without workflow whose
 // body is empty.
-func (s *Store) implausible(it *Item, now time.Time) []string {
-	var out []string
-	td, _ := s.latest(it.Type)
-	done := td.Workflow != nil && len(td.Workflow.States) > 0 && it.State == td.Workflow.States[len(td.Workflow.States)-1]
-	for _, f := range td.Fields {
-		if f.Kind != KindDate || !dueField.MatchString(f.Name) || td.Workflow == nil || done {
-			continue
+// plausibility is what a type's items are checked against, worked out
+// once per type and report rather than once per item (ADR-0081).
+type plausibility struct {
+	td   TypeDef
+	due  []string // date fields that name a deadline
+	last string   // the workflow's last state, or empty
+}
+
+func planFor(td TypeDef) *plausibility {
+	p := &plausibility{td: td}
+	if td.Workflow != nil && len(td.Workflow.States) > 0 {
+		p.last = td.Workflow.States[len(td.Workflow.States)-1]
+		for _, f := range td.Fields {
+			if f.Kind == KindDate && dueField.MatchString(f.Name) {
+				p.due = append(p.due, f.Name)
+			}
 		}
-		if d, ok := it.Properties[f.Name].(time.Time); ok && d.Before(now) {
-			out = append(out, fmt.Sprintf("%s %s has passed, but the state is %s", f.Name, d.Format("2006-01-02"), it.State))
+	}
+	return p
+}
+
+func (p *plausibility) implausible(it *Item, now time.Time) []string {
+	var out []string
+	td := p.td
+	if it.State != p.last {
+		for _, name := range p.due {
+			if d, ok := it.Properties[name].(time.Time); ok && d.Before(now) {
+				out = append(out, fmt.Sprintf("%s %s has passed, but the state is %s", name, d.Format("2006-01-02"), it.State))
+			}
 		}
 	}
 	for _, f := range td.Fields {
@@ -321,9 +431,44 @@ func (s *Store) lastEditor(id ID) (string, time.Time) {
 // content they changed last (ADR-0057). It is what their bell reminds them
 // of; the reports per space list everyone's.
 func (x *Session) Findings(now time.Time, staleAfter time.Duration) Report {
+	// The bell asks on every page; the answer is kept until anything in the
+	// store changes or the hour turns (ADR-0081).
+	key := findingsKey{who: x.who, seq: len(x.s.log), hour: now.Unix() / 3600, stale: staleAfter}
+	x.s.findings.mu.Lock()
+	rep, ok := x.s.findings.m[x.who]
+	x.s.findings.mu.Unlock()
+	if ok && rep.key == key {
+		return rep.report
+	}
+	mine := x.findings(now, staleAfter)
+	x.s.findings.mu.Lock()
+	x.s.findings.m[x.who] = findingsSeen{key, mine}
+	x.s.findings.mu.Unlock()
+	return mine
+}
+
+// findingsMemo keeps each principal's last findings (ADR-0081).
+type findingsMemo struct {
+	mu sync.Mutex
+	m  map[string]findingsSeen
+}
+
+type findingsKey struct {
+	who   string
+	seq   int
+	hour  int64
+	stale time.Duration
+}
+
+type findingsSeen struct {
+	key    findingsKey
+	report Report
+}
+
+func (x *Session) findings(now time.Time, staleAfter time.Duration) Report {
 	var mine Report
 	for _, sp := range x.Spaces() {
-		rep, err := x.Governance(sp.Key, now, staleAfter)
+		rep, err := x.governance(sp.Key, now, staleAfter, x.who)
 		if err != nil {
 			continue
 		}

@@ -1440,12 +1440,11 @@ async function tasksView(tab, params) {
   // in the list as well (ADR-0060).
   const kanbanOf = new Map(kanbans.map((k) => [`${k.space}\n${k.label}`, k]));
   const typeOf = new Map(types.filter(isTaskType).map((ty) => [ty.name, { ty, f: taskFields(ty) }]));
-  let page = await get("/api/items?limit=100");
-  const items = [...page.items];
-  while (page.next && items.length < boardMax) {
-    page = await get(`/api/items?limit=100&after=${encodeURIComponent(page.next)}`);
-    items.push(...page.items);
-  }
+  // Only the task types are read, each by itself: a wiki with thousands of
+  // catalog entries reads its tasks, not everything (ADR-0081).
+  const read = await Promise.all([...typeOf.keys()].map((name) => readAll(`/api/items?type=${encodeURIComponent(name)}&limit=100`)));
+  const items = read.flatMap((r) => r.items);
+  const page = { next: read.some((r) => r.truncated) };
   const open = items.filter((it) => {
     const wf = typeOf.get(it.type)?.ty.workflow;
     return wf && it.state !== wf.states[wf.states.length - 1];

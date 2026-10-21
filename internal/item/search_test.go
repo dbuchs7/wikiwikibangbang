@@ -272,3 +272,12 @@ func TestHitsAreRatedWithStars(t *testing.T) {
 		t.Fatalf("by key: %+v", byKey)
 	}
 }
+
+// spaced builds in one pass what joining the folded words gives.
+func TestSpacedIsTheJoinedWords(t *testing.T) {
+	for _, text := range []string{"", " ", "Hello, World!", "  Straße — Übergröße 42 ", "a", "-a-", "ÄÖÜ äöü ß", "x\ty\nz", "日本語 テキスト", "1-2-3", "!!!"} {
+		if got, want := spaced(text), " "+strings.Join(wordsOf(text), " ")+" "; got != want {
+			t.Errorf("spaced(%q) = %q, want %q", text, got, want)
+		}
+	}
+}

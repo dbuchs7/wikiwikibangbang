@@ -1,7 +1,9 @@
 package storage
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -199,4 +201,36 @@ func TestEveryFileIsBackedUpOrExcluded(t *testing.T) {
 		f.R.Close()
 	}
 	db.Close()
+}
+
+// WarmUp scans every live item ahead, in parts, and stops when told to;
+// the reports then find what a scan finds.
+func TestWarmUp(t *testing.T) {
+	db, _ := mustOpen(t, t.TempDir())
+	defer db.Close()
+	noErr(t, db.Write(func(s *item.Store) error {
+		populate(t, s)
+		for i := range warmPart + 5 {
+			if _, err := s.Create("anna", item.NewItem{Space: "PLAT", Type: "task", Title: fmt.Sprintf("Item %d", i)}); err != nil {
+				return err
+			}
+		}
+		return s.GrantRole("admin", "PLAT", "anna", item.SpaceAdmin)
+	}))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	db.WarmUp(ctx) // stops at once
+	db.WarmUp(context.Background())
+	var n int
+	db.Read(func(s *item.Store) {
+		rep, err := s.As("anna").Governance("PLAT", time.Now(), time.Hour)
+		noErr(t, err)
+		n = len(rep.Sensitive)
+		if len(s.LiveItems()) < warmPart+5 {
+			t.Errorf("%d live items", len(s.LiveItems()))
+		}
+	})
+	if n != 0 {
+		t.Errorf("%d sensitive findings in plain titles", n)
+	}
 }
