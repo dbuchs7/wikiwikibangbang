@@ -45,6 +45,9 @@ export default {
   "search.starsHint": "Relevanz {n} von 5: 5 Schlüssel oder ganzer Titel, 4 alle Begriffe im Titel, 3 einige im Titel oder die Wörter wie eingegeben im Text, 2 alle Begriffe in einem Absatz, 1 die Begriffe über die Seite verteilt",
   "search.results": { "one": "{n} Treffer für «{q}»", "other": "{n} Treffer für «{q}»" },
   "search.title": "Suche",
+  "search.go": "Suchen",
+  "search.prompt": "Geben Sie ein, wonach Sie suchen: Wörter aus Titel, Text oder Kommentar, oder einen Schlüssel wie PLAT-12.",
+  "search.needsTerm": "Eine Suche braucht mindestens einen Buchstaben oder eine Ziffer.",
 
   "spaces.none": "Sie haben noch in keinem Bereich eine Rolle. Wenden Sie sich an eine Administratorin oder einen Administrator.",
   "spaces.noneAdmin": "Noch keine Bereiche. Erstellen Sie unten den ersten.",
