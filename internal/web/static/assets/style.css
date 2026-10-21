@@ -953,6 +953,10 @@ button.info-btn { min-height: 0; box-shadow: none; margin: 0 0 0 4px; }
 /* The start page: a larger picture, and the installed version in a corner. */
 .welcome { position: relative; overflow: hidden; }
 .welcome-art { width: min(440px, 38vw); }
+.home-stats { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 4px 0 14px; min-height: 1.6em; }
+.home-stat { text-decoration: none; color: var(--muted); }
+.home-stat strong { font-size: 22px; color: var(--text); font-variant-numeric: tabular-nums; }
+.home-stat:hover strong { color: var(--accent); }
 .welcome-version { position: absolute; right: 16px; bottom: 12px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums;
   padding: 2px 9px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 75%, transparent); border: 1px solid var(--border); }
 @media (max-width: 720px) { .welcome-art { width: 86%; } .welcome-version { position: static; align-self: flex-start; } }

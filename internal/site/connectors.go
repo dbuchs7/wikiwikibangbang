@@ -41,7 +41,14 @@ type CKAN struct {
 	// Organizations, if any, limit the connector to these publishers, by
 	// their names in the source.
 	Organizations []string `json:"organizations"`
+	// Language is the one a page is written in: the source's texts in it
+	// where it has them, and the page's own words (ADR-0080). Empty is
+	// German, the first language of opendata.swiss.
+	Language string `json:"language,omitempty"`
 }
+
+// ConnectorLanguages are the languages a connector writes its pages in.
+var ConnectorLanguages = []string{"de", "fr", "it", "en"}
 
 // KindCKAN is a connector to a CKAN source.
 const KindCKAN = "ckan"
@@ -64,6 +71,7 @@ func ConnectorTemplates() []Connector {
 		PortalURL:     "https://opendata.swiss/de/dataset/",
 		Formats:       []string{"API", "WMS", "WFS", "WCS", "WMTS", "SPARQL"},
 		Organizations: []string{},
+		Language:      "de",
 	}}}
 }
 
@@ -110,6 +118,8 @@ func (k CKAN) validate() error {
 		return fmt.Errorf("%w: name 1 to 60 formats", ErrInvalid)
 	case len(k.Organizations) > 200:
 		return fmt.Errorf("%w: name at most 200 organizations", ErrInvalid)
+	case k.Language != "" && !slices.Contains(ConnectorLanguages, k.Language):
+		return fmt.Errorf("%w: %q is not a language of the pages (%s)", ErrInvalid, k.Language, strings.Join(ConnectorLanguages, ", "))
 	}
 	for _, f := range k.Formats {
 		if !formatRE.MatchString(f) {

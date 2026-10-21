@@ -1,6 +1,7 @@
 package connector
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -163,14 +164,31 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 		}
 	}
 
+	withdraw := func(it item.Item) bool {
+		u := item.Upsert{Origin: *it.Origin, Space: it.Space, Type: it.Type, Parent: it.Parent, Title: it.Title,
+			Properties: it.Properties, State: Withdrawn}
+		if !dry {
+			if err := db.Write(func(s *item.Store) error { _, _, err := s.Upsert(Actor(cfg), u); return err }); err != nil {
+				res.problem("%s: %v", it.Key, err)
+				return false
+			}
+		}
+		res.count("withdrawn", it.Key, it.Title)
+		return true
+	}
+
 	seen := map[string]bool{}
 	for _, e := range entries {
 		seen[e.SourceID] = true
 		old, had := existing[e.SourceID]
 		u := upsertFor(cfg, e, old, had)
+		// The page is the source's: every run writes it anew, and only
+		// when it changed (ADR-0080).
+		body := item.Doc{Blocks: e.Body}
+		newBody := !sameBody(old.Body, body)
 		kind := "new"
 		if had {
-			if same(old, u) {
+			if same(old, u) && !newBody {
 				res.Unchanged++
 				continue
 			}
@@ -181,8 +199,10 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 			var it item.Item
 			err := db.Write(func(s *item.Store) error {
 				var err error
-				it, _, err = s.Upsert(Actor(cfg), u)
-				return err
+				if it, _, err = s.Upsert(Actor(cfg), u); err != nil || !newBody {
+					return err
+				}
+				return s.CommitBody(Actor(cfg), it.ID, body)
 			})
 			if err != nil {
 				res.problem("%s (%s): %v", e.Title, e.Dataset, err)
@@ -193,13 +213,28 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 		res.count(kind, key, e.Title)
 	}
 
+	// Before ADR-0080 an entry named one interface of a data set; the data
+	// set's entry takes their place, and they are withdrawn, whatever the
+	// share of the source's answer.
+	replaced := map[string]bool{}
+	for _, e := range entries {
+		for _, r := range e.Resources {
+			if it, ok := existing[r]; ok && r != e.SourceID && !seen[r] && it.State != Withdrawn && !replaced[r] {
+				replaced[r] = true
+				if withdraw(it) {
+					res.problem("%s is now part of the entry of its data set, %s", it.Key, e.Title)
+				}
+			}
+		}
+	}
+
 	// An entry the source no longer publishes is withdrawn, not deleted:
 	// its history and what was added here stay. A source that answers far
 	// fewer entries than the catalog holds withdraws nothing, as that is
 	// more likely a failure than a mass withdrawal.
 	active := 0
-	for _, it := range existing {
-		if it.State != Withdrawn {
+	for id, it := range existing {
+		if it.State != Withdrawn && !replaced[id] {
 			active++
 		}
 	}
@@ -212,20 +247,23 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 	ids := slices.Sorted(maps.Keys(existing))
 	for _, id := range ids {
 		it := existing[id]
-		if seen[id] || it.State == Withdrawn {
+		if seen[id] || replaced[id] || it.State == Withdrawn {
 			continue
 		}
-		u := item.Upsert{Origin: *it.Origin, Space: it.Space, Type: it.Type, Parent: it.Parent, Title: it.Title,
-			Properties: it.Properties, State: Withdrawn}
-		if !dry {
-			if err := db.Write(func(s *item.Store) error { _, _, err := s.Upsert(Actor(cfg), u); return err }); err != nil {
-				res.problem("%s: %v", it.Key, err)
-				continue
-			}
-		}
-		res.count("withdrawn", it.Key, it.Title)
+		withdraw(it)
 	}
 	return res, nil
+}
+
+// sameBody reports whether a page is the one the source would write; a
+// page without blocks and none written count as the same.
+func sameBody(have, want item.Doc) bool {
+	if len(have.Blocks) == 0 && len(want.Blocks) == 0 {
+		return true
+	}
+	a, _ := json.Marshal(have.Blocks)
+	b, _ := json.Marshal(want.Blocks)
+	return string(a) == string(b)
 }
 
 // fits checks that an existing type has the fields the synchronisation

@@ -4,9 +4,9 @@ This guide is for an AI assistant (e.g. Claude) connected to wikiwikibangbang ov
 
 ## What the catalog is
 
-- A space, e.g. `API`, holding items of the type `interface`, one per endpoint.
+- A space, e.g. `API`, holding items of the type `interface`, one per data set with interfaces ([ADR-0080](../adr/0080-one-page-per-data-set-written-from-the-source.md)); its `source-id` is the data set's ID.
 - Entries from a source such as opendata.swiss are mirrored by a connector of the server; their origin names the connector and links to the data set on the portal, the system of record.
-- Mirrored fields are overwritten by every run: `source-id`, `format`, `endpoint`, `publisher`, `dataset`, `modified` and the title. Do not change them; change them at the source.
+- Mirrored fields are overwritten by every run: `source-id`, `format`, `endpoint`, `publisher`, `dataset`, `modified`, the title and the page's text, which is written from everything the source says. Do not change them; change them at the source, and put notes in comments, which stay.
 - Fields that belong to the catalog: `owner`, `reviewed`, the body. `contact` and `specification` are kept when the source names none, so they are the place to add what is missing.
 
 ## Rules for an agent

@@ -1,18 +1,23 @@
 package connector
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
-// Entry is one interface as the source describes it.
+// Entry is one data set with interfaces, as the source describes it: one
+// page in the catalog (ADR-0080).
 type Entry struct {
-	// SourceID is the resource's ID, which identifies the entry.
-	SourceID      string
-	Dataset       string // the data set's name
-	Title         string
+	// SourceID is the data set's ID, which identifies the entry.
+	SourceID string
+	Dataset  string // the data set's name
+	Title    string
+	// Format lists the formats of its interfaces, e.g. "WMS, WFS".
 	Format        string
 	Endpoint      string
 	Specification string
@@ -20,6 +25,12 @@ type Entry struct {
 	Contact       string
 	DatasetURL    string
 	Modified      time.Time
+	// Body is the page written from everything the source says of the
+	// data set; every run replaces it.
+	Body []item.Block
+	// Resources are the IDs of its interfaces, which named entries of
+	// their own before ADR-0080.
+	Resources []string
 }
 
 // aliases map formats as publishers write them to the portal's names.
@@ -36,10 +47,11 @@ func normalFormat(f string) string {
 	return f
 }
 
-// Entries lists the interfaces among data sets: each resource in one of
-// the formats with an address. portal prefixes a data set's name to link
-// to its page. Problems name what was left out and why.
-func Entries(datasets []Dataset, formats []string, portal string) ([]Entry, []string) {
+// Entries lists the data sets that have interfaces — resources in one of
+// the formats — as entries, one each. portal prefixes a data set's name to
+// link to its page; lang is the language its page is written in.
+// Problems name what was left out and why.
+func Entries(datasets []Dataset, formats []string, portal, lang, source string) ([]Entry, []string) {
 	want := map[string]bool{}
 	for _, f := range formats {
 		want[normalFormat(f)] = true
@@ -48,68 +60,91 @@ func Entries(datasets []Dataset, formats []string, portal string) ([]Entry, []st
 	var problems []string
 	seen := map[string]bool{}
 	for _, d := range datasets {
-		var apis []Resource
+		var apis, others []Resource
 		for _, r := range d.Resources {
 			if want[normalFormat(r.Format)] {
 				apis = append(apis, r)
+			} else {
+				others = append(others, r)
 			}
 		}
+		if len(apis) == 0 {
+			continue
+		}
+		if d.ID == "" || seen[d.ID] {
+			problems = append(problems, fmt.Sprintf("%s: a data set without an ID of its own is left out", d.Name))
+			continue
+		}
+		seen[d.ID] = true
+		e := Entry{SourceID: d.ID, Dataset: d.Name, Title: d.Title.In(lang)}
+		if e.Title == "" {
+			e.Title = d.Name
+		}
+		var fs []string
 		for _, r := range apis {
-			if r.ID == "" || seen[r.ID] {
-				problems = append(problems, fmt.Sprintf("%s: a resource without an ID of its own is left out", d.Name))
-				continue
+			if f := normalFormat(r.Format); !slices.Contains(fs, f) {
+				fs = append(fs, f)
 			}
-			seen[r.ID] = true
-			e := Entry{SourceID: r.ID, Dataset: d.Name, Format: normalFormat(r.Format), Title: d.Title.Pick()}
-			if e.Title == "" {
-				e.Title = d.Name
+			if r.ID != "" {
+				e.Resources = append(e.Resources, r.ID)
 			}
-			if len(apis) > 1 {
-				label := r.Title.Pick()
-				if label == "" || label == e.Title {
-					label = e.Format
-				}
-				e.Title += " – " + label
+			if e.Endpoint == "" {
+				e.Endpoint = address(r)
 			}
-			switch {
-			case webLink(r.URL):
-				e.Endpoint = r.URL
-			case webLink(r.DownloadURL):
-				e.Endpoint = r.DownloadURL
-			}
-			if docs := slices.Concat([]string(r.Documentation), []string(d.Documentation), []string(r.AccessServices)); len(docs) > 0 {
-				e.Specification = docs[0]
-			}
-			if d.Organization != nil {
-				e.Publisher = d.Organization.Title.Pick()
-				if e.Publisher == "" {
-					e.Publisher = d.Organization.Name
+			if e.Specification == "" {
+				if docs := slices.Concat([]string(r.Documentation), []string(r.AccessServices)); len(docs) > 0 {
+					e.Specification = docs[0]
 				}
 			}
-			if e.Publisher == "" {
-				e.Publisher = d.Publisher.Pick()
+			if m := parseDate(r.Modified); m.After(e.Modified) {
+				e.Modified = m
 			}
-			var contacts []string
-			for _, c := range d.ContactPoints {
-				switch name, mail := strings.TrimSpace(c.Name), strings.TrimSpace(c.Email); {
-				case name != "" && mail != "":
-					contacts = append(contacts, name+" <"+mail+">")
-				case name+mail != "":
-					contacts = append(contacts, name+mail)
-				}
-			}
-			e.Contact = strings.Join(contacts, "; ")
-			if d.Name != "" && webLink(portal+d.Name) {
-				e.DatasetURL = portal + d.Name
-			}
-			e.Modified = parseDate(r.Modified)
-			if e.Modified.IsZero() {
-				e.Modified = parseDate(d.Modified)
-			}
-			out = append(out, e)
 		}
+		e.Format = strings.Join(fs, ", ")
+		if e.Specification == "" && len(d.Documentation) > 0 {
+			e.Specification = d.Documentation[0]
+		}
+		if d.Organization != nil {
+			e.Publisher = cmp.Or(d.Organization.Title.In(lang), d.Organization.Name)
+		}
+		if e.Publisher == "" {
+			e.Publisher = d.Publisher.In(lang)
+		}
+		e.Contact = contacts(d)
+		if d.Name != "" && webLink(portal+d.Name) {
+			e.DatasetURL = portal + d.Name
+		}
+		if m := parseDate(d.Modified); m.After(e.Modified) {
+			e.Modified = m
+		}
+		e.Body = page(d, apis, others, e, lang, source)
+		out = append(out, e)
 	}
 	return out, problems
+}
+
+// address is where a resource is reached: its address, else its access or
+// download address.
+func address(r Resource) string {
+	for _, u := range []string{r.URL, r.AccessURL, r.DownloadURL} {
+		if webLink(u) {
+			return u
+		}
+	}
+	return ""
+}
+
+func contacts(d Dataset) string {
+	var out []string
+	for _, c := range d.ContactPoints {
+		switch name, mail := strings.TrimSpace(c.Name), strings.TrimSpace(c.Email); {
+		case name != "" && mail != "":
+			out = append(out, name+" <"+mail+">")
+		case name+mail != "":
+			out = append(out, name+mail)
+		}
+	}
+	return strings.Join(out, "; ")
 }
 
 // parseDate reads the dates the portal gives: ISO 8601 with or without a

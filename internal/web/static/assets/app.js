@@ -1012,12 +1012,33 @@ async function homeView() {
   const greeting = hour < 11 ? t("home.morning") : hour < 18 ? t("home.day") : t("home.evening");
   const name = brand.name || "wikiwikibangbang";
   const quick = (href, title, text, id, extra) => h("a", { class: "home-tile", href, id }, h("strong", { text: title }), h("span", { class: "muted", text }), extra || null);
+  // How much the wiki holds that one may read: pages, tasks (open and
+  // done) and pictures in the album. Counted after the page is shown.
+  const stats = h("p", { class: "home-stats", id: "home-stats", "aria-live": "polite" });
+  const count = (total) => (total.exact ? "" : "≥ ") + total.value;
+  const totalOf = (url) => get(url).then((r) => r.total).catch(() => null);
+  Promise.all([
+    totalOf("/api/items?type=page&limit=1"),
+    Promise.all(types.filter(isTaskType).map((ty) => totalOf(`/api/items?type=${encodeURIComponent(ty.name)}&limit=1`))),
+    get("/api/album?limit=1").then((r) => ({ exact: true, value: r.total })).catch(() => null),
+  ]).then(([pages, tasks, album]) => {
+    tasks = tasks.filter(Boolean);
+    const sum = tasks.length ? { exact: tasks.every((x) => x.exact), value: tasks.reduce((n, x) => n + x.value, 0) } : { exact: true, value: 0 };
+    const stat = (id, href, total, key) => h(href ? "a" : "span", { class: "home-stat", href, id },
+      h("strong", { text: count(total) }), " ", h("span", { text: t(key, { n: total.value }) }));
+    stats.replaceChildren(...[
+      pages && stat("home-pages", null, pages, "home.statPages"),
+      stat("home-task-count", "#/tasks/all", sum, "home.statTasks"),
+      album && stat("home-album-count", "#/album", album, "home.statAlbum"),
+    ].filter(Boolean));
+  });
   const findings = notes.findings ? notes.findings.sensitive + notes.findings.stale + notes.findings.implausible + (notes.findings.personal || 0) + (notes.findings.reviews || 0) : 0;
   show(
     h("section", { class: "welcome", id: "welcome" },
       h("div", { class: "welcome-text" },
         h("h1", { text: `${greeting}, ${me.user.username}` }),
         h("p", { class: "welcome-lead", text: t("home.lead", { name }) }),
+        stats,
         h("p", { class: "actions-row" },
           anyEditable ? link("#/new", t("home.newPage"), "button primary") : null,
           link("#/tasks", t("home.myTasks"), "button"))),
@@ -1128,21 +1149,38 @@ const typeTemplates = [
     workflow: { initial: "open", states: ["open", "in progress", "done"],
       transitions: [{ name: "start", from: ["open"], to: "in progress" }, { name: "finish", from: ["open", "in progress"], to: "done" },
         { name: "reopen", from: ["done"], to: "open" }] } },
-  { name: "decision", body: true, fields: [{ name: "decided", kind: "date" }],
+  { name: "decision", body: true, fields: [{ name: "assignee", kind: "user" }, { name: "decided", kind: "date" }],
     workflow: { initial: "proposed", states: ["proposed", "accepted", "rejected"],
       transitions: [{ name: "accept", from: ["proposed"], to: "accepted" }, { name: "reject", from: ["proposed"], to: "rejected" }] } },
 ];
 
-// setupCard offers administrators the ready-made types that are missing.
+// setupCard offers administrators the ready-made types that are missing,
+// and the fields a ready-made type gained since it was defined here, such
+// as the assignee of a decision; the fields are added as a new version of
+// the type, everything else of it stays.
 function setupCard(types) {
   const missing = typeTemplates.filter((tt) => !types.some((ty) => ty.name === tt.name));
-  if (missing.length === 0) return null;
+  const outdated = typeTemplates.flatMap((tt) => {
+    const ty = types.find((x) => x.name === tt.name);
+    const add = ty ? tt.fields.filter((f) => !ty.fields.some((x) => x.name === f.name)) : [];
+    return add.length ? [{ ty, add }] : [];
+  });
+  if (missing.length === 0 && outdated.length === 0) return null;
   const status = h("div", { class: "status" });
+  const fieldsText = outdated.map(({ ty, add }) => `${ty.name} (${add.map((f) => f.name).join(", ")})`).join("; ");
   return h("section", { class: "card notice-card", id: "setup-types" },
     h("h2", { text: t("setup.title") }),
-    h("p", { text: types.length ? t("setup.someTypes", { list: missing.map((m) => m.name).join(", ") }) : t("setup.noTypes") }),
-    h("button", { class: "primary", text: t("setup.create", { list: missing.map((m) => m.name).join(", ") }),
-      onclick: () => action(async () => { for (const tt of missing) await post("/api/types", tt); }, status) }),
+    missing.length ? h("p", { text: types.length ? t("setup.someTypes", { list: missing.map((m) => m.name).join(", ") }) : t("setup.noTypes") }) : null,
+    missing.length ? h("button", { class: "primary", id: "setup-create", text: t("setup.create", { list: missing.map((m) => m.name).join(", ") }),
+      onclick: () => action(async () => { for (const tt of missing) await post("/api/types", tt); }, status) }) : null,
+    outdated.length ? h("p", { text: t("setup.newFields", { list: fieldsText }) }) : null,
+    outdated.length ? h("button", { class: missing.length ? "secondary" : "primary", id: "setup-fields", text: t("setup.addFields"),
+      onclick: () => action(async () => {
+        for (const { ty, add } of outdated) {
+          const { name, body, fields, workflow, review } = ty;
+          await post("/api/types", { name, body, workflow, review, fields: [...fields, ...add] });
+        }
+      }, status) }) : null,
     status);
 }
 
@@ -1336,8 +1374,18 @@ function boardOf(items, type, status, cardTail) {
 // taskType is the type "New task" creates: "task" when it has a workflow,
 // else the first type with one.
 function taskType(types) {
-  const flows = types.filter((ty) => ty.workflow);
+  const flows = types.filter(isTaskType);
   return (flows.find((ty) => ty.name === "task") || flows[0])?.name || "";
+}
+
+// isTaskType tells the types whose items are work to do (ADR-0049): a
+// workflow, and the name task or a field for whom it is assigned to or
+// when it is due. A catalog entry has a workflow and an owner, but is no
+// task (ADR-0080).
+function isTaskType(ty) {
+  if (!ty.workflow) return false;
+  const f = taskFields(ty);
+  return ty.name === "task" || Boolean(f.due) || ty.fields.some((x) => x.kind === "user" && /^(assignee|zugewiesen|bearbeiter)/i.test(x.name));
 }
 
 function taskFields(type) {
@@ -1391,7 +1439,7 @@ async function tasksView(tab, params) {
   // A label that is a kanban's links to its board: a task on a kanban is
   // in the list as well (ADR-0060).
   const kanbanOf = new Map(kanbans.map((k) => [`${k.space}\n${k.label}`, k]));
-  const typeOf = new Map(types.filter((ty) => ty.workflow).map((ty) => [ty.name, { ty, f: taskFields(ty) }]));
+  const typeOf = new Map(types.filter(isTaskType).map((ty) => [ty.name, { ty, f: taskFields(ty) }]));
   let page = await get("/api/items?limit=100");
   const items = [...page.items];
   while (page.next && items.length < boardMax) {
@@ -3549,6 +3597,9 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       h("p", { class: "muted" }, t("catalog.formatsHelp", { defaults: data.templates[0].ckan.formats.join(", ") }), " ",
         h("button", { type: "button", class: "link", id: "connector-source-formats", text: t("catalog.showFormats"), onclick: showFormats })),
       formatsBox,
+      field(t("connector.language"), h("select", { name: "language" }, [["de", "Deutsch"], ["fr", "Français"], ["it", "Italiano"], ["en", "English"]]
+        .map(([v, text]) => h("option", { value: v, text, selected: v === (k.language || "de") })))),
+      h("p", { class: "muted", text: t("connector.languageHelp") }),
       field(t("catalog.organizations"), h("input", { name: "organizations", value: k.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
       h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
       field(t("catalog.steward"), h("select", { name: "steward" }, h("option", { value: "", text: "—" }),
@@ -3575,7 +3626,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       const body = {
         id: d.get("id").trim(), name: d.get("name").trim(), kind: c.kind, enabled: d.get("enabled") === "on", space: d.get("space"),
         steward: d.get("steward"), intervalHours: Number(d.get("intervalHours")),
-        ckan: { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim() },
+        ckan: { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(), language: d.get("language") },
       };
       const kept = c.isNew ? await post("/api/connectors", body) : await put(path, body);
       reopen(kept.id);

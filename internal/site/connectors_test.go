@@ -87,6 +87,7 @@ func TestConnectorsAreChecked(t *testing.T) {
 		"no formats":   func(c *Connector) { c.CKAN.Formats = nil },
 		"a bad format": func(c *Connector) { c.CKAN.Formats = []string{"(API)"} },
 		"a bad org":    func(c *Connector) { c.CKAN.Organizations = []string{"A B"} },
+		"a language":   func(c *Connector) { c.CKAN.Language = "rm" },
 		"too many orgs": func(c *Connector) {
 			for i := range 201 {
 				c.CKAN.Organizations = append(c.CKAN.Organizations, fmt.Sprintf("org-%d", i))

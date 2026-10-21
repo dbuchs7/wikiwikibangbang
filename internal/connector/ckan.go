@@ -96,8 +96,12 @@ func (t Text) fill(m map[string]any) {
 }
 
 // Pick is the text in German, else English, French, Italian, else any.
-func (t Text) Pick() string {
-	for _, lang := range []string{"de", "en", "fr", "it", "", "name"} {
+func (t Text) Pick() string { return t.In("de") }
+
+// In is the text in the language lang, else German, English, French,
+// Italian, else any.
+func (t Text) In(lang string) string {
+	for _, lang := range []string{lang, "de", "en", "fr", "it", "", "name"} {
 		if s := t[lang]; s != "" {
 			return s
 		}
@@ -167,29 +171,175 @@ type Organization struct {
 	Title Text   `json:"title"`
 }
 
-// Resource is one distribution of a data set.
-type Resource struct {
-	ID             string `json:"id"`
-	Title          Text   `json:"title"`
-	Format         string `json:"format"`
-	URL            string `json:"url"`
-	DownloadURL    string `json:"download_url"`
-	Documentation  Links  `json:"documentation"`
-	AccessServices Links  `json:"access_services"`
-	Modified       string `json:"modified"`
+// Words is a list of words per language, such as keywords; a plain list
+// counts as words without a language.
+type Words map[string][]string
+
+// UnmarshalJSON reads an object of languages with lists, a list, or a list
+// of objects with a name (CKAN's tags).
+func (w *Words) UnmarshalJSON(data []byte) error {
+	*w = Words{}
+	var byLang map[string][]string
+	if json.Unmarshal(data, &byLang) == nil {
+		for k, v := range byLang {
+			(*w)[k] = v
+		}
+		return nil
+	}
+	var list []string
+	if json.Unmarshal(data, &list) == nil {
+		(*w)[""] = list
+		return nil
+	}
+	var tags []struct {
+		Name        string `json:"name"`
+		DisplayName string `json:"display_name"`
+	}
+	if json.Unmarshal(data, &tags) == nil {
+		for _, t := range tags {
+			(*w)[""] = append((*w)[""], cmp.Or(t.DisplayName, t.Name))
+		}
+	}
+	return nil
 }
 
-// Dataset is a data set as package_search answers it.
+// In is the words in the language lang, else in the order of Text.In.
+func (w Words) In(lang string) []string {
+	for _, l := range []string{lang, "de", "en", "fr", "it", ""} {
+		if len(w[l]) > 0 {
+			return w[l]
+		}
+	}
+	return nil
+}
+
+// Strings is a list of texts that may come as one text.
+type Strings []string
+
+// UnmarshalJSON reads a list of texts, or one; anything else is none.
+func (s *Strings) UnmarshalJSON(data []byte) error {
+	*s = nil
+	var list []string
+	if json.Unmarshal(data, &list) == nil {
+		*s = list
+		return nil
+	}
+	var one string
+	if json.Unmarshal(data, &one) == nil && strings.TrimSpace(one) != "" {
+		*s = Strings{one}
+	}
+	return nil
+}
+
+// Scalar is a value that may come as text or as a number.
+type Scalar string
+
+// UnmarshalJSON reads text, a number or a boolean as text.
+func (v *Scalar) UnmarshalJSON(data []byte) error {
+	var s string
+	if json.Unmarshal(data, &s) == nil {
+		*v = Scalar(s)
+		return nil
+	}
+	var n json.Number
+	if json.Unmarshal(data, &n) == nil {
+		*v = Scalar(n.String())
+		return nil
+	}
+	*v = ""
+	return nil
+}
+
+// Named is a theme or a relation: a name, a title in languages, and an
+// address.
+type Named struct {
+	Name  string `json:"name"`
+	Label Text   `json:"label"`
+	Title Text   `json:"title"`
+	URL   string `json:"url"`
+}
+
+// Period is a temporal coverage.
+type Period struct {
+	Start Scalar `json:"start_date"`
+	End   Scalar `json:"end_date"`
+}
+
+// Resource is one distribution of a data set.
+type Resource struct {
+	ID             string  `json:"id"`
+	Title          Text    `json:"title"`
+	Description    Text    `json:"description"`
+	Format         string  `json:"format"`
+	MediaType      string  `json:"media_type"`
+	URL            string  `json:"url"`
+	AccessURL      string  `json:"access_url"`
+	DownloadURL    string  `json:"download_url"`
+	Documentation  Links   `json:"documentation"`
+	AccessServices Links   `json:"access_services"`
+	Rights         Text    `json:"rights"`
+	License        Text    `json:"license"`
+	Language       Strings `json:"language"`
+	ByteSize       Scalar  `json:"byte_size"`
+	Issued         string  `json:"issued"`
+	Modified       string  `json:"modified"`
+}
+
+// Dataset is a data set as package_search answers it. Extra holds every
+// field of the answer this package does not read by name, so that a
+// connector can show all of it (ADR-0080).
 type Dataset struct {
-	ID            string        `json:"id"`
-	Name          string        `json:"name"`
-	Title         Text          `json:"title"`
-	Organization  *Organization `json:"organization"`
-	Publisher     Text          `json:"publisher"`
-	ContactPoints Contacts      `json:"contact_points"`
-	Documentation Links         `json:"documentation"`
-	Modified      string        `json:"modified"`
-	Resources     []Resource    `json:"resources"`
+	ID                 string                     `json:"id"`
+	Name               string                     `json:"name"`
+	Title              Text                       `json:"title"`
+	Description        Text                       `json:"description"`
+	Notes              Text                       `json:"notes"`
+	Organization       *Organization              `json:"organization"`
+	Publisher          Text                       `json:"publisher"`
+	ContactPoints      Contacts                   `json:"contact_points"`
+	Documentation      Links                      `json:"documentation"`
+	Keywords           Words                      `json:"keywords"`
+	Tags               Words                      `json:"tags"`
+	Groups             []Named                    `json:"groups"`
+	LicenseTitle       Text                       `json:"license_title"`
+	Temporals          []Period                   `json:"temporals"`
+	AccrualPeriodicity string                     `json:"accrual_periodicity"`
+	Language           Strings                    `json:"language"`
+	Spatial            Text                       `json:"spatial"`
+	Relations          []Named                    `json:"relations"`
+	LandingPage        string                     `json:"url"`
+	Identifier         string                     `json:"identifier"`
+	Issued             string                     `json:"issued"`
+	Modified           string                     `json:"modified"`
+	Resources          []Resource                 `json:"resources"`
+	Extra              map[string]json.RawMessage `json:"-"`
+}
+
+// readByName are the fields of a data set that are read by name or are
+// CKAN's own bookkeeping, and so not shown among the further details.
+var readByName = []string{"id", "name", "title", "description", "notes", "organization", "publisher", "contact_points", "documentation",
+	"keywords", "tags", "groups", "license_title", "license_id", "license_url", "temporals", "accrual_periodicity", "language", "spatial",
+	"relations", "url", "identifier", "issued", "modified", "resources", "owner_org", "private", "state", "type", "num_resources", "num_tags",
+	"revision_id", "metadata_created", "metadata_modified", "creator_user_id", "isopen", "extras", "relationships_as_object",
+	"relationships_as_subject", "see_alsos", "qualified_relations", "version", "maintainer", "maintainer_email", "author", "author_email"}
+
+// UnmarshalJSON reads the fields by name and keeps the others in Extra.
+func (d *Dataset) UnmarshalJSON(data []byte) error {
+	type plain Dataset
+	var p plain
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	var all map[string]json.RawMessage
+	if err := json.Unmarshal(data, &all); err != nil {
+		return err
+	}
+	for _, k := range readByName {
+		delete(all, k)
+	}
+	*d = Dataset(p)
+	d.Extra = all
+	return nil
 }
 
 // Client reads the CKAN action API.
@@ -473,7 +623,7 @@ func readCKAN(ctx context.Context, c site.Connector, client Client) (reading, er
 	}
 	rd.apply, rd.datasets = true, len(datasets)
 	var problems []string
-	rd.entries, problems = Entries(datasets, k.Formats, k.PortalURL)
+	rd.entries, problems = Entries(datasets, k.Formats, k.PortalURL, cmp.Or(k.Language, "de"), c.Name)
 	for _, p := range problems {
 		rd.problem("%s", p)
 	}

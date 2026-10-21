@@ -1212,6 +1212,21 @@ function ckanSource() {
     await page.goto(base + "/#/");
     await page.waitForSelector("#welcome");
     check(await page.locator("#welcome a[href='#/search/']").count() === 0, "the start page has no search button");
+    // A ready-made type defined before it gained a field gets it from the
+    // start page: a decision defined without an assignee.
+    check((await page.request.post(base + "/api/types", { data: { name: "decision", body: true, fields: [{ name: "decided", kind: "date" }],
+      workflow: { initial: "proposed", states: ["proposed", "accepted"], transitions: [{ name: "accept", from: ["proposed"], to: "accepted" }] } } })).status() === 201, "an old decision type");
+    await page.reload();
+    await page.waitForSelector("#setup-types :text('decision (assignee)')");
+    await page.click("#setup-fields");
+    await page.waitForSelector("#setup-types :text('decision (assignee)')", { state: "detached" });
+    const decision = (await (await page.request.get(base + "/api/types")).json()).types.find((ty) => ty.name === "decision");
+    check(decision.fields.map((f) => f.name).join(",") === "decided,assignee" && decision.workflow.states.length === 2, "the decision gained its assignee and kept the rest");
+    // The start page counts what one may read: pages, tasks, pictures.
+    await page.waitForSelector("#home-stats #home-pages strong");
+    await page.waitForSelector("#home-stats a#home-task-count[href='#/tasks/all'] strong");
+    await page.waitForSelector("#home-stats a#home-album-count[href='#/album'] strong");
+    check(Number(await page.textContent("#home-task-count strong")) > 0, "tasks are counted");
     await page.goto(base + "/#/search/");
     await page.waitForSelector("#search-page input:focus");
     await page.waitForSelector("#search-hint");
@@ -1260,6 +1275,14 @@ function ckanSource() {
     await page.waitForSelector("#item-origin a[href='https://opendata.swiss/de/dataset/luftqualitaet']");
     check(await page.inputValue("tr[data-field=publisher] input") === "Bundesamt für Umwelt", "the publisher is taken from the source");
     check(await page.inputValue("tr[data-field=contact] input") === "Luft <luft@example.org>", "the contact is taken from the source");
+    // One page per data set, written from what the source says (ADR-0080).
+    await page.waitForSelector(".item-main :text('Schnittstellen')");
+    await page.waitForSelector(".item-main a[href='https://air.example.org/v1']");
+    await page.waitForSelector(".item-main a[href='https://air.example.org/data.csv']");
+    // A catalog entry is no task, though it has a workflow and an owner.
+    await page.goto(base + "/#/tasks/all");
+    await page.waitForSelector("#tasks");
+    check(await page.locator("#tasks tr:has-text('Luftqualität')").count() === 0, "a catalog entry is not in the task list");
 
     step("spaces: an administrator deletes a space into the trash, restores it, and deletes it for good");
     await page.goto(base + "/#/admin");

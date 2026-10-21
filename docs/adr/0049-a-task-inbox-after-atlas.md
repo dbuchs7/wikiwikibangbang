@@ -45,3 +45,7 @@ Not taken over yet: candidate groups (who may take a task over), forms that comp
 - Good: the inbox works for imported items too, as their types carry the same kinds of fields.
 - Bad: the conventions are names; a type that calls its deadline "target" has no due date in the inbox until it is renamed.
 - Bad: the inbox is computed in the browser from the items one may read; for very many open items it needs a server-side query.
+
+## Links
+
+- amended by [ADR-0080](0080-one-page-per-data-set-written-from-the-source.md) (which types are tasks)
