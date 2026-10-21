@@ -809,5 +809,19 @@ export default {
   "envhelp.restart": "Geänderte Umgebungsvariablen gelten erst nach einem Neustart des Servers bzw. Containers. Danach zeigt diese Seite «eingerichtet».",
   "requests.waiting": {"one": "{n} Kontoantrag wartet auf Ihre Entscheidung", "other": "{n} Kontoanträge warten auf Ihre Entscheidung"},
   "requests.waitingHelp": "Freigeben legt das Konto mit dem gewählten Passwort an; Ablehnen verwirft den Antrag. Die Einstellungen dazu stehen unter Administration → Kontoanträge.",
-  "requests.homeHint": "Unter «Aufgaben» freigeben oder ablehnen."
+  "requests.homeHint": "Unter «Aufgaben» freigeben oder ablehnen.",
+  "gov.colReview": "Wiederprüfung",
+  "gov.reviews": {"one": "{n} Eintrag zur Wiederprüfung fällig", "other": "{n} Einträge zur Wiederprüfung fällig"},
+  "gov.infoReview": "Typen mit einer Prüfregel verlangen, dass ihre Einträge regelmässig geprüft werden, z. B. jährlich. Fällig ist ein Eintrag, der nie oder vor zu langer Zeit geprüft wurde. Zuständig ist die Person im Owner-Feld des Eintrags.",
+  "gov.lastReview": "Geprüft",
+  "gov.reviewedDue": "am {last}, fällig seit {due}",
+  "gov.neverReviewed": "noch nie geprüft",
+  "gov.lastReviewed": "zuletzt geprüft am {date}",
+  "gov.markReviewed": "Als geprüft markieren",
+  "item.openLink": "Öffnen ↗",
+  "item.origin": "Gespiegelt aus {system}.",
+  "item.originOpen": "Eintrag im führenden System öffnen ↗",
+  "item.managed": "Er wird dort gepflegt und ist hier bis zur Ablösung schreibgeschützt.",
+  "links.field": "{key} · Feld {field}",
+  "links.origin": "{key} · Eintrag im führenden System"
 };

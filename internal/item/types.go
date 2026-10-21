@@ -3,6 +3,8 @@ package item
 import (
 	"fmt"
 	"math"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -18,7 +20,12 @@ const (
 	KindDate   FieldKind = "date"
 	KindUser   FieldKind = "user"
 	KindEnum   FieldKind = "enum"
+	// KindURL is a web address, http or https (ADR-0074).
+	KindURL FieldKind = "url"
 )
+
+// maxURL is the longest web address a url field holds.
+const maxURL = 2048
 
 // FieldDef defines one property of a type.
 type FieldDef struct {
@@ -27,6 +34,22 @@ type FieldDef struct {
 	Required bool
 	// Values lists the allowed values of an enum field.
 	Values []string
+	// Unique says that no two live items of the type in one space hold the
+	// same value, e.g. an identifier in another system (ADR-0074).
+	Unique bool
+	// Recommended says that the field should be set; the governance report
+	// lists items where it is empty (ADR-0074).
+	Recommended bool
+}
+
+// Review is a type's rule for checking its items again (ADR-0074): an
+// item is due when the date field Field is empty or older than EveryDays.
+// Owner names a user field; who it holds is responsible for the item's
+// governance findings instead of whoever changed it last.
+type Review struct {
+	EveryDays int
+	Field     string
+	Owner     string
 }
 
 // Transition is a named move between workflow states. Requires names the
@@ -56,6 +79,9 @@ type TypeDef struct {
 	Workflow *Workflow
 	// Body says whether items of this type carry a document body.
 	Body bool
+	// Review, if set, has the governance report ask for the items to be
+	// checked again from time to time (ADR-0074).
+	Review *Review
 }
 
 // reservedFields are intrinsic to every item and cannot be declared as
@@ -71,7 +97,7 @@ var reservedFields = map[string]bool{
 func ReservedField(name string) bool { return reservedFields[name] }
 
 var validKinds = map[FieldKind]bool{
-	KindText: true, KindNumber: true, KindBool: true, KindDate: true, KindUser: true, KindEnum: true,
+	KindText: true, KindNumber: true, KindBool: true, KindDate: true, KindUser: true, KindEnum: true, KindURL: true,
 }
 
 func (t TypeDef) field(name string) (FieldDef, bool) {
@@ -107,8 +133,21 @@ func (t TypeDef) validate() error {
 			return invalid("field %q has unknown kind %q", f.Name, f.Kind)
 		case f.Kind == KindEnum && len(f.Values) == 0:
 			return invalid("enum field %q has no values", f.Name)
+		case f.Unique && f.Kind != KindText && f.Kind != KindURL && f.Kind != KindNumber:
+			return invalid("field %q: only text, url and number fields can be unique", f.Name)
 		}
 		seen[f.Name] = true
+	}
+	if r := t.Review; r != nil {
+		if r.EveryDays < 1 || r.EveryDays > 3650 {
+			return invalid("a review is due every 1 to 3650 days")
+		}
+		if f, ok := t.field(r.Field); !ok || f.Kind != KindDate {
+			return invalid("the review's field %q is not a date field of the type", r.Field)
+		}
+		if f, ok := t.field(r.Owner); r.Owner != "" && (!ok || f.Kind != KindUser) {
+			return invalid("the review's owner %q is not a user field of the type", r.Owner)
+		}
 	}
 	if t.Workflow == nil {
 		return nil
@@ -178,11 +217,44 @@ func checkValue(f FieldDef, v any) error {
 				ok = true
 			}
 		}
+	case KindURL:
+		s, isString := v.(string)
+		ok = isString && validURL(s)
 	}
 	if !ok {
 		return invalid("field %q: value %#v is not a valid %s", f.Name, v, f.Kind)
 	}
 	return nil
+}
+
+// validURL accepts an absolute http or https address with a host.
+func validURL(s string) bool {
+	if len(s) > maxURL || strings.ContainsAny(s, " \t\r\n") {
+		return false
+	}
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
+}
+
+// FormatValue is a property value as text: as typed for text, url, enum
+// and user fields, a date as YYYY-MM-DD, a number in its shortest form.
+// The API's where filter compares with it (ADR-0074).
+func FormatValue(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	case time.Time:
+		return x.Format(time.DateOnly)
+	case int:
+		return strconv.Itoa(x)
+	case float64:
+		return strconv.FormatFloat(x, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(x)
+	}
+	return fmt.Sprint(v)
 }
 
 // checkProps validates a set of property values against a type, rejecting

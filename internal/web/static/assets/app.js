@@ -229,14 +229,15 @@ async function notificationsView() {
   // The governance findings one is responsible for, until they are
   // resolved (ADR-0057).
   const f = first.findings;
-  const kindName = { sensitive: t("gov.colSensitive"), stale: t("gov.colStale"), implausible: t("gov.colImplausible"), personal: t("gov.colPersonal") };
+  const kindName = { sensitive: t("gov.colSensitive"), stale: t("gov.colStale"), implausible: t("gov.colImplausible"), personal: t("gov.colPersonal"), review: t("gov.colReview") };
   const findings = f.items?.length ? h("section", { id: "my-findings" },
-    h("h2", {}, t("notif.findings", { n: f.sensitive + f.stale + f.implausible + (f.personal || 0) }), " ", link("#/governance", t("notif.findingsAll"))),
+    h("h2", {}, t("notif.findings", { n: f.sensitive + f.stale + f.implausible + (f.personal || 0) + (f.reviews || 0) }), " ", link("#/governance", t("notif.findingsAll"))),
     h("p", { class: "muted", text: t("notif.findingsNote") }),
     h("ul", { class: "notifications" }, f.items.map((x) => h("li", { class: "finding-" + x.kind },
       h("span", { class: "chip", text: kindName[x.kind] }), " ",
       link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`),
-      h("span", { class: "muted", text: " · " + (x.kind === "stale" ? t("notif.unchangedSince", { date: when(x.since) }) : x.detail) }),
+      h("span", { class: "muted", text: " · " + (x.kind === "stale" ? t("notif.unchangedSince", { date: when(x.since) })
+        : x.kind === "review" ? (x.since ? t("gov.lastReviewed", { date: when(x.since) }) : t("gov.neverReviewed")) : x.detail) }),
       x.release ? h("strong", { class: "finding-release", text: " · " + t("dp.yourRelease") }) : null)))) : null;
   show(
     h("h1", { text: t("notif.title") }),
@@ -559,7 +560,7 @@ function renderNav() {
     count.hidden = !n.unread;
     // Open governance findings one is responsible for show as a dot until
     // they are resolved (ADR-0057); the number counts unread changes.
-    const open = n.findings ? n.findings.sensitive + n.findings.stale + n.findings.implausible + (n.findings.personal || 0) : 0;
+    const open = n.findings ? n.findings.sensitive + n.findings.stale + n.findings.implausible + (n.findings.personal || 0) + (n.findings.reviews || 0) : 0;
     bell.classList.toggle("findings", open > 0);
     const name = (n.unread ? t("nav.notificationsUnread", { n: shown }) : t("nav.notifications"))
       + (open ? " · " + t("nav.findingsOpen", { n: open }) : "");
@@ -995,7 +996,7 @@ async function homeView() {
   const greeting = hour < 11 ? t("home.morning") : hour < 18 ? t("home.day") : t("home.evening");
   const name = brand.name || "wikiwikibangbang";
   const quick = (href, title, text, id, extra) => h("a", { class: "home-tile", href, id }, h("strong", { text: title }), h("span", { class: "muted", text }), extra || null);
-  const findings = notes.findings ? notes.findings.sensitive + notes.findings.stale + notes.findings.implausible + (notes.findings.personal || 0) : 0;
+  const findings = notes.findings ? notes.findings.sensitive + notes.findings.stale + notes.findings.implausible + (notes.findings.personal || 0) + (notes.findings.reviews || 0) : 0;
   show(
     h("section", { class: "welcome", id: "welcome" },
       h("div", { class: "welcome-text" },
@@ -1684,13 +1685,15 @@ async function governanceOverview() {
         h("th", {}, t("gov.colSensitive"), " ", infoTip(t("gov.colSensitive"), t("gov.infoSensitive"), t("gov.infoSensitiveNote"))),
         h("th", {}, t("gov.colStale"), " ", infoTip(t("gov.colStale"), t("gov.infoStale", { days: 365 }))),
         h("th", {}, t("gov.colImplausible"), " ", infoTip(t("gov.colImplausible"), t("gov.infoImplausible"))),
-        h("th", {}, t("gov.colPersonal"), " ", infoTip(t("gov.colPersonal"), t("gov.infoPersonal"))))),
+        h("th", {}, t("gov.colPersonal"), " ", infoTip(t("gov.colPersonal"), t("gov.infoPersonal"))),
+        h("th", {}, t("gov.colReview"), " ", infoTip(t("gov.colReview"), t("gov.infoReview"))))),
         h("tbody", {}, spaces.map((s, i) => h("tr", {},
           h("td", {}, link("#/governance/" + encodeURIComponent(s.key), s.key), " ", h("span", { class: "muted", text: s.name })),
           h("td", { text: String(reports[i].sensitive.length) }),
           h("td", { text: String(reports[i].stale.length) }),
           h("td", { text: String(reports[i].implausible.length) }),
           h("td", { text: String((reports[i].personal || []).length) }),
+          h("td", { text: String((reports[i].reviews || []).length) }),
         ))))
       : h("p", { class: "muted", text: t("gov.noSpaces") })),
   );
@@ -1706,7 +1709,8 @@ async function governanceView(key) {
   const show = screen();
   const days = Number(new URLSearchParams(location.hash.split("?")[1] || "").get("staleDays")) || 365;
   const rep = await get(`/api/spaces/${encodeURIComponent(key)}/governance?staleDays=${days}`);
-  await learnNames([...rep.sensitive, ...rep.stale, ...rep.implausible, ...rep.personal].map((f) => f.responsible));
+  const reviews = rep.reviews || [];
+  await learnNames([...rep.sensitive, ...rep.stale, ...rep.implausible, ...rep.personal, ...reviews].map((f) => f.responsible));
   const { regulations } = await get("/api/regulations").catch(() => ({ regulations: [] }));
   const regName = new Map(regulations.map((r) => [r.id, r.name.split(" – ")[0]]));
   const status = h("div", { class: "status" });
@@ -1743,6 +1747,14 @@ async function governanceView(key) {
       h("h2", {}, t("gov.implausible", { n: rep.implausible.length }), " ", infoTip(t("gov.colImplausible"), t("gov.infoImplausible"))),
       table([t("col.item"), t("col.problem"), t("col.responsible")], rep.implausible.map((f) => h("tr", {},
         itemCell(f), h("td", { text: f.problem }), h("td", { text: who(f.responsible) })))),
+      // Items whose type asks for a periodic review (ADR-0074); whoever
+      // may edit one records the review here.
+      h("h2", { id: "reviews" }, t("gov.reviews", { n: reviews.length }), " ", infoTip(t("gov.colReview"), t("gov.infoReview"))),
+      table([t("col.item"), t("gov.lastReview"), t("col.responsible"), ""], reviews.map((f) => h("tr", { "data-key": f.key },
+        itemCell(f), h("td", { text: f.lastReview ? t("gov.reviewedDue", { last: when(f.lastReview), due: when(f.due) }) : t("gov.neverReviewed") }),
+        h("td", { text: who(f.responsible) }),
+        h("td", {}, h("button", { type: "button", class: "secondary mark-reviewed", text: t("gov.markReviewed"),
+          onclick: () => action(() => post(`/api/items/${f.item}/reviewed`), status) }))))),
       h("h2", { id: "personal-data" }, t("gov.personal", { n: rep.personal.length }), " ", infoTip(t("gov.colPersonal"), t("gov.infoPersonal"))),
       table([t("col.item"), t("gov.what"), t("dp.status"), t("col.responsible")], rep.personal.map((f) => h("tr", { class: f.held ? "held" : "" },
         itemCell(f),
@@ -1783,7 +1795,8 @@ async function linksView(key) {
             h("tbody", {}, report.broken.map((b) => h("tr", {},
               // The item the link is used in, and where in its body.
               h("td", {}, link("#/item/" + encodeURIComponent(b.key), b.title || b.key),
-                h("div", { class: "muted", text: t("links.block", { key: b.key, n: b.block + 1 }) })),
+                h("div", { class: "muted", text: b.field === "origin" ? t("links.origin", { key: b.key })
+                  : b.field ? t("links.field", { key: b.key, field: b.field }) : t("links.block", { key: b.key, n: b.block + 1 }) })),
               h("td", { class: "href", text: b.href }),
               h("td", { text: b.problem }),
               h("td", { text: b.responsible ? who(b.responsible) : "—" }),
@@ -1820,6 +1833,8 @@ function propertyInput(f, value) {
         f.values.map((v) => h("option", { value: v, text: v, selected: v === value })));
     case "user":
       return userInput(name, value);
+    case "url":
+      return h("input", { name, type: "url", value: value ?? "", placeholder: "https://…" });
     default:
       return h("input", { name, value: value ?? "" });
   }
@@ -2009,7 +2024,10 @@ async function itemView(ref, params = new URLSearchParams()) {
         // put oneself in (ADR-0049).
         f.kind === "user" && item.properties[f.name] ? h("span", { class: "muted", text: " " + person(item.properties[f.name]) }) : null,
         f.kind === "user" && canEdit && item.properties[f.name] !== me.user.id
-          ? h("button", { class: "link", text: t("tasks.assignMe"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: me.user.id }), status) }) : null),
+          ? h("button", { class: "link", text: t("tasks.assignMe"), onclick: () => action(() => put(`${path}/properties/${encodeURIComponent(f.name)}`, { value: me.user.id }), status) }) : null,
+        // A web address opens in a new tab (ADR-0074).
+        f.kind === "url" && item.properties[f.name]
+          ? h("a", { href: item.properties[f.name], target: "_blank", rel: "noopener noreferrer", class: "prop-link", text: t("item.openLink") }) : null),
     );
   }));
 
@@ -2075,6 +2093,12 @@ async function itemView(ref, params = new URLSearchParams()) {
     guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
     item.hold ? await holdBanner(item, path, canEdit) : null,
     h("p", { class: "muted" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : "", t("item.version", { n: item.version })),
+    // An item mirrored from another system says where it is kept, the
+    // system of record (ADR-0023, ADR-0074).
+    item.origin ? h("p", { class: "notice origin", id: "item-origin" },
+      t("item.origin", { system: item.origin.system }), " ",
+      item.origin.url ? h("a", { href: item.origin.url, target: "_blank", rel: "noopener noreferrer", text: t("item.originOpen") }) : "",
+      item.managed ? " · " + t("item.managed") : "") : "",
     status,
     h("div", { class: "item-layout" },
       h("div", { class: "item-main" }, body || h("p", { class: "muted", text: t("item.noBody") })),

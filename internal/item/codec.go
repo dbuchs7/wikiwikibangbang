@@ -53,7 +53,9 @@ import (
 //     (ADR-0060). Versions 1 to 15 are still read.
 //   - 17: the kinds SpaceTrashed, SpaceRestored and SpacePurged (ADR-0069).
 //     Versions 1 to 16 are still read.
-const CodecVersion = 17
+//   - 18: a type may have url fields, unique and recommended fields and a
+//     review rule (ADR-0074). Versions 1 to 17 are still read.
+const CodecVersion = 18
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

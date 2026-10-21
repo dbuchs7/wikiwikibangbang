@@ -57,6 +57,7 @@ func (x *Session) Search(text string, q Query) ([]Hit, error) {
 			(q.State != "" && it.State != q.State) ||
 			(q.Parent != "" && it.Parent != q.Parent) ||
 			(q.Label != "" && !slices.Contains(it.Labels, q.Label)) ||
+			!whereMatches(it, q.WhereText) ||
 			!x.s.canRead(x.who, it) {
 			continue
 		}

@@ -109,6 +109,7 @@ type brokenLinkJSON struct {
 	Key         string  `json:"key"`
 	Title       string  `json:"title"`
 	Block       int     `json:"block"`
+	Field       string  `json:"field,omitempty"`
 	Href        string  `json:"href"`
 	Status      int     `json:"status,omitempty"`
 	Problem     string  `json:"problem"`
@@ -152,7 +153,7 @@ func (h itemHandlers) linkReport(w http.ResponseWriter, r *http.Request) {
 			if err != nil || it.Presence != item.Live {
 				continue
 			}
-			broken = append(broken, brokenLinkJSON{Item: l.Item, Key: it.Key, Title: it.Title, Block: l.Block, Href: l.Href,
+			broken = append(broken, brokenLinkJSON{Item: l.Item, Key: it.Key, Title: it.Title, Block: l.Block, Field: l.Field, Href: l.Href,
 				Status: res.Status, Problem: res.Problem, Responsible: l.Responsible})
 		}
 		out["broken"] = broken

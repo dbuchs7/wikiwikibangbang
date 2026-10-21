@@ -113,7 +113,7 @@ const findingsLimit = 100
 // findingsOf counts the findings one is responsible for and, with list,
 // lists them.
 func findingsOf(r item.Report, list bool) map[string]any {
-	out := map[string]any{"sensitive": len(r.Sensitive), "stale": len(r.Stale), "implausible": len(r.Implausible), "personal": len(r.Personal)}
+	out := map[string]any{"sensitive": len(r.Sensitive), "stale": len(r.Stale), "implausible": len(r.Implausible), "personal": len(r.Personal), "reviews": len(r.Reviews)}
 	if !list {
 		return out
 	}
@@ -130,6 +130,14 @@ func findingsOf(r item.Report, list bool) map[string]any {
 	}
 	for _, f := range r.Implausible {
 		items = append(items, findingJSON{Kind: "implausible", Item: f.Item, Key: f.Key, Title: f.Title, Detail: f.Problem})
+	}
+	for _, f := range r.Reviews {
+		var since *time.Time
+		if !f.LastReview.IsZero() {
+			last := f.LastReview
+			since = &last
+		}
+		items = append(items, findingJSON{Kind: "review", Item: f.Item, Key: f.Key, Title: f.Title, Since: since})
 	}
 	for _, f := range r.Stale {
 		since := f.LastChange

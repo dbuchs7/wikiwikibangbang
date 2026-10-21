@@ -51,6 +51,8 @@ curl -b cookies -H 'Content-Type: application/json' -d '{"name":"page","body":tr
 curl -b cookies -H 'Content-Type: application/json' -d '{"space":"PLAT","type":"page","title":"Runbook"}' http://localhost:8080/api/items
 curl -b cookies http://localhost:8080/api/items/PLAT-1
 ```
+
+A type can describe a catalog kept in step with another system ([ADR-0074](docs/adr/0074-catalogs-kept-in-step-with-other-systems.md)): a field of kind `url` holds a checked web address, `"unique": true` keeps an identifier from being held twice in a space, `"recommended": true` has the governance check list items where a field is empty, and `"review": {"everyDays": 365, "field": "reviewed", "owner": "owner"}` lists items due to be checked again and makes the owner answer for them. `GET /api/items?where=source-id=abc` (and the MCP tool `find_items`) finds an item by a property's value.
  Data is kept in `./data` (change it with `-data-dir`); `wikiwikibangbang check -data-dir data` verifies it without changing it.
 
 Back up a running server from **Administration → Backup**, or with an administrator's API token ([ADR-0034](docs/adr/0034-encrypted-backups-from-log-prefixes.md)):
