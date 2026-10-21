@@ -251,6 +251,9 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	backupDone := make(chan struct{})
 	go func() { backups.Loop(backupCtx); close(backupDone) }()
 	defer func() { stopBackups(); <-backupDone; backups.Close() }()
+	// The scan for sensitive data is done ahead, in the background, so the
+	// first page after a start does not wait for it (ADR-0081).
+	go db.WarmUp(ctx)
 	// Connectors keep catalog spaces in step with their sources, such as
 	// opendata.swiss, on the schedules set under Administration (ADR-0077).
 	catalog := connector.New(db, log)

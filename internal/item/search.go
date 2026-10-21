@@ -111,8 +111,30 @@ func wordsOf(text string) []string {
 	return strings.FieldsFunc(fold(text), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 }
 
-// spaced joins words between spaces, so a phrase is found as whole words.
-func spaced(text string) string { return " " + strings.Join(wordsOf(text), " ") + " " }
+// spaced joins words between spaces, so a phrase is found as whole words:
+// " " + the folded words joined by " " + " ", built in one pass, as it
+// runs for every block of every hit (ADR-0081).
+func spaced(text string) string {
+	folded := appendFold(nil, text)
+	out := make([]byte, 0, len(folded)+2)
+	out = append(out, ' ')
+	for i := 0; i < len(folded); {
+		r, n := utf8.DecodeRune(folded[i:])
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			out = append(out, folded[i:i+n]...)
+		} else if out[len(out)-1] != ' ' {
+			out = append(out, ' ')
+		}
+		i += n
+	}
+	if out[len(out)-1] != ' ' {
+		out = append(out, ' ')
+	}
+	if len(out) == 1 {
+		return "  "
+	}
+	return string(out)
+}
 
 // stars rates a hit (ADR-0072). It runs for hits only, so its allocations
 // stay with the results, not with every item searched.

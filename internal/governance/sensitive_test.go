@@ -1,6 +1,8 @@
 package governance
 
 import (
+	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -94,6 +96,35 @@ func TestFingerprintsTellNewFindingsFromOld(t *testing.T) {
 	for fp := range old {
 		if strings.Contains(fp, "Sommer") {
 			t.Error("a fingerprint shows the secret")
+		}
+	}
+}
+
+// A detector's quick test never turns away a text its pattern matches
+// (ADR-0081): random texts built from the characters the patterns care
+// about, and the known examples, are checked against both.
+func TestQuickTestsMissNothing(t *testing.T) {
+	alphabet := []rune("AKIGHBCDEXYZaksghpoxwdrtyben_-:= 0123456789.ſKPRIVATE-")
+	words := []string{"Passwort: Sommer2026!", "pwd=hunter2", "KENNWORT = geheim", "CH93 0076 2011 6238 5295 7", "4111 1111 1111 1111",
+		"AKIAIOSFODNN7EXAMPLE", "ghp_" + strings.Repeat("a", 36), "xoxb-1234567890-abc", "sk-" + strings.Repeat("Z", 24),
+		"eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.SflKxwRJSMeKKF2QT4", "-----BEGIN RSA PRIVATE KEY-----", "paſſword: x9Yq!", "Kennwort: Zug-42!"}
+	rng := rand.New(rand.NewPCG(1, 2))
+	texts := slices.Clone(words)
+	for range 20000 {
+		var b strings.Builder
+		for range 5 + rng.IntN(60) {
+			if rng.IntN(12) == 0 {
+				b.WriteString(words[rng.IntN(len(words))])
+			}
+			b.WriteRune(alphabet[rng.IntN(len(alphabet))])
+		}
+		texts = append(texts, b.String())
+	}
+	for _, text := range texts {
+		for _, d := range detectors {
+			if d.may != nil && !d.may(text) && d.re.MatchString(text) {
+				t.Fatalf("%s: the quick test turns away %q", d.kind, text)
+			}
 		}
 	}
 }

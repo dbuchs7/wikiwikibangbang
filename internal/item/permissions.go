@@ -345,6 +345,30 @@ func (x *Session) Spaces() []SpaceInfo {
 }
 
 // Find returns the readable items matching q.
+// FindPage returns the readable items a query matches, in the order they
+// were made: the page of up to limit after the item after (from the
+// start when empty), how many there are in all, and the last of the page
+// when more follow. Only the page is copied, so a listing of a large space
+// costs a filter, not a copy of every item (ADR-0081).
+func (x *Session) FindPage(q Query, after ID, limit int) (page []Item, total int, next ID, err error) {
+	matches := x.s.matching(q, func(it *Item) bool { return x.s.canRead(x.who, it) })
+	start := 0
+	if after != "" {
+		start = slices.IndexFunc(matches, func(it *Item) bool { return it.ID == after }) + 1
+		if start == 0 {
+			return nil, 0, "", invalid("cursor %q is not in this listing", after)
+		}
+	}
+	end := min(start+limit, len(matches))
+	for _, it := range matches[start:end] {
+		page = append(page, it.clone())
+	}
+	if end < len(matches) && len(page) > 0 {
+		next = page[len(page)-1].ID
+	}
+	return page, len(matches), next, nil
+}
+
 func (x *Session) Find(q Query) []Item {
 	var out []Item
 	for _, it := range x.s.Find(q) {
@@ -587,7 +611,8 @@ func (x *Session) Place(id ID, toSpace string, newParent, before ID) error {
 	return x.s.Place(x.who, id, toSpace, newParent, before)
 }
 
-// TreeNode is one readable child in a page tree.
+// TreeNode is one readable child in a page tree. Item is its summary,
+// without content (ADR-0081).
 type TreeNode struct {
 	Item        Item
 	HasChildren bool // it has readable live children
@@ -609,16 +634,19 @@ func (x *Session) Tree(space string, parent ID) ([]TreeNode, error) {
 			return nil, notFound("item %s in space %s", parent, space)
 		}
 	}
-	parents := map[ID]bool{}
+	// The children of every item of the space, so that whether a node has
+	// a readable child is asked only for the nodes listed (ADR-0081).
+	kids := map[ID][]*Item{}
 	for _, it := range x.s.items {
-		if it.Presence == Live && it.Space == space && it.Parent != "" && x.s.canRead(x.who, it) {
-			parents[it.Parent] = true
+		if it.Presence == Live && it.Space == space && it.Parent != "" {
+			kids[it.Parent] = append(kids[it.Parent], it)
 		}
 	}
 	var out []TreeNode
 	for _, it := range x.s.Children(space, parent) {
 		if x.s.canRead(x.who, x.s.items[it.ID]) {
-			out = append(out, TreeNode{Item: it, HasChildren: parents[it.ID]})
+			has := slices.ContainsFunc(kids[it.ID], func(k *Item) bool { return x.s.canRead(x.who, k) })
+			out = append(out, TreeNode{Item: it, HasChildren: has})
 		}
 	}
 	return out, nil

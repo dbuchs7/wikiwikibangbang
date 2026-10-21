@@ -441,10 +441,13 @@ func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")),
 		IncludeDeleted: q.Get("deleted") == "true", Label: q.Get("label"), WhereText: where}
 	h.read(w, r, func(x *item.Session) (any, error) {
-		all := x.Find(query)
-		page, res, err := paged(all, func(it item.Item) item.ID { return it.ID }, item.ID(q.Get("after")), limit)
+		page, total, next, err := x.FindPage(query, item.ID(q.Get("after")), limit)
 		if err != nil {
-			return nil, err
+			return nil, badInput("%s", strings.TrimPrefix(err.Error(), item.ErrValidation.Error()+": "))
+		}
+		res := map[string]any{"total": map[string]any{"value": total, "exact": true}}
+		if next != "" {
+			res["next"] = next
 		}
 		out := make([]itemJSON, len(page))
 		for i, it := range page {

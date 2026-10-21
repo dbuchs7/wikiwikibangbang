@@ -53,6 +53,15 @@ type Store struct {
 	watches map[string]map[string]int
 
 	journal Journal
+
+	// sensitive remembers what the scan for sensitive data found in each
+	// item, until the item changes (ADR-0081). It is derived from the
+	// state, never part of it, and is guarded on its own, as reads run in
+	// parallel.
+	sensitive *sensitiveMemo
+	// findings keeps what the bell last found for each principal, until
+	// the store changes (ADR-0081).
+	findings *findingsMemo
 }
 
 // Journal makes batches of events durable. Append returns only after the
@@ -94,6 +103,8 @@ func NewStore(opts ...Option) *Store {
 		rels:     map[ID]*Relation{},
 		touching: map[ID][]int{},
 
+		sensitive:  &sensitiveMemo{m: map[ID]sensitiveSeen{}},
+		findings:   &findingsMemo{m: map[string]findingsSeen{}},
 		groups:     map[string]map[string]bool{},
 		order:      map[string][]ID{},
 		watches:    map[string]map[string]int{},
@@ -467,16 +478,25 @@ func (s *Store) Place(actor string, id ID, toSpace string, newParent, before ID)
 func orderKey(space string, parent ID) string { return space + "\x00" + string(parent) }
 
 // Children returns the live children of an item, or the live items at the
-// top of a space when parent is empty, in their sibling order (ADR-0041).
+// top of a space when parent is empty, in their sibling order (ADR-0041),
+// as summaries without their content.
 func (s *Store) Children(space string, parent ID) []Item {
 	var out []Item
 	for _, it := range s.items {
 		if it.Presence == Live && it.Space == space && it.Parent == parent {
-			out = append(out, it.clone())
+			out = append(out, it.summary())
 		}
 	}
 	s.sortSiblings(space, parent, out)
 	return out
+}
+
+// summary is an item without its content (properties, body, comments,
+// attachments): what a list of children names it by. A space with
+// thousands of items lists them without copying their text (ADR-0081).
+func (it *Item) summary() Item {
+	return Item{ID: it.ID, Key: it.Key, Type: it.Type, TypeVersion: it.TypeVersion, Space: it.Space, Parent: it.Parent,
+		Title: it.Title, State: it.State, Version: it.Version, Presence: it.Presence, created: it.created, trashedBy: it.trashedBy}
 }
 
 // sortSiblings orders items by the placed order, unplaced ones after it,
@@ -898,6 +918,16 @@ type Query struct {
 // Find returns copies of the matching items in creation order.
 func (s *Store) Find(q Query) []Item {
 	var out []Item
+	for _, it := range s.matching(q, nil) {
+		out = append(out, it.clone())
+	}
+	return out
+}
+
+// matching lists the items a query matches that keep accepts (all when
+// nil), in the order they were made, without copying them.
+func (s *Store) matching(q Query, keep func(*Item) bool) []*Item {
+	var out []*Item
 	for _, it := range s.items {
 		if (!q.IncludeDeleted && it.Presence != Live) ||
 			(q.Type != "" && it.Type != q.Type) ||
@@ -914,11 +944,11 @@ func (s *Store) Find(q Query) []Item {
 				match = false
 			}
 		}
-		if match {
-			out = append(out, it.clone())
+		if match && (keep == nil || keep(it)) {
+			out = append(out, it)
 		}
 	}
-	slices.SortFunc(out, func(a, b Item) int { return a.created - b.created })
+	slices.SortFunc(out, func(a, b *Item) int { return a.created - b.created })
 	return out
 }
 

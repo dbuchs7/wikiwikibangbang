@@ -6,6 +6,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -40,7 +41,8 @@ type DB struct {
 	Audit    *audit.Trail
 	Site     *site.Settings
 
-	mu       sync.Mutex
+	// mu lets reads run side by side and a command alone (ADR-0081).
+	mu       sync.RWMutex
 	lock     io.Closer
 	log      *wal.Log
 	keys     *keyring
@@ -50,12 +52,30 @@ type DB struct {
 	dir      string
 }
 
-// Read runs fn with the item store while no command runs.
+// Read runs fn with the item store while no command runs; reads run side
+// by side (ADR-0081), so fn must not change the store. What a read
+// remembers for later reads, the store guards itself.
 func (db *DB) Read(fn func(*item.Store)) {
-	db.mu.Lock()
-	defer db.mu.Unlock()
+	db.mu.RLock()
+	defer db.mu.RUnlock()
 	fn(db.Store)
 }
+
+// WarmUp scans the items for sensitive data in parts of a few hundred,
+// each a read of its own, so that commands are not held up, until done or
+// ctx ends (ADR-0081). The server runs it after opening, so the first
+// person to open a page does not wait for every item to be scanned.
+func (db *DB) WarmUp(ctx context.Context) {
+	var ids []item.ID
+	db.Read(func(s *item.Store) { ids = s.LiveItems() })
+	for start := 0; start < len(ids) && ctx.Err() == nil; start += warmPart {
+		part := ids[start:min(start+warmPart, len(ids))]
+		db.Read(func(s *item.Store) { s.ScanSensitive(part) })
+	}
+}
+
+// warmPart is how many items one read of WarmUp scans.
+const warmPart = 200
 
 // Write runs fn with the item store as the only writer (ADR-0008): commands
 // are applied one at a time, in the order of the log.
