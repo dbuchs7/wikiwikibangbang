@@ -18,7 +18,7 @@ func watchRoutes(h itemHandlers) []Route {
 		{Method: put, Pattern: "/api/spaces/{space}/watch", Summary: "Watch every item of a space", Handler: http.HandlerFunc(h.watchSpace(true))},
 		{Method: del, Pattern: "/api/spaces/{space}/watch", Summary: "Stop watching a space", Handler: http.HandlerFunc(h.watchSpace(false))},
 		{Method: get, Pattern: "/api/me/watches", Summary: "What one watches", Handler: http.HandlerFunc(h.listWatches)},
-		{Method: get, Pattern: "/api/notifications", Summary: "What others changed on what one watches, newest first, paged (before, limit), with the unread count", Handler: http.HandlerFunc(h.notifications)},
+		{Method: get, Pattern: "/api/notifications", Summary: "What others changed on what one watches and comments mentioning one by @username, newest first, paged (before, limit), with the unread count", Handler: http.HandlerFunc(h.notifications)},
 		{Method: post, Pattern: "/api/notifications/seen", Summary: "Mark the notifications up to an event (seq) as seen", Handler: http.HandlerFunc(h.notificationsSeen)},
 	}
 }
@@ -84,7 +84,9 @@ type notificationJSON struct {
 	Title   string         `json:"title"`
 	Space   string         `json:"space"`
 	Created bool           `json:"created,omitempty"`
-	Unread  bool           `json:"unread,omitempty"`
+	// Mentioned: the comment names the reader by @username.
+	Mentioned bool `json:"mentioned,omitempty"`
+	Unread    bool `json:"unread,omitempty"`
 }
 
 // unreadCap bounds the unread count the navigation shows ("99+").
@@ -163,12 +165,14 @@ func (h itemHandlers) notifications(w http.ResponseWriter, r *http.Request) {
 		before = n
 	}
 	seen := h.d.DB.Accounts.Seen(auth.UserID(who(r)))
+	p, _ := PrincipalFrom(r.Context())
 	h.read(w, r, func(x *item.Session) (any, error) {
+		x = x.Named(p.Username)
 		list, more := x.Notifications(before, limit)
 		out := []notificationJSON{}
 		for _, n := range list {
 			out = append(out, notificationJSON{Seq: n.Seq, At: n.At, Actor: n.Actor, Kind: n.Kind, Item: n.Item, Key: n.Key,
-				Title: n.Title, Space: n.Space, Created: n.Created, Unread: n.Seq > seen})
+				Title: n.Title, Space: n.Space, Created: n.Created, Mentioned: n.Mentioned, Unread: n.Seq > seen})
 		}
 		res := map[string]any{"notifications": out, "unread": x.Unread(seen, unreadCap), "seen": seen,
 			"findings": findingsOf(x.Findings(time.Now(), defaultStale), q.Get("findings") != "")}

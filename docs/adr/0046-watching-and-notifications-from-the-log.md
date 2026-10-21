@@ -61,3 +61,4 @@ Chosen option: **1**.
 ## Links
 
 - ADR-0008 (the log), ADR-0022 (permissions), ADR-0026 (erasure), ADR-0027 (accounts), ADR-0035 (comments)
+- amended by [ADR-0084](0084-a-mention-in-a-comment-is-a-notification.md) (a comment that mentions one is a notification)

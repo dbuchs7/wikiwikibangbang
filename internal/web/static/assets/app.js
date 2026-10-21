@@ -134,6 +134,7 @@ function watchButton(path, watching, status) {
 // what says what a notification's change was.
 function what(n) {
   if (n.created) return t("notif.child");
+  if (n.mentioned) return t("notif.mentioned");
   switch (n.kind) {
     case "ItemCreated": return t("notif.created");
     case "ItemImported": return t("notif.imported");
@@ -457,6 +458,43 @@ function closeDrawer() {
   switcher.setAttribute("aria-expanded", "false");
 }
 
+// Home, back and forward sit beside the nine dots on every page. Where the
+// browser tells whether there is a way back or forward, the buttons say so.
+const historyNav = document.getElementById("history-nav");
+const backButton = document.getElementById("nav-back");
+const forwardButton = document.getElementById("nav-forward");
+backButton.addEventListener("click", () => history.back());
+forwardButton.addEventListener("click", () => history.forward());
+
+function updateHistoryNav() {
+  historyNav.hidden = !me;
+  const nav = window.navigation;
+  if (nav && "canGoBack" in nav) {
+    backButton.disabled = !nav.canGoBack;
+    forwardButton.disabled = !nav.canGoForward;
+  }
+}
+
+// beforeSearch is where the reader was before the search results, to go
+// back to when the search field is cleared.
+let beforeSearch = "#/";
+window.addEventListener("hashchange", (ev) => {
+  const from = new URL(ev.oldURL).hash;
+  if (location.hash.startsWith("#/search/") && !from.startsWith("#/search/")) beforeSearch = from || "#/";
+});
+
+// clearable makes a search field leave the results when it is cleared with
+// its × (or Escape); deleting the words by hand keeps them, so a new search
+// can be typed.
+function clearable(input) {
+  const leave = () => {
+    if (!input.value && location.hash.startsWith("#/search/")) location.hash = beforeSearch;
+  };
+  input.addEventListener("search", leave);
+  input.addEventListener("input", (ev) => { if (!ev.inputType) leave(); });
+  return input;
+}
+
 switcher.addEventListener("click", () => (drawer.hidden ? openDrawer() : closeDrawer()));
 document.getElementById("drawer-close").addEventListener("click", () => { closeDrawer(); switcher.focus(); });
 scrim.addEventListener("click", closeDrawer);
@@ -471,6 +509,7 @@ document.addEventListener("keydown", (ev) => {
 // renderModules lists the modules and marks the one the route belongs to.
 function renderModules(section) {
   switcher.hidden = !me;
+  updateHistoryNav();
   mount(document.getElementById("drawer-apps"), ...modules.filter((m) => !m.admin || me?.admin).map((m) =>
     h("a", { href: m.href, class: m.match.includes(section) ? "active" : "", "aria-current": m.match.includes(section) ? "page" : "false" },
       lineIcon(m.icon), h("span", { text: t(m.name) }))));
@@ -483,6 +522,11 @@ function labelChrome() {
   const close = document.getElementById("drawer-close");
   close.title = t("common.close");
   close.setAttribute("aria-label", t("common.close"));
+  for (const [id, key] of [["nav-home", "nav.home"], ["nav-back", "nav.back"], ["nav-forward", "nav.forward"]]) {
+    const el = document.getElementById(id);
+    el.title = t(key);
+    el.setAttribute("aria-label", t(key));
+  }
 }
 
 // lockIcon draws a padlock, closed or open, as SVG.
@@ -547,7 +591,7 @@ function renderNav() {
     ev.preventDefault();
     const q = new FormData(ev.target).get("q").trim();
     if (q) location.hash = "#/search/" + encodeURIComponent(q);
-  } }, h("input", { name: "q", type: "search", placeholder: t("nav.search"), "aria-label": t("nav.search"), value: current }));
+  } }, clearable(h("input", { name: "q", type: "search", placeholder: t("nav.search"), "aria-label": t("nav.search"), value: current })));
   // The unread count arrives after the navigation is drawn (ADR-0046).
   // A bell with the number of unread notifications; its name says it in
   // words, for screen readers and as a tooltip.
@@ -769,8 +813,17 @@ async function chooseLanguage() {
 
 // --- corporate design (ADR-0052) -----------------------------------------------
 
-// The product's own logo, kept to come back to when a design's logo goes.
+// The product's own logo and icons, kept to come back to when a design's
+// logo goes.
 const productLogo = document.querySelector(".brand picture")?.cloneNode(true);
+const productIcons = [...document.querySelectorAll("link[rel=icon]")].map((l) => l.cloneNode());
+
+// setFavicon shows the design's logo as the browser's icon, or the
+// product's icons without one.
+function setFavicon(href) {
+  document.querySelectorAll("link[rel=icon]").forEach((l) => l.remove());
+  document.head.append(...(href ? [h("link", { rel: "icon", href })] : productIcons.map((l) => l.cloneNode())));
+}
 
 // applyBranding shows the installation's logo and name; the colours, fonts
 // and background come with /branding.css. reload asks for the stylesheet
@@ -780,9 +833,12 @@ async function applyBranding(reload = false) {
   if (!b) return;
   const brand = document.querySelector(".brand");
   if (b.assets?.logo) {
-    brand.replaceChildren(h("img", { src: "/branding/logo?v=" + encodeURIComponent(b.assets.logo), alt: b.name || "wikiwikibangbang", class: "brand-logo" }));
-  } else if (productLogo) {
-    brand.replaceChildren(productLogo.cloneNode(true));
+    const logo = "/branding/logo?v=" + encodeURIComponent(b.assets.logo);
+    brand.replaceChildren(h("img", { src: logo, alt: b.name || "wikiwikibangbang", class: "brand-logo" }));
+    setFavicon(logo);
+  } else {
+    if (productLogo) brand.replaceChildren(productLogo.cloneNode(true));
+    setFavicon("");
   }
   // Without a dark scheme (ADR-0070) the product's logo stays the dark one.
   if (b.dark === false) brand.querySelector("picture source")?.remove();
@@ -949,7 +1005,7 @@ async function searchView(q) {
     ev.preventDefault();
     const typed = new FormData(ev.target).get("q").trim();
     if (typed) location.hash = "#/search/" + encodeURIComponent(typed);
-  } }, h("input", { name: "q", type: "search", value: q, placeholder: t("nav.search"), "aria-label": t("nav.search") }),
+  } }, clearable(h("input", { name: "q", type: "search", value: q, placeholder: t("nav.search"), "aria-label": t("nav.search") })),
   h("button", { type: "submit", class: "primary", text: t("search.go") }));
   if (!/[\p{L}\p{N}]/u.test(q)) {
     show(h("div", { class: "page-head" }, h("h1", { text: t("search.title") })), box,
@@ -2158,6 +2214,40 @@ function userInput(name, value) {
   return input;
 }
 
+// mentionable suggests people while "@name" is typed in a comment, and a
+// choice completes the name; a comment that names someone so tells them
+// under Notifications (ADR-0084). Without the right to look people up,
+// names are typed in full.
+function mentionable(area) {
+  const list = h("ul", { class: "mention-list", hidden: true });
+  let timer = 0;
+  const typed = () => area.value.slice(0, area.selectionStart).match(/(?:^|\s)@([^\s@]{0,64})$/u)?.[1] ?? null;
+  const choose = (name) => {
+    const at = area.selectionStart;
+    const before = area.value.slice(0, at).replace(/@[^\s@]*$/u, "@" + name + " ");
+    area.value = before + area.value.slice(at);
+    area.selectionStart = area.selectionEnd = before.length;
+    list.hidden = true;
+    area.focus();
+  };
+  area.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = typed();
+    if (q === null) {
+      list.hidden = true;
+      return;
+    }
+    timer = setTimeout(async () => {
+      const { users } = await get("/api/users/search?q=" + encodeURIComponent(q)).catch(() => ({ users: [] }));
+      list.replaceChildren(...users.slice(0, 8).map((u) =>
+        h("li", {}, h("button", { type: "button", class: "link", text: "@" + u.username, onclick: () => choose(u.username) }))));
+      list.hidden = !users.length || typed() === null;
+    }, 150);
+  });
+  area.addEventListener("keydown", (ev) => { if (ev.key === "Escape") list.hidden = true; });
+  return h("div", { class: "mention-box" }, area, list);
+}
+
 function readProperty(f, el) {
   if (f.kind === "bool") return el.checked;
   if (f.kind === "user") {
@@ -2614,7 +2704,7 @@ function commentThreads(path, page, live) {
     const mine = live && c.author === me.user.id;
     const status = h("div", { class: "status" });
     const edit = () => li.replaceChildren(head, form({ class: "comment-form" }, [
-      h("textarea", { name: "text", rows: 3, "aria-label": t("comment.editLabel"), value: c.text }),
+      mentionable(h("textarea", { name: "text", rows: 3, "aria-label": t("comment.editLabel"), value: c.text })),
       h("p", {}, h("button", { type: "submit", text: t("comment.save") }), h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => route() })),
     ], async (data) => { await put(`${path}/comments/${c.id}`, { text: data.get("text") }); route(); }));
     li.append(head, h("p", { class: "comment-text", text: c.text }), status, mine
@@ -2645,7 +2735,7 @@ function commentThreads(path, page, live) {
     const replyForm = h("div");
     const reply = () => {
       replyForm.replaceChildren(form({ class: "comment-form" }, [
-        h("textarea", { name: "text", rows: 2, "aria-label": t("comment.replyLabel"), required: true }),
+        mentionable(h("textarea", { name: "text", rows: 2, "aria-label": t("comment.replyLabel"), required: true })),
         h("p", {}, h("button", { type: "submit", text: t("comment.reply") }),
           h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => replyForm.replaceChildren() })),
       ], async (data) => { await post(path + "/comments", { text: data.get("text"), reply: c.id }); route(); }));
@@ -2670,7 +2760,7 @@ function commentThreads(path, page, live) {
   const start = (anchor) => {
     pending.replaceChildren(form({ class: "comment-form card" }, [
       h("blockquote", { class: "comment-quote", text: anchor.quote }),
-      h("textarea", { name: "text", rows: 3, placeholder: t("comment.placeholder"), "aria-label": t("comment.inlineLabel"), required: true }),
+      mentionable(h("textarea", { name: "text", rows: 3, placeholder: t("comment.placeholder"), "aria-label": t("comment.inlineLabel"), required: true })),
       h("p", {}, h("button", { type: "submit", text: t("comment.add") }),
         h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => pending.replaceChildren() })),
     ], async (data) => { await post(path + "/comments", { text: data.get("text"), anchor }); route(); }));
@@ -2681,7 +2771,7 @@ function commentThreads(path, page, live) {
   const open = roots.filter((c) => !c.resolved), done = roots.filter((c) => c.resolved);
   const add = live
     ? form({ id: "add-comment", class: "comment-form" }, [
-      h("textarea", { name: "text", rows: 3, placeholder: t("comment.placeholder"), "aria-label": t("comment.label"), required: true }),
+      mentionable(h("textarea", { name: "text", rows: 3, placeholder: t("comment.placeholder"), "aria-label": t("comment.label"), required: true })),
       h("p", {}, h("button", { type: "submit", text: t("comment.add") })),
     ], async (data) => { await post(path + "/comments", { text: data.get("text") }); route(); })
     : null;

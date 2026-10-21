@@ -240,6 +240,17 @@ func (s *Store) canEdit(principal string, it *Item) bool {
 type Session struct {
 	s   *Store
 	who string
+	// name is the principal's username, for the comments that mention
+	// them by @username; empty when not known.
+	name string
+}
+
+// Named returns the session with the principal's username, so their
+// notifications include the comments that mention them.
+func (x *Session) Named(username string) *Session {
+	y := *x
+	y.name = username
+	return &y
 }
 
 // As returns a session for a principal.
