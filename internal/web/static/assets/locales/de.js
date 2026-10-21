@@ -420,6 +420,8 @@ export default {
   "setup.noTypes": "Es gibt noch keine Typen, darum können keine Seiten erstellt werden. Erstellen Sie die vorbereiteten Typen Seite (page), Aufgabe (task) und Entscheid (decision), oder definieren Sie eigene unter Administration.",
   "setup.someTypes": "Noch nicht definierte vorbereitete Typen: {list}.",
   "setup.create": "{list} erstellen",
+  "setup.newFields": "Vorgefertigte Typen, die hier vor neuen Feldern angelegt wurden: {list}.",
+  "setup.addFields": "Felder ergänzen",
   "new.title": "Erstellen",
   "new.page": "Neue Seite oder neuer Eintrag",
   "new.noTypes": "Es gibt noch keine Typen. Bitten Sie eine Administratorin oder einen Administrator, sie zu erstellen.",

@@ -422,6 +422,8 @@ export default {
   "setup.noTypes": "There are no item types yet, so no pages can be created. Create the ready-made types page, task and decision, or define your own under Administration.",
   "setup.someTypes": "Ready-made types not defined yet: {list}.",
   "setup.create": "Create {list}",
+  "setup.newFields": "Ready-made types defined here before they gained fields: {list}.",
+  "setup.addFields": "Add the fields",
   "new.title": "Create",
   "new.page": "New page or item",
   "new.noTypes": "There are no item types yet. Ask an administrator to create them.",

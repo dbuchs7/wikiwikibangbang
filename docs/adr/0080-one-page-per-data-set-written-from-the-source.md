@@ -51,7 +51,7 @@ Chosen option: **1**.
 - **Positive:** one owner and one review per data set; fewer entries to govern.
 - **Negative / trade-offs accepted:** the page cannot hold notes; they belong in comments. An entry's interfaces are no longer governed one by one.
 - **Negative / trade-offs accepted:** the field names of the source's answer were taken from its schema, not from a live answer. A field the source names differently appears under the further details rather than in its place.
-- **Negative / trade-offs accepted:** a type with a workflow but no assignee or due field, such as `decision`, is no longer in the task list.
+- **Negative / trade-offs accepted:** a type with a workflow but no assignee or due field is no longer in the task list. The ready-made `decision` gains an `assignee` field for this; an installation that defined it before is offered the missing field on the start page, added as a new version of the type.
 
 ## Pros and cons of the options
 

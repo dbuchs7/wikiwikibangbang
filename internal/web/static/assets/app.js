@@ -1149,21 +1149,38 @@ const typeTemplates = [
     workflow: { initial: "open", states: ["open", "in progress", "done"],
       transitions: [{ name: "start", from: ["open"], to: "in progress" }, { name: "finish", from: ["open", "in progress"], to: "done" },
         { name: "reopen", from: ["done"], to: "open" }] } },
-  { name: "decision", body: true, fields: [{ name: "decided", kind: "date" }],
+  { name: "decision", body: true, fields: [{ name: "assignee", kind: "user" }, { name: "decided", kind: "date" }],
     workflow: { initial: "proposed", states: ["proposed", "accepted", "rejected"],
       transitions: [{ name: "accept", from: ["proposed"], to: "accepted" }, { name: "reject", from: ["proposed"], to: "rejected" }] } },
 ];
 
-// setupCard offers administrators the ready-made types that are missing.
+// setupCard offers administrators the ready-made types that are missing,
+// and the fields a ready-made type gained since it was defined here, such
+// as the assignee of a decision; the fields are added as a new version of
+// the type, everything else of it stays.
 function setupCard(types) {
   const missing = typeTemplates.filter((tt) => !types.some((ty) => ty.name === tt.name));
-  if (missing.length === 0) return null;
+  const outdated = typeTemplates.flatMap((tt) => {
+    const ty = types.find((x) => x.name === tt.name);
+    const add = ty ? tt.fields.filter((f) => !ty.fields.some((x) => x.name === f.name)) : [];
+    return add.length ? [{ ty, add }] : [];
+  });
+  if (missing.length === 0 && outdated.length === 0) return null;
   const status = h("div", { class: "status" });
+  const fieldsText = outdated.map(({ ty, add }) => `${ty.name} (${add.map((f) => f.name).join(", ")})`).join("; ");
   return h("section", { class: "card notice-card", id: "setup-types" },
     h("h2", { text: t("setup.title") }),
-    h("p", { text: types.length ? t("setup.someTypes", { list: missing.map((m) => m.name).join(", ") }) : t("setup.noTypes") }),
-    h("button", { class: "primary", text: t("setup.create", { list: missing.map((m) => m.name).join(", ") }),
-      onclick: () => action(async () => { for (const tt of missing) await post("/api/types", tt); }, status) }),
+    missing.length ? h("p", { text: types.length ? t("setup.someTypes", { list: missing.map((m) => m.name).join(", ") }) : t("setup.noTypes") }) : null,
+    missing.length ? h("button", { class: "primary", id: "setup-create", text: t("setup.create", { list: missing.map((m) => m.name).join(", ") }),
+      onclick: () => action(async () => { for (const tt of missing) await post("/api/types", tt); }, status) }) : null,
+    outdated.length ? h("p", { text: t("setup.newFields", { list: fieldsText }) }) : null,
+    outdated.length ? h("button", { class: missing.length ? "secondary" : "primary", id: "setup-fields", text: t("setup.addFields"),
+      onclick: () => action(async () => {
+        for (const { ty, add } of outdated) {
+          const { name, body, fields, workflow, review } = ty;
+          await post("/api/types", { name, body, workflow, review, fields: [...fields, ...add] });
+        }
+      }, status) }) : null,
     status);
 }
 

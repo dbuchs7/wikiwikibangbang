@@ -1212,6 +1212,16 @@ function ckanSource() {
     await page.goto(base + "/#/");
     await page.waitForSelector("#welcome");
     check(await page.locator("#welcome a[href='#/search/']").count() === 0, "the start page has no search button");
+    // A ready-made type defined before it gained a field gets it from the
+    // start page: a decision defined without an assignee.
+    check((await page.request.post(base + "/api/types", { data: { name: "decision", body: true, fields: [{ name: "decided", kind: "date" }],
+      workflow: { initial: "proposed", states: ["proposed", "accepted"], transitions: [{ name: "accept", from: ["proposed"], to: "accepted" }] } } })).status() === 201, "an old decision type");
+    await page.reload();
+    await page.waitForSelector("#setup-types :text('decision (assignee)')");
+    await page.click("#setup-fields");
+    await page.waitForSelector("#setup-types :text('decision (assignee)')", { state: "detached" });
+    const decision = (await (await page.request.get(base + "/api/types")).json()).types.find((ty) => ty.name === "decision");
+    check(decision.fields.map((f) => f.name).join(",") === "decided,assignee" && decision.workflow.states.length === 2, "the decision gained its assignee and kept the rest");
     // The start page counts what one may read: pages, tasks, pictures.
     await page.waitForSelector("#home-stats #home-pages strong");
     await page.waitForSelector("#home-stats a#home-task-count[href='#/tasks/all'] strong");
