@@ -969,6 +969,11 @@ async function searchView(q) {
         link("#/item/" + encodeURIComponent(it.key), it.key), " ", h("strong", { text: it.title }),
         " ", h("span", { class: "muted", text: `${it.space} · ${it.type}${it.state ? " · " + it.state : ""}` }),
         hit.snippet ? h("p", { class: "snippet", text: hit.comment ? t("search.inComment", { text: hit.snippet }) : hit.snippet }) : null,
+        // Which words the hit holds and which it lacks (ADR-0083).
+        hit.matched?.length && (hit.missing?.length || hit.matched.length > 1) ? h("p", { class: "hit-words" },
+          h("span", { class: "muted", text: t("search.matched") + " " }), ...hit.matched.map((w) => h("span", { class: "chip hit-matched", text: w })),
+          hit.missing.length ? [h("span", { class: "muted", text: " " + t("search.missing") + " " }),
+            ...hit.missing.map((w) => h("s", { class: "chip hit-missing", text: w }))] : null) : null,
       ));
     }
     more.replaceChildren();

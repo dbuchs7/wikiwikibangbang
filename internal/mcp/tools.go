@@ -94,7 +94,7 @@ var tools = []tool{
 		Method: "GET", Path: "/api/spaces/{space}/governance", Params: []param{
 			{"space", str, inPath, true, "The space key."},
 		}},
-	{Name: "search_items", Description: "Full-text search over readable items, best match first, paged.",
+	{Name: "search_items", Description: "Full-text search over readable items, best match first, paged. An item holding any of the words is a hit; each hit names the words it holds (matched) and those it does not (missing), and rates itself with 1 to 5 stars.",
 		Method: "GET", Path: "/api/search", Params: append([]param{
 			{"q", str, inQuery, true, "Words to find; every word must occur."},
 			{"space", str, inQuery, false, "Limit to a space key."},

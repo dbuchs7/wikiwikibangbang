@@ -326,7 +326,7 @@ function ckanSource() {
     await page.press("nav input[name=q]", "Enter");
     await page.waitForSelector(".hits li");
     await page.waitForTimeout(2500); // the item view has answered by now
-    check(await page.locator(".hits li").count() === 1, "the search results stay");
+    check(await page.locator(".hits li").count() > 0 && (await page.textContent(".hits li a")) === "PLAT-2", "the search results stay");
     await page.unroute("**/api/items/PLAT-1");
 
     step("app switcher: nine dots open the modules; Tasks lists open work across spaces");
@@ -1237,7 +1237,11 @@ function ckanSource() {
     await page.goto(base + "/#/search/%2A%2A");
     await page.waitForSelector("#search-hint:has-text('at least one letter')");
     await page.goto(base + "/#/search/Price");
-    await page.waitForSelector(".hits li:has-text('Price list') .stars[aria-label='4 of 5 stars']"); // every term in the title (ADR-0072)
+    await page.waitForSelector(".hits li:has-text('Price list') .stars[aria-label='5 of 5 stars']"); // every word whole in the title (ADR-0083)
+    // A hit holds any of the words; it names those it holds and those it lacks.
+    await page.goto(base + "/#/search/" + encodeURIComponent("Price zebraquark"));
+    await page.waitForSelector(".hits li:has-text('Price list') .hit-words .hit-matched:has-text('Price')");
+    await page.waitForSelector(".hits li:has-text('Price list') .hit-words s.hit-missing:has-text('zebraquark')");
     const [found] = await Promise.all([page.waitForEvent("download"), page.click("#search-csv")]);
     check(require("fs").readFileSync(await found.path(), "utf8").includes(exported + ",Price list,PLAT,task"), "the search as CSV");
     await page.goto(base + "/#/tasks/all");

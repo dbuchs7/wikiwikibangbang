@@ -505,7 +505,8 @@ func (h itemHandlers) searchItems(w http.ResponseWriter, r *http.Request) {
 		}
 		out := make([]hitJSON, len(page))
 		for i, hit := range page {
-			out[i] = hitJSON{Item: toItemJSON(hit.Item), Score: hit.Score, Stars: hit.Stars, Snippet: hit.Snippet, Comment: hit.Comment}
+			out[i] = hitJSON{Item: toItemJSON(hit.Item), Score: hit.Score, Stars: hit.Stars, Snippet: hit.Snippet, Comment: hit.Comment,
+				Matched: nonNil(hit.Matched), Missing: nonNil(hit.Missing)}
 		}
 		res["hits"] = out
 		return res, nil
@@ -520,6 +521,17 @@ type hitJSON struct {
 	Snippet string `json:"snippet,omitempty"`
 	// Comment is the comment the snippet comes from (ADR-0035).
 	Comment item.ID `json:"comment,omitempty"`
+	// Matched and Missing are the words of the search the item holds and
+	// does not, as typed (ADR-0083).
+	Matched []string `json:"matched"`
+	Missing []string `json:"missing"`
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // parseLimit reads the page size, 100 by default; it answers 400 itself.
