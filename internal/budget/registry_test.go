@@ -37,6 +37,8 @@ var classified = map[string]string{
 	"internal/opendata/ckan.go:maxAnswer": "the same bound, where the answer is read",
 	"internal/opendata.maxDatasets": "the size of one synchronisation run (ADR-0075), so a misbehaving source cannot make it endless; " +
 		"not memory a caller of this server can claim",
+	"internal/item.maxColumns":       "the shape of a kanban (ADR-0076), like the length of its name; a definition of the space, not memory a caller claims",
+	"internal/item.maxCardFields":    "the shape of a kanban's cards (ADR-0076): how many fields a card shows",
 	"internal/auth.MaxFailures":      "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
 	"internal/auth.MaxTokenLifetime": "a security policy (ADR-0027): how long an API token may live",
 	"internal/auth.MaxReasonLength":  "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",

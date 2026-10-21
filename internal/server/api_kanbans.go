@@ -14,7 +14,10 @@ func kanbanRoutes(h itemHandlers) []Route {
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/kanbans", Summary: "The kanbans of the spaces one holds a role in (space narrows them)", Handler: http.HandlerFunc(h.kanbans)},
 		{Method: http.MethodPost, Pattern: "/api/spaces/{space}/kanbans", Summary: "Make a kanban: a name, a type with a workflow and, optionally, the label of its cards (editors)", Handler: http.HandlerFunc(h.createKanban)},
-		{Method: http.MethodPut, Pattern: "/api/spaces/{space}/kanbans/{id}", Summary: "Rename a kanban (editors)", Handler: http.HandlerFunc(h.renameKanban)},
+		{Method: http.MethodPut, Pattern: "/api/spaces/{space}/kanbans/{id}", Summary: "Change a kanban: its name, its columns (states renamed and ordered, columns of its own) and the fields its cards show (editors)", Handler: http.HandlerFunc(h.renameKanban)},
+		{Method: http.MethodGet, Pattern: "/api/spaces/{space}/kanbans/{id}/board", Summary: "A kanban's columns with the cards one may read, in their order (ADR-0076)", Handler: http.HandlerFunc(h.kanbanBoard)},
+		{Method: http.MethodPost, Pattern: "/api/spaces/{space}/kanbans/{id}/place", Summary: "Put a card in a column, before another card or last; a column of a state performs the transition to it (who may edit the card)", Handler: http.HandlerFunc(h.placeCard)},
+		{Method: http.MethodPost, Pattern: "/api/types/{name}/transitions", Summary: "Add a transition from one state to another to a type's workflow, so a card can move there on a kanban (administrators)", Handler: http.HandlerFunc(h.addTransition)},
 		{Method: http.MethodDelete, Pattern: "/api/spaces/{space}/kanbans/{id}", Summary: "Remove a kanban; its cards keep their label (editors)", Handler: http.HandlerFunc(h.removeKanban)},
 	}
 }
@@ -25,10 +28,27 @@ type kanbanJSON struct {
 	Name  string  `json:"name"`
 	Type  string  `json:"type"`
 	Label string  `json:"label"`
+	// Columns are the kanban's own columns, empty for the workflow's
+	// states; CardFields what its cards show (ADR-0076).
+	Columns    []columnJSON `json:"columns"`
+	CardFields []string     `json:"cardFields"`
+}
+
+type columnJSON struct {
+	ID    item.ID `json:"id,omitempty"`
+	Name  string  `json:"name"`
+	State string  `json:"state,omitempty"`
+	// Cards are the column's cards in their order, on a board.
+	Cards []item.ID `json:"cards,omitempty"`
 }
 
 func toKanbanJSON(space string, k item.Kanban) kanbanJSON {
-	return kanbanJSON{ID: k.ID, Space: space, Name: k.Name, Type: k.Type, Label: k.Label}
+	j := kanbanJSON{ID: k.ID, Space: space, Name: k.Name, Type: k.Type, Label: k.Label, Columns: []columnJSON{}, CardFields: []string{}}
+	for _, c := range k.Columns {
+		j.Columns = append(j.Columns, columnJSON{ID: c.ID, Name: c.Name, State: c.State})
+	}
+	j.CardFields = append(j.CardFields, k.CardFields...)
+	return j
 }
 
 func (h itemHandlers) kanbans(w http.ResponseWriter, r *http.Request) {
@@ -67,15 +87,85 @@ func (h itemHandlers) createKanban(w http.ResponseWriter, r *http.Request) {
 
 func (h itemHandlers) renameKanban(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name string `json:"name"`
+		Name       string        `json:"name"`
+		Columns    *[]columnJSON `json:"columns"`
+		CardFields *[]string     `json:"cardFields"`
 	}
 	if !decode(w, r, &req) {
 		return
 	}
 	space := r.PathValue("space")
+	k := item.Kanban{ID: item.ID(r.PathValue("id")), Name: req.Name}
+	if req.Columns != nil {
+		k.Columns = []item.KanbanColumn{}
+		for _, c := range *req.Columns {
+			k.Columns = append(k.Columns, item.KanbanColumn{ID: c.ID, Name: c.Name, State: c.State})
+		}
+	}
+	if req.CardFields != nil {
+		k.CardFields = append([]string{}, *req.CardFields...)
+	}
 	h.write(w, r, http.StatusOK, func(x *item.Session, _ *item.Store) (any, error) {
-		k, err := x.SetKanban(space, item.Kanban{ID: item.ID(r.PathValue("id")), Name: req.Name})
+		k, err := x.SetKanban(space, k)
 		return map[string]kanbanJSON{"kanban": toKanbanJSON(space, k)}, err
+	})
+}
+
+// kanbanBoard answers a kanban's columns with the cards one may read
+// (ADR-0076); the cards themselves come from the item listing.
+func (h itemHandlers) kanbanBoard(w http.ResponseWriter, r *http.Request) {
+	space := r.PathValue("space")
+	h.read(w, r, func(x *item.Session) (any, error) {
+		k, board, err := x.Board(space, item.ID(r.PathValue("id")))
+		if err != nil {
+			return nil, err
+		}
+		cols := []columnJSON{}
+		for _, c := range board {
+			cols = append(cols, columnJSON{ID: c.ID, Name: c.Name, State: c.State, Cards: c.Cards})
+		}
+		return map[string]any{"kanban": toKanbanJSON(space, k), "columns": cols}, nil
+	})
+}
+
+func (h itemHandlers) placeCard(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Card   string  `json:"card"`
+		Column item.ID `json:"column"`
+		Before string  `json:"before"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	space := r.PathValue("space")
+	h.write(w, r, http.StatusNoContent, func(x *item.Session, _ *item.Store) (any, error) {
+		card, err := resolveItem(x, req.Card)
+		if err != nil {
+			return nil, err
+		}
+		var before item.ID
+		if req.Before != "" {
+			b, err := resolveItem(x, req.Before)
+			if err != nil {
+				return nil, err
+			}
+			before = b.ID
+		}
+		return nil, x.PlaceCard(space, item.ID(r.PathValue("id")), card.ID, req.Column, before)
+	})
+}
+
+func (h itemHandlers) addTransition(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	h.write(w, r, http.StatusOK, func(x *item.Session, _ *item.Store) (any, error) {
+		td, err := x.AddTransition(r.PathValue("name"), req.From, req.To)
+		return map[string]typeJSON{"type": toTypeJSON(td)}, err
 	})
 }
 

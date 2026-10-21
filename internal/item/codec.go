@@ -55,7 +55,9 @@ import (
 //     Versions 1 to 16 are still read.
 //   - 18: a type may have url fields, unique and recommended fields and a
 //     review rule (ADR-0074). Versions 1 to 17 are still read.
-const CodecVersion = 18
+//   - 19: a kanban may have columns and card fields, and the kind
+//     KanbanCardPlaced (ADR-0076). Versions 1 to 18 are still read.
+const CodecVersion = 19
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

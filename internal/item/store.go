@@ -28,7 +28,11 @@ type Store struct {
 	types  map[string][]TypeDef // all versions, oldest first
 	spaces map[string]*space
 	// kanbans are the kanbans of each space, in the order made (ADR-0060).
-	kanbans  map[string][]Kanban
+	kanbans map[string][]Kanban
+	// placed holds where cards were put on each kanban (ADR-0076):
+	// kanban → item → placement, and kanban → column → order.
+	placed   map[ID]map[ID]placement
+	orders   map[ID]map[ID][]ID
 	items    map[ID]*Item
 	keys     map[string]ID // current and former keys (D2)
 	rels     map[ID]*Relation
@@ -817,7 +821,7 @@ func (s *Store) apply(e Event) {
 		s.applyAttachment(e, touch)
 	case HoldSet, HoldReleased:
 		s.applyHold(e, touch)
-	case KanbanSet, KanbanRemoved:
+	case KanbanSet, KanbanRemoved, KanbanCardPlaced:
 		s.applyKanban(e)
 	case SpaceTrashed, SpaceRestored, SpacePurged:
 		s.applySpace(e, touch)

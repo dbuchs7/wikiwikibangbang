@@ -278,6 +278,10 @@ const (
 	// it (ADR-0060).
 	KanbanSet     EventKind = "KanbanSet"
 	KanbanRemoved EventKind = "KanbanRemoved"
+	// KanbanCardPlaced puts a card in a column of a kanban, at a place
+	// among the column's cards (ADR-0076): Kanban names the kanban, Field
+	// the column, To the card's state then, Order the column's cards.
+	KanbanCardPlaced EventKind = "KanbanCardPlaced"
 	// SpaceTrashed puts a space with everything in it out of sight,
 	// SpaceRestored brings it back, SpacePurged turns its items into
 	// tombstones and keeps only its key (ADR-0069).
@@ -337,7 +341,7 @@ type Event struct {
 	Attachment  *Attachment  // AttachmentAdded; AttachmentDeleted: only its ID
 	Hold        *Hold        // HoldSet: the hold as it is after the event
 	Outcome     string       // HoldReleased: HoldRestricted or HoldFalseAlarm; Text holds the reason
-	Kanban      *Kanban      // KanbanSet; KanbanRemoved: only its ID
+	Kanban      *Kanban      // KanbanSet; KanbanRemoved and KanbanCardPlaced: only its ID
 
 	// Erased is set on an event whose content (title, properties, body, raw
 	// source) was removed because its item was purged or redacted. The

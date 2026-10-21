@@ -841,6 +841,29 @@ function ckanSource() {
     await page.goto(base + "/#/kanbans");
     await page.waitForSelector("#kanbans .space-tile:has-text('Operations'):has-text('1 card')"); // still on the other kanban
 
+    step("kanban board: details beside the board, the fields cards show, an own column, cards moved back and forth");
+    await page.click("#kanbans .space-tile:has-text('Website relaunch')");
+    await page.click("#kanban .card-item:has-text('Hero image') .card-title");
+    await page.waitForSelector("#kanban-detail:not([hidden]) h2:has-text('Hero image')");
+    check(/[?&]card=/.test(page.url()), "the open card is in the address");
+    await page.click("#kanban-settings summary");
+    await page.check("#kanban-card-fields input[value=priority]");
+    await page.fill("#kanban-new-column", "Blocked");
+    await page.click("#kanban-add-column");
+    await page.click("#kanban-settings-save");
+    await page.waitForSelector("#kanban .own-column h2:has-text('Blocked')");
+    await page.waitForSelector("#kanban-detail:not([hidden]) tr[data-field=priority] select"); // still open after the redraw
+    await page.selectOption("#kanban-detail tr[data-field=priority] select", "high");
+    await page.waitForSelector("#kanban .card-item:has-text('Hero image') .card-facts dd:text-is('high')");
+    await page.dragAndDrop("#kanban .card-item:has-text('Hero image')", "#kanban .own-column");
+    await page.waitForSelector("#kanban .own-column .card-item:has-text('Hero image')");
+    await page.dragAndDrop("#kanban .card-item:has-text('Hero image')", "#kanban .board-column[data-state=closed]");
+    await page.waitForSelector("#kanban .board-column[data-state=closed] .card-item:has-text('Hero image')");
+    // Back to open: the workflow has no such transition; an administrator adds it.
+    await page.dragAndDrop("#kanban .card-item:has-text('Hero image')", "#kanban .board-column[data-state=open]");
+    await page.click("#kanban-add-transition");
+    await page.waitForSelector("#kanban .board-column[data-state=open] .card-item:has-text('Hero image')");
+
     step("account requests: someone asks at the sign-in page, an administrator approves, the new account sets its message channels");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");

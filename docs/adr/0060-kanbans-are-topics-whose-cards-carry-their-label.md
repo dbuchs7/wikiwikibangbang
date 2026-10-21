@@ -55,4 +55,5 @@ Strongest form: nothing new to store.
 
 ## Links
 
+- amended by [ADR-0076](0076-kanban-columns-card-fields-and-free-moves.md) (columns of the kanban's own, card fields, order per kanban)
 - relates to ADR-0036 (boards), ADR-0044 (labels), ADR-0049 (task inbox)

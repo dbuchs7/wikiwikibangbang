@@ -17,10 +17,49 @@ type Kanban struct {
 	Name  string
 	Type  string
 	Label string
+	// Columns, when set, are the kanban's columns in their order: one per
+	// workflow state, renamed as wished, and columns of its own that hold
+	// no state (ADR-0076). Unset, the columns are the workflow's states.
+	Columns []KanbanColumn
+	// CardFields name what a card shows besides its key and title: fields
+	// of the type, or "labels" and "state".
+	CardFields []string
+}
+
+// KanbanColumn is a column of a kanban. A column with a State holds the
+// cards in that state, and putting a card there performs the transition
+// to it; a column without one is the kanban's own, e.g. "Review", and
+// putting a card there leaves its state as it is.
+type KanbanColumn struct {
+	ID    ID
+	Name  string
+	State string
+}
+
+// stateColumn is the ID of the column of a workflow state.
+func stateColumn(state string) ID { return ID("state:" + state) }
+
+// placement is where a card was put on a kanban: in a column, while it
+// was in a state.
+type placement struct {
+	Column ID
+	State  string
 }
 
 func (s *Store) applyKanban(e Event) {
 	if e.Kanban == nil {
+		return
+	}
+	if e.Kind == KanbanCardPlaced {
+		k := e.Kanban.ID
+		if s.placed == nil {
+			s.placed, s.orders = map[ID]map[ID]placement{}, map[ID]map[ID][]ID{}
+		}
+		if s.placed[k] == nil {
+			s.placed[k], s.orders[k] = map[ID]placement{}, map[ID][]ID{}
+		}
+		s.placed[k][e.Item] = placement{Column: ID(e.Field), State: e.To}
+		s.orders[k][ID(e.Field)] = slices.Clone(e.Order)
 		return
 	}
 	list := s.kanbans[e.Space]
@@ -55,9 +94,11 @@ func (x *Session) Kanbans(space string) map[string][]Kanban {
 	return out
 }
 
-// SetKanban makes a kanban in a space or renames one; editors of the space
-// may. A new kanban's label is its name as a label unless one is given; a
-// kanban's type and label do not change, so its cards stay its cards.
+// SetKanban makes a kanban in a space or changes one; editors of the
+// space may. A new kanban's label is its name as a label unless one is
+// given; a kanban's type and label do not change, so its cards stay its
+// cards. When changing a kanban, Columns and CardFields left nil keep
+// what the kanban has.
 func (x *Session) SetKanban(space string, k Kanban) (Kanban, error) {
 	if _, ok := x.s.spaces[space]; !ok || x.s.spaceRole(x.who, space) < Viewer {
 		return Kanban{}, notFound("space %q", space)
@@ -76,6 +117,12 @@ func (x *Session) SetKanban(space string, k Kanban) (Kanban, error) {
 			return Kanban{}, notFound("kanban %s in %s", k.ID, space)
 		}
 		k.Type, k.Label = list[i].Type, list[i].Label
+		if k.Columns == nil {
+			k.Columns = list[i].Columns
+		}
+		if k.CardFields == nil {
+			k.CardFields = list[i].CardFields
+		}
 	} else {
 		td, ok := x.s.latest(k.Type)
 		if !ok || td.Workflow == nil {
@@ -94,7 +141,259 @@ func (x *Session) SetKanban(space string, k Kanban) (Kanban, error) {
 		}
 		k.ID = x.s.newID()
 	}
+	td, _ := x.s.latest(k.Type)
+	if err := x.s.checkColumns(&k, td); err != nil {
+		return Kanban{}, err
+	}
+	if err := checkCardFields(k.CardFields, td); err != nil {
+		return Kanban{}, err
+	}
 	return k, x.s.record(x.who, Event{Kind: KanbanSet, Space: space, Kanban: &k})
+}
+
+// maxColumns and maxCardFields bound what a kanban shows.
+const (
+	maxColumns    = 30
+	maxCardFields = 12
+)
+
+// checkColumns checks a kanban's own columns and gives new ones an ID: a
+// state at most once, a name of 1 to 40 characters, no ID twice.
+func (s *Store) checkColumns(k *Kanban, td TypeDef) error {
+	if len(k.Columns) == 0 {
+		k.Columns = nil
+		return nil
+	}
+	if len(k.Columns) > maxColumns {
+		return invalid("a kanban has at most %d columns", maxColumns)
+	}
+	ids, states := map[ID]bool{}, map[string]bool{}
+	for i := range k.Columns {
+		c := &k.Columns[i]
+		c.Name = strings.TrimSpace(c.Name)
+		if c.Name == "" || utf8.RuneCountInString(c.Name) > 40 || strings.ContainsAny(c.Name, "\r\n") {
+			return invalid("a column's name is a single line of 1 to 40 characters")
+		}
+		switch {
+		case c.State != "":
+			if td.Workflow == nil || !slices.Contains(td.Workflow.States, c.State) {
+				return invalid("%s has no state %q", td.Name, c.State)
+			}
+			if states[c.State] {
+				return invalid("the state %q has two columns", c.State)
+			}
+			states[c.State] = true
+			c.ID = stateColumn(c.State)
+		case c.ID == "" || strings.HasPrefix(string(c.ID), "state:"):
+			c.ID = s.newID()
+		}
+		if ids[c.ID] {
+			return invalid("the column %s appears twice", c.ID)
+		}
+		ids[c.ID] = true
+	}
+	return nil
+}
+
+func checkCardFields(names []string, td TypeDef) error {
+	if len(names) > maxCardFields {
+		return invalid("a card shows at most %d fields", maxCardFields)
+	}
+	seen := map[string]bool{}
+	for _, n := range names {
+		if _, ok := td.field(n); !ok && n != "labels" && n != "state" {
+			return invalid("type %q has no field %q to show on a card", td.Name, n)
+		}
+		if seen[n] {
+			return invalid("the field %q is shown twice", n)
+		}
+		seen[n] = true
+	}
+	return nil
+}
+
+// Columns are a kanban's columns as they show: its own, or the
+// workflow's states; a state the columns miss, e.g. one added to the
+// workflow later, gets a column at the end.
+func (k Kanban) columns(td TypeDef) []KanbanColumn {
+	out := slices.Clone(k.Columns)
+	if td.Workflow == nil {
+		return out
+	}
+	for _, st := range td.Workflow.States {
+		if !slices.ContainsFunc(out, func(c KanbanColumn) bool { return c.State == st }) {
+			out = append(out, KanbanColumn{ID: stateColumn(st), Name: st, State: st})
+		}
+	}
+	return out
+}
+
+func (x *Session) kanban(space string, id ID) (Kanban, error) {
+	if x.s.spaceRole(x.who, space) < Viewer {
+		return Kanban{}, notFound("space %q", space)
+	}
+	i := slices.IndexFunc(x.s.kanbans[space], func(o Kanban) bool { return o.ID == id })
+	if i < 0 {
+		return Kanban{}, notFound("kanban %s in %s", id, space)
+	}
+	return x.s.kanbans[space][i], nil
+}
+
+// BoardColumn is a column of a kanban with its cards, in their order.
+type BoardColumn struct {
+	KanbanColumn
+	Cards []ID
+}
+
+// Board lays a kanban's cards out that the principal may read: each in
+// the column it was put in while it is still in the state it was put
+// there in, otherwise in the column of its state; within a column in the
+// order they were put, then in the order they were made.
+func (x *Session) Board(space string, id ID) (Kanban, []BoardColumn, error) {
+	k, err := x.kanban(space, id)
+	if err != nil {
+		return k, nil, err
+	}
+	td, _ := x.s.latest(k.Type)
+	cols := k.columns(td)
+	out := make([]BoardColumn, len(cols))
+	index := map[ID]int{}
+	for i, c := range cols {
+		out[i] = BoardColumn{KanbanColumn: c, Cards: []ID{}}
+		index[c.ID] = i
+	}
+	var cards []*Item
+	for _, it := range x.s.items {
+		if it.Presence == Live && it.Space == space && it.Type == k.Type && slices.Contains(it.Labels, k.Label) && x.s.canRead(x.who, it) {
+			cards = append(cards, it)
+		}
+	}
+	slices.SortFunc(cards, func(a, b *Item) int { return a.created - b.created })
+	for _, it := range cards {
+		col := -1
+		if p, ok := x.s.placed[k.ID][it.ID]; ok && p.State == it.State {
+			if i, ok := index[p.Column]; ok && (cols[i].State == "" || cols[i].State == it.State) {
+				col = i
+			}
+		}
+		if col < 0 {
+			col = slices.IndexFunc(cols, func(c KanbanColumn) bool { return c.State == it.State })
+		}
+		if col < 0 {
+			col = 0
+		}
+		out[col].Cards = append(out[col].Cards, it.ID)
+	}
+	for i := range out {
+		order := x.s.orders[k.ID][out[i].ID]
+		rank := func(id ID) int {
+			if r := slices.Index(order, id); r >= 0 {
+				return r
+			}
+			return len(order)
+		}
+		slices.SortStableFunc(out[i].Cards, func(a, b ID) int { return rank(a) - rank(b) })
+	}
+	return k, out, nil
+}
+
+// PlaceCard puts a card in a column of a kanban, before another card or
+// last (ADR-0076). Whoever may edit the card may. A column of a state
+// performs the transition to that state first — the workflow must have
+// one from the card's state (D3); a column of the kanban's own leaves the
+// state as it is.
+func (x *Session) PlaceCard(space string, kanban, card ID, column, before ID) error {
+	k, err := x.kanban(space, kanban)
+	if err != nil {
+		return err
+	}
+	it, err := x.s.live(card)
+	if err != nil || !x.s.canRead(x.who, it) {
+		return notFound("item %s", card)
+	}
+	if it.Space != space || it.Type != k.Type || !slices.Contains(it.Labels, k.Label) {
+		return invalid("%s is not a card of the kanban %s", it.Key, k.Name)
+	}
+	if !x.s.canEdit(x.who, it) || it.Managed != "" {
+		return forbidden("%s may not move %s", x.who, it.Key)
+	}
+	td, _ := x.s.latest(k.Type)
+	cols := k.columns(td)
+	i := slices.IndexFunc(cols, func(c KanbanColumn) bool { return c.ID == column })
+	if i < 0 {
+		return notFound("column %s of the kanban %s", column, k.Name)
+	}
+	if to := cols[i].State; to != "" && to != it.State {
+		var names []string
+		for _, tr := range td.Workflow.Transitions {
+			if tr.To == to && slices.Contains(tr.From, it.State) {
+				names = append(names, tr.Name)
+			}
+		}
+		switch len(names) {
+		case 0:
+			return invalid("the workflow of %s has no transition from %s to %s; add one to the type", td.Name, it.State, to)
+		case 1:
+			if err := x.Transition(card, names[0]); err != nil {
+				return err
+			}
+		default:
+			return invalid("the workflow of %s has several transitions from %s to %s (%s); choose one on the card", td.Name, it.State, to, strings.Join(names, ", "))
+		}
+	}
+	_, board, _ := x.Board(space, kanban)
+	var order []ID
+	for _, c := range board {
+		if c.ID == column {
+			order = slices.DeleteFunc(slices.Clone(c.Cards), func(id ID) bool { return id == card })
+		}
+	}
+	if j := slices.Index(order, before); before != "" && j >= 0 {
+		order = slices.Insert(order, j, card)
+	} else {
+		order = append(order, card)
+	}
+	return x.s.record(x.who, Event{Kind: KanbanCardPlaced, Space: space, Item: card, Kanban: &Kanban{ID: kanban},
+		Field: string(column), To: x.s.items[card].State, Order: order})
+}
+
+// AddTransition adds a transition to the latest version of a type, so a
+// card can move between two states on a kanban (ADR-0076): named "to
+// <state>", from the given state; an existing one of that name gains the
+// state to start from. Administrators may, as they define types.
+func (x *Session) AddTransition(typeName, from, to string) (TypeDef, error) {
+	if !x.s.HasSystemRole(x.who, RoleAdmin) {
+		return TypeDef{}, forbidden("%s may not change types", x.who)
+	}
+	td, ok := x.s.latest(typeName)
+	if !ok || td.Workflow == nil {
+		return TypeDef{}, notFound("type %q with a workflow", typeName)
+	}
+	if !slices.Contains(td.Workflow.States, from) || !slices.Contains(td.Workflow.States, to) || from == to {
+		return TypeDef{}, invalid("%s → %s is not a move between two states of %s", from, to, typeName)
+	}
+	wf := *td.Workflow
+	wf.Transitions = slices.Clone(wf.Transitions)
+	name := "to " + to
+	if j := slices.IndexFunc(wf.Transitions, func(tr Transition) bool { return tr.Name == name }); j >= 0 {
+		tr := wf.Transitions[j]
+		if tr.To != to {
+			return TypeDef{}, invalid("%s has a transition %q to another state", typeName, name)
+		}
+		if slices.Contains(tr.From, from) {
+			return td, nil
+		}
+		tr.From = append(slices.Clone(tr.From), from)
+		wf.Transitions[j] = tr
+	} else {
+		wf.Transitions = append(wf.Transitions, Transition{Name: name, From: []string{from}, To: to})
+	}
+	td.Workflow = &wf
+	if err := x.s.DefineType(x.who, td); err != nil {
+		return TypeDef{}, err
+	}
+	td, _ = x.s.latest(typeName)
+	return td, nil
 }
 
 // RemoveKanban removes a kanban; its items keep their label.
