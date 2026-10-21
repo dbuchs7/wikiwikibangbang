@@ -80,7 +80,7 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	if status["credentialVar"] != "WWBB_CONNECTOR_WETTER_TOKEN" || status["credential"] != false {
 		t.Errorf("credential %s", jsonOf(status))
 	}
-	found := w.bert.expect("GET", "/api/items?space=PLAT&type=interface&where=source-id%3Dr1", "", http.StatusOK)
+	found := w.bert.expect("GET", "/api/items?space=PLAT&type=interface&where=source-id%3Dd1", "", http.StatusOK)
 	items := found["items"].([]any)
 	if len(items) != 1 || !strings.Contains(jsonOf(items[0]), `"url":"https://opendata.swiss/de/dataset/wetter"`) ||
 		!strings.Contains(jsonOf(items[0]), `"system":"wetter"`) || field(items[0].(map[string]any), "properties", "owner") != w.ids["bert"] {

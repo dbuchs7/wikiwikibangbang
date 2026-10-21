@@ -1012,12 +1012,33 @@ async function homeView() {
   const greeting = hour < 11 ? t("home.morning") : hour < 18 ? t("home.day") : t("home.evening");
   const name = brand.name || "wikiwikibangbang";
   const quick = (href, title, text, id, extra) => h("a", { class: "home-tile", href, id }, h("strong", { text: title }), h("span", { class: "muted", text }), extra || null);
+  // How much the wiki holds that one may read: pages, tasks (open and
+  // done) and pictures in the album. Counted after the page is shown.
+  const stats = h("p", { class: "home-stats", id: "home-stats", "aria-live": "polite" });
+  const count = (total) => (total.exact ? "" : "≥ ") + total.value;
+  const totalOf = (url) => get(url).then((r) => r.total).catch(() => null);
+  Promise.all([
+    totalOf("/api/items?type=page&limit=1"),
+    Promise.all(types.filter(isTaskType).map((ty) => totalOf(`/api/items?type=${encodeURIComponent(ty.name)}&limit=1`))),
+    get("/api/album?limit=1").then((r) => ({ exact: true, value: r.total })).catch(() => null),
+  ]).then(([pages, tasks, album]) => {
+    tasks = tasks.filter(Boolean);
+    const sum = tasks.length ? { exact: tasks.every((x) => x.exact), value: tasks.reduce((n, x) => n + x.value, 0) } : { exact: true, value: 0 };
+    const stat = (id, href, total, key) => h(href ? "a" : "span", { class: "home-stat", href, id },
+      h("strong", { text: count(total) }), " ", h("span", { text: t(key, { n: total.value }) }));
+    stats.replaceChildren(...[
+      pages && stat("home-pages", null, pages, "home.statPages"),
+      stat("home-task-count", "#/tasks/all", sum, "home.statTasks"),
+      album && stat("home-album-count", "#/album", album, "home.statAlbum"),
+    ].filter(Boolean));
+  });
   const findings = notes.findings ? notes.findings.sensitive + notes.findings.stale + notes.findings.implausible + (notes.findings.personal || 0) + (notes.findings.reviews || 0) : 0;
   show(
     h("section", { class: "welcome", id: "welcome" },
       h("div", { class: "welcome-text" },
         h("h1", { text: `${greeting}, ${me.user.username}` }),
         h("p", { class: "welcome-lead", text: t("home.lead", { name }) }),
+        stats,
         h("p", { class: "actions-row" },
           anyEditable ? link("#/new", t("home.newPage"), "button primary") : null,
           link("#/tasks", t("home.myTasks"), "button"))),
@@ -1336,8 +1357,18 @@ function boardOf(items, type, status, cardTail) {
 // taskType is the type "New task" creates: "task" when it has a workflow,
 // else the first type with one.
 function taskType(types) {
-  const flows = types.filter((ty) => ty.workflow);
+  const flows = types.filter(isTaskType);
   return (flows.find((ty) => ty.name === "task") || flows[0])?.name || "";
+}
+
+// isTaskType tells the types whose items are work to do (ADR-0049): a
+// workflow, and the name task or a field for whom it is assigned to or
+// when it is due. A catalog entry has a workflow and an owner, but is no
+// task (ADR-0080).
+function isTaskType(ty) {
+  if (!ty.workflow) return false;
+  const f = taskFields(ty);
+  return ty.name === "task" || Boolean(f.due) || ty.fields.some((x) => x.kind === "user" && /^(assignee|zugewiesen|bearbeiter)/i.test(x.name));
 }
 
 function taskFields(type) {
@@ -1391,7 +1422,7 @@ async function tasksView(tab, params) {
   // A label that is a kanban's links to its board: a task on a kanban is
   // in the list as well (ADR-0060).
   const kanbanOf = new Map(kanbans.map((k) => [`${k.space}\n${k.label}`, k]));
-  const typeOf = new Map(types.filter((ty) => ty.workflow).map((ty) => [ty.name, { ty, f: taskFields(ty) }]));
+  const typeOf = new Map(types.filter(isTaskType).map((ty) => [ty.name, { ty, f: taskFields(ty) }]));
   let page = await get("/api/items?limit=100");
   const items = [...page.items];
   while (page.next && items.length < boardMax) {
@@ -3549,6 +3580,9 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       h("p", { class: "muted" }, t("catalog.formatsHelp", { defaults: data.templates[0].ckan.formats.join(", ") }), " ",
         h("button", { type: "button", class: "link", id: "connector-source-formats", text: t("catalog.showFormats"), onclick: showFormats })),
       formatsBox,
+      field(t("connector.language"), h("select", { name: "language" }, [["de", "Deutsch"], ["fr", "Français"], ["it", "Italiano"], ["en", "English"]]
+        .map(([v, text]) => h("option", { value: v, text, selected: v === (k.language || "de") })))),
+      h("p", { class: "muted", text: t("connector.languageHelp") }),
       field(t("catalog.organizations"), h("input", { name: "organizations", value: k.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
       h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
       field(t("catalog.steward"), h("select", { name: "steward" }, h("option", { value: "", text: "—" }),
@@ -3575,7 +3609,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       const body = {
         id: d.get("id").trim(), name: d.get("name").trim(), kind: c.kind, enabled: d.get("enabled") === "on", space: d.get("space"),
         steward: d.get("steward"), intervalHours: Number(d.get("intervalHours")),
-        ckan: { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim() },
+        ckan: { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(), language: d.get("language") },
       };
       const kept = c.isNew ? await post("/api/connectors", body) : await put(path, body);
       reopen(kept.id);

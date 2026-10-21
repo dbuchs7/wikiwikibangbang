@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
@@ -109,24 +111,41 @@ func TestEntriesReadTheShapesOfThePortal(t *testing.T) {
 		}
 		ds = append(ds, d)
 	}
-	entries, problems := Entries(ds, []string{"api", "WMS", "WFS"}, "https://opendata.swiss/de/dataset/")
-	if len(entries) != 4 || len(problems) != 1 {
+	entries, problems := Entries(ds, []string{"api", "WMS", "WFS"}, "https://opendata.swiss/de/dataset/", "de", "opendata.swiss")
+	if len(entries) != 3 || len(problems) != 0 {
 		t.Fatalf("entries %+v\nproblems %v", entries, problems)
 	}
 	want := []Entry{
-		{SourceID: "r1", Dataset: "wetterdaten", Title: "Wetterdaten", Format: "API", Endpoint: "https://api.meteo.example/v1", Specification: "https://api.meteo.example/docs",
-			Publisher: "MeteoSchweiz", Contact: "API-Team <api@meteo.example>", DatasetURL: "https://opendata.swiss/de/dataset/wetterdaten", Modified: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)},
-		{SourceID: "r3", Dataset: "geodaten", Title: "Geodaten – Karten", Format: "WMS", Endpoint: "https://wms.geo.example", Specification: "https://geo.example/manual",
-			Publisher: "swisstopo FR", DatasetURL: "https://opendata.swiss/de/dataset/geodaten", Modified: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)},
-		{SourceID: "r4", Dataset: "geodaten", Title: "Geodaten – WFS", Format: "WFS", Endpoint: "https://wfs.geo.example", Specification: "https://geo.example/manual",
-			Publisher: "swisstopo FR", DatasetURL: "https://opendata.swiss/de/dataset/geodaten", Modified: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)},
-		{SourceID: "r5", Dataset: "fahrplan", Title: "Fahrplan – API", Format: "API", Endpoint: "https://transport.example/api",
-			Publisher: "SBB", Contact: "open@sbb.example", DatasetURL: "https://opendata.swiss/de/dataset/fahrplan"},
+		{SourceID: "d1", Dataset: "wetterdaten", Title: "Wetterdaten", Format: "API", Endpoint: "https://api.meteo.example/v1", Specification: "https://api.meteo.example/docs",
+			Publisher: "MeteoSchweiz", Contact: "API-Team <api@meteo.example>", DatasetURL: "https://opendata.swiss/de/dataset/wetterdaten",
+			Modified: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC), Resources: []string{"r1"}},
+		{SourceID: "d2", Dataset: "geodaten", Title: "Geodaten", Format: "WMS, WFS", Endpoint: "https://wms.geo.example", Specification: "https://geo.example/manual",
+			Publisher: "swisstopo FR", DatasetURL: "https://opendata.swiss/de/dataset/geodaten", Modified: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC),
+			Resources: []string{"r3", "r4"}},
+		{SourceID: "d3", Dataset: "fahrplan", Title: "Fahrplan", Format: "API", Endpoint: "https://transport.example/api",
+			Publisher: "SBB", Contact: "open@sbb.example", DatasetURL: "https://opendata.swiss/de/dataset/fahrplan", Resources: []string{"r5"}},
 	}
 	for i := range want {
-		if entries[i] != want[i] {
-			t.Errorf("entry %d\n got %+v\nwant %+v", i, entries[i], want[i])
+		got := entries[i]
+		got.Body = nil
+		if !reflect.DeepEqual(got, want[i]) {
+			t.Errorf("entry %d\n got %+v\nwant %+v", i, got, want[i])
 		}
+		for j, b := range entries[i].Body {
+			if err := item.CheckBlock(b, "x"); err != nil {
+				t.Errorf("entry %d block %d %+v: %v", i, j, b, err)
+			}
+		}
+	}
+	text := pageText(entries[1].Body)
+	for _, part := range []string{"wird bei jedem Abgleich aus opendata.swiss geschrieben", "Schnittstellen", "Karten", "Format\tWMS",
+		"Download: https://wfs.geo.example", "Dokumentation: https://geo.example/manual", "Datensatz in der Quelle: https://opendata.swiss/de/dataset/geodaten"} {
+		if !strings.Contains(text, part) {
+			t.Errorf("the page of geodaten lacks %q:\n%s", part, text)
+		}
+	}
+	if !strings.Contains(pageText(entries[0].Body), "Weitere Ressourcen") || !strings.Contains(pageText(entries[0].Body), "(CSV): https://meteo.example/data.csv") {
+		t.Errorf("the other resources of wetterdaten:\n%s", pageText(entries[0].Body))
 	}
 	var pub Text
 	json.Unmarshal([]byte(`{"name":"Only a name","url":"https://x"}`), &pub)
@@ -149,6 +168,86 @@ func TestEntriesReadTheShapesOfThePortal(t *testing.T) {
 	}
 	if !parseDate("garbage").IsZero() || parseDate("2026-01-02T03:04:05Z").Day() != 2 {
 		t.Error("dates")
+	}
+}
+
+// pageText is a page's blocks as text, one block per line.
+func pageText(blocks []item.Block) string {
+	var lines []string
+	for _, b := range blocks {
+		lines = append(lines, b.Text)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Everything the source says of a data set is on its page: the fields
+// read by name, in the page's language, and every other field of the
+// answer under further details.
+func TestThePageShowsAllTheSourceSays(t *testing.T) {
+	raw := `{"id":"d7","name":"luft","title":{"de":"Luft","fr":"Air"},"description":{"de":"Messwerte.\n\nStündlich.","fr":"Mesures."},
+		"keywords":{"de":["Luft","Ozon"],"fr":["air"]},"groups":[{"name":"envi","title":{"de":"Umwelt"}}],"license_title":"Open use",
+		"temporals":[{"start_date":"2020-01-01T00:00:00","end_date":"2025-12-31"}],"accrual_periodicity":"http://publications.europa.eu/resource/authority/frequency/HOURLY",
+		"language":["de","fr"],"spatial":"Schweiz","identifier":"luft@bafu","url":"https://bafu.example/luft","issued":"2020-02-01",
+		"relations":[{"label":{"de":"Methode"},"url":"https://bafu.example/methode"}],"tags":[{"name":"ozon"}],
+		"coverage":"Nur Messnetz","see_alsos":[],"qualified":{"x":1},"count":3,"flag":true,"empty":"","nothing":null,
+		"resources":[{"id":"r7","format":"API","title":{"de":"Messwerte-API"},"description":{"de":"JSON über HTTPS"},"media_type":"application/json",
+			"url":"https://api.bafu.example","access_url":"https://api.bafu.example","download_url":"","byte_size":1024,"rights":{"de":"Frei"},
+			"license":"CC BY","language":"de","issued":"2020-02-01","modified":"2026-01-05","documentation":["https://api.bafu.example/doc"],
+			"access_services":"[\"https://bafu.example/service\"]"},
+			{"id":"r8","format":"CSV","title":"Archiv","url":"https://bafu.example/archiv.csv"}]}`
+	var d Dataset
+	if err := json.Unmarshal([]byte(raw), &d); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(`[1,2]`), &d); err == nil {
+		t.Error("a list as a data set")
+	}
+	for _, lang := range []string{"de", "fr", "en", "it"} {
+		entries, _ := Entries([]Dataset{d}, []string{"API"}, "https://portal.example/", lang, "Portal")
+		for i, b := range entries[0].Body {
+			if err := item.CheckBlock(b, "x"); err != nil {
+				t.Fatalf("%s block %d %+v: %v", lang, i, b, err)
+			}
+		}
+	}
+	entries, _ := Entries([]Dataset{d}, []string{"API"}, "https://portal.example/", "de", "Portal")
+	text := pageText(entries[0].Body)
+	for _, part := range []string{"Messwerte.", "Stündlich.", "Messwerte-API", "JSON über HTTPS", "Medientyp\tapplication/json", "Grösse in Bytes\t1024",
+		"Nutzungsbedingungen\tFrei", "Lizenz\tCC BY", "Sprachen\tde", "Geändert\t2026-01-05", "Zugangsdienst: https://bafu.example/service",
+		"Stichwörter\tLuft, Ozon, ozon", "Themen\tUmwelt", "Lizenz\tOpen use", "Zeitraum\t2020-01-01 – 2025-12-31", "Aktualisierung\tHOURLY",
+		"Sprachen\tde, fr", "Raum\tSchweiz", "Kennung\tluft@bafu", "Einstiegsseite: https://bafu.example/luft", "Methode: https://bafu.example/methode",
+		"Archiv (CSV): https://bafu.example/archiv.csv", "Weitere Angaben der Quelle", "coverage\tNur Messnetz", "qualified\t{\"x\":1}",
+		"count\t3", "flag\ttrue"} {
+		if !strings.Contains(text, part) {
+			t.Errorf("the page lacks %q:\n%s", part, text)
+		}
+	}
+	for _, absent := range []string{"see_alsos", "empty\t", "nothing", "Zugang: https://api.bafu.example"} {
+		if strings.Contains(text, absent) {
+			t.Errorf("the page shows %q:\n%s", absent, text)
+		}
+	}
+	if fr := pageText(func() []item.Block {
+		e, _ := Entries([]Dataset{d}, []string{"API"}, "", "fr", "Portal")
+		return e[0].Body
+	}()); !strings.Contains(fr, "Mesures.") || !strings.Contains(fr, "Interfaces") {
+		t.Errorf("in French, the source's text and English words:\n%s", fr)
+	}
+	long := strings.Repeat("x", maxCell+10)
+	if got := oneLine(long); utf8.RuneCountInString(got) != maxCell {
+		t.Errorf("a long value is %d characters", utf8.RuneCountInString(got))
+	}
+	if lastSegment("plain") != "plain" || day("soon") != "soon" {
+		t.Error("values that are no address or date")
+	}
+	var w Words
+	json.Unmarshal([]byte(`42`), &w)
+	var st Strings
+	json.Unmarshal([]byte(`42`), &st)
+	var sc Scalar
+	json.Unmarshal([]byte(`{}`), &sc)
+	if len(w) != 0 || st != nil || sc != "" {
+		t.Errorf("values of no shape: %v %v %q", w, st, sc)
 	}
 }
 
@@ -205,7 +304,7 @@ func TestTheCatalogFollowsTheSource(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	dry, err := f.r.Run(ctx, id, true, "admin")
-	if err != nil || dry.New != 4 || dry.Datasets != 3 || len(f.items(t)) != 0 || len(dry.Examples) != 4 {
+	if err != nil || dry.New != 3 || dry.Datasets != 3 || len(f.items(t)) != 0 || len(dry.Examples) != 3 {
 		t.Fatalf("dry run %+v %v", dry, err)
 	}
 	if f.ckan.queries[0] != "" || !strings.Contains(f.ckan.queries[1], `"wfs_srvc"`) || !strings.Contains(f.ckan.queries[1], `"rest"`) {
@@ -215,51 +314,62 @@ func TestTheCatalogFollowsTheSource(t *testing.T) {
 		t.Errorf("formats read %v", dry.Formats)
 	}
 	res, err := f.r.Run(ctx, id, false, "admin")
-	if err != nil || res.New != 4 || res.Changed != 0 {
+	if err != nil || res.New != 3 || res.Changed != 0 {
 		t.Fatalf("first run %+v %v", res, err)
 	}
 	if data, _ := json.Marshal(res); !strings.Contains(string(data), `"problems":[`) || !strings.Contains(string(data), `"examples":[`) {
 		t.Errorf("lists as null: %s", data)
 	}
 	got := f.items(t)
-	r1 := got["r1"]
-	if r1.Title != "Wetterdaten" || r1.State != Active || r1.Properties[FieldOwner] != "anna" || r1.Properties[FieldEndpoint] != "https://api.meteo.example/v1" ||
-		r1.Origin == nil || r1.Origin.URL != "https://opendata.swiss/de/dataset/wetterdaten" || r1.Origin.System != id {
-		t.Fatalf("entry r1 %+v %+v", r1, r1.Origin)
+	d1 := got["d1"]
+	if d1.Title != "Wetterdaten" || d1.State != Active || d1.Properties[FieldOwner] != "anna" || d1.Properties[FieldEndpoint] != "https://api.meteo.example/v1" ||
+		d1.Origin == nil || d1.Origin.URL != "https://opendata.swiss/de/dataset/wetterdaten" || d1.Origin.System != id {
+		t.Fatalf("entry d1 %+v %+v", d1, d1.Origin)
+	}
+	if text := pageText(d1.Body.Blocks); !strings.Contains(text, "https://api.meteo.example/v1") || !strings.Contains(text, "Wetterdaten") && !strings.Contains(text, "Schnittstellen") {
+		t.Fatalf("the page of d1:\n%s", text)
 	}
 
-	// Here someone takes over r1 and adds a contact to r3; the source
-	// changes r1's address and stops publishing r5.
+	// Here someone takes over d1, adds a contact to d2, comments on d1 and
+	// writes into its page; the source changes d1's address and stops
+	// publishing geodaten's interfaces.
 	f.db.Write(func(s *item.Store) error {
-		s.SetProperty("bert", r1.ID, FieldOwner, "bert")
-		return s.SetProperty("bert", got["r3"].ID, FieldContact, "geo@example.org")
+		s.SetProperty("bert", d1.ID, FieldOwner, "bert")
+		s.AddComment("bert", d1.ID, "Checked with the team")
+		s.CommitBody("bert", d1.ID, item.Doc{Blocks: []item.Block{{Kind: item.Paragraph, Text: "my notes"}}})
+		return s.SetProperty("bert", got["d2"].ID, FieldContact, "geo@example.org")
 	})
 	f.ckan.datasets = []string{strings.Replace(weather, "api.meteo.example/v1", "api.meteo.example/v2", 1), geo,
 		strings.Replace(transport, `"id":"r5"`, `"id":"r6"`, 1)}
 	res, err = f.r.Run(ctx, id, false, "")
-	if err != nil || res.New != 1 || res.Changed != 1 || res.Unchanged != 2 || res.Withdrawn != 1 {
+	if err != nil || res.New != 0 || res.Changed != 2 || res.Unchanged != 1 || res.Withdrawn != 0 {
 		t.Fatalf("second run %+v %v", res, err)
 	}
 	got = f.items(t)
-	if got["r1"].Properties[FieldEndpoint] != "https://api.meteo.example/v2" || got["r1"].Properties[FieldOwner] != "bert" {
-		t.Errorf("r1 lost what was set here: %+v", got["r1"].Properties)
+	if got["d1"].Properties[FieldEndpoint] != "https://api.meteo.example/v2" || got["d1"].Properties[FieldOwner] != "bert" {
+		t.Errorf("d1 lost what was set here: %+v", got["d1"].Properties)
 	}
-	if got["r3"].Properties[FieldContact] != "geo@example.org" {
-		t.Errorf("r3 lost its contact: %+v", got["r3"].Properties)
+	if text := pageText(got["d1"].Body.Blocks); strings.Contains(text, "my notes") || !strings.Contains(text, "api.meteo.example/v2") {
+		t.Errorf("the page of d1 is not the source's:\n%s", text)
 	}
-	if got["r5"].State != Withdrawn || got["r6"].State != Active {
-		t.Errorf("r5 %s, r6 %s", got["r5"].State, got["r6"].State)
+	if len(got["d1"].Comments) != 1 {
+		t.Errorf("the comment on d1 went: %+v", got["d1"].Comments)
 	}
-	if res, _ := f.r.Run(ctx, id, false, ""); res.New+res.Changed+res.Withdrawn != 0 || res.Unchanged != 4 {
+	if got["d2"].Properties[FieldContact] != "geo@example.org" {
+		t.Errorf("d2 lost its contact: %+v", got["d2"].Properties)
+	}
+	if res, _ := f.r.Run(ctx, id, false, ""); res.New+res.Changed+res.Withdrawn != 0 || res.Unchanged != 3 {
 		t.Errorf("a run without changes %+v", res)
 	}
-	// It comes back when the source publishes it again.
-	f.ckan.datasets = []string{weather, geo, transport}
-	if res, _ := f.r.Run(ctx, id, false, ""); res.Changed != 2 || res.Withdrawn != 1 {
-		t.Errorf("r5 back, r6 gone %+v", res)
+	// A data set without interfaces any more is withdrawn, and comes back.
+	f.ckan.datasets = []string{weather, strings.ReplaceAll(geo, "wfs_srvc", "zip"), transport}
+	f.ckan.datasets[1] = strings.Replace(f.ckan.datasets[1], `"format":"WMS"`, `"format":"PDF"`, 1)
+	if res, _ := f.r.Run(ctx, id, false, ""); res.Withdrawn != 1 || f.items(t)["d2"].State != Withdrawn {
+		t.Errorf("geodaten without interfaces %+v", res)
 	}
-	if f.items(t)["r5"].State != Active {
-		t.Error("r5 is not active again")
+	f.ckan.datasets = []string{weather, geo, transport}
+	if res, _ := f.r.Run(ctx, id, false, ""); res.Changed != 1 || res.Unchanged != 2 || f.items(t)["d2"].State != Active {
+		t.Errorf("geodaten back %+v", res)
 	}
 
 	// A source that answers far fewer entries withdraws nothing.
@@ -274,11 +384,45 @@ func TestTheCatalogFollowsTheSource(t *testing.T) {
 			synced++
 		}
 	}
-	if synced != 5 {
+	if synced != 6 {
 		t.Errorf("%d runs audited", synced)
 	}
-	if st := f.r.Status(id); len(st.History) != 6 || !st.History[5].DryRun || st.Running {
+	if st := f.r.Status(id); len(st.History) != 7 || !st.History[6].DryRun || st.Running {
 		t.Errorf("status %+v", st)
+	}
+}
+
+// Entries of one interface each, as before ADR-0080, give way to the entry
+// of their data set: withdrawn, with their comments, whatever the share.
+func TestEntriesOfOneInterfaceGiveWay(t *testing.T) {
+	f := setup(t)
+	old := func(resource, title string) item.Upsert {
+		return item.Upsert{Origin: item.Origin{System: id, Instance: f.cfg.CKAN.BaseURL, ExternalID: resource}, Space: "API", Type: TypeName,
+			Title: title, Properties: item.Props{FieldSourceID: resource, FieldPublisher: "x"}, State: Active}
+	}
+	f.db.Write(func(s *item.Store) error {
+		if err := s.DefineType("admin", TypeDef()); err != nil {
+			return err
+		}
+		for _, u := range []item.Upsert{old("r1", "Wetterdaten"), old("r3", "Geodaten – Karten"), old("r4", "Geodaten – WFS"), old("r5", "Fahrplan – API"), old("r9", "Gone")} {
+			if _, _, err := s.Upsert("sync:"+id, u); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	res, err := f.r.Run(context.Background(), id, false, "")
+	if err != nil || res.New != 3 || res.Withdrawn != 5 {
+		t.Fatalf("the change of entries %+v %v", res, err)
+	}
+	got := f.items(t)
+	for _, r := range []string{"r1", "r3", "r4", "r5", "r9"} {
+		if got[r].State != Withdrawn {
+			t.Errorf("%s is %s", r, got[r].State)
+		}
+	}
+	if !slices.ContainsFunc(res.Problems, func(p string) bool { return strings.Contains(p, "is now part of the entry of its data set, Geodaten") }) {
+		t.Errorf("problems %v", res.Problems)
 	}
 }
 
@@ -349,7 +493,7 @@ func TestTheSchedule(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
 	f.r.Tick(ctx)
-	if len(f.items(t)) != 4 {
+	if len(f.items(t)) != 3 {
 		t.Fatal("the first tick did not run")
 	}
 	f.ckan.datasets = append(f.ckan.datasets, strings.ReplaceAll(weather, `"r1"`, `"r9"`))
@@ -357,7 +501,7 @@ func TestTheSchedule(t *testing.T) {
 	f.ckan.datasets[3] = strings.ReplaceAll(f.ckan.datasets[3], `"d1"`, `"d9"`)
 	f.clock = f.clock.Add(time.Hour)
 	f.r.Tick(ctx)
-	if len(f.items(t)) != 4 {
+	if len(f.items(t)) != 3 {
 		t.Fatal("ran before it was due")
 	}
 	if st := f.r.Status(id); !st.Next.Equal(f.clock.Add(23 * time.Hour)) {
@@ -365,7 +509,7 @@ func TestTheSchedule(t *testing.T) {
 	}
 	f.clock = f.clock.Add(23 * time.Hour)
 	f.r.Tick(ctx)
-	if len(f.items(t)) != 5 {
+	if len(f.items(t)) != 4 {
 		t.Fatal("did not run when due")
 	}
 	if err := f.r.Start(id, true, "admin"); err != nil {
@@ -474,17 +618,17 @@ func TestSeveralConnectors(t *testing.T) {
 		t.Errorf("a connector switched off ran: %+v", st)
 	}
 	res, err := f.r.Run(ctx, "second", false, "admin")
-	if err != nil || res.New != 4 || res.Connector != "second" {
+	if err != nil || res.New != 3 || res.Connector != "second" {
 		t.Fatalf("the second connector %+v %v", res, err)
 	}
 	// The first connector (which the tick ran) leaves the second's
 	// entries alone.
-	if res, err := f.r.Run(ctx, id, false, ""); err != nil || res.Unchanged != 4 || res.Withdrawn != 0 {
+	if res, err := f.r.Run(ctx, id, false, ""); err != nil || res.Unchanged != 3 || res.Withdrawn != 0 {
 		t.Errorf("the first connector %+v %v", res, err)
 	}
 	n := 0
 	f.db.Read(func(s *item.Store) { n = len(s.Find(item.Query{Space: "API2", Type: TypeName})) })
-	if n != 4 || len(f.items(t)) != 4 {
+	if n != 3 || len(f.items(t)) != 3 {
 		t.Errorf("%d and %d entries", n, len(f.items(t)))
 	}
 	f.r.mu.Lock()

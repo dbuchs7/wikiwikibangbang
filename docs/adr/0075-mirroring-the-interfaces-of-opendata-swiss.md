@@ -69,6 +69,7 @@ Strongest form: reuses the existing importer.
 
 ## Links
 
+- amended by [ADR-0080](0080-one-page-per-data-set-written-from-the-source.md) (one entry per data set; its page is written from the source)
 - amended by [ADR-0077](0077-connectors-keep-catalogs-in-step-with-their-sources.md) (the synchronisation is the connector `opendata.swiss`)
 - builds on ADR-0074 (catalog rules) and ADR-0023 (origin, upsert, release)
 - relates to ADR-0040 and ADR-0057 (governance), ADR-0012 (MCP), ADR-0039 (link check)
