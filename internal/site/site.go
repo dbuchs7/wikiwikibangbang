@@ -112,8 +112,10 @@ type event struct {
 	Access *Access `json:"access,omitempty"`
 	// Backup is set by BackupSet (ADR-0073).
 	Backup *Backup `json:"backup,omitempty"`
-	Type   string  `json:"type,omitempty"`
-	Data   []byte  `json:"data,omitempty"`
+	// OpenData is set by OpenDataSet (ADR-0075).
+	OpenData *OpenData `json:"openData,omitempty"`
+	Type     string    `json:"type,omitempty"`
+	Data     []byte    `json:"data,omitempty"`
 }
 
 const (
@@ -127,6 +129,8 @@ const (
 	accessSet = "AccessSet"
 
 	backupSet = "BackupSet"
+
+	openDataSet = "OpenDataSet"
 )
 
 // Settings is safe for concurrent use.
@@ -142,6 +146,7 @@ type Settings struct {
 	matchers    []matcher
 	access      Access
 	backup      *Backup
+	openData    *OpenData
 }
 
 // New rebuilds the settings from records and journals later changes.
@@ -194,6 +199,12 @@ func (s *Settings) apply(e event) error {
 		}
 		b := *e.Backup
 		s.backup = &b
+	case openDataSet:
+		if e.OpenData == nil {
+			return errors.New("an open data event without settings")
+		}
+		o := *e.OpenData
+		s.openData = &o
 	default:
 		return fmt.Errorf("unknown event %q", e.Kind)
 	}

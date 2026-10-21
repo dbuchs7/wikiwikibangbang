@@ -32,9 +32,14 @@ var classified = map[string]string{
 		"not a caller's input to this server, it guards against a destination that misbehaves",
 	"internal/backup/dest/remote.go:2048": "the start of a destination's error answer, quoted in the error message (ADR-0073)",
 	"internal/item.maxURL":                "the shape of a url field (ADR-0074), like the length of a username; what a request carries is bounded by RequestBody",
-	"internal/auth.MaxFailures":           "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
-	"internal/auth.MaxTokenLifetime":      "a security policy (ADR-0027): how long an API token may live",
-	"internal/auth.MaxReasonLength":       "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",
+	"internal/opendata.maxAnswer": "the answer of the catalog source the synchronisation reads (ADR-0075), not a caller's input to this server; " +
+		"it guards the synchronisation against a source that misbehaves",
+	"internal/opendata/ckan.go:maxAnswer": "the same bound, where the answer is read",
+	"internal/opendata.maxDatasets": "the size of one synchronisation run (ADR-0075), so a misbehaving source cannot make it endless; " +
+		"not memory a caller of this server can claim",
+	"internal/auth.MaxFailures":      "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
+	"internal/auth.MaxTokenLifetime": "a security policy (ADR-0027): how long an API token may live",
+	"internal/auth.MaxReasonLength":  "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",
 	"internal/wal.MaxRecord": "part of the event log format: a server must read every record a server wrote, " +
 		"so the bound may not differ between them",
 	"internal/backup.maxIterations": "part of the backup format: the work factor a header may demand " +

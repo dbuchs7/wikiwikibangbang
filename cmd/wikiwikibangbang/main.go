@@ -37,6 +37,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
 	"github.com/dbuchs7/wikiwikibangbang/internal/mcp"
 	"github.com/dbuchs7/wikiwikibangbang/internal/notify"
+	"github.com/dbuchs7/wikiwikibangbang/internal/opendata"
 	"github.com/dbuchs7/wikiwikibangbang/internal/privdrop"
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
@@ -250,7 +251,14 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	backupDone := make(chan struct{})
 	go func() { backups.Loop(backupCtx); close(backupDone) }()
 	defer func() { stopBackups(); <-backupDone; backups.Close() }()
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration, Backups: backups})
+	// A catalog follows opendata.swiss on the schedule set under
+	// Administration (ADR-0075).
+	catalog := opendata.New(db, log)
+	catalogCtx, stopCatalog := context.WithCancel(ctx)
+	catalogDone := make(chan struct{})
+	go func() { catalog.Loop(catalogCtx); close(catalogDone) }()
+	defer func() { stopCatalog(); <-catalogDone; catalog.Close() }()
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration, Backups: backups, OpenData: catalog})
 	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.WithPublicURL(notifier.PublicURL(), server.Handler(routes, db.Accounts))), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1

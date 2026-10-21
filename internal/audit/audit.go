@@ -58,6 +58,10 @@ const (
 	// and changes to their schedule (ADR-0073).
 	BackupFailed  = "backup.failed"
 	BackupChanged = "backup.change"
+	// CatalogSynced and CatalogSyncChanged are runs of a catalog's
+	// synchronisation and changes to its settings (ADR-0075).
+	CatalogSynced      = "catalog.sync"
+	CatalogSyncChanged = "catalog.sync.change"
 	// The account requests and contacts (ADR-0061).
 	AccountRequested = "account.request"
 	AccountApproved  = "account.approve"

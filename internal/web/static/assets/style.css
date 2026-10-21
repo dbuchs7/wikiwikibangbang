@@ -946,3 +946,6 @@ a.requests-notice:hover { border-color: var(--accent); }
 /* Catalogs (ADR-0074): where a mirrored item is kept, and web addresses. */
 .notice.origin { margin: 0 0 14px; }
 .prop-link { margin-left: 6px; white-space: nowrap; }
+.catalog-run { margin: 6px 0; }
+.catalog-run summary { cursor: pointer; }
+.catalog-problems { font-size: 13px; }
