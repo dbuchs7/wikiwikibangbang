@@ -423,6 +423,27 @@ details.card > summary { cursor: pointer; font-weight: 600; }
 .badge.danger { background: var(--danger-soft); color: var(--danger); }
 tr.overdue td:first-child { box-shadow: inset 3px 0 0 var(--danger); }
 .task-actions { white-space: nowrap; }
+.task-labels { display: flex; flex-wrap: wrap; gap: 4px; }
+.task-labels .chip { font-size: 12px; }
+a.kanban-chip { text-decoration: none; border: 1px solid var(--accent); }
+/* The task list with its label filter at the right (ADR-0049). */
+.tasks-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.tasks-layout:has(.tasks-filter) { grid-template-columns: minmax(0, 1fr) 220px; }
+.tasks-layout #tasks { overflow-x: auto; }
+.tasks-filter { position: sticky; top: 12px; }
+.tasks-filter h2 { margin-top: 0; }
+.tasks-label-list { display: flex; flex-direction: column; max-height: 60vh; overflow: auto; }
+.tasks-label-list label.check { margin: 4px 0; overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .tasks-layout:has(.tasks-filter) { grid-template-columns: minmax(0, 1fr); }
+  .tasks-filter { position: static; }
+}
+/* Protecting an item for people and groups (ADR-0078). */
+.access-edit summary { cursor: pointer; font-weight: 600; margin: 6px 0; }
+.access-modes label.check { margin: 4px 0; }
+.access-entries { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
+.access-entry { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.access-entry label.check { margin: 0; font-size: 12px; }
 .actions-row { display: flex; flex-wrap: wrap; gap: 8px; }
 #relations form.inline input { width: auto; }
 /* On a phone the navigation takes its own row below the logo, the search

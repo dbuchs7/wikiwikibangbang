@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
+	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
@@ -911,7 +912,26 @@ func (h itemHandlers) relations(w http.ResponseWriter, r *http.Request) {
 func (h itemHandlers) restrict(w http.ResponseWriter, r *http.Request) {
 	var req restrictionJSON
 	if decode(w, r, &req) {
-		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
+		h.change(w, r, func(x *item.Session, s *item.Store, it item.Item) error {
+			// Only people and groups that exist: a typing error would
+			// otherwise close the item to everyone but its space's
+			// administrators (ADR-0078).
+			var users []auth.UserID
+			for _, p := range slices.Concat(req.Read, req.Edit) {
+				if g, ok := strings.CutPrefix(p, "@"); ok {
+					if s.GroupSize(g) == 0 {
+						return fmt.Errorf("%w: there is no group %s", item.ErrValidation, p)
+					}
+				} else {
+					users = append(users, auth.UserID(p))
+				}
+			}
+			known := h.d.DB.Accounts.Usernames(users)
+			for _, u := range users {
+				if _, ok := known[u]; !ok {
+					return fmt.Errorf("%w: there is no user %s", item.ErrValidation, u)
+				}
+			}
 			return x.Restrict(it.ID, item.Restriction{Read: req.Read, Edit: req.Edit})
 		})
 	}

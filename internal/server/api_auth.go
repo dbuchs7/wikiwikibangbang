@@ -6,6 +6,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/web"
+	"maps"
 	"net"
 	"net/http"
 	"slices"
@@ -32,6 +33,7 @@ func authRoutes(d Deps) []Route {
 		{Method: http.MethodDelete, Pattern: "/api/tokens/{id}", Summary: "Revoke one of one's own API tokens", Handler: http.HandlerFunc(h.revokeToken)},
 		{Method: http.MethodGet, Pattern: "/api/users", Summary: "List accounts (administrators and space administrators)", Handler: http.HandlerFunc(h.listUsers)},
 		{Method: http.MethodGet, Pattern: "/api/users/search", Summary: "Accounts whose username contains q, for choosing a person in a field (those who may edit in a space)", Handler: http.HandlerFunc(h.searchUsers)},
+		{Method: http.MethodGet, Pattern: "/api/groups/search", Summary: "Groups whose name contains q, by name only, for protecting an item for a group (those who may edit in a space)", Handler: http.HandlerFunc(h.searchGroups)},
 		{Method: http.MethodGet, Pattern: "/api/users/names", Summary: "Usernames of the user IDs given as id parameters, for showing authors, and which of them have a profile picture", Handler: http.HandlerFunc(h.userNames)},
 		{Method: http.MethodPost, Pattern: "/api/users", Summary: "Create an account (administrators)", Handler: http.HandlerFunc(h.createUser)},
 		{Method: http.MethodPost, Pattern: "/api/backup", Summary: "Download an encrypted backup of the data directory (administrators; passphrase in the body)", Handler: http.HandlerFunc(h.backup)},
@@ -371,6 +373,40 @@ func (h authHandlers) searchUsers(w http.ResponseWriter, r *http.Request) {
 		out = []userJSON{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": out[:min(len(out), searchLimit)]})
+}
+
+// searchGroups finds groups by name for those who may edit in a space, so
+// they can protect an item for a group (ADR-0078). It names the groups,
+// not their members.
+func (h authHandlers) searchGroups(w http.ResponseWriter, r *http.Request) {
+	p, _ := PrincipalFrom(r.Context())
+	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
+	may := false
+	var groups []string
+	h.d.DB.Read(func(s *item.Store) {
+		if may = s.As(string(p.User)).EditsASpace(); may {
+			groups = slices.Sorted(maps.Keys(s.Groups()))
+		}
+	})
+	if !may {
+		writeError(w, http.StatusForbidden, "only those who may edit in a space look up groups")
+		return
+	}
+	var prefix, inner []string
+	for _, g := range groups {
+		name := strings.ToLower(g)
+		switch {
+		case strings.HasPrefix(name, q):
+			prefix = append(prefix, g)
+		case strings.Contains(name, q):
+			inner = append(inner, g)
+		}
+	}
+	out := append(prefix, inner...)
+	if out == nil {
+		out = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"groups": out[:min(len(out), searchLimit)]})
 }
 
 func (h authHandlers) avatarTagOf(id auth.UserID) string {
