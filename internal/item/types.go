@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -107,6 +108,19 @@ func (t TypeDef) field(name string) (FieldDef, bool) {
 		}
 	}
 	return FieldDef{}, false
+}
+
+// Finished reports whether an item in state is done with (ADR-0082): the
+// workflow's last state, or a state no transition leaves, such as the
+// accepted of a decision whose last state is rejected.
+func (w *Workflow) Finished(state string) bool {
+	if w == nil || len(w.States) == 0 {
+		return false
+	}
+	if state == w.States[len(w.States)-1] {
+		return true
+	}
+	return slices.Contains(w.States, state) && !slices.ContainsFunc(w.Transitions, func(tr Transition) bool { return slices.Contains(tr.From, state) })
 }
 
 func (w *Workflow) transition(name string) (Transition, bool) {

@@ -1378,6 +1378,13 @@ function taskType(types) {
   return (flows.find((ty) => ty.name === "task") || flows[0])?.name || "";
 }
 
+// finished tells whether an item in state is done with (ADR-0082): the
+// workflow's last state, or a state no transition leaves, as the accepted
+// of a decision.
+function finished(wf, state) {
+  return state === wf.states[wf.states.length - 1] || (wf.states.includes(state) && !wf.transitions.some((tr) => tr.from.includes(state)));
+}
+
 // isTaskType tells the types whose items are work to do (ADR-0049): a
 // workflow, and the name task or a field for whom it is assigned to or
 // when it is due. A catalog entry has a workflow and an owner, but is no
@@ -1447,7 +1454,7 @@ async function tasksView(tab, params) {
   const page = { next: read.some((r) => r.truncated) };
   const open = items.filter((it) => {
     const wf = typeOf.get(it.type)?.ty.workflow;
-    return wf && it.state !== wf.states[wf.states.length - 1];
+    return wf && !finished(wf, it.state);
   });
   const assigneeOf = (it) => {
     const f = typeOf.get(it.type).f.assignee;

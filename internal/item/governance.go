@@ -356,15 +356,13 @@ func (s *Store) sensitiveIn(it *Item, responsible string, rep *Report) {
 // plausibility is what a type's items are checked against, worked out
 // once per type and report rather than once per item (ADR-0081).
 type plausibility struct {
-	td   TypeDef
-	due  []string // date fields that name a deadline
-	last string   // the workflow's last state, or empty
+	td  TypeDef
+	due []string // date fields that name a deadline
 }
 
 func planFor(td TypeDef) *plausibility {
 	p := &plausibility{td: td}
 	if td.Workflow != nil && len(td.Workflow.States) > 0 {
-		p.last = td.Workflow.States[len(td.Workflow.States)-1]
 		for _, f := range td.Fields {
 			if f.Kind == KindDate && dueField.MatchString(f.Name) {
 				p.due = append(p.due, f.Name)
@@ -377,7 +375,7 @@ func planFor(td TypeDef) *plausibility {
 func (p *plausibility) implausible(it *Item, now time.Time) []string {
 	var out []string
 	td := p.td
-	if it.State != p.last {
+	if !td.Workflow.Finished(it.State) {
 		for _, name := range p.due {
 			if d, ok := it.Properties[name].(time.Time); ok && d.Before(now) {
 				out = append(out, fmt.Sprintf("%s %s has passed, but the state is %s", name, d.Format("2006-01-02"), it.State))

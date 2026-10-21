@@ -48,4 +48,5 @@ Not taken over yet: candidate groups (who may take a task over), forms that comp
 
 ## Links
 
+- amended by [ADR-0082](0082-a-state-no-transition-leaves-is-finished.md) (a state no transition leaves is finished)
 - amended by [ADR-0080](0080-one-page-per-data-set-written-from-the-source.md) (which types are tasks)
