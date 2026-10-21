@@ -1,0 +1,26 @@
+/* Swiss: red, black and white, square corners and clear lines; light
+   and dark. */
+:root {
+  --bg: #ffffff; --surface: #ffffff; --surface-2: #f7f7f7; --border: #1a1a1a; --border-strong: #1a1a1a;
+  --text: #111111; --muted: #555555;
+  --accent: #d52b1e; --accent-hover: #a82218; --accent-soft: #fbe9e7; --accent-ink: #ffffff;
+  --row-hover: #f4f4f4; --radius: 0px; --radius-sm: 0px;
+  --shadow: none; --shadow-lg: 0 0 0 2px #111111;
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+*:not(.avatar, .avatar img), *::before, *::after { border-radius: 0 !important; }
+.top { background: #ffffff; border-bottom: 3px solid #111111; }
+.card, .welcome, .home-tile, .space-tile, .tree-box, .board-column, .card-item { border: 1px solid #111111; box-shadow: none; }
+.home-tile:hover, .space-tile:hover { transform: none; box-shadow: inset 0 -4px 0 var(--accent); }
+h1, h2 { font-weight: 700; letter-spacing: -0.01em; }
+h1 { border-bottom: 3px solid var(--accent); display: inline-block; padding-bottom: 2px; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b0b0b; --surface: #111111; --surface-2: #161616; --border: #e6e6e6; --border-strong: #e6e6e6;
+    --text: #f2f2f2; --muted: #a8a8a8;
+    --accent: #ff4a3d; --accent-hover: #ff7469; --accent-soft: #3a1311; --accent-ink: #0b0b0b;
+    --row-hover: #1a1a1a; --shadow-lg: 0 0 0 2px #f2f2f2;
+  }
+  .top { background: #0b0b0b; border-bottom-color: #f2f2f2; }
+  .card, .home-tile, .space-tile, .tree-box, .board-column, .card-item { border-color: #e6e6e6; }
+}

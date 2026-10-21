@@ -1,0 +1,25 @@
+/* Ocean: deep blue and turquoise, rounded and calm; light and dark. */
+:root {
+  --bg: #eef6f9; --surface: #ffffff; --surface-2: #f4fafc; --border: #d5e7ee; --border-strong: #b5d3df;
+  --text: #0d2a3a; --muted: #4f6b7a;
+  --accent: #0a6c8f; --accent-hover: #08566f; --accent-soft: #e0f1f7; --accent-ink: #ffffff;
+  --row-hover: #f0f8fb; --radius: 16px; --radius-sm: 10px;
+  --shadow: 0 1px 2px rgba(10, 60, 90, 0.06), 0 2px 6px rgba(10, 60, 90, 0.06);
+  --shadow-lg: 0 14px 34px rgba(10, 60, 90, 0.14);
+}
+.top { background: linear-gradient(90deg, #0a4d6b, #0a6c8f 60%, #16a3b8); border-bottom: 0; }
+.top, .top .brand, .top .icon-btn, #nav > a, #nav > button.link, #nav-notifications { color: #ffffff; }
+.top .icon-btn:hover { background: rgba(255, 255, 255, 0.16); color: #ffffff; }
+.top .brand picture img { filter: brightness(0) invert(1); }
+#nav .search input { background-color: rgba(255, 255, 255, 0.92); }
+#nav-new { background: #ffffff; border-color: #ffffff; color: #0a4d6b; }
+button, .button { border-radius: 10px; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #07161e; --surface: #0d2230; --surface-2: #10293a; --border: #18374a; --border-strong: #234a61;
+    --text: #e2f1f7; --muted: #8fb0bf;
+    --accent: #3ec3dd; --accent-hover: #6ad3e7; --accent-soft: #0f3343; --accent-ink: #04161d; --row-hover: #10293a;
+  }
+  .top { background: linear-gradient(90deg, #052433, #073a52 60%, #0b5368); }
+  #nav .search input { background-color: rgba(255, 255, 255, 0.1); color: var(--text); }
+}

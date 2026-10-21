@@ -64,3 +64,4 @@ Strongest form: history, access and encryption already exist for items.
 ## Links
 
 - relates to ADR-0014 (no markup from data), ADR-0027 (accounts journal), ADR-0045 (files served inertly), ADR-0050 (profile pictures)
+- amended by [ADR-0085](0085-ready-made-themes-under-the-corporate-design.md) (ready-made themes under the design)

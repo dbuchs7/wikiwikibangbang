@@ -43,12 +43,14 @@ type brandingJSON struct {
 	Contrast []site.Finding `json:"contrast"`
 	// Dark says whether the UI offers its dark scheme (ADR-0070).
 	Dark bool `json:"dark"`
+	// Themes are the ready-made themes to choose from (ADR-0085).
+	Themes []string `json:"themes"`
 }
 
 func (h authHandlers) getBranding(w http.ResponseWriter, r *http.Request) {
 	s := h.d.DB.Site
 	d := s.Design()
-	out := brandingJSON{Design: d, Assets: map[string]string{}, Fonts: []string{"system", "humanist", "serif", "rounded", "mono"}, Contrast: d.Contrast(), Dark: d.DarkMode()}
+	out := brandingJSON{Design: d, Assets: map[string]string{}, Fonts: []string{"system", "humanist", "serif", "rounded", "mono"}, Contrast: d.Contrast(), Dark: d.DarkMode(), Themes: site.Themes}
 	if out.Contrast == nil {
 		out.Contrast = []site.Finding{}
 	}

@@ -1,0 +1,23 @@
+/* Forest: greens and warm paper, soft shapes; light and dark. */
+:root {
+  --bg: #f3f5ef; --surface: #fffefb; --surface-2: #f8f9f4; --border: #dfe4d6; --border-strong: #c6cfb8;
+  --text: #1f2a1c; --muted: #5d6a56;
+  --accent: #2f6b3a; --accent-hover: #24552d; --accent-soft: #e6f0e3; --accent-ink: #ffffff;
+  --row-hover: #f2f5ec; --radius: 14px; --radius-sm: 9px;
+  --font-sans: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+.top { background: #24452b; border-bottom: 0; }
+.top, .top .brand, .top .icon-btn, #nav > a, #nav > button.link, #nav-notifications { color: #f1f5ea; }
+.top .icon-btn:hover { background: rgba(255, 255, 255, 0.14); color: #ffffff; }
+.top .brand picture img { filter: brightness(0) invert(1); }
+#nav-new { background: #b9d98a; border-color: #b9d98a; color: #1b3320; }
+h1, h2 { color: #24452b; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1510; --surface: #172019; --surface-2: #1b261d; --border: #263428; --border-strong: #344637;
+    --text: #e4ecdf; --muted: #9fae98;
+    --accent: #7fc48a; --accent-hover: #9dd4a6; --accent-soft: #1d3322; --accent-ink: #0c140d; --row-hover: #1b261d;
+  }
+  .top { background: #121c14; }
+  h1, h2 { color: #cfe6c6; }
+}

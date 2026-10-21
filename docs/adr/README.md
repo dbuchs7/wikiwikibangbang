@@ -97,3 +97,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0082](0082-a-state-no-transition-leaves-is-finished.md) | A state no transition leaves is finished | Accepted | Landed |
 | [0083](0083-search-finds-any-word-and-names-the-words-of-each-hit.md) | Search finds any word and names the words of each hit | Accepted | Landed |
 | [0084](0084-a-mention-in-a-comment-is-a-notification.md) | A mention in a comment is a notification | Accepted | Landed |
+| [0085](0085-ready-made-themes-under-the-corporate-design.md) | Ready-made themes under the corporate design | Accepted | Landed |
