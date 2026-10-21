@@ -1,10 +1,12 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
@@ -20,6 +22,7 @@ func openDataRoutes(d Deps) []Route {
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/catalog/opendata", Summary: "The synchronisation of a catalog with opendata.swiss: settings and the last runs (administrators)", Handler: http.HandlerFunc(h.openData)},
 		{Method: http.MethodPut, Pattern: "/api/catalog/opendata/settings", Summary: "Set the synchronisation with opendata.swiss: space, source, formats, organizations, interval, steward (administrators)", Handler: http.HandlerFunc(h.setOpenData)},
+		{Method: http.MethodGet, Pattern: "/api/catalog/opendata/formats", Summary: "The resource formats the source's data sets use, with how many data sets use each, to choose the interfaces from (administrators)", Handler: http.HandlerFunc(h.openDataFormats)},
 		{Method: http.MethodPost, Pattern: "/api/catalog/opendata/run", Summary: "Run the synchronisation now, in the background; dryRun reports what it would change without writing (administrators)", Handler: http.HandlerFunc(h.runOpenData)},
 	}
 }
@@ -103,4 +106,36 @@ func (h authHandlers) runOpenData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// formatsTimeout bounds asking the source for its formats.
+const formatsTimeout = 30 * time.Second
+
+func (h authHandlers) openDataFormats(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.adminOnly(w, r); !ok {
+		return
+	}
+	// The source and organizations as typed, so they can be chosen before
+	// they are saved; the saved ones otherwise.
+	cfg := h.d.DB.Site.OpenData()
+	q := r.URL.Query()
+	if q.Has("baseURL") {
+		cfg.BaseURL = q.Get("baseURL")
+	}
+	if q.Has("organizations") {
+		cfg.Organizations = strings.FieldsFunc(q.Get("organizations"), func(c rune) bool { return c == ',' || c == ' ' || c == ';' })
+	}
+	cfg.Enabled = false
+	if err := cfg.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), formatsTimeout)
+	defer cancel()
+	formats, err := h.d.OpenData.SourceFormats(ctx, cfg.BaseURL, cfg.Organizations)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"formats": formats})
 }

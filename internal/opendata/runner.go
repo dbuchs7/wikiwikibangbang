@@ -3,8 +3,10 @@ package opendata
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -117,15 +119,29 @@ func (r *Runner) locked(ctx context.Context, dry bool, actor string) (Result, er
 	start := r.now()
 	cfg := r.db.Site.OpenData()
 	res := Result{DryRun: dry, Problems: []string{}, Examples: []Change{}}
-	datasets, err := r.client(cfg.BaseURL).Datasets(ctx, cfg.Formats, cfg.Organizations)
-	if err == nil {
-		entries, problems := Entries(datasets, cfg.Formats, cfg.PortalURL)
-		res, err = Apply(r.db, cfg, entries, dry)
-		res.Datasets = len(datasets)
-		for _, p := range problems {
-			res.problem("%s", p)
+	// The source's own spelling of the formats is asked first: its search
+	// compares them exactly, so "api" would not find "API".
+	client := r.client(cfg.BaseURL)
+	available, err := client.Formats(ctx, cfg.Organizations)
+	matched := Match(available, cfg.Formats)
+	switch {
+	case err != nil:
+	case len(matched) == 0:
+		res.problem("no format of the source is in the list %s; the source's formats are %s — choose the ones that are interfaces",
+			strings.Join(cfg.Formats, ", "), describe(available, 25))
+	default:
+		var datasets []Dataset
+		if datasets, err = client.Datasets(ctx, matched, cfg.Organizations); err == nil {
+			entries, problems := Entries(datasets, cfg.Formats, cfg.PortalURL)
+			kept := res.Problems
+			res, err = Apply(r.db, cfg, entries, dry)
+			res.Datasets, res.Problems = len(datasets), append(kept, res.Problems...)
+			for _, p := range problems {
+				res.problem("%s", p)
+			}
 		}
 	}
+	res.Formats = matched
 	res.Started, res.Seconds = start.UTC(), r.now().Sub(start).Seconds()
 	if err != nil {
 		res.Error = err.Error()
@@ -153,6 +169,28 @@ func (r *Runner) setRunning(v bool) {
 	r.mu.Lock()
 	r.running = v
 	r.mu.Unlock()
+}
+
+// describe lists the first n formats with their counts.
+func describe(fs []FormatCount, n int) string {
+	if len(fs) == 0 {
+		return "none"
+	}
+	var parts []string
+	for _, f := range fs[:min(n, len(fs))] {
+		parts = append(parts, fmt.Sprintf("%s (%d)", f.Format, f.Count))
+	}
+	if len(fs) > n {
+		parts = append(parts, fmt.Sprintf("and %d more", len(fs)-n))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// SourceFormats asks the source at base which formats its data sets use,
+// of the organizations if any are named, so an administrator can choose
+// (ADR-0075).
+func (r *Runner) SourceFormats(ctx context.Context, base string, orgs []string) ([]FormatCount, error) {
+	return r.client(base).Formats(ctx, orgs)
 }
 
 // Status is what an administrator sees of the synchronisation.

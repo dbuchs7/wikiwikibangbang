@@ -852,5 +852,10 @@ export default {
   "catalog.counts": "{datasets} data sets, {entries} interfaces: {created} new, {changed} changed, {unchanged} unchanged, {withdrawn} withdrawn",
   "catalog.kind.new": "new",
   "catalog.kind.changed": "changed",
-  "catalog.kind.withdrawn": "withdrawn"
+  "catalog.kind.withdrawn": "withdrawn",
+  "catalog.showFormats": "Show the source's formats",
+  "catalog.loadingFormats": "Asking the source for its formats …",
+  "catalog.formatsPick": "{n} formats occur in the source, with the number of data sets. Tick what is an interface; the list above follows. Then “Save” and “Dry run”.",
+  "catalog.noFormats": "The source names no formats.",
+  "catalog.formatsRead": "Formats of the source read: {list}"
 };

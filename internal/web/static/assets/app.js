@@ -3170,6 +3170,33 @@ function catalogCard(spaces, users) {
     }
     const { settings: s, status: st } = data;
     const runStatus = h("div", { class: "status", id: "catalog-run-status" });
+    // The formats the source uses, to tick the ones that are interfaces:
+    // the source names them its own way, e.g. "WMS-Dienst".
+    const formatsInput = h("input", { name: "formats", value: s.formats.join(", ") });
+    const formatsBox = h("div", { id: "catalog-formats" });
+    const showFormats = async () => {
+      formatsBox.replaceChildren(h("p", { class: "muted", text: t("catalog.loadingFormats") }));
+      try {
+        const form = card.querySelector("#catalog-settings");
+        const { formats } = await get("/api/catalog/opendata/formats?" + new URLSearchParams({
+          baseURL: form.querySelector("[name=baseURL]").value.trim(), organizations: list(form.querySelector("[name=organizations]").value).join(","),
+        }));
+        const chosen = new Set(list(formatsInput.value).map((f) => f.toUpperCase()));
+        const boxes = formats.map((f) => h("input", { type: "checkbox", value: f.format, checked: chosen.has(f.format.toUpperCase()) }));
+        const apply = () => {
+          const picked = boxes.filter((b) => b.checked).map((b) => b.value.toUpperCase());
+          const others = list(formatsInput.value).filter((f) => !formats.some((x) => x.format.toUpperCase() === f.toUpperCase()));
+          formatsInput.value = [...picked, ...others].join(", ");
+        };
+        boxes.forEach((b) => b.addEventListener("change", apply));
+        formatsBox.replaceChildren(
+          h("p", { class: "muted", text: t("catalog.formatsPick", { n: formats.length }) }),
+          formats.length ? h("div", { class: "format-list" }, formats.map((f, i) => h("label", { class: "check" }, boxes[i], " ", f.format, " ",
+            h("span", { class: "muted", text: `(${f.count})` })))) : h("p", { class: "muted", text: t("catalog.noFormats") }));
+      } catch (err) {
+        formatsBox.replaceChildren(errorBox(err));
+      }
+    };
     const run = (dryRun, id, text) => h("button", { type: "button", class: dryRun ? "secondary" : "primary", id, disabled: st.running || !s.space, text, onclick: async () => {
       runStatus.replaceChildren();
       try {
@@ -3183,6 +3210,7 @@ function catalogCard(spaces, users) {
       h("summary", {}, h("strong", { text: r.dryRun ? t("catalog.dryRun") : t("catalog.run") }), " · ", when(r.started), " · ",
         r.error ? h("span", { class: "error", text: r.error })
           : t("catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn })),
+      r.formats?.length ? h("p", { class: "muted", text: t("catalog.formatsRead", { list: r.formats.join(", ") }) }) : "",
       r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn") }[x.kind] }), " ",
         x.key ? link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`) : x.title))) : "",
       r.problems.length ? h("ul", { class: "catalog-problems" }, r.problems.map((p) => h("li", { class: "muted", text: p }))) : "");
@@ -3192,8 +3220,10 @@ function catalogCard(spaces, users) {
         h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: s.enabled }), " ", t("catalog.enabled")),
         field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
           spaces.map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === s.space })))),
-        field(t("catalog.formats"), h("input", { name: "formats", value: s.formats.join(", ") })),
-        h("p", { class: "muted", text: t("catalog.formatsHelp", { defaults: data.defaults.formats.join(", ") }) }),
+        field(t("catalog.formats"), formatsInput),
+        h("p", { class: "muted" }, t("catalog.formatsHelp", { defaults: data.defaults.formats.join(", ") }), " ",
+          h("button", { type: "button", class: "link", id: "catalog-source-formats", text: t("catalog.showFormats"), onclick: showFormats })),
+        formatsBox,
         field(t("catalog.organizations"), h("input", { name: "organizations", value: s.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
         h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
         field(t("catalog.steward"), h("select", { name: "steward" }, h("option", { value: "", text: "—" }),

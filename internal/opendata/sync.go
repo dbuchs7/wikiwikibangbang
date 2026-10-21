@@ -77,16 +77,18 @@ type Change struct {
 
 // Result is what a run did, or with DryRun would do.
 type Result struct {
-	DryRun    bool      `json:"dryRun"`
-	Started   time.Time `json:"started"`
-	Seconds   float64   `json:"seconds"`
-	Datasets  int       `json:"datasets"`
-	Entries   int       `json:"entries"`
-	New       int       `json:"new"`
-	Changed   int       `json:"changed"`
-	Unchanged int       `json:"unchanged"`
-	Withdrawn int       `json:"withdrawn"`
-	Problems  []string  `json:"problems"`
+	DryRun   bool      `json:"dryRun"`
+	Started  time.Time `json:"started"`
+	Seconds  float64   `json:"seconds"`
+	Datasets int       `json:"datasets"`
+	// Formats are the source's formats the run read, as it writes them.
+	Formats   []string `json:"formats"`
+	Entries   int      `json:"entries"`
+	New       int      `json:"new"`
+	Changed   int      `json:"changed"`
+	Unchanged int      `json:"unchanged"`
+	Withdrawn int      `json:"withdrawn"`
+	Problems  []string `json:"problems"`
 	// Examples are the first changes, to judge a dry run by.
 	Examples []Change `json:"examples"`
 	Error    string   `json:"error,omitempty"`
