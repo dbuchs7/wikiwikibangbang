@@ -224,8 +224,16 @@ func (r *Runner) Forget(id string) {
 // the organizations if any are named, so an administrator can choose; id
 // names the connector whose credential is sent (ADR-0075).
 func (r *Runner) SourceFormats(ctx context.Context, id, base string, orgs []string) ([]FormatCount, error) {
-	return r.client(base, r.getenv(TokenVar(id))).Formats(ctx, orgs)
+	client := r.client(base, r.getenv(TokenVar(id)))
+	if unknown, err := client.UnknownOrganizations(ctx, orgs); err == nil && len(unknown) > 0 {
+		return nil, fmt.Errorf("%w: the source knows no organization %s; name publishers as the source's addresses do, e.g. bundesamt-fur-statistik-bfs, or leave the list empty for all",
+			ErrUnknownOrganization, strings.Join(unknown, ", "))
+	}
+	return client.Formats(ctx, orgs)
 }
+
+// ErrUnknownOrganization is a publisher the source does not know.
+var ErrUnknownOrganization = errors.New("connector: unknown organization")
 
 // Status is what an administrator sees of a connector's runs.
 type Status struct {

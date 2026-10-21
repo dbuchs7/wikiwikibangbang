@@ -53,6 +53,13 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	}
 	w.admin.expect("GET", "/api/connectors/new-one/formats?baseURL="+ckan.URL+"&organizations=meteo,%20bafu", "", http.StatusOK)
 	w.admin.expect("GET", "/api/connectors/wetter/formats?baseURL=ftp://x", "", http.StatusBadRequest)
+	orgs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"success":true,"result":["meteo"]}`)
+	}))
+	defer orgs.Close()
+	if got := w.admin.expect("GET", "/api/connectors/wetter/formats?baseURL="+orgs.URL+"&organizations=schweizerische", "", http.StatusBadRequest); !strings.Contains(jsonOf(got), "no organization schweizerische") {
+		t.Errorf("unknown publisher %s", jsonOf(got))
+	}
 	w.admin.expect("GET", "/api/connectors/wetter/formats?baseURL=http://127.0.0.1:1", "", http.StatusBadGateway)
 	w.admin.expect("POST", "/api/connectors/wetter/run", `{`, http.StatusBadRequest)
 	w.admin.expect("POST", "/api/connectors/nope/run", `{}`, http.StatusNotFound)

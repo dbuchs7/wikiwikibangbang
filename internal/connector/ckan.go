@@ -315,6 +315,36 @@ func Match(available []FormatCount, wanted []string) []string {
 	return out
 }
 
+// UnknownOrganizations returns the names among orgs that are no
+// organization of the source. A source that does not list its
+// organizations is taken at its word: the error is returned, and the
+// caller goes on.
+func (c Client) UnknownOrganizations(ctx context.Context, orgs []string) ([]string, error) {
+	if len(orgs) == 0 {
+		return nil, nil
+	}
+	var answer struct {
+		Success bool `json:"success"`
+		Error   *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Result []string `json:"result"`
+	}
+	if err := c.get(ctx, "/organization_list?"+url.Values{"limit": {"1000"}}.Encode(), &answer); err != nil {
+		return nil, err
+	}
+	if !answer.Success {
+		return nil, failure(answer.Error)
+	}
+	var unknown []string
+	for _, o := range orgs {
+		if !slices.Contains(answer.Result, o) {
+			unknown = append(unknown, o)
+		}
+	}
+	return unknown, nil
+}
+
 func failure(e *struct {
 	Message string `json:"message"`
 }) error {
@@ -412,6 +442,15 @@ func (rd *reading) problem(format string, args ...any) {
 func readCKAN(ctx context.Context, c site.Connector, client Client) (reading, error) {
 	var rd reading
 	k := c.CKAN
+	// Publishers are named by their short names in the source; a name the
+	// source does not know would leave the search empty without a word.
+	if unknown, err := client.UnknownOrganizations(ctx, k.Organizations); err == nil && len(unknown) > 0 {
+		rd.problem("the source knows no organization %s; name publishers as the source's addresses do, e.g. bundesamt-fur-statistik-bfs, or leave the list empty for all",
+			strings.Join(unknown, ", "))
+		if len(unknown) == len(k.Organizations) {
+			return rd, nil
+		}
+	}
 	available, err := client.Formats(ctx, k.Organizations)
 	if err != nil {
 		return rd, err

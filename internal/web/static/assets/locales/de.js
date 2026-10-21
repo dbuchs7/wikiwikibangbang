@@ -882,7 +882,7 @@ export default {
   "catalog.formats": "Formate, die als Schnittstelle gelten",
   "catalog.formatsHelp": "Durch Komma getrennt, Vorgabe: {defaults}. Downloads wie CSV oder JSON-Dateien gehören nicht dazu.",
   "catalog.organizations": "Nur diese Herausgeber (optional)",
-  "catalog.organizationsHelp": "Kürzel der Organisationen in der Quelle, durch Komma getrennt; leer übernimmt alle.",
+  "catalog.organizationsHelp": "Kürzel der Herausgeber wie in ihrer Adresse in der Quelle, z. B. bundesamt-fur-statistik-bfs aus …/organization/bundesamt-fur-statistik-bfs; nicht ihr ausgeschriebener Name. Durch Komma getrennt; leer übernimmt alle.",
   "catalog.steward": "Owner neuer Einträge",
   "catalog.stewardHelp": "Wird bei neuen Einträgen als Owner gesetzt, bis eine andere Person zuständig ist; diese Person erhält die Governance-Meldungen.",
   "catalog.interval": "Abgleich alle … Stunden",
