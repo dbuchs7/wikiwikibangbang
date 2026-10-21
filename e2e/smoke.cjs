@@ -244,7 +244,7 @@ function ckanSource() {
     await page.fill(".pm-target", "PLAT-1");
     await page.click(".pm-toolbar button:has-text('Embed')");
     await page.waitForSelector(".ProseMirror .pm-embed");
-    await page.click(".item-side #details h2"); // leaving the editor releases its blocks, which saves them
+    await page.click("#details h2"); // leaving the editor releases its blocks, which saves them
     await page.waitForSelector(".live[data-pending='0']");
 
     step("the body survives a reload exactly");
@@ -284,8 +284,8 @@ function ckanSource() {
     await other.keyboard.press("End");
     await other.keyboard.type(" (bert)");
     await page.waitForSelector(".pm-locked[data-holder='bert'] >> text=first item (bert)");
-    await page.click(".item-side #details h2");
-    await other.click(".item-side #details h2");
+    await page.click("#details h2");
+    await other.click("#details h2");
     await page.waitForSelector(".live[data-pending='0']");
     await other.waitForSelector(".live[data-pending='0']");
     await other.close();
@@ -482,7 +482,7 @@ function ckanSource() {
     await page.fill("#body .pm-table tr:nth-child(2) td:first-child input", "db1");
     await page.press("#body .pm-table tr:nth-child(2) td:first-child input", "Tab");
     await page.selectOption("#body .pm-toolbar select >> nth=1", "toc");
-    await page.click(".item-side #details h2"); // leave the editor: its blocks are released and saved
+    await page.click("#details h2"); // leave the editor: its blocks are released and saved
     await page.waitForSelector(".live[data-pending='0']");
     await page.reload();
     await page.waitForSelector("#body .pm-task[data-checked='true']:has-text('Check the backups')");

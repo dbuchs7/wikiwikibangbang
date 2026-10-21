@@ -34,3 +34,7 @@ Chosen option: **1**, the way people are used to editing wiki pages. Option 2 is
 - Bad: one more click before writing in an existing page.
 - Bad: while reading, others' live edits are not shown until the page is opened again; the read view shows what was saved.
 - Neutral: the history and its comparison of versions sit in the narrower column.
+
+## Links
+
+- amended by [ADR-0079](0079-owner-and-details-lead-the-main-column.md) (owner and details lead the main column)

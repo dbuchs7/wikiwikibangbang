@@ -2329,9 +2329,10 @@ async function itemView(ref, params = new URLSearchParams()) {
       item.managed ? " · " + t("item.managed") : "") : "",
     status,
     h("div", { class: "item-layout" },
-      h("div", { class: "item-main" }, body || h("p", { class: "muted", text: t("item.noBody") })),
+      // The owner and details lead the main column, above the text, so a
+      // catalog entry reads as one page (ADR-0079).
+      h("div", { class: "item-main" }, details, body || h("p", { class: "muted", text: t("item.noBody") })),
       h("aside", { class: "item-side", "aria-label": t("item.side") },
-        details,
         threads.section,
         attachmentsSection(path, attachments, canEdit),
         await relationsSection(path, out.relations, inc.relations, item.id, canEdit),
