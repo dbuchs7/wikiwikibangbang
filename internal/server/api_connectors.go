@@ -1,0 +1,226 @@
+package server
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
+	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+)
+
+// connectorRoutes set up the connectors that keep catalog spaces in step
+// with external sources, and show how their runs went (ADR-0077).
+func connectorRoutes(d Deps) []Route {
+	h := authHandlers{d: d}
+	return []Route{
+		{Method: http.MethodGet, Pattern: "/api/connectors", Summary: "The connectors with their settings and last runs, and the templates to start one from (administrators)", Handler: http.HandlerFunc(h.connectors)},
+		{Method: http.MethodPost, Pattern: "/api/connectors", Summary: "Add a connector: ID, name, kind, space, interval, steward and the settings of its kind (administrators)", Handler: http.HandlerFunc(h.addConnector)},
+		{Method: http.MethodPut, Pattern: "/api/connectors/{id}", Summary: "Change a connector's settings; its ID stays (administrators)", Handler: http.HandlerFunc(h.setConnector)},
+		{Method: http.MethodDelete, Pattern: "/api/connectors/{id}", Summary: "Remove a connector; the entries it wrote stay, with their origin (administrators)", Handler: http.HandlerFunc(h.removeConnector)},
+		{Method: http.MethodPost, Pattern: "/api/connectors/{id}/run", Summary: "Run a connector now, in the background; dryRun reports what it would change without writing (administrators)", Handler: http.HandlerFunc(h.runConnector)},
+		{Method: http.MethodGet, Pattern: "/api/connectors/{id}/formats", Summary: "The resource formats a CKAN source's data sets use, with how many data sets use each, to choose the interfaces from; baseURL and organizations as typed, else as saved (administrators)", Handler: http.HandlerFunc(h.connectorFormats)},
+	}
+}
+
+func (h authHandlers) connectors(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.adminOnly(w, r); !ok {
+		return
+	}
+	type entry struct {
+		site.Connector
+		Status connector.Status `json:"status"`
+	}
+	list := []entry{}
+	for _, c := range h.d.DB.Site.Connectors() {
+		list = append(list, entry{Connector: c, Status: h.d.Connectors.Status(c.ID)})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"connectors": list,
+		"templates":  site.ConnectorTemplates(),
+		"kinds":      site.ConnectorKinds,
+		"type":       connector.TypeName,
+	})
+}
+
+// checkConnector refuses a space that does not exist and a steward who
+// is not a user, which the settings cannot know.
+func (h authHandlers) checkConnector(w http.ResponseWriter, c site.Connector) bool {
+	space := strings.TrimSpace(c.Space)
+	exists := true
+	if space != "" {
+		h.d.DB.Read(func(s *item.Store) { exists = s.HasSpace(space) })
+	}
+	if !exists {
+		writeError(w, http.StatusBadRequest, "the space "+space+" does not exist; create it first")
+		return false
+	}
+	if c.Steward != "" {
+		if _, ok := h.d.DB.Accounts.Usernames([]auth.UserID{auth.UserID(c.Steward)})[auth.UserID(c.Steward)]; !ok {
+			writeError(w, http.StatusBadRequest, "the steward is not a user")
+			return false
+		}
+	}
+	return true
+}
+
+func (h authHandlers) addConnector(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.adminOnly(w, r)
+	if !ok {
+		return
+	}
+	var c site.Connector
+	if err := readJSON(w, r, &c); err != nil {
+		badRequest(w, err)
+		return
+	}
+	if _, exists := h.d.DB.Site.Connector(strings.TrimSpace(c.ID)); exists {
+		writeError(w, http.StatusConflict, "a connector "+c.ID+" exists")
+		return
+	}
+	h.keepConnector(w, r, actor, c, http.StatusCreated)
+}
+
+func (h authHandlers) setConnector(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.adminOnly(w, r)
+	if !ok {
+		return
+	}
+	var c site.Connector
+	if err := readJSON(w, r, &c); err != nil {
+		badRequest(w, err)
+		return
+	}
+	c.ID = r.PathValue("id")
+	if _, exists := h.d.DB.Site.Connector(c.ID); !exists {
+		writeError(w, http.StatusNotFound, "no connector "+c.ID)
+		return
+	}
+	h.keepConnector(w, r, actor, c, http.StatusOK)
+}
+
+func (h authHandlers) keepConnector(w http.ResponseWriter, r *http.Request, actor string, c site.Connector, status int) {
+	if !h.checkConnector(w, c) {
+		return
+	}
+	kept, err := h.d.DB.Site.SetConnector(actor, c)
+	if err != nil {
+		if errors.Is(err, site.ErrInvalid) {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "connector not saved")
+		return
+	}
+	detail := map[string]string{"connector": kept.ID, "kind": kept.Kind, "enabled": strconv.FormatBool(kept.Enabled), "intervalHours": strconv.Itoa(kept.IntervalHours)}
+	if k := kept.CKAN; k != nil {
+		detail["source"], detail["formats"], detail["organizations"] = k.BaseURL, strings.Join(k.Formats, " "), strings.Join(k.Organizations, " ")
+	}
+	h.record(audit.Entry{Event: audit.CatalogSyncChanged, Actor: actor, Addr: clientAddr(r), Subject: kept.Space, Detail: detail})
+	writeJSON(w, status, kept)
+}
+
+func (h authHandlers) removeConnector(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.adminOnly(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	c, exists := h.d.DB.Site.Connector(id)
+	if !exists {
+		writeError(w, http.StatusNotFound, "no connector "+id)
+		return
+	}
+	if h.d.Connectors.Status(id).Running {
+		writeError(w, http.StatusConflict, "the connector is running")
+		return
+	}
+	if err := h.d.DB.Site.RemoveConnector(actor, id); err != nil {
+		writeError(w, http.StatusInternalServerError, "connector not removed")
+		return
+	}
+	h.d.Connectors.Forget(id)
+	h.record(audit.Entry{Event: audit.CatalogSyncChanged, Actor: actor, Addr: clientAddr(r), Subject: c.Space, Detail: map[string]string{"connector": id, "removed": "true"}})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h authHandlers) runConnector(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.adminOnly(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		DryRun bool `json:"dryRun"`
+	}
+	if err := readJSON(w, r, &req); err != nil {
+		badRequest(w, err)
+		return
+	}
+	id := r.PathValue("id")
+	c, exists := h.d.DB.Site.Connector(id)
+	if !exists {
+		writeError(w, http.StatusNotFound, "no connector "+id)
+		return
+	}
+	if c.Space == "" {
+		writeError(w, http.StatusConflict, "set the connector's space first")
+		return
+	}
+	err := h.d.Connectors.Start(id, req.DryRun, actor)
+	switch {
+	case errors.Is(err, connector.ErrBusy):
+		writeError(w, http.StatusConflict, "the connector is running")
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "the connector did not start")
+	default:
+		w.WriteHeader(http.StatusAccepted)
+	}
+}
+
+// formatsTimeout bounds asking the source for its formats.
+const formatsTimeout = 30 * time.Second
+
+func (h authHandlers) connectorFormats(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.adminOnly(w, r); !ok {
+		return
+	}
+	// The source and organizations as typed, so they can be chosen before
+	// they are saved; the saved ones otherwise. A connector not yet saved
+	// starts from the first template.
+	id := r.PathValue("id")
+	c, exists := h.d.DB.Site.Connector(id)
+	if !exists {
+		c = site.ConnectorTemplates()[0]
+		c.ID = id
+	}
+	if c.CKAN == nil {
+		writeError(w, http.StatusBadRequest, "the connector does not read a CKAN source")
+		return
+	}
+	q := r.URL.Query()
+	if q.Has("baseURL") {
+		c.CKAN.BaseURL = q.Get("baseURL")
+	}
+	if q.Has("organizations") {
+		c.CKAN.Organizations = strings.FieldsFunc(q.Get("organizations"), func(c rune) bool { return c == ',' || c == ' ' || c == ';' })
+	}
+	c.Enabled = false
+	if err := c.Normalize().Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), formatsTimeout)
+	defer cancel()
+	formats, err := h.d.Connectors.SourceFormats(ctx, c.ID, c.CKAN.BaseURL, c.CKAN.Organizations)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"formats": formats})
+}

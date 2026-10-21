@@ -32,10 +32,11 @@ var classified = map[string]string{
 		"not a caller's input to this server, it guards against a destination that misbehaves",
 	"internal/backup/dest/remote.go:2048": "the start of a destination's error answer, quoted in the error message (ADR-0073)",
 	"internal/item.maxURL":                "the shape of a url field (ADR-0074), like the length of a username; what a request carries is bounded by RequestBody",
-	"internal/opendata.maxAnswer": "the answer of the catalog source the synchronisation reads (ADR-0075), not a caller's input to this server; " +
-		"it guards the synchronisation against a source that misbehaves",
-	"internal/opendata/ckan.go:maxAnswer": "the same bound, where the answer is read",
-	"internal/opendata.maxDatasets": "the size of one synchronisation run (ADR-0075), so a misbehaving source cannot make it endless; " +
+	"internal/connector.maxAnswer": "the answer of the catalog source a connector reads (ADR-0075, ADR-0077), not a caller's input to this server; " +
+		"it guards the connector against a source that misbehaves",
+	"internal/connector/ckan.go:maxAnswer": "the same bound, where the answer is read",
+	"internal/site.maxConnectors":          "the shape of the site's settings (ADR-0077): how many connectors an administrator keeps, like the number of regulations",
+	"internal/connector.maxDatasets": "the size of one connector's run (ADR-0075), so a misbehaving source cannot make it endless; " +
 		"not memory a caller of this server can claim",
 	"internal/item.maxColumns":       "the shape of a kanban (ADR-0076), like the length of its name; a definition of the space, not memory a caller claims",
 	"internal/item.maxCardFields":    "the shape of a kanban's cards (ADR-0076): how many fields a card shows",

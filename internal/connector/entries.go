@@ -1,4 +1,4 @@
-package opendata
+package connector
 
 import (
 	"fmt"

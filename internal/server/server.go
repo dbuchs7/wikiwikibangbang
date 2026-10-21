@@ -23,9 +23,9 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/autobackup"
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
+	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/metrics"
-	"github.com/dbuchs7/wikiwikibangbang/internal/opendata"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
@@ -82,9 +82,9 @@ type Deps struct {
 	// Backups takes automatic backups (ADR-0073); Routes creates one that
 	// reads the process environment when it is nil.
 	Backups *autobackup.Runner
-	// OpenData synchronises a catalog with opendata.swiss (ADR-0075);
-	// Routes creates one when it is nil.
-	OpenData *opendata.Runner
+	// Connectors keep catalog spaces in step with external sources
+	// (ADR-0077); Routes creates one when it is nil.
+	Connectors *connector.Runner
 }
 
 // MetricsPath serves the operational metrics. It is the only path a token
@@ -130,8 +130,8 @@ func Routes(d Deps) []Route {
 	if d.Backups == nil && d.DB != nil {
 		d.Backups = autobackup.New(d.DB, os.Getenv, buildinfo.Get().String(), d.Log)
 	}
-	if d.OpenData == nil && d.DB != nil {
-		d.OpenData = opendata.New(d.DB, d.Log)
+	if d.Connectors == nil && d.DB != nil {
+		d.Connectors = connector.New(d.DB, d.Log)
 	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
@@ -154,7 +154,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, mcpRoutes()...)
 	routes = append(routes, oauthRoutes(d)...)
 	routes = append(routes, autoBackupRoutes(d)...)
-	routes = append(routes, openDataRoutes(d)...)
+	routes = append(routes, connectorRoutes(d)...)
 	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
 		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}

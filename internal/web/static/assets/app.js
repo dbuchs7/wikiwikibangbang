@@ -3149,7 +3149,7 @@ async function adminView() {
     }),
     autoBackupCard());
 
-  const catalogSection = section("catalog", t("catalog.title"), catalogCard(spaces, users));
+  const catalogSection = section("connectors", t("connector.title"), connectorsCard(spaces, users));
   const designSection = section("design", t("design.title"), await designCard());
   const regulationsSection = section("regulations", t("dp.adminTitle"), await regulationsCard());
 
@@ -3329,107 +3329,160 @@ function infoButton(help) {
   } }, infoIcon());
 }
 
-// catalogCard sets up the synchronisation of a catalog of interfaces with
-// opendata.swiss and shows how its runs went (ADR-0075). A dry run reports
-// what a run would change; while one runs the card looks again.
-function catalogCard(spaces, users) {
-  const card = h("div", { id: "catalog-sync" }, h("p", { class: "muted", text: t("autobackup.loading") }));
+// connectorsCard lists the connectors that keep catalog spaces in step
+// with external sources, such as opendata.swiss, and opens one to set it
+// up and run it (ADR-0077). A dry run reports what a run would change;
+// while one runs the card looks again.
+function connectorsCard(spaces, users) {
+  const card = h("div", { id: "connectors" }, h("p", { class: "muted", text: t("autobackup.loading") }));
   let timer = 0;
+  // The connector open in the editor: its ID, or a template for a new one.
+  let open = null;
   const list = (v) => v.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
   const load = async () => {
     clearTimeout(timer);
     if (!card.isConnected && timer) return;
     let data;
     try {
-      data = await get("/api/catalog/opendata");
+      data = await get("/api/connectors");
     } catch (err) {
       card.replaceChildren(errorBox(err));
       return;
     }
-    const { settings: s, status: st } = data;
-    const runStatus = h("div", { class: "status", id: "catalog-run-status" });
-    // The formats the source uses, to tick the ones that are interfaces:
-    // the source names them its own way, e.g. "WMS-Dienst".
-    const formatsInput = h("input", { name: "formats", value: s.formats.join(", ") });
-    const formatsBox = h("div", { id: "catalog-formats" });
-    const showFormats = async () => {
-      formatsBox.replaceChildren(h("p", { class: "muted", text: t("catalog.loadingFormats") }));
-      try {
-        const form = card.querySelector("#catalog-settings");
-        const { formats } = await get("/api/catalog/opendata/formats?" + new URLSearchParams({
-          baseURL: form.querySelector("[name=baseURL]").value.trim(), organizations: list(form.querySelector("[name=organizations]").value).join(","),
-        }));
-        const chosen = new Set(list(formatsInput.value).map((f) => f.toUpperCase()));
-        const boxes = formats.map((f) => h("input", { type: "checkbox", value: f.format, checked: chosen.has(f.format.toUpperCase()) }));
-        const apply = () => {
-          const picked = boxes.filter((b) => b.checked).map((b) => b.value.toUpperCase());
-          const others = list(formatsInput.value).filter((f) => !formats.some((x) => x.format.toUpperCase() === f.toUpperCase()));
-          formatsInput.value = [...picked, ...others].join(", ");
-        };
-        boxes.forEach((b) => b.addEventListener("change", apply));
-        formatsBox.replaceChildren(
-          h("p", { class: "muted", text: t("catalog.formatsPick", { n: formats.length }) }),
-          formats.length ? h("div", { class: "format-list" }, formats.map((f, i) => h("label", { class: "check" }, boxes[i], " ", f.format, " ",
-            h("span", { class: "muted", text: `(${f.count})` })))) : h("p", { class: "muted", text: t("catalog.noFormats") }));
-      } catch (err) {
-        formatsBox.replaceChildren(errorBox(err));
-      }
+    const last = (c) => c.status.history[0];
+    const rows = data.connectors.map((c) => h("tr", { "data-connector": c.id },
+      h("td", {}, h("strong", { text: c.name }), h("br"), h("span", { class: "muted", text: c.id })),
+      h("td", { text: c.kind.toUpperCase() }),
+      h("td", { text: c.space || "—" }),
+      h("td", { text: c.status.running ? t("catalog.running") : last(c) ? `${when(last(c).started)} · ${last(c).error ? t("connector.failed") : t("connector.entries", { n: last(c).entries })}` : "—" }),
+      h("td", { text: c.enabled ? t("connector.on") : t("connector.off") }),
+      h("td", {}, h("button", { type: "button", class: "link", text: t("common.edit"), onclick: () => { open = c.id; load(); } }))));
+    const fresh = () => {
+      const tpl = structuredClone(data.templates[0]);
+      if (data.connectors.some((c) => c.id === tpl.id)) tpl.id = "";
+      return { ...tpl, status: { running: false, history: [], credential: false, credentialVar: "" }, isNew: true };
     };
-    const run = (dryRun, id, text) => h("button", { type: "button", class: dryRun ? "secondary" : "primary", id, disabled: st.running || !s.space, text, onclick: async () => {
-      runStatus.replaceChildren();
-      try {
-        await post("/api/catalog/opendata/run", { dryRun });
-        await load();
-      } catch (err) {
-        runStatus.replaceChildren(errorBox(err));
-      }
-    } });
-    const result = (r) => h("details", { class: "catalog-run", open: r === st.history[0] },
-      h("summary", {}, h("strong", { text: r.dryRun ? t("catalog.dryRun") : t("catalog.run") }), " · ", when(r.started), " · ",
-        r.error ? h("span", { class: "error", text: r.error })
-          : t("catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn })),
-      r.formats?.length ? h("p", { class: "muted", text: t("catalog.formatsRead", { list: r.formats.join(", ") }) }) : "",
-      r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn") }[x.kind] }), " ",
-        x.key ? link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`) : x.title))) : "",
-      r.problems.length ? h("ul", { class: "catalog-problems" }, r.problems.map((p) => h("li", { class: "muted", text: p }))) : "");
+    const chosen = open === "new" ? fresh() : data.connectors.find((c) => c.id === open);
     card.replaceChildren(
-      h("p", { class: "muted", text: t("catalog.note") }),
-      form({ id: "catalog-settings" }, [
-        h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: s.enabled }), " ", t("catalog.enabled")),
-        field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
-          spaces.map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === s.space })))),
-        field(t("catalog.formats"), formatsInput),
-        h("p", { class: "muted" }, t("catalog.formatsHelp", { defaults: data.defaults.formats.join(", ") }), " ",
-          h("button", { type: "button", class: "link", id: "catalog-source-formats", text: t("catalog.showFormats"), onclick: showFormats })),
-        formatsBox,
-        field(t("catalog.organizations"), h("input", { name: "organizations", value: s.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
-        h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
-        field(t("catalog.steward"), h("select", { name: "steward" }, h("option", { value: "", text: "—" }),
-          users.map((u) => h("option", { value: u.id, text: u.username, selected: u.id === s.steward })))),
-        h("p", { class: "muted", text: t("catalog.stewardHelp") }),
-        field(t("catalog.interval"), h("input", { name: "intervalHours", type: "number", min: 1, max: 744, required: true, value: s.intervalHours })),
-        h("details", {}, h("summary", { text: t("catalog.source") }),
-          field(t("catalog.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: s.baseURL })),
-          field(t("catalog.portalURL"), h("input", { name: "portalURL", type: "url", required: true, value: s.portalURL }))),
-        h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", text: t("autobackup.save") })),
-      ], async (d) => {
-        await put("/api/catalog/opendata/settings", {
-          enabled: d.get("enabled") === "on", space: d.get("space"), formats: list(d.get("formats")), organizations: list(d.get("organizations")),
-          steward: d.get("steward"), intervalHours: Number(d.get("intervalHours")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(),
-        });
-        await load();
-        card.querySelector("#catalog-settings .status")?.replaceChildren(h("p", { class: "notice", text: t("autobackup.saved") }));
-      }),
-      h("p", { id: "catalog-next" }, st.running ? t("catalog.running") : st.next ? t("catalog.next", { when: when(st.next) }) : t("catalog.off")),
-      h("div", { class: "actions-row" }, run(true, "catalog-dry-run", t("catalog.dryRunNow")), run(false, "catalog-run-now", t("catalog.runNow")),
-        s.space ? link("#/space/" + encodeURIComponent(s.space), t("catalog.openSpace"), "button") : ""),
-      runStatus,
-      st.history.length ? h("div", { id: "catalog-history" }, st.history.map(result)) : h("p", { class: "muted", text: t("catalog.noRuns") }),
+      h("p", { class: "muted", text: t("connector.note") }),
+      data.connectors.length ? h("table", { id: "connector-list" },
+        h("thead", {}, h("tr", {}, [t("connector.name"), t("connector.kind"), t("catalog.space"), t("connector.lastRun"), t("connector.schedule"), ""].map((x) => h("th", { text: x })))),
+        h("tbody", {}, rows)) : h("p", { class: "muted", text: t("connector.none") }),
+      h("p", {}, h("button", { type: "button", id: "connector-new", text: t("connector.new", { name: data.templates[0].name }), onclick: () => { open = "new"; load(); } })),
+      chosen ? connectorEditor(chosen, data, spaces, users, list, (id) => { open = id; load(); }) : "",
     );
-    if (st.running) timer = setTimeout(load, 1500);
+    if (data.connectors.some((c) => c.status.running)) timer = setTimeout(load, 1500);
   };
   load();
   return card;
+}
+
+// connectorEditor sets up one connector of the kind ckan, runs it and
+// shows its last runs; reopen(id) shows the card again with id open, or
+// none.
+function connectorEditor(c, data, spaces, users, list, reopen) {
+  const k = c.ckan;
+  const path = "/api/connectors/" + encodeURIComponent(c.id);
+  const st = c.status;
+  const runStatus = h("div", { class: "status", id: "connector-run-status" });
+  // The formats the source uses, to tick the ones that are interfaces:
+  // the source names them its own way, e.g. "WMS-Dienst".
+  const formatsInput = h("input", { name: "formats", value: k.formats.join(", ") });
+  const formatsBox = h("div", { id: "connector-formats" });
+  const editor = h("div", { class: "connector-editor", id: "connector-editor" });
+  const showFormats = async () => {
+    formatsBox.replaceChildren(h("p", { class: "muted", text: t("catalog.loadingFormats") }));
+    try {
+      const form = editor.querySelector("#connector-settings");
+      const id = form.querySelector("[name=id]").value.trim() || "new";
+      const { formats } = await get(`/api/connectors/${encodeURIComponent(id)}/formats?` + new URLSearchParams({
+        baseURL: form.querySelector("[name=baseURL]").value.trim(), organizations: list(form.querySelector("[name=organizations]").value).join(","),
+      }));
+      const chosen = new Set(list(formatsInput.value).map((f) => f.toUpperCase()));
+      const boxes = formats.map((f) => h("input", { type: "checkbox", value: f.format, checked: chosen.has(f.format.toUpperCase()) }));
+      const apply = () => {
+        const picked = boxes.filter((b) => b.checked).map((b) => b.value.toUpperCase());
+        const others = list(formatsInput.value).filter((f) => !formats.some((x) => x.format.toUpperCase() === f.toUpperCase()));
+        formatsInput.value = [...picked, ...others].join(", ");
+      };
+      boxes.forEach((b) => b.addEventListener("change", apply));
+      formatsBox.replaceChildren(
+        h("p", { class: "muted", text: t("catalog.formatsPick", { n: formats.length }) }),
+        formats.length ? h("div", { class: "format-list" }, formats.map((f, i) => h("label", { class: "check" }, boxes[i], " ", f.format, " ",
+          h("span", { class: "muted", text: `(${f.count})` })))) : h("p", { class: "muted", text: t("catalog.noFormats") }));
+    } catch (err) {
+      formatsBox.replaceChildren(errorBox(err));
+    }
+  };
+  const run = (dryRun, id, text) => h("button", { type: "button", class: dryRun ? "secondary" : "primary", id, disabled: st.running || !c.space, text, onclick: async () => {
+    runStatus.replaceChildren();
+    try {
+      await post(path + "/run", { dryRun });
+      reopen(c.id);
+    } catch (err) {
+      runStatus.replaceChildren(errorBox(err));
+    }
+  } });
+  const result = (r) => h("details", { class: "catalog-run", open: r === st.history[0] },
+    h("summary", {}, h("strong", { text: r.dryRun ? t("catalog.dryRun") : t("catalog.run") }), " · ", when(r.started), " · ",
+      r.error ? h("span", { class: "error", text: r.error })
+        : t("catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn })),
+    r.formats?.length ? h("p", { class: "muted", text: t("catalog.formatsRead", { list: r.formats.join(", ") }) }) : "",
+    r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn") }[x.kind] }), " ",
+      x.key ? link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`) : x.title))) : "",
+    r.problems.length ? h("ul", { class: "catalog-problems" }, r.problems.map((p) => h("li", { class: "muted", text: p }))) : "");
+  editor.replaceChildren(
+    h("h3", { text: c.isNew ? t("connector.newTitle") : c.name }),
+    h("p", { class: "muted", text: t("catalog.note") }),
+    form({ id: "connector-settings" }, [
+      field(t("connector.id"), h("input", { name: "id", value: c.id, required: true, readonly: !c.isNew, pattern: "[a-z0-9][a-z0-9.\\-]{0,39}", maxlength: 40 })),
+      c.isNew ? h("p", { class: "muted", text: t("connector.idHelp") }) : "",
+      field(t("connector.name"), h("input", { name: "name", value: c.name, required: true, maxlength: 80 })),
+      h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: c.enabled }), " ", t("catalog.enabled")),
+      field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
+        spaces.map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === c.space })))),
+      field(t("catalog.formats"), formatsInput),
+      h("p", { class: "muted" }, t("catalog.formatsHelp", { defaults: data.templates[0].ckan.formats.join(", ") }), " ",
+        h("button", { type: "button", class: "link", id: "connector-source-formats", text: t("catalog.showFormats"), onclick: showFormats })),
+      formatsBox,
+      field(t("catalog.organizations"), h("input", { name: "organizations", value: k.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
+      h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
+      field(t("catalog.steward"), h("select", { name: "steward" }, h("option", { value: "", text: "—" }),
+        users.map((u) => h("option", { value: u.id, text: u.username, selected: u.id === c.steward })))),
+      h("p", { class: "muted", text: t("catalog.stewardHelp") }),
+      field(t("catalog.interval"), h("input", { name: "intervalHours", type: "number", min: 1, max: 744, required: true, value: c.intervalHours })),
+      h("details", {}, h("summary", { text: t("catalog.source") }),
+        field(t("catalog.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: k.baseURL })),
+        field(t("catalog.portalURL"), h("input", { name: "portalURL", type: "url", required: true, value: k.portalURL }))),
+      c.isNew ? "" : h("p", { class: "muted", id: "connector-credential",
+        text: st.credential ? t("connector.credentialSet", { name: st.credentialVar }) : t("connector.credentialUnset", { name: st.credentialVar }) }),
+      h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", text: t("autobackup.save") }),
+        c.isNew ? h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => reopen(null) })
+          : h("button", { type: "button", class: "link danger", id: "connector-delete", text: t("connector.remove"), onclick: async () => {
+            if (!confirm(t("connector.removeConfirm", { name: c.name }))) return;
+            try {
+              await del(path);
+              reopen(null);
+            } catch (err) {
+              runStatus.replaceChildren(errorBox(err));
+            }
+          } })),
+    ], async (d) => {
+      const body = {
+        id: d.get("id").trim(), name: d.get("name").trim(), kind: c.kind, enabled: d.get("enabled") === "on", space: d.get("space"),
+        steward: d.get("steward"), intervalHours: Number(d.get("intervalHours")),
+        ckan: { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim() },
+      };
+      const kept = c.isNew ? await post("/api/connectors", body) : await put(path, body);
+      reopen(kept.id);
+    }),
+    c.isNew ? "" : h("p", { id: "connector-next" }, st.running ? t("catalog.running") : st.next ? t("catalog.next", { when: when(st.next) }) : t("catalog.off")),
+    c.isNew ? "" : h("div", { class: "actions-row" }, run(true, "connector-dry-run", t("catalog.dryRunNow")), run(false, "connector-run-now", t("catalog.runNow")),
+      c.space ? link("#/space/" + encodeURIComponent(c.space), t("catalog.openSpace"), "button") : ""),
+    runStatus,
+    c.isNew ? "" : st.history.length ? h("div", { id: "connector-history" }, st.history.map(result)) : h("p", { class: "muted", text: t("catalog.noRuns") }),
+  );
+  return editor;
 }
 
 // autoBackupCard sets up automatic backups and shows how they went

@@ -1,11 +1,11 @@
 # Keeping a catalog current with agents
 
-This guide is for an AI assistant (e.g. Claude) connected to wikiwikibangbang over MCP ([ADR-0012](../adr/0012-mcp-adapter-over-http-api.md), [ADR-0068](../adr/0068-oauth-for-ai-assistants.md)) that is asked to work on a catalog of interfaces ([ADR-0074](../adr/0074-catalogs-kept-in-step-with-other-systems.md), [ADR-0075](../adr/0075-mirroring-the-interfaces-of-opendata-swiss.md)). It can be given to the assistant as instructions.
+This guide is for an AI assistant (e.g. Claude) connected to wikiwikibangbang over MCP ([ADR-0012](../adr/0012-mcp-adapter-over-http-api.md), [ADR-0068](../adr/0068-oauth-for-ai-assistants.md)) that is asked to work on a catalog of interfaces ([ADR-0074](../adr/0074-catalogs-kept-in-step-with-other-systems.md), [ADR-0075](../adr/0075-mirroring-the-interfaces-of-opendata-swiss.md), [ADR-0077](../adr/0077-connectors-keep-catalogs-in-step-with-their-sources.md)). It can be given to the assistant as instructions.
 
 ## What the catalog is
 
 - A space, e.g. `API`, holding items of the type `interface`, one per endpoint.
-- Entries from opendata.swiss are mirrored by the server's synchronisation; their origin links to the data set on the portal, the system of record.
+- Entries from a source such as opendata.swiss are mirrored by a connector of the server; their origin names the connector and links to the data set on the portal, the system of record.
 - Mirrored fields are overwritten by every run: `source-id`, `format`, `endpoint`, `publisher`, `dataset`, `modified` and the title. Do not change them; change them at the source.
 - Fields that belong to the catalog: `owner`, `reviewed`, the body. `contact` and `specification` are kept when the source names none, so they are the place to add what is missing.
 

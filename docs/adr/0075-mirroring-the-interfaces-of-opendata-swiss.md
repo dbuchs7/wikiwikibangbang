@@ -34,7 +34,7 @@ Chosen option: **2**, because a deterministic synchronisation is the only one th
 - **Owner.** The publisher is the owner in the source and is mirrored as `publisher`; the person here who answers for an entry is the `owner` field. New entries get the *steward* from the settings, if one is set, until someone else takes them over.
 - **What a run writes.** The fields the source knows are mirrored: `source-id`, `format`, `endpoint`, `publisher`, `dataset`, `modified`, and the title. `contact` and `specification` are taken from the source when it names them and otherwise kept, so what an agent or a person adds stays. `owner`, `reviewed`, the body, comments, relations and labels are never touched. The items are not locked (no `Managed` tag): the owner and the review must be set here; a change to a mirrored field is overwritten by the next run, and the history shows it.
 - **Withdrawal.** An entry the source no longer publishes is set to `withdrawn`, not deleted, and back to `active` when it returns. If the source answers fewer than half the entries that are active here, or none, nothing is withdrawn and the run says so: that is more likely a failure than a mass withdrawal.
-- **Running.** On the schedule set under *Administration → Catalog sync* (every 24 hours by default), and on request: a *dry run* reports the counts and the first changes without writing, a run writes. Runs are audited (`catalog.sync`), as are changes to the settings (`catalog.sync.change`); the last ten runs are shown, held in memory.
+- **Running.** On the schedule set under *Administration → Connectors* (ADR-0077; formerly *Catalog sync*) (every 24 hours by default), and on request: a *dry run* reports the counts and the first changes without writing, a run writes. Runs are audited (`catalog.sync`), as are changes to the settings (`catalog.sync.change`); the last ten runs are shown, held in memory.
 - **The source is read with care.** Multilingual fields come as an object of languages, as text, or as text holding such an object; contact points as a list or one; documentation as a list, text, or a list encoded as text. All are read; a field that cannot be read is left empty, not the run failed. German is preferred, then English, French, Italian.
 - **Becoming the master.** Switching the synchronisation off leaves a catalog of ordinary items; their origins keep the link to opendata.swiss.
 
@@ -69,6 +69,7 @@ Strongest form: reuses the existing importer.
 
 ## Links
 
+- amended by [ADR-0077](0077-connectors-keep-catalogs-in-step-with-their-sources.md) (the synchronisation is the connector `opendata.swiss`)
 - builds on ADR-0074 (catalog rules) and ADR-0023 (origin, upsert, release)
 - relates to ADR-0040 and ADR-0057 (governance), ADR-0012 (MCP), ADR-0039 (link check)
 - the guide for agents: [docs/guides/catalog-agents.md](../guides/catalog-agents.md)
