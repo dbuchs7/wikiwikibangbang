@@ -1372,7 +1372,10 @@ async function requestsCard() {
 
 async function tasksView(tab, params) {
   const show = screen();
-  const [{ types }, { spaces }, requests] = await Promise.all([get("/api/types"), get("/api/spaces"), requestsCard()]);
+  const [{ types }, { spaces }, requests, { kanbans }] = await Promise.all([get("/api/types"), get("/api/spaces"), requestsCard(), get("/api/kanbans").catch(() => ({ kanbans: [] }))]);
+  // A label that is a kanban's links to its board: a task on a kanban is
+  // in the list as well (ADR-0060).
+  const kanbanOf = new Map(kanbans.map((k) => [`${k.space}\n${k.label}`, k]));
   const typeOf = new Map(types.filter((ty) => ty.workflow).map((ty) => [ty.name, { ty, f: taskFields(ty) }]));
   let page = await get("/api/items?limit=100");
   const items = [...page.items];
@@ -1428,9 +1431,13 @@ async function tasksView(tab, params) {
       : null;
     const moves = canAct ? ty.workflow.transitions.filter((tr) => tr.from.includes(it.state))
       .map((tr) => h("button", { class: "link", text: tr.name, onclick: () => action(() => post(`/api/items/${it.id}/transitions`, { name: tr.name }), status) })) : [];
-    return h("tr", { class: due && due < today ? "overdue" : "" },
+    return h("tr", { class: due && due < today ? "overdue" : "", "data-key": it.key },
       h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)),
       h("td", { text: it.title }),
+      h("td", { class: "task-labels" }, (it.labels || []).map((l) => {
+        const k = kanbanOf.get(`${it.space}\n${l}`);
+        return k ? link(`#/kanban/${encodeURIComponent(k.space)}/${k.id}`, l, "chip kanban-chip") : h("span", { class: "chip", text: l });
+      })),
       h("td", { text: it.state }),
       h("td", { text: who === null ? "" : who ? person(who) : t("tasks.nobody") }),
       h("td", {}, due ? h("span", { class: due < today ? "badge danger" : due === today ? "badge" : "", text: due < today ? t("tasks.overdue", { date: due }) : due }) : ""),
@@ -1441,7 +1448,7 @@ async function tasksView(tab, params) {
   // Every column can be filtered. The filters apply at once, without
   // reading the tasks again, and are kept in the address, so a reload or a
   // shared link shows the same; changing a tab keeps them.
-  const filterNames = ["key", "title", "state", "who", "due", "prio"];
+  const filterNames = ["key", "title", "state", "who", "due", "prio", "labels", "labelMode"];
   const filters = Object.fromEntries(filterNames.map((k) => [k, params.get(k) || ""]));
   const query = (extra = {}) => {
     const q = new URLSearchParams();
@@ -1450,10 +1457,17 @@ async function tasksView(tab, params) {
   };
   const weekEnd = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
   const contains = (text, part) => String(text).toLowerCase().includes(part.trim().toLowerCase());
+  // Labels filter by any of the chosen ones, or by all of them; "-" stands
+  // for tasks without a label.
+  const chosenLabels = () => filters.labels ? filters.labels.split(",") : [];
+  const labelled = (it) => {
+    const chosen = chosenLabels(), has = (l) => l === "-" ? !(it.labels || []).length : (it.labels || []).includes(l);
+    return !chosen.length || (filters.labelMode === "all" ? chosen.every(has) : chosen.some(has));
+  };
   const matches = (it) => {
     const due = dueOf(it), who = assigneeOf(it);
     const f = typeOf.get(it.type).f;
-    return contains(it.key, filters.key) && contains(it.title, filters.title)
+    return labelled(it) && contains(it.key, filters.key) && contains(it.title, filters.title)
       && (!filters.state || it.state === filters.state)
       && (!filters.who || (filters.who === "-" ? who === "" : who === filters.who))
       && (!filters.prio || (f.priority && it.properties[f.priority.name] === filters.prio))
@@ -1485,6 +1499,7 @@ async function tasksView(tab, params) {
   const filterRow = h("tr", { class: "filters" },
     h("td", {}, typed("key", t("col.item"))),
     h("td", {}, typed("title", t("col.title"))),
+    h("td", {}),
     h("td", {}, choose("state", t("col.state"), distinct(shown.map((it) => it.state)).map((v) => [v, v]))),
     h("td", {}, choose("who", t("tasks.assignee"), [
       ...(whoValues.includes("") ? [["-", t("tasks.nobody")]] : []),
@@ -1496,6 +1511,25 @@ async function tasksView(tab, params) {
     } }, h("option", { value: "", text: t("tasks.allSpaces") }),
     [...new Set(open.map((it) => it.space))].sort().map((k) => h("option", { value: k, text: k, selected: k === space })))),
     h("td", {}));
+  // The labels of the tasks shown, to filter by at the right.
+  const labelCounts = new Map();
+  for (const it of shown) for (const l of it.labels || []) labelCounts.set(l, (labelCounts.get(l) || 0) + 1);
+  const unlabelled = shown.filter((it) => !(it.labels || []).length).length;
+  const labelBoxes = [...[...labelCounts].sort((a, b) => a[0].localeCompare(b[0])), ...(unlabelled ? [["-", unlabelled]] : [])].map(([l, n]) => {
+    const box = h("input", { type: "checkbox", value: l, checked: chosenLabels().includes(l) });
+    box.addEventListener("change", () => {
+      filters.labels = labelBoxes.filter(([b]) => b.checked).map(([b]) => b.value).join(",");
+      apply();
+    });
+    return [box, h("label", { class: "check" }, box, " ", l === "-" ? h("em", { text: t("tasks.noLabel") }) : l, " ", h("span", { class: "muted", text: `(${n})` }))];
+  });
+  const modeBox = h("select", { id: "tasks-label-mode", "aria-label": t("tasks.labelMode"), onchange: set("labelMode") },
+    h("option", { value: "", text: t("tasks.labelAny"), selected: filters.labelMode !== "all" }),
+    h("option", { value: "all", text: t("tasks.labelAll"), selected: filters.labelMode === "all" }));
+  const labelPanel = labelBoxes.length ? h("aside", { class: "tasks-filter side-card", id: "tasks-labels", "aria-label": t("tasks.labels") },
+    h("h2", { text: t("tasks.labels") }),
+    h("div", { class: "tasks-label-list" }, labelBoxes.map(([, el]) => el)),
+    h("p", {}, modeBox)) : null;
   const reset = h("button", { type: "button", class: "link", text: t("tasks.filterReset"), hidden: true, onclick: () => {
     location.hash = `#/tasks/${current}${space ? "?space=" + encodeURIComponent(space) : ""}`;
   } });
@@ -1509,19 +1543,20 @@ async function tasksView(tab, params) {
     h("div", { class: "page-head" }, h("h1", { text: t("tasks.title") }),
       h("p", { class: "actions" }, link(newHref(space || here.space, "", taskType(types)), t("tasks.new"), "button primary", "tasks-new"),
         rows.length ? h("button", { type: "button", class: "secondary", id: "tasks-csv", text: t("export.csv"), onclick: () => downloadCSV("tasks.csv", [
-          [t("col.item"), t("col.title"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space")],
+          [t("col.item"), t("col.title"), t("tasks.labels"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space")],
           ...rows.filter(([, tr]) => !tr.hidden).map(([it]) => {
             const who = assigneeOf(it), f = typeOf.get(it.type).f;
-            return [it.key, it.title, it.state, who ? names.get(who) || who : "", dueOf(it), f.priority ? it.properties[f.priority.name] || "" : "", it.space];
+            return [it.key, it.title, (it.labels || []).join(", "), it.state, who ? names.get(who) || who : "", dueOf(it), f.priority ? it.properties[f.priority.name] || "" : "", it.space];
           })]) }) : null)),
     tabs,
     requests,
     status,
-    h("section", { id: "tasks" }, shown.length
-      ? [h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space"), ""]
+    h("div", { class: "tasks-layout" }, h("section", { id: "tasks" }, shown.length
+      ? [h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("tasks.labels"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space"), ""]
         .map((c) => h("th", { text: c }))), filterRow),
       h("tbody", {}, rows.map(([, tr]) => tr))), h("p", { class: "tasks-foot" }, count, reset), empty]
       : h("p", { class: "muted", text: current === "mine" ? t("tasks.noneMine") : t("tasks.none") })),
+    labelPanel),
     h("p", { class: "muted", text: t("tasks.conventions") }),
     page.next ? h("p", { class: "notice", text: t("tasks.truncated", { n: items.length }) }) : null,
   );
@@ -2381,49 +2416,102 @@ async function relationsSection(path, out, inc, self, canEdit) {
 }
 
 // accessSection shows who may read and edit an item and lets one who may
-// edit it narrow that, without locking themselves out; a space
-// administrator may name anyone (ADR-0022). Holders of the erasure role
-// redact an item at once (ADR-0026).
+// edit it protect it: for people and groups, either for editing only or
+// for reading and editing, without locking themselves out; it holds for
+// the item's children too (ADR-0022, ADR-0078). Holders of the erasure
+// role redact an item at once (ADR-0026).
 async function accessSection(path, item, canEdit, spaceAdmin) {
   const r = item.restriction || { read: [], edit: [] };
   const read = r.read || [], edit = r.edit || [];
   await learnNames([...read, ...edit].filter((p) => !p.startsWith("@")));
   const status = h("div", { class: "status" });
-  const listed = (list) => list.length ? list.map((p) => p.startsWith("@") ? p : person(p)).join(", ") : t("access.everyone");
+  const named = (p) => p.startsWith("@") ? t("access.group", { name: p.slice(1) }) : person(p);
+  const listed = (list) => list.length ? list.map(named).join(", ") : t("access.everyone");
   const set = (next) => action(() => put(path + "/restriction", next), status);
   const restricted = read.length + edit.length > 0;
-  // Who else may read or edit a restricted item is chosen among the
-  // accounts, which space administrators may list.
-  const users = canEdit && restricted && spaceAdmin ? (await get("/api/users")).users : null;
-  if (users) for (const u of users) names.set(u.id, u.username);
-  const pick = users ? form({ id: "restrict", class: "inline" }, [
-    h("select", { name: "who", "aria-label": t("access.who") }, users.map((u) => h("option", { value: u.id, text: u.username }))),
-    h("select", { name: "what", "aria-label": t("access.what") }, h("option", { value: "read", text: t("access.mayRead") }), h("option", { value: "edit", text: t("access.mayEdit") })),
-    h("button", { type: "submit", text: t("access.add") }),
-  ], async (d) => {
-    const who = d.get("who");
-    const next = { read: [...read], edit: [...edit] };
-    // Whoever may edit a restricted item must also read it.
-    if (next.read.length && !next.read.includes(who)) next.read.push(who);
-    if (d.get("what") === "edit" && next.edit.length && !next.edit.includes(who)) next.edit.push(who);
-    await put(path + "/restriction", next);
-    route();
-  }) : null;
-  // Open is the normal case; a restriction is for sensitive content, and
-  // shows as a closed lock on a coloured bar (ADR-0051).
   return h("section", { id: "access", class: "side-card " + (restricted ? "access-restricted" : "access-open") },
+    // Open is the normal case; a restriction shows as a closed lock on a
+    // coloured bar (ADR-0051).
     h("h2", { class: "access-bar" }, lockIcon(restricted), restricted ? t("access.restricted") : t("access.open")),
     h("p", {}, t("access.read", { who: listed(read) }), h("br"), t("access.edit", { who: listed(edit) })),
     canEdit ? h("p", { class: "actions-row" },
       h("button", { type: "button", class: "secondary", text: t("access.onlyMe"), onclick: () => set({ read: [me.user.id], edit: [me.user.id] }) }),
       h("button", { type: "button", class: "secondary", text: t("access.onlyMeEdits"), onclick: () => set({ read: read, edit: [me.user.id] }) }),
       restricted ? h("button", { type: "button", class: "secondary", text: t("access.lift"), onclick: () => set({ read: [], edit: [] }) }) : null) : null,
-    pick,
+    canEdit ? protectForm(path, read, edit, spaceAdmin, named) : null,
     me.erasure && item.presence !== "purged" ? h("p", {}, h("button", { type: "button", class: "danger", text: t("access.redact"), onclick: () => {
       const reason = prompt(t("access.redactReason"));
       if (reason && reason.trim() && confirm(t("access.redactConfirm", { key: item.key }))) action(() => post(path + "/redact", { reason: reason.trim() }), status);
     } })) : null,
     status);
+}
+
+// protectForm chooses who an item is protected for: people and groups,
+// found by typing, each allowed to read only or to edit too. "Edit only"
+// leaves reading open to the space. One who is not a space administrator
+// stays on the lists, as the server refuses a lock-out.
+function protectForm(path, read, edit, spaceAdmin, named) {
+  // An entry is a person (user ID) or a group ("@name") that may edit or
+  // only read.
+  let mode = read.length ? "both" : edit.length ? "edit" : "both";
+  let entries = (mode === "both" ? read : edit).map((p) => ({ p, edit: mode === "edit" || !edit.length || edit.includes(p) }));
+  for (const p of edit) if (!entries.some((e) => e.p === p)) entries.push({ p, edit: true });
+  const list = h("ul", { class: "access-entries", id: "access-entries" });
+  const modes = h("div", { class: "access-modes" }, ["both", "edit"].map((m) => h("label", { class: "check" },
+    h("input", { type: "radio", name: "access-mode", value: m, checked: m === mode, onchange: () => { mode = m; draw(); } }), " ", { both: t("access.mode.both"), edit: t("access.mode.edit") }[m])));
+  const draw = () => list.replaceChildren(...entries.map((e) => h("li", { class: "chip access-entry" + (e.p.startsWith("@") ? " group" : ""), "data-principal": e.p },
+    h("span", { text: named(e.p) }),
+    mode === "both" ? h("label", { class: "check" }, h("input", { type: "checkbox", checked: e.edit, onchange: (ev) => { e.edit = ev.target.checked; } }), " ", t("access.mayEditShort")) : "",
+    h("button", { type: "button", class: "link", text: "×", "aria-label": t("access.removeWho", { who: named(e.p) }), onclick: () => { entries = entries.filter((x) => x !== e); draw(); } }))));
+  draw();
+  // People and groups are offered as one list while typing.
+  const options = h("datalist", { id: "access-options" });
+  const found = new Map();
+  const who = h("input", { id: "access-who", list: "access-options", autocomplete: "off", placeholder: t("access.whoPlaceholder"), "aria-label": t("access.who") });
+  let timer = 0;
+  who.addEventListener("input", () => {
+    clearTimeout(timer);
+    const typed = who.value.trim().replace(/^@/, "");
+    if (!typed || found.has(who.value.trim())) return;
+    timer = setTimeout(async () => {
+      const q = encodeURIComponent(typed);
+      const [{ users }, { groups }] = await Promise.all([
+        get("/api/users/search?q=" + q).catch(() => ({ users: [] })), get("/api/groups/search?q=" + q).catch(() => ({ groups: [] }))]);
+      for (const u of users) { found.set(u.username, u.id); names.set(u.id, u.username); }
+      for (const g of groups) found.set("@" + g, "@" + g);
+      options.replaceChildren(...users.map((u) => h("option", { value: u.username })), ...groups.map((g) => h("option", { value: "@" + g, label: t("access.group", { name: g }) })));
+    }, 150);
+  });
+  const added = h("p", { class: "muted", role: "status" });
+  const add = () => {
+    const p = found.get(who.value.trim());
+    if (!p) { added.textContent = t("access.unknown"); return; }
+    added.textContent = "";
+    if (!entries.some((e) => e.p === p)) entries.push({ p, edit: true });
+    who.value = "";
+    draw();
+  };
+  who.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); add(); } });
+  return h("details", { class: "access-edit", id: "access-edit", open: read.length + edit.length > 0 },
+    h("summary", { text: t("access.protect") }),
+    modes,
+    list,
+    h("p", { class: "inline-form" }, who, options, h("button", { type: "button", id: "access-add", text: t("access.add"), onclick: add })),
+    added,
+    h("p", { class: "muted", text: spaceAdmin ? t("access.helpAdmin") : t("access.help") }),
+    form({ id: "access-save", class: "actions-row" }, [h("button", { type: "submit", class: "primary", text: t("common.save") })], async () => {
+      let all = entries.map((e) => e.p);
+      let editors = mode === "edit" ? all : entries.filter((e) => e.edit).map((e) => e.p);
+      // One who is not a space administrator keeps reading and editing;
+      // an empty list of editors would let every reader edit, so it holds
+      // at least oneself.
+      if (all.length && (!spaceAdmin || !editors.length)) {
+        if (!all.includes(me.user.id)) all = [...all, me.user.id];
+        if (!editors.includes(me.user.id)) editors = [...editors, me.user.id];
+      }
+      await put(path + "/restriction", mode === "edit" ? { read: [], edit: editors } : { read: all, edit: editors });
+      route();
+    }));
 }
 
 // commentThreads shows an item's comments (ADR-0035) as threads: a first

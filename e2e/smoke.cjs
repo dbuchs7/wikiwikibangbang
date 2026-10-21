@@ -864,6 +864,37 @@ function ckanSource() {
     await page.click("#kanban-add-transition");
     await page.waitForSelector("#kanban .board-column[data-state=open] .card-item:has-text('Hero image')");
 
+    step("task list: tasks on a kanban are listed too, with their label; the labels at the right filter the list");
+    await page.goto(base + "/#/tasks/all");
+    await page.waitForSelector("#tasks tr:has-text('Hero image') .task-labels a.kanban-chip");
+    await page.waitForSelector("#tasks tr:has-text('Tidy the wiki') .task-labels a.kanban-chip");
+    await page.click("#tasks-labels label:has-text('relaunch') input");
+    await page.waitForSelector("#tasks tbody tr:has-text('Tidy the wiki')", { state: "hidden" });
+    await page.waitForSelector("#tasks tbody tr:has-text('Hero image')");
+    check(/labels=/.test(page.url()), "the label filter is in the address");
+    await page.click("#tasks-labels label:has-text('operations') input");
+    await page.waitForSelector("#tasks tbody tr:has-text('Tidy the wiki')");
+    await page.selectOption("#tasks-label-mode", "all");
+    await page.waitForSelector("#tasks p:has-text('No task matches the filters.')");
+    await page.click("#tasks button:has-text('Reset filters')");
+    await page.waitForSelector("#tasks tbody tr:has-text('Tidy the wiki')");
+
+    step("access: an item is protected for a group from its page, and opened again");
+    const meID = (await (await page.request.get(base + "/api/me")).json()).user.id;
+    check((await page.request.put(base + "/api/groups/redaktion/members/" + meID)).status() === 204, "a group is made");
+    await page.click("#tasks tr:has-text('Hero image') td:first-child a");
+    await page.waitForSelector("#access-edit");
+    await page.click("#access-edit summary");
+    await page.fill("#access-who", "@redaktion");
+    await page.waitForSelector("#access-options option[value='@redaktion']", { state: "attached" });
+    await page.click("#access-add");
+    await page.waitForSelector("#access-entries li[data-principal='@redaktion']");
+    await page.click("#access-save button[type=submit]");
+    await page.waitForSelector("#access.access-restricted p:has-text('May read: group redaktion')");
+    await page.click("#access button:has-text('Lift the restriction')");
+    await page.waitForSelector("#access.access-open");
+    check((await page.request.delete(base + "/api/groups/redaktion/members/" + meID)).status() === 204, "the group is taken away again");
+
     step("account requests: someone asks at the sign-in page, an administrator approves, the new account sets its message channels");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");
