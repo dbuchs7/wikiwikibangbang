@@ -412,13 +412,12 @@ function face(id, size = 24) {
 
 // --- navigation ------------------------------------------------------------
 
-// renderFooter names the running build for signed-in users, e.g.
-// "wikiwikibangbang 0.0.0-dev+858fd3a90746".
+// renderFooter names the running release for signed-in users, e.g.
+// "wikiwikibangbang 0.5.4"; the commit it was built from is its tooltip.
 function renderFooter() {
   const footer = document.getElementById("footer");
   if (!me || !me.version) return footer.replaceChildren();
-  const rev = me.revision && !me.version.includes(me.revision.slice(0, 12)) ? ` (${me.revision})` : "";
-  footer.replaceChildren(`wikiwikibangbang ${me.version}${rev}`);
+  footer.replaceChildren(h("span", { title: me.revision ? t("home.revision", { revision: me.revision }) : null, text: `wikiwikibangbang ${me.version}` }));
 }
 
 // --- module switcher ---------------------------------------------------------
