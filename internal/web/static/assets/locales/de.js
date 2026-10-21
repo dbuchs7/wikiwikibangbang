@@ -806,5 +806,8 @@ export default {
   "envhelp.ssoVars": "Microsoft: WWBB_ENTRA_TENANT_ID, WWBB_ENTRA_CLIENT_ID, WWBB_ENTRA_CLIENT_SECRET; Google: WWBB_GOOGLE_CLIENT_ID, WWBB_GOOGLE_CLIENT_SECRET, WWBB_GOOGLE_DOMAINS; dazu WWBB_PUBLIC_URL.",
   "envhelp.backup": "Automatische Sicherung:",
   "envhelp.backupVars": "WWBB_BACKUP_PASSPHRASE (mindestens 12 Zeichen). Für entfernte Ziele zusätzlich: WebDAV und FTPS WWBB_BACKUP_PASSWORD (und WWBB_BACKUP_USERNAME, falls der Benutzer nicht in der Adresse steht); S3 WWBB_BACKUP_ACCESS_KEY und WWBB_BACKUP_SECRET_KEY; SFTP WWBB_BACKUP_SSH_KEY (Pfad zu einer Schlüsseldatei ohne Passphrase) oder WWBB_BACKUP_PASSWORD, dazu WWBB_BACKUP_SSH_HOST_KEY (Fingerabdruck SHA256:… des Servers; «Ziel prüfen» zeigt ihn an, wenn er fehlt). Für Server mit eigenem Zertifikat: WWBB_BACKUP_CA_FILE (Pfad zur Zertifikatsdatei).",
-  "envhelp.restart": "Geänderte Umgebungsvariablen gelten erst nach einem Neustart des Servers bzw. Containers. Danach zeigt diese Seite «eingerichtet»."
+  "envhelp.restart": "Geänderte Umgebungsvariablen gelten erst nach einem Neustart des Servers bzw. Containers. Danach zeigt diese Seite «eingerichtet».",
+  "requests.waiting": {"one": "{n} Kontoantrag wartet auf Ihre Entscheidung", "other": "{n} Kontoanträge warten auf Ihre Entscheidung"},
+  "requests.waitingHelp": "Freigeben legt das Konto mit dem gewählten Passwort an; Ablehnen verwirft den Antrag. Die Einstellungen dazu stehen unter Administration → Kontoanträge.",
+  "requests.homeHint": "Unter «Aufgaben» freigeben oder ablehnen."
 };
