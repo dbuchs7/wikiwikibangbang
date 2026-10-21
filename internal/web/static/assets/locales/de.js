@@ -759,8 +759,8 @@ export default {
   "autobackup.noPassphrase": "Es ist keine Passphrase gesetzt. Setzen Sie {env} in der Umgebung des Servers auf mindestens {n} Zeichen und starten Sie ihn neu; ohne sie wird nichts gesichert.",
   "autobackup.enabled": "Automatisch sichern",
   "autobackup.destination": "Ziel",
-  "autobackup.destinationExample": "/volume1/backup/wikiwikibangbang",
-  "autobackup.destinationHelp": "Ein Verzeichnis des Servers mit absolutem Pfad, z. B. ein eingebundener Fileserver oder NAS. Im Container ist es ein eingebundenes Volume. Das Verzeichnis muss bestehen.",
+  "autobackup.destinationExample": "/backup  ·  https://nas:5006/backup  ·  s3://bucket/wiki?endpoint=https://…  ·  ftps://wiki@nas/backup  ·  sftp://wiki@nas/volume1/backup",
+  "autobackup.destinationHelp": "Ein Verzeichnis des Servers mit absolutem Pfad (z. B. ein eingebundener Fileserver, NAS oder ein Volume im Container) oder ein entferntes Ziel: WebDAV über https://benutzer@server/ordner, S3-kompatibler Speicher über s3://bucket/ordner?endpoint=https://…&region=…, FTPS über ftps://benutzer@server/ordner, SFTP über sftp://benutzer@server/ordner. Der Ordner muss bestehen. Passwörter und Schlüssel stehen nicht hier, sondern in der Umgebung des Servers (siehe Info-Symbol).",
   "autobackup.fullDays": "Vollbackup alle … Tage",
   "autobackup.incrementalDays": "Inkrementelles Backup alle … Tage (0 = keine)",
   "autobackup.keep": "Versionen behalten",
@@ -805,6 +805,6 @@ export default {
   "envhelp.sso": "Single Sign-on:",
   "envhelp.ssoVars": "Microsoft: WWBB_ENTRA_TENANT_ID, WWBB_ENTRA_CLIENT_ID, WWBB_ENTRA_CLIENT_SECRET; Google: WWBB_GOOGLE_CLIENT_ID, WWBB_GOOGLE_CLIENT_SECRET, WWBB_GOOGLE_DOMAINS; dazu WWBB_PUBLIC_URL.",
   "envhelp.backup": "Automatische Sicherung:",
-  "envhelp.backupVars": "WWBB_BACKUP_PASSPHRASE (mindestens 12 Zeichen).",
+  "envhelp.backupVars": "WWBB_BACKUP_PASSPHRASE (mindestens 12 Zeichen). Für entfernte Ziele zusätzlich: WebDAV und FTPS WWBB_BACKUP_PASSWORD (und WWBB_BACKUP_USERNAME, falls der Benutzer nicht in der Adresse steht); S3 WWBB_BACKUP_ACCESS_KEY und WWBB_BACKUP_SECRET_KEY; SFTP WWBB_BACKUP_SSH_KEY (Pfad zu einer Schlüsseldatei ohne Passphrase) oder WWBB_BACKUP_PASSWORD, dazu WWBB_BACKUP_SSH_HOST_KEY (Fingerabdruck SHA256:… des Servers; «Ziel prüfen» zeigt ihn an, wenn er fehlt). Für Server mit eigenem Zertifikat: WWBB_BACKUP_CA_FILE (Pfad zur Zertifikatsdatei).",
   "envhelp.restart": "Geänderte Umgebungsvariablen gelten erst nach einem Neustart des Servers bzw. Containers. Danach zeigt diese Seite «eingerichtet»."
 };

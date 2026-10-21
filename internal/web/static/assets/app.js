@@ -3093,6 +3093,7 @@ function autoBackupCard() {
     }
     const { settings: s, status: st } = data;
     const destination = h("input", { name: "destination", id: "autobackup-destination", value: s.destination, placeholder: t("autobackup.destinationExample") });
+    const backupHelp = envHelp("backup-destination-help");
     const checkStatus = h("div", { class: "status", id: "autobackup-check" });
     const runStatus = h("div", { class: "status", id: "autobackup-run-status" });
     const run = (kind) => h("button", { type: "button", class: "secondary", id: "autobackup-run-" + kind, disabled: !!st.running || !s.destination,
@@ -3113,7 +3114,8 @@ function autoBackupCard() {
       form({ id: "autobackup-settings" }, [
         h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: s.enabled }), " ", t("autobackup.enabled")),
         field(t("autobackup.destination"), destination),
-        h("p", { class: "muted", text: t("autobackup.destinationHelp") }),
+        h("p", { class: "muted" }, t("autobackup.destinationHelp"), " ", infoButton(backupHelp)),
+        backupHelp,
         field(t("autobackup.fullDays"), h("input", { name: "fullDays", type: "number", min: 1, max: 365, required: true, value: s.fullDays })),
         field(t("autobackup.incrementalDays"), h("input", { name: "incrementalDays", type: "number", min: 0, max: 364, required: true, value: s.incrementalDays })),
         field(t("autobackup.keep"), h("input", { name: "keep", type: "number", min: 1, max: data.maxVersions, required: true, value: s.keep })),

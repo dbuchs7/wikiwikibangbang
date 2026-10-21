@@ -28,9 +28,12 @@ var classified = map[string]string{
 		"like a heading level; what an export gathers is bounded by PageItems",
 	"internal/site.MaxBackupVersions": "a retention policy (ADR-0073): how many backup versions an administrator may keep " +
 		"at the destination, not something the server holds in memory",
-	"internal/auth.MaxFailures":      "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
-	"internal/auth.MaxTokenLifetime": "a security policy (ADR-0027): how long an API token may live",
-	"internal/auth.MaxReasonLength":  "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",
+	"internal/backup/dest.maxListing": "a backup destination's listing or error answer (ADR-0073), read and parsed; " +
+		"not a caller's input to this server, it guards against a destination that misbehaves",
+	"internal/backup/dest/remote.go:2048": "the start of a destination's error answer, quoted in the error message (ADR-0073)",
+	"internal/auth.MaxFailures":           "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
+	"internal/auth.MaxTokenLifetime":      "a security policy (ADR-0027): how long an API token may live",
+	"internal/auth.MaxReasonLength":       "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",
 	"internal/wal.MaxRecord": "part of the event log format: a server must read every record a server wrote, " +
 		"so the bound may not differ between them",
 	"internal/backup.maxIterations": "part of the backup format: the work factor a header may demand " +
