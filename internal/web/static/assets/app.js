@@ -414,10 +414,12 @@ const filesOf = (item, attachments = []) => {
   };
 };
 
-// readOnlyBody shows an item's body without editing it.
-function readOnlyBody(item, embeds) {
+// readOnlyBody shows an item's body without editing it; edit, if given,
+// stands in the bar where the text begins.
+function readOnlyBody(item, embeds, edit) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
-  return createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item) }).element;
+  return createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
+    actions: edit ? [edit] : [] }).element;
 }
 
 // sizeText shows a number of bytes for people.
@@ -1494,10 +1496,15 @@ async function spaceView(key) {
   let home = h("section", { class: "card empty" }, h("p", { class: "muted", text: t("space.noPages") }),
     create ? h("button", { class: "primary", text: t("space.firstPage"), onclick: toForm }) : null);
   if (top.items.length) {
-    const [{ item }, { embeds }] = await Promise.all([get("/api/items/" + top.items[0].id), get(`/api/items/${top.items[0].id}/embeds`)]);
+    const [{ item, editable }, { embeds }] = await Promise.all([get("/api/items/" + top.items[0].id), get(`/api/items/${top.items[0].id}/embeds`)]);
+    // The home page is edited from here too, in the bar where its text
+    // begins, as on its own page (ADR-0091).
+    const edit = editable && item.presence === "live" && item.readsAllSecrets !== false
+      ? link("#/item/" + encodeURIComponent(item.key) + "?edit", t("item.edit"), "button primary", "home-edit") : null;
     home = h("section", { id: "home", class: "card" },
       h("h2", {}, link("#/item/" + encodeURIComponent(item.key), item.title || item.key)),
-      item.body.length ? readOnlyBody(item, embeds) : h("p", { class: "muted", text: t("space.homeEmpty") }));
+      item.body.length ? readOnlyBody(item, embeds, edit)
+        : [edit ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, edit) : null, h("p", { class: "muted", text: t("space.homeEmpty") })]);
   }
   const rows = h("tbody");
   const more = h("div");
