@@ -4000,6 +4000,7 @@ async function membersView(key) {
     h("p", { class: "muted", text: t("members.help") }),
     status,
     sp.role === "space-admin" ? spaceIconCard(sp, status) : null,
+    h("h2", { text: t("members.roles") }),
     roles.length ? h("table", { id: "members" }, roles.map(row)) : h("p", { class: "muted", text: t("members.none") }),
     form({ class: "card", id: "add-role" }, [
       h("h2", { text: t("members.add") }),
