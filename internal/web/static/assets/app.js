@@ -414,10 +414,12 @@ const filesOf = (item, attachments = []) => {
   };
 };
 
-// readOnlyBody shows an item's body without editing it.
-function readOnlyBody(item, embeds) {
+// readOnlyBody shows an item's body without editing it; edit, if given,
+// stands in the bar where the text begins.
+function readOnlyBody(item, embeds, edit) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
-  return createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item) }).element;
+  return createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
+    actions: edit ? [edit] : [] }).element;
 }
 
 // sizeText shows a number of bytes for people.
@@ -1494,10 +1496,15 @@ async function spaceView(key) {
   let home = h("section", { class: "card empty" }, h("p", { class: "muted", text: t("space.noPages") }),
     create ? h("button", { class: "primary", text: t("space.firstPage"), onclick: toForm }) : null);
   if (top.items.length) {
-    const [{ item }, { embeds }] = await Promise.all([get("/api/items/" + top.items[0].id), get(`/api/items/${top.items[0].id}/embeds`)]);
+    const [{ item, editable }, { embeds }] = await Promise.all([get("/api/items/" + top.items[0].id), get(`/api/items/${top.items[0].id}/embeds`)]);
+    // The home page is edited from here too, in the bar where its text
+    // begins, as on its own page (ADR-0091).
+    const edit = editable && item.presence === "live" && item.readsAllSecrets !== false
+      ? link("#/item/" + encodeURIComponent(item.key) + "?edit", t("item.edit"), "button primary", "home-edit") : null;
     home = h("section", { id: "home", class: "card" },
       h("h2", {}, link("#/item/" + encodeURIComponent(item.key), item.title || item.key)),
-      item.body.length ? readOnlyBody(item, embeds) : h("p", { class: "muted", text: t("space.homeEmpty") }));
+      item.body.length ? readOnlyBody(item, embeds, edit)
+        : [edit ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, edit) : null, h("p", { class: "muted", text: t("space.homeEmpty") })]);
   }
   const rows = h("tbody");
   const more = h("div");
@@ -2696,18 +2703,25 @@ async function itemView(ref, params = new URLSearchParams()) {
   } });
   const headActions = h("p", { class: "actions" },
     live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null,
-    editing ? done : canEdit && readsAll ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null,
+    // Editing is offered in the bar where the text begins (ADR-0091).
+    editing ? done : null,
     canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null,
     !editing ? exportMenu(item) : null);
   let body = null;
   const protecting = h("div", { id: "protect-passage" });
+  if (!type.body && canEdit && readsAll && !editing) {
+    // An item without a text still has its bar, with Edit, in the same place.
+    body = h("section", { id: "body", class: "reading no-body" },
+      h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, link(itemHref + "?edit", t("item.edit"), "button primary", "edit")));
+  }
   if (type.body) {
     // Protected passages show readable or veiled; one who may change the
     // text protects a passage from what they read (ADR-0088).
     const secretOf = new Map((item.secrets || []).map((sc) => [sc.id, sc]));
     setSecretClass((ref) => (secretOf.get(ref)?.readable ? "secret-readable" : "secret-veiled"));
     const protect = canEdit && readsAll && live && !editing ? (at) => protectPassageForm(protecting, path, item, at, status) : null;
-    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect);
+    const edit = canEdit && readsAll && !editing ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null;
+    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit);
     body = b.element;
     session = b.session;
   }
@@ -2798,11 +2812,12 @@ async function relocateForm(box, item, mode, spaces, status) {
 // commented on highlighted and commenting on a selection offered; or, when
 // editing, in its live session (ADR-0010), where changes reach everyone at
 // once and are saved as one leaves a block.
-function bodySection(item, embeds, editing, threads, attachments, protect) {
+function bodySection(item, embeds, editing, threads, attachments, protect, edit) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!editing) {
     const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
-      extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined, protect: protect || undefined });
+      extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined, protect: protect || undefined,
+      actions: edit ? [edit] : [] });
     const section = h("section", { id: "body", class: "reading" }, view.element);
     // A click on a protected passage shows it in the list of passages.
     const open = (ev) => {
