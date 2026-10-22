@@ -249,7 +249,9 @@ type EventKind string
 
 // The event kinds.
 const (
-	TypeDefined       EventKind = "TypeDefined"
+	TypeDefined EventKind = "TypeDefined"
+	// TypeRemoved takes the type TypeName out of use (ADR-0094).
+	TypeRemoved       EventKind = "TypeRemoved"
 	SpaceCreated      EventKind = "SpaceCreated"
 	ItemCreated       EventKind = "ItemCreated"
 	TitleSet          EventKind = "TitleSet"
@@ -335,7 +337,7 @@ type Event struct {
 	TypeDef     *TypeDef // TypeDefined
 	Space       string   // SpaceCreated, ItemCreated, ItemMoved, SpaceTrashed, SpaceRestored, SpacePurged
 	SpaceName   string   // SpaceCreated, SpaceRenamed
-	TypeName    string   // ItemCreated
+	TypeName    string   // ItemCreated, TypeRemoved
 	TypeVersion int      // ItemCreated
 	Parent      ID       // ItemCreated, ItemMoved
 	// Order is the new order of the children of Parent (or the top of

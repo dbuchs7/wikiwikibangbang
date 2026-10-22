@@ -32,6 +32,7 @@ func itemRoutes(d Deps) []Route {
 	routes := []Route{
 		{Method: get, Pattern: "/api/types", Summary: "List item types", Handler: http.HandlerFunc(h.listTypes)},
 		{Method: post, Pattern: "/api/types", Summary: "Define a type or a new version of it (administrators)", Handler: http.HandlerFunc(h.defineType)},
+		{Method: del, Pattern: "/api/types/{name}", Summary: "Remove a type that no item and no kanban uses (administrators)", Handler: http.HandlerFunc(h.removeType)},
 		{Method: get, Pattern: "/api/spaces", Summary: "List the spaces one holds a role in", Handler: http.HandlerFunc(h.listSpaces)},
 		{Method: post, Pattern: "/api/spaces", Summary: "Create a space (administrators)", Handler: http.HandlerFunc(h.createSpace)},
 		{Method: put, Pattern: "/api/spaces/{space}/roles/{principal}", Summary: "Grant a space role to a user ID or @group (space administrators)", Handler: http.HandlerFunc(h.grantRole)},
@@ -208,6 +209,16 @@ func (h itemHandlers) defineType(w http.ResponseWriter, r *http.Request) {
 			return nil, err
 		}
 		return map[string]typeJSON{"type": toTypeJSON(s.Type(req.Name))}, nil
+	})
+}
+
+// removeType takes a type out of use (ADR-0094).
+func (h itemHandlers) removeType(w http.ResponseWriter, r *http.Request) {
+	h.write(w, r, http.StatusNoContent, func(_ *item.Session, s *item.Store) (any, error) {
+		if err := h.isAdmin(s, r); err != nil {
+			return nil, err
+		}
+		return nil, s.RemoveType(who(r), r.PathValue("name"))
 	})
 }
 

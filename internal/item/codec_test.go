@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":24,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":25,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -152,8 +152,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	erasure := secretErasureLog(t)
 	album := albumLog(t)
 	catalog := catalogLog(t)
+	removal := typeRemovalLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline, access, provenance, sizes, holds, layout, kanbans, spaces, catalog, columns, names, secrets, erasure, album) {
+	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline, access, provenance, sizes, holds, layout, kanbans, spaces, catalog, columns, names, secrets, erasure, album, removal) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -166,34 +167,35 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v23.golden.jsonl", nil, log},
-		{"events.v23.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v23.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v23.comments.golden.jsonl", fakeSealer{}, comments},
-		{"events.v23.tree.golden.jsonl", fakeSealer{}, tree},
-		{"events.v23.blocks.golden.jsonl", fakeSealer{}, blocks},
-		{"events.v23.labels.golden.jsonl", fakeSealer{}, labels},
-		{"events.v23.attachments.golden.jsonl", fakeSealer{}, files},
-		{"events.v23.attachments.plain.golden.jsonl", nil, files},
-		{"events.v23.watches.golden.jsonl", fakeSealer{}, watches},
-		{"events.v23.inline.golden.jsonl", fakeSealer{}, inline},
-		{"events.v23.revocations.golden.jsonl", nil, access},
-		{"events.v23.provenance.golden.jsonl", fakeSealer{}, provenance},
-		{"events.v23.imagesize.golden.jsonl", fakeSealer{}, sizes},
-		{"events.v23.dataprotection.golden.jsonl", fakeSealer{}, holds},
-		{"events.v23.dataprotection.plain.golden.jsonl", nil, holds},
-		{"events.v23.layout.golden.jsonl", fakeSealer{}, layout},
-		{"events.v23.kanbans.golden.jsonl", nil, kanbans},
-		{"events.v23.spaces.golden.jsonl", nil, spaces},
-		{"events.v23.catalog.golden.jsonl", nil, catalog},
-		{"events.v23.kanbancolumns.golden.jsonl", nil, columns},
-		{"events.v23.spacenames.golden.jsonl", nil, names},
-		{"events.v23.secrets.golden.jsonl", fakeSealer{}, secrets},
-		{"events.v23.secrets.plain.golden.jsonl", nil, secrets},
-		{"events.v23.secreterasure.golden.jsonl", fakeSealer{}, erasure},
-		{"events.v23.secreterasure.plain.golden.jsonl", nil, erasure},
-		{"events.v23.album.golden.jsonl", fakeSealer{}, album},
-		{"events.v23.album.plain.golden.jsonl", nil, album},
+		{"events.v24.golden.jsonl", nil, log},
+		{"events.v24.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v24.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v24.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v24.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v24.blocks.golden.jsonl", fakeSealer{}, blocks},
+		{"events.v24.labels.golden.jsonl", fakeSealer{}, labels},
+		{"events.v24.attachments.golden.jsonl", fakeSealer{}, files},
+		{"events.v24.attachments.plain.golden.jsonl", nil, files},
+		{"events.v24.watches.golden.jsonl", fakeSealer{}, watches},
+		{"events.v24.inline.golden.jsonl", fakeSealer{}, inline},
+		{"events.v24.revocations.golden.jsonl", nil, access},
+		{"events.v24.provenance.golden.jsonl", fakeSealer{}, provenance},
+		{"events.v24.imagesize.golden.jsonl", fakeSealer{}, sizes},
+		{"events.v24.dataprotection.golden.jsonl", fakeSealer{}, holds},
+		{"events.v24.dataprotection.plain.golden.jsonl", nil, holds},
+		{"events.v24.layout.golden.jsonl", fakeSealer{}, layout},
+		{"events.v24.kanbans.golden.jsonl", nil, kanbans},
+		{"events.v24.spaces.golden.jsonl", nil, spaces},
+		{"events.v24.catalog.golden.jsonl", nil, catalog},
+		{"events.v24.kanbancolumns.golden.jsonl", nil, columns},
+		{"events.v24.spacenames.golden.jsonl", nil, names},
+		{"events.v24.secrets.golden.jsonl", fakeSealer{}, secrets},
+		{"events.v24.secrets.plain.golden.jsonl", nil, secrets},
+		{"events.v24.secreterasure.golden.jsonl", fakeSealer{}, erasure},
+		{"events.v24.secreterasure.plain.golden.jsonl", nil, erasure},
+		{"events.v24.album.golden.jsonl", fakeSealer{}, album},
+		{"events.v24.album.plain.golden.jsonl", nil, album},
+		{"events.v24.typeremoval.golden.jsonl", nil, removal},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -226,7 +228,7 @@ func TestPersistedFormatIsStable(t *testing.T) {
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
 // text), 4 (comments), 5 (sibling order), 6 (block kinds), 7 (labels), 8
-// (attachments), 9 (watches), 10 (inline comments), 11 (revocations), 12 (provenance), 13 (image sizes), 14 (data protection), 15 (layout), 16 (kanbans), 17 (spaces), 18 (catalogs), 19 (kanban columns), 20 (space names), 21 (protected passages), 22 (erased passages) — still open and rebuild the same state and history as today's log
+// (attachments), 9 (watches), 10 (inline comments), 11 (revocations), 12 (provenance), 13 (image sizes), 14 (data protection), 15 (layout), 16 (kanbans), 17 (spaces), 18 (catalogs), 19 (kanban columns), 20 (space names), 21 (protected passages), 22 (erased passages), 23 (picture labels) — still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -510,6 +512,34 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v22.secrets.plain.golden.jsonl"), nil, secretLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v22.secreterasure.golden.jsonl"), fakeSealer{}, secretErasureLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v22.secreterasure.plain.golden.jsonl"), nil, secretErasureLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.labels.golden.jsonl"), fakeSealer{}, labelLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.attachments.golden.jsonl"), fakeSealer{}, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.attachments.plain.golden.jsonl"), nil, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.watches.golden.jsonl"), fakeSealer{}, watchLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.inline.golden.jsonl"), fakeSealer{}, inlineCommentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.revocations.golden.jsonl"), nil, revocationLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.provenance.golden.jsonl"), fakeSealer{}, provenanceLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.imagesize.golden.jsonl"), fakeSealer{}, imageSizeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.dataprotection.golden.jsonl"), fakeSealer{}, holdLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.dataprotection.plain.golden.jsonl"), nil, holdLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.layout.golden.jsonl"), fakeSealer{}, layoutLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.kanbans.golden.jsonl"), nil, kanbanLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.spaces.golden.jsonl"), nil, spaceLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.catalog.golden.jsonl"), nil, catalogLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.kanbancolumns.golden.jsonl"), nil, kanbanColumnsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.spacenames.golden.jsonl"), nil, spaceNameLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.secrets.golden.jsonl"), fakeSealer{}, secretLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.secrets.plain.golden.jsonl"), nil, secretLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.secreterasure.golden.jsonl"), fakeSealer{}, secretErasureLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.secreterasure.plain.golden.jsonl"), nil, secretErasureLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.album.golden.jsonl"), fakeSealer{}, albumLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v23.album.plain.golden.jsonl"), nil, albumLog(t))
 }
 
 // provenanceLog copies a file to another item, makes a new version of the
@@ -686,6 +716,21 @@ func secretErasureLog(t *testing.T) []Event {
 	_, err = anna.Comment(page.ID, NewComment{Text: "Check", Anchor: &Anchor{Quote: "Paul", Prefix: "Salary of "}})
 	noErr(t, err)
 	noErr(t, anna.EraseSecret(page.ID, sec.ID))
+	return s.Log()
+}
+
+// typeRemovalLog defines a type, makes and purges an item of it and
+// removes the type, so the golden file pins the kind TypeRemoved
+// (ADR-0094).
+func typeRemovalLog(t *testing.T) []Event {
+	s := setup(t)
+	noErr(t, s.DefineType("admin", TypeDef{Name: "interface", Body: true}))
+	noErr(t, s.GrantRole("admin", "PLAT", "anna", SpaceAdmin))
+	anna := s.As("anna")
+	it := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "interface", Title: "Old entry"}))
+	noErr(t, anna.Trash(it.ID))
+	noErr(t, anna.Purge(it.ID))
+	noErr(t, s.RemoveType("admin", "interface"))
 	return s.Log()
 }
 
@@ -997,7 +1042,7 @@ func (failingSealer) Seal(ID, []byte, []byte) ([]byte, error) { return nil, erro
 func (failingSealer) Open(ID, []byte, []byte) ([]byte, error) { return nil, errors.New("no") }
 
 var allEventKinds = []EventKind{
-	TypeDefined, SpaceCreated, ItemCreated, TitleSet, PropertySet, Transitioned, ItemMoved,
+	TypeDefined, TypeRemoved, SpaceCreated, ItemCreated, TitleSet, PropertySet, Transitioned, ItemMoved,
 	BodyCommitted, RelationAdded, RelationRemoved, ItemTrashed, ItemRestored, ItemPurged,
 	ItemRedacted, GroupMemberAdded, RoleGranted, SystemRoleGranted, RestrictionSet,
 	ItemImported, ItemReleased, CommentAdded, CommentEdited, CommentDeleted, CommentResolved, CommentReopened, RoleRevoked, GroupMemberRemoved, SystemRoleRevoked, LabelsSet,

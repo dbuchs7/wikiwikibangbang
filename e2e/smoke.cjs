@@ -138,6 +138,15 @@ function ckanSource() {
     }));
     await page.click("#new-type button[type=submit]");
     await page.waitForSelector("text=task v1");
+    // A type nothing uses is removed (ADR-0094).
+    await page.fill("#new-type [name=type]", JSON.stringify({ name: "scratch", body: true }));
+    await page.click("#new-type button[type=submit]");
+    await page.waitForSelector("text=scratch v1");
+    answer = true;
+    await page.click("#types tr:has-text('scratch v1') button:has-text('Remove')");
+    await page.waitForSelector("text=scratch v1", { state: "detached" });
+    check(!(await page.evaluate(async () => (await (await fetch("/api/types")).json()).types.some((ty) => ty.name === "scratch"))),
+      "a removed type is no longer listed");
     await page.fill("#new-user [name=username]", "bert");
     await page.fill("#new-user [name=password]", "bert's password");
     await page.click("#new-user button[type=submit]");

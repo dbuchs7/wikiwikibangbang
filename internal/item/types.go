@@ -290,6 +290,11 @@ func invalid(format string, args ...any) error { return wrapf(ErrValidation, for
 
 func notFound(format string, args ...any) error { return wrapf(ErrNotFound, format, args...) }
 
+// referenced refuses a removal while something still uses what is removed.
+func referenced(format string, args ...any) error {
+	return fmt.Errorf("%w: %w: %s", ErrValidation, ErrReferenced, fmt.Sprintf(format, args...))
+}
+
 func wrapf(sentinel error, format string, args ...any) error {
 	return fmt.Errorf("%w: %s", sentinel, fmt.Sprintf(format, args...))
 }

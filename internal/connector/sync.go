@@ -167,6 +167,19 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 		}
 		res.count("removed", it.Key, it.Title)
 	}
+	// Their type goes with the last of them (ADR-0094), unless other items
+	// or a kanban still use it.
+	if !dry && len(legacy) > 0 {
+		err := db.Write(func(s *item.Store) error {
+			if s.Type(LegacyType).Name == "" {
+				return nil
+			}
+			return s.RemoveType(Actor(cfg), LegacyType)
+		})
+		if err != nil && !errors.Is(err, item.ErrReferenced) {
+			res.problem("the type %s is not removed: %v", LegacyType, err)
+		}
+	}
 
 	words := wordsIn(language(cfg))
 	seen := map[string]bool{}

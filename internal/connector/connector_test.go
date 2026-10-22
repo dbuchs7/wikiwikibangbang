@@ -447,6 +447,32 @@ func TestOldEntriesGiveWayToPages(t *testing.T) {
 		if len(left) != 2 {
 			t.Errorf("old entries left %d", len(left))
 		}
+		if s.Type(LegacyType).Name == "" {
+			t.Error("the old type went while entries still use it")
+		}
+	})
+
+	// Once nothing points to the last one, it goes, and its type with it
+	// (ADR-0094).
+	f.db.Write(func(s *item.Store) error {
+		for _, it := range s.Find(item.Query{Space: "API", Type: LegacyType}) {
+			if it.Title == "Notes" {
+				if err := s.Trash("bert", it.ID); err != nil {
+					return err
+				}
+				return s.Purge("bert", it.ID)
+			}
+		}
+		return nil
+	})
+	res, err = f.r.Run(context.Background(), id, false, "")
+	if err != nil || res.Removed != 1 || len(res.Problems) != 0 {
+		t.Fatalf("the last old entry %+v %v", res, err)
+	}
+	f.db.Read(func(s *item.Store) {
+		if s.Type(LegacyType).Name != "" {
+			t.Error("the old type stays though nothing uses it")
+		}
 	})
 }
 

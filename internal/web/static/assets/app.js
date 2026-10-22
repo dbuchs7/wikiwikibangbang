@@ -3673,7 +3673,11 @@ async function adminView() {
         typeText.value = JSON.stringify(def, null, 2);
         typeText.scrollIntoView({ block: "center" });
         typeText.focus();
-      } }))))) : null,
+      } }), " ",
+      // A type no item and no kanban uses can be removed (ADR-0094).
+      h("button", { type: "button", class: "link danger", text: t("admin.removeType"), onclick: () =>
+        confirm(t("admin.removeTypeConfirm", { name: ty.name })) &&
+        action(async () => { await del(`/api/types/${encodeURIComponent(ty.name)}`); route(); }, status) }))))) : null,
     form({ id: "new-type" }, [
       h("h3", { text: t("admin.defineType") }),
       h("p", { class: "muted", text: t("admin.typeHelp") }),

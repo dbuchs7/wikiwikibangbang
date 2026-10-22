@@ -69,7 +69,9 @@ import (
 //     members (ADR-0089). Versions 1 to 21 are still read.
 //   - 23: an attachment may carry labels, and the kind AttachmentLabelled
 //     with attachment, sealed (ADR-0090). Versions 1 to 22 are still read.
-const CodecVersion = 23
+//   - 24: the kind TypeRemoved with the type's name (ADR-0094). Versions 1
+//     to 23 are still read.
+const CodecVersion = 24
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

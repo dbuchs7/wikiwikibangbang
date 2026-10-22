@@ -103,5 +103,6 @@ Strongest form: no data changes.
 
 ## Links
 
+- amended by [ADR-0094](0094-a-type-nothing-uses-can-be-removed.md) (the former type goes)
 - amends [ADR-0074](0074-catalogs-kept-in-step-with-other-systems.md), [ADR-0075](0075-mirroring-the-interfaces-of-opendata-swiss.md), [ADR-0077](0077-connectors-keep-catalogs-in-step-with-their-sources.md) and [ADR-0080](0080-one-page-per-data-set-written-from-the-source.md)
 - relates to ADR-0021 (deletion), ADR-0023 (imports and origins), ADR-0026 (erasure), ADR-0046 (watching), ADR-0044 (labels)
