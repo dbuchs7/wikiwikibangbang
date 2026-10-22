@@ -949,6 +949,12 @@ function ckanSource() {
     await page.locator("#labels [name=label]").pressSequentially("relau");
     await page.waitForSelector("#label-options option[value='website-relaunch']", { state: "attached" });
     await page.fill("#labels [name=label]", "");
+    // The search in the header finds items by their labels, and offers the
+    // labels themselves (ADR-0092).
+    await page.fill("#nav .search input", "relaunch");
+    await page.press("#nav .search input", "Enter");
+    await page.waitForSelector("#search-labels a:has-text('website-relaunch')");
+    await page.waitForSelector("ol.hits li:has-text('Hero image')");
 
     step("task list: tasks on a kanban are listed too, with their label; the labels at the right filter the list");
     await page.goto(base + "/#/tasks/all");

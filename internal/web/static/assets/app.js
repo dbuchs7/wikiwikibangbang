@@ -1104,7 +1104,8 @@ async function searchView(q) {
     return;
   }
   const url = (after) => `/api/search?q=${encodeURIComponent(q)}&limit=50${after ? "&after=" + encodeURIComponent(after) : ""}`;
-  const first = await get(url());
+  // Labels that hold what was typed lead to their items (ADR-0092).
+  const [first, { labels }] = await Promise.all([get(url()), get("/api/labels?q=" + encodeURIComponent(q)).catch(() => ({ labels: [] }))]);
   const list = h("ol", { class: "list hits" });
   const more = h("div");
   const addHits = (page) => {
@@ -1114,6 +1115,7 @@ async function searchView(q) {
         hit.stars ? stars(hit.stars) : null,
         link("#/item/" + encodeURIComponent(it.key), it.key), " ", h("strong", { text: it.title }),
         " ", h("span", { class: "muted", text: `${it.space} · ${it.type}${it.state ? " · " + it.state : ""}` }),
+        it.labels?.length ? [" ", ...it.labels.map((l) => labelChip(l))] : null,
         hit.snippet ? h("p", { class: "snippet", text: hit.comment ? t("search.inComment", { text: hit.snippet }) : hit.snippet }) : null,
         // Which words the hit holds and which it lacks (ADR-0083).
         hit.matched?.length && (hit.missing?.length || hit.matched.length > 1) ? h("p", { class: "hit-words" },
@@ -1130,6 +1132,8 @@ async function searchView(q) {
     h("div", { class: "page-head" }, h("h1", { text: t("search.title") }),
       first.total.value ? h("p", { class: "actions" }, csvLink("/api/search.csv?q=" + encodeURIComponent(q), "search-csv")) : null),
     box,
+    labels.length ? h("p", { class: "search-labels", id: "search-labels" }, h("span", { class: "muted", text: t("search.labels") + " " }),
+      labels.slice(0, 12).map((l) => link("#/label/" + encodeURIComponent(l.label), `${l.label} (${l.count})`, "chip"))) : null,
     h("p", { class: "muted", text: t("search.results", { n: first.total.value, q }) }),
     first.total.value === 0 ? empty(t("search.none")) : list,
     more,
@@ -1860,7 +1864,7 @@ async function labelBoardView(label, space) {
 async function kanbansView() {
   const show = screen();
   const [{ kanbans }, { spaces }, { types }, { labels }] = await Promise.all([get("/api/kanbans"), get("/api/spaces"), get("/api/types"),
-    get("/api/labels").catch(() => ({ labels: [] }))]);
+    get("/api/labels?tasks=1").catch(() => ({ labels: [] }))]);
   const flows = types.filter((ty) => ty.workflow);
   const editable = spaces.filter((sp) => mayEdit(sp.role));
   const counts = await Promise.all(kanbans.map((k) =>

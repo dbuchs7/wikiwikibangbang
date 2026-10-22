@@ -72,5 +72,6 @@ Strongest form: the industry standard for search at scale.
 
 ## Links
 
+- amended by [ADR-0092](0092-labels-in-search-and-task-counts-on-label-boards.md) (labels are searched)
 - respects [ADR-0022](0022-permission-model.md), [ADR-0026](0026-crypto-shredding-of-item-content.md) and [ADR-0014](0014-closed-renderer-for-user-content.md); uses the page envelope of [ADR-0015](0015-resource-budgets-and-paged-listings.md) and the item API of [ADR-0028](0028-item-api.md); builds on [ADR-0025](0025-event-log-file-and-in-memory-state.md)
 - amended by [ADR-0083](0083-search-finds-any-word-and-names-the-words-of-each-hit.md) (an item matches when any term occurs)

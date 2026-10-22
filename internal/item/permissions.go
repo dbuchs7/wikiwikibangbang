@@ -571,10 +571,25 @@ type LabelCount struct {
 // Labels counts the labels of the readable live items of a space, or of
 // all spaces when space is empty, most used first (ADR-0044).
 func (x *Session) Labels(space string) []LabelCount {
+	return x.labels(space, false)
+}
+
+// TaskLabels counts the labels of the readable tasks, the items whose type
+// has a workflow: the labels a board by label shows (ADR-0092).
+func (x *Session) TaskLabels(space string) []LabelCount {
+	return x.labels(space, true)
+}
+
+func (x *Session) labels(space string, tasks bool) []LabelCount {
 	counts := map[string]int{}
 	for _, it := range x.s.items {
 		if it.Presence != Live || (space != "" && it.Space != space) || len(it.Labels) == 0 || !x.s.canRead(x.who, it) {
 			continue
+		}
+		if tasks {
+			if td, ok := x.s.latest(it.Type); !ok || td.Workflow == nil {
+				continue
+			}
 		}
 		for _, l := range it.Labels {
 			counts[l]++

@@ -345,6 +345,10 @@ func (m *matcher) match(it *Item, terms []string, wholeKey string) (Hit, bool) {
 			m.add(s, scoreOther, -1, -1)
 		}
 	}
+	// Labels are found as words, as properties are (ADR-0092).
+	for _, l := range it.Labels {
+		m.add(l, scoreOther, -1, -1)
+	}
 	// A deleted comment's text is already empty, so it cannot match.
 	for i, c := range it.Comments {
 		m.add(c.Text, scoreOther, -1, i)
