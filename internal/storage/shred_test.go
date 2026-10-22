@@ -221,3 +221,37 @@ func TestPlaintextDataDirectoriesStillOpen(t *testing.T) {
 		t.Fatalf("recovered %+v", rec)
 	}
 }
+
+// A protected passage is sealed with its own key, which survives a restart
+// and goes with its item's purge (ADR-0088).
+func TestAPassageHasItsOwnKeyOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	db, _ := mustOpen(t, dir)
+	it := secretItem(t, db.Store)
+	noErr(t, db.Store.GrantRole("admin", "PLAT", "anna", item.Editor))
+	noErr(t, db.Store.GrantRole("admin", "PLAT", "bert", item.Viewer))
+	sec, err := db.Store.As("anna").Protect(it.ID, 0, 5, 5+len(secret), nil)
+	noErr(t, err)
+	key := item.SecretKey(it.ID, sec.ID)
+	if !hasKey(t, dir, key) {
+		t.Fatal("no key was stored for the passage")
+	}
+	noErr(t, db.Close())
+
+	db, rec := mustOpen(t, dir)
+	if rec.Shredded != 0 || !hasKey(t, dir, key) {
+		t.Fatalf("the passage's key was taken for an orphan on start: shredded %d", rec.Shredded)
+	}
+	if got, _ := db.Store.As("anna").Get(it.ID); got.Body.Blocks[0].Text != "body "+secret {
+		t.Fatalf("after a restart the passage reads %q", got.Body.Blocks[0].Text)
+	}
+	if got, _ := db.Store.As("bert").Get(it.ID); strings.Contains(got.Body.Blocks[0].Text, secret) {
+		t.Fatal("after a restart a viewer reads the passage")
+	}
+	noErr(t, db.Store.Trash("anna", it.ID))
+	noErr(t, db.Store.Purge("anna", it.ID))
+	if hasKey(t, dir, key) {
+		t.Fatal("the passage's key survived its item's purge")
+	}
+	noErr(t, db.Close())
+}

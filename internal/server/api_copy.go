@@ -98,6 +98,11 @@ func (h itemHandlers) copyOne(r *http.Request, space string, t copyTask) (item.I
 		if src, err = x.Get(t.src); err != nil {
 			return
 		}
+		// A copy holds text, never a placeholder for it (ADR-0088).
+		if !x.ReadsAllSecrets(t.src) {
+			err = fmt.Errorf("%w: %s holds protected passages you may not read; ask for them or copy without it", item.ErrForbidden, src.Key)
+			return
+		}
 		files, err = x.Attachments(src.ID)
 	})
 	if err != nil {
@@ -119,6 +124,9 @@ func (h itemHandlers) copyOne(r *http.Request, space string, t copyTask) (item.I
 			if err := x.SetLabels(made.ID, src.Labels); err != nil {
 				return err
 			}
+		}
+		if err := x.CopySecrets(src.ID, made.ID); err != nil {
+			return err
 		}
 		// A restricted page stays as restricted as its source.
 		if len(src.Restriction.Read)+len(src.Restriction.Edit) > 0 {

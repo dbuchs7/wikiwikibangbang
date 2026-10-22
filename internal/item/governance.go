@@ -228,7 +228,20 @@ func (x *Session) governance(space string, now time.Time, staleAfter time.Durati
 			rd.Responsible = responsible
 			rep.Reviews = append(rep.Reviews, rd)
 		}
+		before := len(rep.Sensitive)
 		x.s.sensitiveIn(it, responsible, &rep)
+		// What a finding shows of a passage the principal may not read is
+		// veiled (ADR-0088).
+		if hide := x.s.hidden(x.who, it); hide != nil {
+			texts := secretTexts(it.Body)
+			for i := before; i < len(rep.Sensitive); i++ {
+				for id := range hide {
+					if shares(rep.Sensitive[i].Masked, texts[id]) {
+						rep.Sensitive[i].Masked = SecretPlaceholder
+					}
+				}
+			}
+		}
 		if now.Sub(last) > staleAfter {
 			rep.Stale = append(rep.Stale, StaleItem{Item: it.ID, Key: it.Key, Title: it.Title, LastChange: last, Responsible: responsible})
 		}

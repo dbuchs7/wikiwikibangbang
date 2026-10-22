@@ -204,7 +204,12 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 func (db *DB) heal() (int, error) {
 	var ids []item.ID
 	for id := range db.keys.keys {
-		it, err := db.Store.Get(id)
+		// A protected passage's key belongs to its item (ADR-0088).
+		owner := id
+		if of, ok := item.SecretKeyItem(id); ok {
+			owner = of
+		}
+		it, err := db.Store.Get(owner)
 		if err != nil || it.Presence == item.Purged {
 			ids = append(ids, id)
 		}
@@ -355,6 +360,8 @@ func (j journal) Append(batch []item.Event) error {
 			deleted[e.Item] = append(deleted[e.Item], e.Attachment.ID)
 		}
 	}
+	// An item's protected passages go with it (ADR-0088).
+	gone = append(gone, kr.passagesOf(gone)...)
 	if len(gone) > 0 || len(kr.unshred) > 0 {
 		// The batch is durable and will take effect. A failure to destroy
 		// the keys now is retried on the next purge and on the next start;

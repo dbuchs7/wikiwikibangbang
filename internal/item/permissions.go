@@ -328,7 +328,8 @@ func (x *Session) Get(id ID) (Item, error) {
 	if err != nil {
 		return Item{}, err
 	}
-	return it.clone(), nil
+	// Passages the principal may not read are veiled (ADR-0088).
+	return x.s.veiled(x.who, it).clone(), nil
 }
 
 // ByKey resolves a current or former key to a readable item.
@@ -372,7 +373,7 @@ func (x *Session) FindPage(q Query, after ID, limit int) (page []Item, total int
 	}
 	end := min(start+limit, len(matches))
 	for _, it := range matches[start:end] {
-		page = append(page, it.clone())
+		page = append(page, x.s.veiled(x.who, it).clone())
 	}
 	if end < len(matches) && len(page) > 0 {
 		next = page[len(page)-1].ID
@@ -384,7 +385,7 @@ func (x *Session) Find(q Query) []Item {
 	var out []Item
 	for _, it := range x.s.Find(q) {
 		if x.s.canRead(x.who, x.s.items[it.ID]) {
-			out = append(out, it)
+			out = append(out, *x.s.veiled(x.who, &it))
 		}
 	}
 	return out
@@ -419,8 +420,15 @@ func (x *Session) History(id ID) ([]Event, error) {
 // BodyAt returns the body a readable item had after its BodyCommitted
 // event seq (ADR-0043). An erased version is gone (ADR-0026).
 func (x *Session) BodyAt(id ID, seq int) (Event, error) {
-	if _, err := x.readable(id); err != nil {
+	it, err := x.readable(id)
+	if err != nil {
 		return Event{}, err
+	}
+	// An earlier version may hold in clear what is protected now; the
+	// versions of an item with protected passages are shown to those who
+	// read them all (ADR-0088).
+	if !x.s.readsAllSecrets(x.who, it) {
+		return Event{}, forbidden("%s holds protected passages that %s may not read; its earlier versions are shown to those who read them all", it.Key, x.who)
 	}
 	for _, e := range x.s.History(id) {
 		if e.Seq != seq || e.Item != id || e.Kind != BodyCommitted {
@@ -443,7 +451,20 @@ func (x *Session) RestoreBody(id ID, seq int) error {
 	if err != nil {
 		return err
 	}
-	return x.CommitBody(id, *v.Body)
+	// A passage protected then and not now reads as any other text.
+	it := x.s.items[id]
+	body := v.Body.clone()
+	for i, b := range body.Blocks {
+		b.Marks = slices.DeleteFunc(b.Marks, func(m Mark) bool {
+			_, known := it.secret(m.Ref)
+			return m.Type == MarkSecret && !known
+		})
+		if len(b.Marks) == 0 {
+			b.Marks = nil // as a decoded body has it
+		}
+		body.Blocks[i] = b
+	}
+	return x.CommitBody(id, body)
 }
 
 func ptrTo[T any](v T) *T { return &v }
@@ -574,7 +595,7 @@ func (x *Session) Transition(id ID, name string) error {
 // CommitBody commits a body of an editable item. New references must point
 // at readable items; references the previous version had may stay.
 func (x *Session) CommitBody(id ID, d Doc) error {
-	it, err := x.editable(id)
+	it, err := x.editableBody(id)
 	if err != nil {
 		return err
 	}

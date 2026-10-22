@@ -26,6 +26,11 @@ func (b storeBackend) Access(id item.ID, principal string) (read, edit bool) {
 		if err != nil || it.Presence != item.Live {
 			return
 		}
+		// A live session shares one text with all who join it: only
+		// those who read every protected passage do (ADR-0088).
+		if !x.ReadsAllSecrets(id) {
+			return
+		}
 		read, edit = true, x.MayEdit(id)
 	})
 	return read, edit

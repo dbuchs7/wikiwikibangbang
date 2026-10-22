@@ -196,6 +196,13 @@ func (x *Session) scan(before, after int, fn func(Notification) bool) {
 			}
 			continue
 		}
+		if x.secretAlert(e) {
+			it := x.s.items[e.Item]
+			if !fn(Notification{Seq: e.Seq, At: e.At, Actor: e.Actor, Kind: e.Kind, Item: it.ID, Key: it.Key, Title: it.Title, Space: it.Space}) {
+				return
+			}
+			continue
+		}
 		if x.mentioned(e) {
 			it := x.s.items[e.Item]
 			if !fn(Notification{Seq: e.Seq, At: e.At, Actor: e.Actor, Kind: e.Kind, Item: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Mentioned: true}) {
@@ -247,6 +254,27 @@ func (x *Session) mentioned(e Event) bool {
 		if c.ID == e.Comment {
 			return !c.Deleted && Mentions(c.Text, x.name)
 		}
+	}
+	return false
+}
+
+// secretAlert reports whether e is about a protected passage the
+// principal is to hear of (ADR-0088): a request to read one they decide
+// about, or the answer to their own request.
+func (x *Session) secretAlert(e Event) bool {
+	if e.Secret == nil || e.Actor == x.who {
+		return false
+	}
+	it := x.s.items[e.Item]
+	if it == nil || it.Presence == Purged || !x.s.canRead(x.who, it) {
+		return false
+	}
+	switch e.Kind {
+	case SecretRequested:
+		i, ok := it.secret(e.Secret.ID)
+		return ok && x.s.decidesSecret(x.who, it, it.Secrets[i])
+	case SecretGranted, SecretDeclined:
+		return e.Principal == x.who
 	}
 	return false
 }

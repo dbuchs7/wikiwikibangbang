@@ -75,6 +75,7 @@ func itemRoutes(d Deps) []Route {
 	routes = append(routes, commentRoutes(h)...)
 	routes = append(routes, copyRoutes(h)...)
 	routes = append(routes, spaceTrashRoutes(h)...)
+	routes = append(routes, secretRoutes(h)...)
 	routes = append(routes, exportRoutes(h)...)
 	routes = append(routes, linkCheckRoutes(h)...)
 	routes = append(routes, governanceRoutes(h)...)
@@ -624,7 +625,7 @@ func (h itemHandlers) getItem(w http.ResponseWriter, r *http.Request) {
 		}
 		// editable tells the UI whether to offer changes: the caller's
 		// role, the item's restriction and an import's hold decide it.
-		return map[string]any{"item": toItemJSON(it), "editable": x.CanEdit(it.ID)}, nil
+		return map[string]any{"item": withSecrets(x, toItemJSON(it)), "editable": x.CanEdit(it.ID)}, nil
 	})
 }
 
@@ -639,11 +640,13 @@ func (h itemHandlers) change(w http.ResponseWriter, r *http.Request, cmd func(x 
 		if err := cmd(x, s, it); err != nil {
 			return nil, err
 		}
-		after, err := s.Get(it.ID)
+		// Read as the caller reads it: passages they may not read stay
+		// veiled (ADR-0088).
+		after, err := x.Get(it.ID)
 		if err != nil {
 			return nil, err
 		}
-		return map[string]itemJSON{"item": toItemJSON(after)}, nil
+		return map[string]itemJSON{"item": withSecrets(x, toItemJSON(after))}, nil
 	})
 }
 

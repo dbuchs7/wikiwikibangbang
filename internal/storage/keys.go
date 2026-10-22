@@ -156,6 +156,25 @@ func (kr *keyring) persistPending() error {
 	return nil
 }
 
+// passagesOf returns the keys of the protected passages of items
+// (ADR-0088).
+func (kr *keyring) passagesOf(items []item.ID) []item.ID {
+	if len(items) == 0 {
+		return nil
+	}
+	gone := map[item.ID]bool{}
+	for _, id := range items {
+		gone[id] = true
+	}
+	var out []item.ID
+	for id := range kr.keys {
+		if of, ok := item.SecretKeyItem(id); ok && gone[of] {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // shred destroys the keys of ids: at once in memory, and on disk by
 // rewriting the keys file without them. If the rewrite fails, the IDs are
 // remembered and the next shred, or the next start, retries.

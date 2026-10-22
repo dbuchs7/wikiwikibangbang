@@ -197,7 +197,11 @@ func (x *Session) Comments(id ID) ([]Comment, error) {
 	if err != nil {
 		return nil, err
 	}
-	return slices.Clone(it.Comments), nil
+	out := slices.Clone(it.Comments)
+	for i := range out {
+		out[i].Anchor = x.veilAnchor(it, out[i].Anchor)
+	}
+	return out, nil
 }
 
 // AddComment comments on an item the principal may edit.

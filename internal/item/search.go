@@ -67,6 +67,8 @@ func (x *Session) Search(text string, q Query) ([]Hit, error) {
 			!x.s.canRead(x.who, it) {
 			continue
 		}
+		// Passages the principal may not read are not searched (ADR-0088).
+		it = x.s.veiled(x.who, it)
 		if h, ok := m.match(it, terms, wholeKey); ok {
 			h.Stars = m.stars(it, terms, phrase, it.Key == wholeKey)
 			for i, f := range m.found {

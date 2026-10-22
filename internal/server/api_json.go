@@ -186,6 +186,35 @@ type itemJSON struct {
 	Labels      []string         `json:"labels"`
 	// Hold is the item's open data protection review (ADR-0058).
 	Hold *holdJSON `json:"hold,omitempty"`
+	// Secrets are the protected passages of the body as the caller sees
+	// them, and ReadsAllSecrets whether the caller reads them all and so
+	// may change the body (ADR-0088); set on answers about one item.
+	Secrets         []secretJSON `json:"secrets,omitempty"`
+	ReadsAllSecrets *bool        `json:"readsAllSecrets,omitempty"`
+}
+
+type secretJSON struct {
+	ID        item.ID  `json:"id"`
+	By        string   `json:"by"`
+	Readable  bool     `json:"readable"`
+	Decides   bool     `json:"decides"`
+	Requested bool     `json:"requested,omitempty"`
+	Readers   []string `json:"readers,omitempty"`
+	Requests  []string `json:"requests,omitempty"`
+}
+
+// withSecrets adds what the caller sees of an item's protected passages.
+func withSecrets(x *item.Session, j itemJSON) itemJSON {
+	views, err := x.Secrets(j.ID)
+	if err != nil {
+		return j
+	}
+	for _, v := range views {
+		j.Secrets = append(j.Secrets, secretJSON{ID: v.ID, By: v.By, Readable: v.Readable, Decides: v.Decides, Requested: v.Requested, Readers: v.Readers, Requests: v.Requests})
+	}
+	all := x.ReadsAllSecrets(j.ID)
+	j.ReadsAllSecrets = &all
+	return j
 }
 
 type holdJSON struct {
