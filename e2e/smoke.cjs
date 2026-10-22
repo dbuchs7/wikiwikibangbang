@@ -998,7 +998,7 @@ function ckanSource() {
     await page.waitForSelector("#users tr:has-text('bert') label:has-text('erasure') input:checked");
     await page.click("#users tr:has-text('bert') label:has-text('erasure') input");
     await page.waitForSelector("#users tr:has-text('bert') label:has-text('erasure') input:not(:checked)");
-    await page.click("#admin-spaces a:has-text('Members and roles')");
+    await page.click("#admin-spaces a:has-text('Settings')");
     await page.fill("#add-role [name=group]", "ops");
     await page.selectOption("#add-role [name=role]", "editor");
     await page.click("#add-role button[type=submit]");
