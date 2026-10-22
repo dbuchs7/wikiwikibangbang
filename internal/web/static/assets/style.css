@@ -577,6 +577,18 @@ dialog.drawing::backdrop { background: rgba(20, 22, 26, .45); }
 .album-card figcaption { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 0; }
 .album-name { font-weight: 600; overflow-wrap: anywhere; }
 .album-item { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Folders, tools and picture labels (ADR-0090). */
+.album-trail { margin: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.album-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.album-new-folder { display: flex; gap: 8px; flex: 1 1 100%; }
+.album-folders { list-style: none; margin: 8px 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.album-folder { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; text-align: left; overflow-wrap: anywhere; }
+.album-folder-icon { flex: none; position: relative; width: 26px; height: 18px; margin-top: 4px; background: var(--accent); border-radius: 2px 3px 3px 3px; opacity: .8; }
+.album-folder-icon::before { content: ""; position: absolute; top: -4px; left: 0; width: 11px; height: 5px; background: inherit; border-radius: 2px 2px 0 0; }
+.album-labels { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+.album-labels-input { flex: 1 1 100%; font-size: 13px; }
+.album-label { cursor: pointer; }
+.album-used { font-size: 12px; margin: 0; }
 .album-card .chip { align-self: flex-start; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 dialog.album-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; }
 dialog.album-dialog::backdrop { background: rgba(20, 22, 26, .45); }
