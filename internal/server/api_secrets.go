@@ -13,6 +13,7 @@ func secretRoutes(h itemHandlers) []Route {
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets", Summary: "Protect a passage of the body: block (from 0), start and end in characters of its text, and readers (users and @groups) besides oneself; who may edit the item and reads all its passages", Handler: http.HandlerFunc(h.protect)},
 		{Method: http.MethodPut, Pattern: "/api/items/{ref}/secrets/{id}", Summary: "Set who reads a protected passage besides the one who protected it (that one and the space's administrators)", Handler: http.HandlerFunc(h.setSecretReaders)},
 		{Method: http.MethodDelete, Pattern: "/api/items/{ref}/secrets/{id}", Summary: "Take a passage's protection off (the one who protected it and the space's administrators)", Handler: http.HandlerFunc(h.unprotect)},
+		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/erase", Summary: "Erase a protected passage for good: its text leaves the body and its key is destroyed, so no earlier version holds it either (the one who protected it and the space's administrators; ADR-0089)", Handler: http.HandlerFunc(h.eraseSecret)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/request", Summary: "Ask to read a protected passage; the one who protected it and the space's administrators are told", Handler: http.HandlerFunc(h.requestSecret)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/requests/{principal}", Summary: "Answer a request to read a protected passage: grant true lets the one who asked read it, false declines", Handler: http.HandlerFunc(h.decideSecret)},
 	}
@@ -22,7 +23,7 @@ func secretRoutes(h itemHandlers) []Route {
 // it beside the session would be lost by the session's next commit.
 func (h itemHandlers) liveBusy(w http.ResponseWriter, r *http.Request) bool {
 	if id, err := h.resolveID(r); err == nil && h.d.Collab != nil && h.d.Collab.Busy(id) {
-		writeError(w, http.StatusConflict, "the body is being edited in a live session; protect the passage when it is done")
+		writeError(w, http.StatusConflict, "the body is being edited in a live session; change the passage when it is done")
 		return true
 	}
 	return false
@@ -62,6 +63,15 @@ func (h itemHandlers) unprotect(w http.ResponseWriter, r *http.Request) {
 	}
 	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
 		return x.Unprotect(it.ID, item.ID(r.PathValue("id")))
+	})
+}
+
+func (h itemHandlers) eraseSecret(w http.ResponseWriter, r *http.Request) {
+	if h.liveBusy(w, r) {
+		return
+	}
+	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
+		return x.EraseSecret(it.ID, item.ID(r.PathValue("id")))
 	})
 }
 

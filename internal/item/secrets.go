@@ -26,6 +26,8 @@ type Secret struct {
 	// the order they asked. They follow from the events, so they are not
 	// part of one.
 	Requests []string `json:"-"`
+
+	since int // sequence number of the event that first protected it
 }
 
 func (sec Secret) clone() Secret {
@@ -81,9 +83,16 @@ func (s *Store) readsAllSecrets(principal string, it *Item) bool {
 	return true
 }
 
-// hidden returns the passages of an item the principal may not read.
+// hidden returns the passages of an item the principal may not read, and
+// those erased for good, which no one reads (ADR-0089).
 func (s *Store) hidden(principal string, it *Item) map[ID]bool {
 	var out map[ID]bool
+	for _, id := range it.ErasedSecrets {
+		if out == nil {
+			out = map[ID]bool{}
+		}
+		out[id] = true
+	}
 	for _, sec := range it.Secrets {
 		if !s.readsSecret(principal, sec) {
 			if out == nil {
@@ -243,7 +252,9 @@ func (s *Store) applySecret(e Event) {
 	switch e.Kind {
 	case SecretSet:
 		sec := e.Secret.clone()
+		sec.since = e.Seq
 		if ok {
+			sec.since = it.Secrets[i].since
 			// The answer to a request is in who reads it now.
 			sec.Requests = slices.DeleteFunc(slices.Clone(it.Secrets[i].Requests), func(p string) bool { return s.readsSecret(p, sec) })
 			it.Secrets[i] = sec
@@ -254,6 +265,25 @@ func (s *Store) applySecret(e Event) {
 	case SecretRemoved:
 		if ok {
 			it.Secrets = slices.Delete(slices.Clone(it.Secrets), i, i+1)
+		}
+	case SecretErased:
+		if ok {
+			// The versions from before it was protected hold its text
+			// sealed with the item's key, which stays: they are withheld.
+			it.erasedBefore = max(it.erasedBefore, it.Secrets[i].since)
+			it.Secrets = slices.Delete(slices.Clone(it.Secrets), i, i+1)
+		}
+		if !slices.Contains(it.ErasedSecrets, e.Secret.ID) {
+			it.ErasedSecrets = append(slices.Clone(it.ErasedSecrets), e.Secret.ID)
+		}
+		// What inline comments quoted of it goes with it.
+		if len(e.Members) > 0 {
+			it.Comments = slices.Clone(it.Comments)
+			for j, c := range it.Comments {
+				if c.Anchor != nil && slices.Contains(e.Members, c.ID) {
+					it.Comments[j].Anchor = &Anchor{Quote: SecretPlaceholder}
+				}
+			}
 		}
 	case SecretRequested:
 		if ok && !slices.Contains(it.Secrets[i].Requests, e.Principal) {
@@ -444,6 +474,77 @@ func (x *Session) Unprotect(id, secret ID) error {
 		body.Blocks[i] = b
 	}
 	return x.s.recordBatch(x.who, Event{Kind: SecretRemoved, Item: id, Secret: &Secret{ID: sec.ID}}, Event{Kind: BodyCommitted, Item: id, Body: &body})
+}
+
+// EraseSecret erases a passage for good (ADR-0089): its text leaves the
+// body, its key is destroyed, so no version of the body holds it any more,
+// and what inline comments quoted of it is veiled. Those who decide who
+// reads it may, even without reading it.
+func (x *Session) EraseSecret(id, secret ID) error {
+	it, sec, err := x.decidable(id, secret)
+	if err != nil {
+		return err
+	}
+	if it.Presence != Live {
+		return invalid("%s is %s", it.Key, it.Presence)
+	}
+	var quoted []ID
+	if text := secretTexts(it.Body)[sec.ID]; text != "" {
+		for _, c := range it.Comments {
+			if a := c.Anchor; a != nil && (shares(a.Quote, text) || shares(a.Prefix, text) || shares(a.Suffix, text)) {
+				quoted = append(quoted, c.ID)
+			}
+		}
+	}
+	body := cutSecrets(it.Body, map[ID]bool{sec.ID: true})
+	return x.s.recordBatch(x.who, Event{Kind: SecretErased, Item: id, Secret: &Secret{ID: sec.ID}, Members: quoted},
+		Event{Kind: BodyCommitted, Item: id, Body: &body})
+}
+
+// cutSecrets removes the passages in cut, text and mark, from a body; the
+// other marks keep what lies outside them.
+func cutSecrets(d Doc, cut map[ID]bool) Doc {
+	d = d.clone()
+	for i, b := range d.Blocks {
+		var gone []Mark
+		for _, m := range b.Marks {
+			if m.Type == MarkSecret && cut[m.Ref] {
+				gone = append(gone, m)
+			}
+		}
+		if len(gone) == 0 {
+			continue
+		}
+		// at maps an offset of the old text to the new one.
+		at := func(p int) int {
+			n := p
+			for _, g := range gone {
+				n -= max(0, min(p, g.End)-g.Start)
+			}
+			return n
+		}
+		runes := []rune(b.Text)
+		var text []rune
+		for j, r := range runes {
+			if !slices.ContainsFunc(gone, func(g Mark) bool { return j >= g.Start && j < g.End }) {
+				text = append(text, r)
+			}
+		}
+		var marks []Mark
+		for _, m := range b.Marks {
+			if m.Type == MarkSecret && cut[m.Ref] {
+				continue
+			}
+			if start, end := at(m.Start), at(m.End); end > start {
+				m.Start, m.End = start, end
+				marks = append(marks, m)
+			}
+		}
+		b.Text = string(text)
+		b.Marks = marks
+		d.Blocks[i] = b
+	}
+	return d
 }
 
 // RequestSecret asks to read a passage one may not read yet.

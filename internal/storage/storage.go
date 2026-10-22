@@ -12,6 +12,8 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -199,18 +201,17 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 }
 
 // heal destroys the keys that should no longer exist: those of purged items
-// (a crash between the purge and the key's destruction) and those of items
-// the log does not know (a crash between storing a key and its batch).
+// and erased passages (a crash between the purge or erasure and the key's
+// destruction, ADR-0089) and those of items the log does not know (a crash
+// between storing a key and its batch).
 func (db *DB) heal() (int, error) {
 	var ids []item.ID
 	for id := range db.keys.keys {
 		// A protected passage's key belongs to its item (ADR-0088).
-		owner := id
-		if of, ok := item.SecretKeyItem(id); ok {
-			owner = of
-		}
-		it, err := db.Store.Get(owner)
-		if err != nil || it.Presence == item.Purged {
+		// A protected passage's key, {item}~{passage}, belongs to its item.
+		owner, passage, ok := strings.Cut(string(id), "~")
+		it, err := db.Store.Get(item.ID(owner))
+		if err != nil || it.Presence == item.Purged || ok && slices.Contains(it.ErasedSecrets, item.ID(passage)) {
 			ids = append(ids, id)
 		}
 	}
@@ -332,7 +333,8 @@ func decode(sc wal.Scan, kr *keyring) ([]item.Event, error) {
 
 // journal writes each command's batch as one record, so a batch is durable
 // as a whole or not at all. New keys are made durable first; keys of items
-// the batch purges are destroyed after it is durable.
+// the batch purges, and of passages it erases, are destroyed after it is
+// durable.
 type journal struct{ db *DB }
 
 func (j journal) Append(batch []item.Event) error {
@@ -356,6 +358,8 @@ func (j journal) Append(batch []item.Event) error {
 			gone = append(gone, e.Members...)
 		case item.ItemRedacted:
 			gone = append(gone, e.Item)
+		case item.SecretErased:
+			gone = append(gone, item.SecretKey(e.Item, e.Secret.ID))
 		case item.AttachmentDeleted:
 			deleted[e.Item] = append(deleted[e.Item], e.Attachment.ID)
 		}

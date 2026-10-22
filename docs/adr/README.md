@@ -101,3 +101,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0086](0086-a-space-is-renamed-its-key-stays.md) | A space is renamed; its key stays | Accepted | Landed |
 | [0087](0087-kanban-pictures-and-boards-by-label.md) | Kanban pictures, and a board for every label | Accepted | Landed |
 | [0088](0088-protected-passages-of-a-body.md) | Protected passages of a body | Accepted | Landed |
+| [0089](0089-a-protected-passage-is-erased-by-its-key.md) | A protected passage is erased by destroying its key | Accepted | Landed |

@@ -395,11 +395,15 @@ func (x *Session) Find(q Query) []Item {
 // items the principal may not read: a body that embeds the item, or a
 // relation to it, would otherwise disclose an unreadable item's content.
 func (x *Session) History(id ID) ([]Event, error) {
-	if _, err := x.readable(id); err != nil {
+	it, err := x.readable(id)
+	if err != nil {
 		return nil, err
 	}
 	var out []Event
 	for _, e := range x.s.History(id) {
+		if withheld(it, e) {
+			e.Body, e.Erased = nil, true
+		}
 		ends := []ID{e.Item}
 		if e.Relation != nil {
 			ends = []ID{e.Relation.From, e.Relation.To}
@@ -434,10 +438,12 @@ func (x *Session) BodyAt(id ID, seq int) (Event, error) {
 		if e.Seq != seq || e.Item != id || e.Kind != BodyCommitted {
 			continue
 		}
-		if e.Erased || e.Body == nil {
+		if e.Erased || e.Body == nil || withheld(it, e) {
 			return Event{}, notFound("version %d of item %s was erased", seq, id)
 		}
-		e.Body = ptrTo(e.Body.clone())
+		// A passage erased since is gone (ADR-0089): until the next start
+		// the history in memory still holds its text.
+		e.Body = ptrTo(veil(e.Body.clone(), x.s.hidden(x.who, it)))
 		return e, nil
 	}
 	return Event{}, notFound("body version %d of item %s", seq, id)
@@ -453,7 +459,11 @@ func (x *Session) RestoreBody(id ID, seq int) error {
 	}
 	// A passage protected then and not now reads as any other text.
 	it := x.s.items[id]
-	body := v.Body.clone()
+	erased := map[ID]bool{}
+	for _, sec := range it.ErasedSecrets {
+		erased[sec] = true
+	}
+	body := cutSecrets(*v.Body, erased)
 	for i, b := range body.Blocks {
 		b.Marks = slices.DeleteFunc(b.Marks, func(m Mark) bool {
 			_, known := it.secret(m.Ref)
@@ -465,6 +475,13 @@ func (x *Session) RestoreBody(id ID, seq int) error {
 		body.Blocks[i] = b
 	}
 	return x.CommitBody(id, body)
+}
+
+// withheld reports whether a version of an item's body is withheld: it is
+// from before a passage erased since was protected, so it may hold the
+// passage's text (ADR-0089).
+func withheld(it *Item, e Event) bool {
+	return e.Kind == BodyCommitted && e.Item == it.ID && e.Seq < it.erasedBefore
 }
 
 func ptrTo[T any](v T) *T { return &v }
