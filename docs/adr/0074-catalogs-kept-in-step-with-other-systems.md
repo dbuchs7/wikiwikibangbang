@@ -72,4 +72,5 @@ Strongest form: a model made for catalogs, with versions and links of its own.
 
 ## Links
 
+- amended by [ADR-0093](0093-the-interface-catalog-is-ordinary-pages.md) (the catalog is ordinary pages)
 - relates to ADR-0001 (types as data), ADR-0023 (origin and one-way sync), ADR-0039 (link check), ADR-0040 and ADR-0057 (governance and findings), ADR-0012 (MCP)

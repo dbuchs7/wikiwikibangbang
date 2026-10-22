@@ -20,6 +20,7 @@ type labels struct {
 	address, access, download, documentation, accessService                           string
 	publisher, contact, keywords, themes, temporal, frequency, spatial, identifier    string
 	datasetID, page, landing, relation                                                string
+	withdrawn                                                                         string
 }
 
 var pageLabels = map[string]labels{
@@ -33,6 +34,7 @@ var pageLabels = map[string]labels{
 		publisher: "Publisher", contact: "Contact", keywords: "Keywords", themes: "Themes", temporal: "Period covered",
 		frequency: "Update frequency", spatial: "Area", identifier: "Identifier", datasetID: "Data set ID",
 		page: "Data set in the source", landing: "Landing page", relation: "Related",
+		withdrawn: "The source no longer publishes this data set. The page stays, with what was added here; it is no longer kept in step.",
 	},
 	"de": {
 		generated:  "Diese Seite wird bei jedem Abgleich aus %s geschrieben und vom nächsten ersetzt. Anmerkungen bitte als Kommentar: Kommentare bleiben erhalten.",
@@ -44,6 +46,7 @@ var pageLabels = map[string]labels{
 		publisher: "Herausgeber", contact: "Kontakt", keywords: "Stichwörter", themes: "Themen", temporal: "Zeitraum",
 		frequency: "Aktualisierung", spatial: "Raum", identifier: "Kennung", datasetID: "Datensatz-ID",
 		page: "Datensatz in der Quelle", landing: "Einstiegsseite", relation: "Verwandt",
+		withdrawn: "Die Quelle publiziert diesen Datensatz nicht mehr. Die Seite bleibt mit allem, was hier ergänzt wurde, wird aber nicht mehr abgeglichen.",
 	},
 }
 

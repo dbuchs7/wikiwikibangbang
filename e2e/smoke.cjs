@@ -1401,16 +1401,18 @@ function ckanSource() {
     await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('1 new')");
     await page.click("#connector-run-now");
     await page.waitForSelector("#connector-history .catalog-run:has-text('Sync'):has-text('1 new') a");
-    await page.waitForSelector("#connector-list tr[data-connector='opendata.swiss'] >> text=1 interface");
+    await page.waitForSelector("#connector-list tr[data-connector='opendata.swiss'] >> text=1 page");
     await page.click("#connector-history .catalog-run a");
     await page.waitForSelector("#item-origin a[href='https://opendata.swiss/de/dataset/luftqualitaet']");
-    check(await page.inputValue("tr[data-field=publisher] input") === "Bundesamt für Umwelt", "the publisher is taken from the source");
-    check(await page.inputValue("tr[data-field=contact] input") === "Luft <luft@example.org>", "the contact is taken from the source");
-    // One page per data set, written from what the source says (ADR-0080).
+    // One ordinary page per data set, written from what the source says
+    // (ADR-0080, ADR-0093): publisher and contact are in its text.
+    await page.waitForSelector(".item-main :text('Bundesamt für Umwelt')");
+    await page.waitForSelector(".item-main :text('luft@example.org')");
+    check(await page.$("tr[data-field=publisher]") === null, "the page has no fields of its own");
     await page.waitForSelector(".item-main :text('Schnittstellen')");
     await page.waitForSelector(".item-main a[href='https://air.example.org/v1']");
     await page.waitForSelector(".item-main a[href='https://air.example.org/data.csv']");
-    // A catalog entry is no task, though it has a workflow and an owner.
+    // A catalog page is no task.
     await page.goto(base + "/#/tasks/all");
     await page.waitForSelector("#tasks");
     check(await page.locator("#tasks tr:has-text('Luftqualität')").count() === 0, "a catalog entry is not in the task list");

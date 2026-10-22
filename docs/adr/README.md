@@ -105,3 +105,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0090](0090-album-folders-uploads-and-picture-labels.md) | Album folders, uploads and labels of pictures | Accepted | Landed |
 | [0091](0091-rules-every-view-follows.md) | Rules every view follows | Accepted | Landed |
 | [0092](0092-labels-in-search-and-task-counts-on-label-boards.md) | Labels in search, and task counts on the boards by label | Accepted | Landed |
+| [0093](0093-the-interface-catalog-is-ordinary-pages.md) | The interface catalog is ordinary pages | Accepted | Landed |

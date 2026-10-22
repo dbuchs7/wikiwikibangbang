@@ -69,5 +69,6 @@ Strongest form: always current, and the text stays free for notes.
 
 ## Links
 
+- amended by [ADR-0093](0093-the-interface-catalog-is-ordinary-pages.md) (the catalog is ordinary pages)
 - amends [ADR-0075](0075-mirroring-the-interfaces-of-opendata-swiss.md) (entries per data set; the page is the source's) and [ADR-0049](0049-a-task-inbox-after-atlas.md) (which types are tasks)
 - relates to ADR-0035 and ADR-0047 (comments), ADR-0077 (connectors)

@@ -4083,9 +4083,9 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
   const result = (r) => h("details", { class: "catalog-run", open: r === st.history[0] },
     h("summary", {}, h("strong", { text: r.dryRun ? t("catalog.dryRun") : t("catalog.run") }), " · ", when(r.started), " · ",
       r.error ? h("span", { class: "error", text: r.error })
-        : t("catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn })),
+        : t("catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn, removed: r.removed || 0 })),
     r.formats?.length ? h("p", { class: "muted", text: t("catalog.formatsRead", { list: r.formats.join(", ") }) }) : "",
-    r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn") }[x.kind] }), " ",
+    r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn"), removed: t("catalog.kind.removed") }[x.kind] }), " ",
       x.key ? link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`) : x.title))) : "",
     r.problems.length ? h("ul", { class: "catalog-problems" }, r.problems.map((p) => h("li", { class: "muted", text: p }))) : "");
   editor.replaceChildren(

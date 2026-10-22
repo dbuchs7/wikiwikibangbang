@@ -116,14 +116,12 @@ func TestEntriesReadTheShapesOfThePortal(t *testing.T) {
 		t.Fatalf("entries %+v\nproblems %v", entries, problems)
 	}
 	want := []Entry{
-		{SourceID: "d1", Dataset: "wetterdaten", Title: "Wetterdaten", Format: "API", Endpoint: "https://api.meteo.example/v1", Specification: "https://api.meteo.example/docs",
-			Publisher: "MeteoSchweiz", Contact: "API-Team <api@meteo.example>", DatasetURL: "https://opendata.swiss/de/dataset/wetterdaten",
-			Modified: time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC), Resources: []string{"r1"}},
-		{SourceID: "d2", Dataset: "geodaten", Title: "Geodaten", Format: "WMS, WFS", Endpoint: "https://wms.geo.example", Specification: "https://geo.example/manual",
-			Publisher: "swisstopo FR", DatasetURL: "https://opendata.swiss/de/dataset/geodaten", Modified: time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC),
-			Resources: []string{"r3", "r4"}},
-		{SourceID: "d3", Dataset: "fahrplan", Title: "Fahrplan", Format: "API", Endpoint: "https://transport.example/api",
-			Publisher: "SBB", Contact: "open@sbb.example", DatasetURL: "https://opendata.swiss/de/dataset/fahrplan", Resources: []string{"r5"}},
+		{SourceID: "d1", Dataset: "wetterdaten", Title: "Wetterdaten",
+			Publisher: "MeteoSchweiz", Contact: "API-Team <api@meteo.example>", DatasetURL: "https://opendata.swiss/de/dataset/wetterdaten"},
+		{SourceID: "d2", Dataset: "geodaten", Title: "Geodaten",
+			Publisher: "swisstopo FR", DatasetURL: "https://opendata.swiss/de/dataset/geodaten"},
+		{SourceID: "d3", Dataset: "fahrplan", Title: "Fahrplan",
+			Publisher: "SBB", Contact: "open@sbb.example", DatasetURL: "https://opendata.swiss/de/dataset/fahrplan"},
 	}
 	for i := range want {
 		got := entries[i]
@@ -269,7 +267,13 @@ func setup(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := db.Write(func(s *item.Store) error { return s.CreateSpace("admin", "API", "Interfaces") }); err != nil {
+	if err := db.Write(func(s *item.Store) error {
+		if err := s.CreateSpace("admin", "API", "Interfaces"); err != nil {
+			return err
+		}
+		// The steward watches new pages, so may read the space.
+		return s.GrantRole("admin", "API", "anna", item.Viewer)
+	}); err != nil {
 		t.Fatal(err)
 	}
 	f := &fixture{db: db, ckan: &fakeCKAN{datasets: []string{weather, geo, transport}}, clock: time.Date(2026, 10, 21, 8, 0, 0, 0, time.UTC)}
@@ -290,16 +294,16 @@ func (f *fixture) items(t *testing.T) map[string]item.Item {
 	t.Helper()
 	out := map[string]item.Item{}
 	f.db.Read(func(s *item.Store) {
-		for _, it := range s.Find(item.Query{Space: "API", Type: TypeName}) {
-			out[it.Properties[FieldSourceID].(string)] = it
+		for _, it := range s.Find(item.Query{Space: "API", Type: PageType}) {
+			out[strings.TrimPrefix(it.Origin.ExternalID, "page/")] = it
 		}
 	})
 	return out
 }
 
-// A run mirrors the interfaces; the next one changes only what changed,
-// keeps what was added here, and withdraws what the source no longer
-// publishes. A dry run writes nothing.
+// A run writes a page per data set; the next one changes only what
+// changed, keeps comments and labels added here, and marks the pages the
+// source no longer publishes. A dry run writes nothing (ADR-0093).
 func TestTheCatalogFollowsTheSource(t *testing.T) {
 	f := setup(t)
 	ctx := context.Background()
@@ -314,7 +318,7 @@ func TestTheCatalogFollowsTheSource(t *testing.T) {
 		t.Errorf("formats read %v", dry.Formats)
 	}
 	res, err := f.r.Run(ctx, id, false, "admin")
-	if err != nil || res.New != 3 || res.Changed != 0 {
+	if err != nil || res.New != 3 || res.Changed != 0 || len(res.Problems) != 0 {
 		t.Fatalf("first run %+v %v", res, err)
 	}
 	if data, _ := json.Marshal(res); !strings.Contains(string(data), `"problems":[`) || !strings.Contains(string(data), `"examples":[`) {
@@ -322,22 +326,25 @@ func TestTheCatalogFollowsTheSource(t *testing.T) {
 	}
 	got := f.items(t)
 	d1 := got["d1"]
-	if d1.Title != "Wetterdaten" || d1.State != Active || d1.Properties[FieldOwner] != "anna" || d1.Properties[FieldEndpoint] != "https://api.meteo.example/v1" ||
-		d1.Origin == nil || d1.Origin.URL != "https://opendata.swiss/de/dataset/wetterdaten" || d1.Origin.System != id {
-		t.Fatalf("entry d1 %+v %+v", d1, d1.Origin)
+	if d1.Title != "Wetterdaten" || d1.Type != PageType || d1.State != "" || len(d1.Properties) != 0 ||
+		d1.Origin == nil || d1.Origin.URL != "https://opendata.swiss/de/dataset/wetterdaten" || d1.Origin.System != id || d1.Origin.ExternalID != "page/d1" {
+		t.Fatalf("page d1 %+v %+v", d1, d1.Origin)
 	}
-	if text := pageText(d1.Body.Blocks); !strings.Contains(text, "https://api.meteo.example/v1") || !strings.Contains(text, "Wetterdaten") && !strings.Contains(text, "Schnittstellen") {
+	if text := pageText(d1.Body.Blocks); !strings.Contains(text, "https://api.meteo.example/v1") {
 		t.Fatalf("the page of d1:\n%s", text)
 	}
+	f.db.Read(func(s *item.Store) {
+		if !s.As("anna").Watching(d1.ID) {
+			t.Error("the steward does not watch the new page")
+		}
+	})
 
-	// Here someone takes over d1, adds a contact to d2, comments on d1 and
-	// writes into its page; the source changes d1's address and stops
-	// publishing geodaten's interfaces.
+	// Here someone comments on d1 and writes into its page, and labels
+	// d2; the source changes d1's address and a resource of fahrplan.
 	f.db.Write(func(s *item.Store) error {
-		s.SetProperty("bert", d1.ID, FieldOwner, "bert")
 		s.AddComment("bert", d1.ID, "Checked with the team")
 		s.CommitBody("bert", d1.ID, item.Doc{Blocks: []item.Block{{Kind: item.Paragraph, Text: "my notes"}}})
-		return s.SetProperty("bert", got["d2"].ID, FieldContact, "geo@example.org")
+		return s.SetLabels("bert", got["d2"].ID, []string{"important"})
 	})
 	f.ckan.datasets = []string{strings.Replace(weather, "api.meteo.example/v1", "api.meteo.example/v2", 1), geo,
 		strings.Replace(transport, `"id":"r5"`, `"id":"r6"`, 1)}
@@ -346,30 +353,33 @@ func TestTheCatalogFollowsTheSource(t *testing.T) {
 		t.Fatalf("second run %+v %v", res, err)
 	}
 	got = f.items(t)
-	if got["d1"].Properties[FieldEndpoint] != "https://api.meteo.example/v2" || got["d1"].Properties[FieldOwner] != "bert" {
-		t.Errorf("d1 lost what was set here: %+v", got["d1"].Properties)
-	}
 	if text := pageText(got["d1"].Body.Blocks); strings.Contains(text, "my notes") || !strings.Contains(text, "api.meteo.example/v2") {
 		t.Errorf("the page of d1 is not the source's:\n%s", text)
 	}
 	if len(got["d1"].Comments) != 1 {
 		t.Errorf("the comment on d1 went: %+v", got["d1"].Comments)
 	}
-	if got["d2"].Properties[FieldContact] != "geo@example.org" {
-		t.Errorf("d2 lost its contact: %+v", got["d2"].Properties)
-	}
 	if res, _ := f.r.Run(ctx, id, false, ""); res.New+res.Changed+res.Withdrawn != 0 || res.Unchanged != 3 {
 		t.Errorf("a run without changes %+v", res)
 	}
-	// A data set without interfaces any more is withdrawn, and comes back.
+	// A data set without interfaces any more is marked withdrawn, with
+	// its labels kept, and comes back.
 	f.ckan.datasets = []string{weather, strings.ReplaceAll(geo, "wfs_srvc", "zip"), transport}
 	f.ckan.datasets[1] = strings.Replace(f.ckan.datasets[1], `"format":"WMS"`, `"format":"PDF"`, 1)
-	if res, _ := f.r.Run(ctx, id, false, ""); res.Withdrawn != 1 || f.items(t)["d2"].State != Withdrawn {
-		t.Errorf("geodaten without interfaces %+v", res)
+	res, _ = f.r.Run(ctx, id, false, "")
+	d2 := f.items(t)["d2"]
+	if res.Withdrawn != 1 || !slices.Equal(d2.Labels, []string{"important", WithdrawnLabel}) ||
+		d2.Body.Blocks[0].Kind != item.Panel || !strings.Contains(d2.Body.Blocks[0].Text, "publiziert diesen Datensatz nicht mehr") {
+		t.Errorf("geodaten without interfaces %+v %v %+v", res, d2.Labels, d2.Body.Blocks[0])
+	}
+	if res, _ := f.r.Run(ctx, id, false, ""); res.Withdrawn != 0 || res.Unchanged != 2 {
+		t.Errorf("a withdrawn page is marked once %+v", res)
 	}
 	f.ckan.datasets = []string{weather, geo, transport}
-	if res, _ := f.r.Run(ctx, id, false, ""); res.Changed != 1 || res.Unchanged != 2 || f.items(t)["d2"].State != Active {
-		t.Errorf("geodaten back %+v", res)
+	res, _ = f.r.Run(ctx, id, false, "")
+	d2 = f.items(t)["d2"]
+	if res.Changed != 1 || res.Unchanged != 2 || !slices.Equal(d2.Labels, []string{"important"}) || strings.Contains(pageText(d2.Body.Blocks), "nicht mehr") {
+		t.Errorf("geodaten back %+v %v", res, d2.Labels)
 	}
 
 	// A source that answers far fewer entries withdraws nothing.
@@ -384,46 +394,60 @@ func TestTheCatalogFollowsTheSource(t *testing.T) {
 			synced++
 		}
 	}
-	if synced != 6 {
+	if synced != 7 {
 		t.Errorf("%d runs audited", synced)
 	}
-	if st := f.r.Status(id); len(st.History) != 7 || !st.History[6].DryRun || st.Running {
+	if st := f.r.Status(id); len(st.History) != 8 || !st.History[7].DryRun || st.Running {
 		t.Errorf("status %+v", st)
 	}
 }
 
-// Entries of one interface each, as before ADR-0080, give way to the entry
-// of their data set: withdrawn, with their comments, whatever the share.
-func TestEntriesOfOneInterfaceGiveWay(t *testing.T) {
+// The entries of before ADR-0093, with fields and a workflow, are erased
+// and pages written in their place; one that something points to stays,
+// and the run says so. A dry run only counts them.
+func TestOldEntriesGiveWayToPages(t *testing.T) {
 	f := setup(t)
-	old := func(resource, title string) item.Upsert {
-		return item.Upsert{Origin: item.Origin{System: id, Instance: f.cfg.CKAN.BaseURL, ExternalID: resource}, Space: "API", Type: TypeName,
-			Title: title, Properties: item.Props{FieldSourceID: resource, FieldPublisher: "x"}, State: Active}
+	old := func(external, title string) item.Upsert {
+		return item.Upsert{Origin: item.Origin{System: id, Instance: f.cfg.CKAN.BaseURL, ExternalID: external}, Space: "API", Type: LegacyType, Title: title}
 	}
+	var kept item.Item
 	f.db.Write(func(s *item.Store) error {
-		if err := s.DefineType("admin", TypeDef()); err != nil {
+		if err := s.DefineType("admin", item.TypeDef{Name: LegacyType, Body: true}); err != nil {
 			return err
 		}
-		for _, u := range []item.Upsert{old("r1", "Wetterdaten"), old("r3", "Geodaten – Karten"), old("r4", "Geodaten – WFS"), old("r5", "Fahrplan – API"), old("r9", "Gone")} {
+		for _, u := range []item.Upsert{old("d1", "Wetterdaten"), old("r3", "Geodaten – Karten"), old("r9", "Gone")} {
 			if _, _, err := s.Upsert("sync:"+id, u); err != nil {
 				return err
 			}
 		}
-		return nil
-	})
-	res, err := f.r.Run(context.Background(), id, false, "")
-	if err != nil || res.New != 3 || res.Withdrawn != 5 {
-		t.Fatalf("the change of entries %+v %v", res, err)
-	}
-	got := f.items(t)
-	for _, r := range []string{"r1", "r3", "r4", "r5", "r9"} {
-		if got[r].State != Withdrawn {
-			t.Errorf("%s is %s", r, got[r].State)
+		var err error
+		kept, _, err = s.Upsert("sync:"+id, old("d3", "Fahrplan"))
+		if err != nil {
+			return err
 		}
+		note, err := s.Create("bert", item.NewItem{Space: "API", Type: LegacyType, Title: "Notes"})
+		if err != nil {
+			return err
+		}
+		return s.AddRelation("bert", "relates-to", note.ID, kept.ID)
+	})
+	dry, err := f.r.Run(context.Background(), id, true, "")
+	if err != nil || dry.Removed != 4 || dry.New != 3 {
+		t.Fatalf("dry run %+v %v", dry, err)
 	}
-	if !slices.ContainsFunc(res.Problems, func(p string) bool { return strings.Contains(p, "is now part of the entry of its data set, Geodaten") }) {
+	res, err := f.r.Run(context.Background(), id, false, "")
+	if err != nil || res.Removed != 3 || res.New != 3 || len(f.items(t)) != 3 {
+		t.Fatalf("the change to pages %+v %v", res, err)
+	}
+	if !slices.ContainsFunc(res.Problems, func(p string) bool { return strings.Contains(p, kept.Key+" is not removed") }) {
 		t.Errorf("problems %v", res.Problems)
 	}
+	f.db.Read(func(s *item.Store) {
+		left := s.Find(item.Query{Space: "API", Type: LegacyType})
+		if len(left) != 2 {
+			t.Errorf("old entries left %d", len(left))
+		}
+	})
 }
 
 func TestRunsThatCannotWork(t *testing.T) {
@@ -443,18 +467,16 @@ func TestRunsThatCannotWork(t *testing.T) {
 	cfg.Space = "API"
 	f.db.Site.SetConnector("admin", cfg)
 	f.db.Write(func(s *item.Store) error {
-		return s.DefineType("admin", item.TypeDef{Name: TypeName, Fields: []item.FieldDef{{Name: FieldSourceID, Kind: item.KindNumber}}})
+		return s.DefineType("admin", item.TypeDef{Name: PageType})
 	})
-	if _, err := f.r.Run(ctx, id, false, ""); err == nil || !strings.Contains(err.Error(), "source-id") {
+	if _, err := f.r.Run(ctx, id, false, ""); err == nil || !strings.Contains(err.Error(), "no text") {
 		t.Errorf("a type that does not fit: %v", err)
 	}
-	for _, td := range []item.TypeDef{
-		func() item.TypeDef { td := TypeDef(); td.Fields = td.Fields[1:]; return td }(),
-		func() item.TypeDef { td := TypeDef(); td.Workflow = nil; return td }(),
-	} {
-		if err := fits(td); err == nil {
-			t.Errorf("fits %+v", td.Fields)
-		}
+	if err := fits(item.TypeDef{Name: PageType, Body: true, Fields: []item.FieldDef{{Name: "owner", Kind: item.KindUser, Required: true}}}); err == nil {
+		t.Error("fits a type with a field to fill")
+	}
+	if err := fits(PageTypeDef()); err != nil {
+		t.Errorf("does not fit its own type: %v", err)
 	}
 	if NewClient("http://127.0.0.1:1", "").HTTP == nil {
 		t.Error("no client")
@@ -627,7 +649,7 @@ func TestSeveralConnectors(t *testing.T) {
 		t.Errorf("the first connector %+v %v", res, err)
 	}
 	n := 0
-	f.db.Read(func(s *item.Store) { n = len(s.Find(item.Query{Space: "API2", Type: TypeName})) })
+	f.db.Read(func(s *item.Store) { n = len(s.Find(item.Query{Space: "API2", Type: PageType})) })
 	if n != 3 || len(f.items(t)) != 3 {
 		t.Errorf("%d and %d entries", n, len(f.items(t)))
 	}
