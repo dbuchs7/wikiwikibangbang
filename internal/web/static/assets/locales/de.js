@@ -168,6 +168,8 @@ export default {
   "item.purgeConfirm": "Endgültig löschen? Der Inhalt kann nicht wiederhergestellt werden.",
   "item.restore": "Wiederherstellen",
   "item.state": " · Status: {state}",
+  "item.status": "Status",
+  "item.stateMove": "Wechseln zu {state} ({transition})",
   "item.transitions": "Übergänge: ",
   "item.trash": "In den Papierkorb",
   "item.version": " · Version {n}",
@@ -318,6 +320,8 @@ export default {
 
   "label.title": "Labels",
   "label.placeholder": "Label hinzufügen",
+  "label.add": "Label hinzufügen",
+  "label.invalid": "Ein Label besteht aus Buchstaben und Ziffern, verbunden mit -, _ oder ., höchstens 64 Zeichen; Leerzeichen werden zu -. Nicht möglich: {label}",
   "label.remove": "Label {label} entfernen",
   "label.noItems": "Nichts, was Sie lesen dürfen, trägt dieses Label.",
   "label.more": "Erste Seite von {n} angezeigt.",

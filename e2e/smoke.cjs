@@ -191,8 +191,12 @@ function ckanSource() {
     await page.waitForSelector("tr[data-field=estimate] .saved");
     await page.reload();
     await page.waitForSelector("text=version 2");
-    await page.click("button:has-text('finish')");
+    // The status leads the details: the states in a row, the current one
+    // marked, the next ones buttons that perform their transition.
+    await page.waitForSelector("#item-status .state-step.current:text-is('open')");
+    await page.click("#item-status button[data-transition=finish]");
     await page.waitForSelector("text=state: done");
+    await page.waitForSelector("#item-status .state-step.current.finished:text-is('done')");
 
     step("comments: add one with markup, which shows as text, then edit it");
     await page.fill("#add-comment [name=text]", hostile);
@@ -540,8 +544,24 @@ function ckanSource() {
     await page.waitForSelector("#labelled td:has-text('Upgrade')");
     await page.goBack();
     await page.waitForSelector("#labels .label");
-    await page.click("#labels .label-remove");
-    await page.waitForFunction(() => document.querySelectorAll("#labels .label").length === 0);
+    // Several at once with commas, by the button; one typed and left is
+    // added too; a label that breaks the rule is refused beside the labels.
+    await page.fill("#labels [name=label]", "alpha, Beta Gamma");
+    await page.click("#labels .label-add-button");
+    await page.waitForSelector("#labels .label a:text-is('beta-gamma')");
+    await page.fill("#labels [name=label]", "left behind");
+    await page.click("h1.item-title");
+    await page.waitForSelector("#labels .label a:text-is('left-behind')");
+    await page.fill("#labels [name=label]", "Sven's");
+    await page.press("#labels [name=label]", "Enter");
+    await page.waitForSelector("#labels .error:has-text(\"Not possible: Sven's\")");
+    check(await page.locator("#labels .label").count() === 4, "the refused label is not added");
+    await page.fill("#labels [name=label]", "");
+    while (await page.locator("#labels .label-remove").count()) {
+      const n = await page.locator("#labels .label").count();
+      await page.click("#labels .label-remove >> nth=0");
+      await page.waitForFunction((n) => document.querySelectorAll("#labels .label").length === n - 1, n);
+    }
 
     step("inline comments: a comment on selected text highlights it, takes a reply and is resolved");
     await page.click("#body .ProseMirror p");
