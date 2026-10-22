@@ -2696,18 +2696,25 @@ async function itemView(ref, params = new URLSearchParams()) {
   } });
   const headActions = h("p", { class: "actions" },
     live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null,
-    editing ? done : canEdit && readsAll ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null,
+    // Editing is offered in the bar where the text begins (ADR-0091).
+    editing ? done : null,
     canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null,
     !editing ? exportMenu(item) : null);
   let body = null;
   const protecting = h("div", { id: "protect-passage" });
+  if (!type.body && canEdit && readsAll && !editing) {
+    // An item without a text still has its bar, with Edit, in the same place.
+    body = h("section", { id: "body", class: "reading no-body" },
+      h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, link(itemHref + "?edit", t("item.edit"), "button primary", "edit")));
+  }
   if (type.body) {
     // Protected passages show readable or veiled; one who may change the
     // text protects a passage from what they read (ADR-0088).
     const secretOf = new Map((item.secrets || []).map((sc) => [sc.id, sc]));
     setSecretClass((ref) => (secretOf.get(ref)?.readable ? "secret-readable" : "secret-veiled"));
     const protect = canEdit && readsAll && live && !editing ? (at) => protectPassageForm(protecting, path, item, at, status) : null;
-    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect);
+    const edit = canEdit && readsAll && !editing ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null;
+    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit);
     body = b.element;
     session = b.session;
   }
@@ -2798,11 +2805,12 @@ async function relocateForm(box, item, mode, spaces, status) {
 // commented on highlighted and commenting on a selection offered; or, when
 // editing, in its live session (ADR-0010), where changes reach everyone at
 // once and are saved as one leaves a block.
-function bodySection(item, embeds, editing, threads, attachments, protect) {
+function bodySection(item, embeds, editing, threads, attachments, protect, edit) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!editing) {
     const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
-      extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined, protect: protect || undefined });
+      extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined, protect: protect || undefined,
+      actions: edit ? [edit] : [] });
     const section = h("section", { id: "body", class: "reading" }, view.element);
     // A click on a protected passage shows it in the list of passages.
     const open = (ev) => {

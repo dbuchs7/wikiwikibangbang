@@ -557,7 +557,7 @@ function imageView(node, view, getPos, files) {
 // the attachment. extra adds plugins, such as a live session's (live.js);
 // viewProps adds editor view properties. comment(anchor), if given, starts
 // an inline comment on the selected text (anchors.js, ADR-0047).
-export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect }) {
+export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, actions = [] }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
   const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
@@ -710,7 +710,8 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     for (const b of alignButtons) b.el.disabled = !canAlign;
   };
   const toolbar = !editable
-    ? (commentButton || protectButton ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, commentButton, protectButton, status) : null)
+    // The text's own actions, such as editing it, stand beside them.
+    ? (commentButton || protectButton || actions.length ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, commentButton, protectButton, ...actions, status) : null)
     : h("div", { class: "pm-toolbar", role: "toolbar", "aria-label": t("editor.toolbar") },
     group(kindSelect),
     group(...markButtons.map((b) => b.el)),
