@@ -79,6 +79,38 @@ func (h itemHandlers) spaceIcon(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "this space has no icon")
 		return
 	}
+	serveIcon(w, r, a)
+}
+
+// readIcon reads an uploaded icon: a picture of a kind a browser shows,
+// within the design's budget. It answers the request itself when the
+// upload is refused.
+func readIcon(w http.ResponseWriter, r *http.Request) ([]byte, string, bool) {
+	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/octet-stream" {
+		writeError(w, http.StatusUnsupportedMediaType, "the request body must be application/octet-stream")
+		return nil, "", false
+	}
+	limit := budget.Get().BrandingBytes
+	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
+	var tooLarge *http.MaxBytesError
+	switch {
+	case errors.As(err, &tooLarge):
+		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("an icon may have at most %d bytes", limit))
+		return nil, "", false
+	case err != nil:
+		writeError(w, http.StatusBadRequest, "the file could not be read")
+		return nil, "", false
+	}
+	mediaType := sniff(data)
+	if !spaceIconTypes[mediaType] {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("this file is %s; an icon is PNG, JPEG, GIF, WebP or SVG", mediaType))
+		return nil, "", false
+	}
+	return data, mediaType, true
+}
+
+// serveIcon sends an icon so it never runs as a page (ADR-0052).
+func serveIcon(w http.ResponseWriter, r *http.Request, a site.Asset) {
 	tag := strconv.Quote(a.Tag)
 	hd := w.Header()
 	hd.Set("Content-Type", a.Type)
@@ -100,24 +132,8 @@ func (h itemHandlers) setSpaceIcon(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "space administrators only")
 		return
 	}
-	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mt != "application/octet-stream" {
-		writeError(w, http.StatusUnsupportedMediaType, "the request body must be application/octet-stream")
-		return
-	}
-	limit := budget.Get().BrandingBytes
-	data, err := io.ReadAll(http.MaxBytesReader(w, r.Body, limit))
-	var tooLarge *http.MaxBytesError
-	switch {
-	case errors.As(err, &tooLarge):
-		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("an icon may have at most %d bytes", limit))
-		return
-	case err != nil:
-		writeError(w, http.StatusBadRequest, "the file could not be read")
-		return
-	}
-	mediaType := sniff(data)
-	if !spaceIconTypes[mediaType] {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("this file is %s; an icon is PNG, JPEG, GIF, WebP or SVG", mediaType))
+	data, mediaType, ok := readIcon(w, r)
+	if !ok {
 		return
 	}
 	if err := h.d.DB.Site.SetAsset(who(r), site.SpaceIcon(key), mediaType, data); err != nil {

@@ -99,3 +99,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0084](0084-a-mention-in-a-comment-is-a-notification.md) | A mention in a comment is a notification | Accepted | Landed |
 | [0085](0085-ready-made-themes-under-the-corporate-design.md) | Ready-made themes under the corporate design | Accepted | Landed |
 | [0086](0086-a-space-is-renamed-its-key-stays.md) | A space is renamed; its key stays | Accepted | Landed |
+| [0087](0087-kanban-pictures-and-boards-by-label.md) | Kanban pictures, and a board for every label | Accepted | Landed |

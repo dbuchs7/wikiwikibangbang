@@ -60,10 +60,15 @@ func (h itemHandlers) purgeSpace(w http.ResponseWriter, r *http.Request) {
 		purged = err == nil
 		return err
 	})
-	// The space's icon goes with it; a failure leaves an icon nobody can
+	// The space's icon and its kanbans' pictures go with it; a failure leaves an icon nobody can
 	// see, which the space's key never shows again.
 	if _, ok := h.d.DB.Site.Asset(site.SpaceIcon(key)); purged && ok {
 		_ = h.d.DB.Site.RemoveAsset(who(r), site.SpaceIcon(key))
+	}
+	if purged {
+		for _, name := range h.d.DB.Site.KanbanIcons(key) {
+			_ = h.d.DB.Site.RemoveAsset(who(r), name)
+		}
 	}
 }
 

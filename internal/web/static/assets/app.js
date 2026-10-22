@@ -285,7 +285,8 @@ async function labelView(label) {
   show(
     h("p", {}, link("#/", t("nav.spaces")), " / " + t("label.title")),
     h("div", { class: "page-head" }, h("h1", {}, labelChip(label)),
-      page.items.length ? h("p", { class: "actions" }, csvLink("/api/items.csv?label=" + encodeURIComponent(label), "label-csv")) : null),
+      page.items.length ? h("p", { class: "actions" }, link(`#/labelboard/${encodeURIComponent(label)}`, t("labelboard.open"), "button secondary", "label-board"),
+        csvLink("/api/items.csv?label=" + encodeURIComponent(label), "label-csv")) : null),
     page.items.length
       ? h("table", { id: "labelled" }, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type")].map((c) => h("th", { text: c })))),
         h("tbody", {}, page.items.map((it) => h("tr", {},
@@ -777,6 +778,7 @@ async function route() {
       case "tasks": return await tasksView(arg, params);
       case "kanbans": return await kanbansView();
       case "kanban": return await kanbanView(arg, arg2);
+      case "labelboard": return await labelBoardView(arg, params.get("space") || "");
       case "space": return await spaceView(arg);
       case "board": return await boardView(arg, arg2);
       case "links": return await linksView(arg);
@@ -1580,7 +1582,8 @@ async function tasksView(tab, params) {
       h("td", { text: it.title }),
       h("td", { class: "task-labels" }, (it.labels || []).map((l) => {
         const k = kanbanOf.get(`${it.space}\n${l}`);
-        return k ? link(`#/kanban/${encodeURIComponent(k.space)}/${k.id}`, l, "chip kanban-chip") : h("span", { class: "chip", text: l });
+        return k ? link(`#/kanban/${encodeURIComponent(k.space)}/${k.id}`, l, "chip kanban-chip")
+          : link(`#/labelboard/${encodeURIComponent(l)}?space=${encodeURIComponent(it.space)}`, l, "chip");
       })),
       h("td", { text: it.state }),
       h("td", { text: who === null ? "" : who ? person(who) : t("tasks.nobody") }),
@@ -1720,11 +1723,56 @@ async function readAll(base) {
   return { items, truncated: Boolean(page.next) };
 }
 
+// kanbanIcon shows a kanban's picture or logo (ADR-0087), or nothing.
+function kanbanIcon(k, size) {
+  if (!k.icon) return null;
+  return h("img", { class: `space-icon space-icon-${size} kanban-icon`, alt: "", width: size, height: size,
+    src: `/api/spaces/${encodeURIComponent(k.space)}/kanbans/${encodeURIComponent(k.id)}/icon?v=${encodeURIComponent(k.icon)}` });
+}
+
+// labelBoardView shows every task that carries a label as a board, one
+// per type with a workflow, its columns the states (ADR-0087). Nothing is
+// made or kept: the board is the label, as the task list's filter is. A
+// card moves by a transition, as on the board of a type (ADR-0036).
+async function labelBoardView(label, space) {
+  const show = screen();
+  const [{ types }, { spaces }, { kanbans }] = await Promise.all([get("/api/types"), get("/api/spaces"), get("/api/kanbans")]);
+  const found = await readAll(`/api/items?label=${encodeURIComponent(label)}&limit=100${space ? "&space=" + encodeURIComponent(space) : ""}`);
+  const flows = types.filter((ty) => ty.workflow && found.items.some((it) => it.type === ty.name));
+  const inSpaces = [...new Set(found.items.filter((it) => flows.some((ty) => ty.name === it.type)).map((it) => it.space))].sort();
+  const status = h("div", { class: "status" });
+  const go = (sp) => { location.hash = `#/labelboard/${encodeURIComponent(label)}${sp ? "?space=" + encodeURIComponent(sp) : ""}`; };
+  const filter = inSpaces.length > 1 || space
+    ? field(t("col.space"), h("select", { id: "labelboard-space", onchange: (ev) => go(ev.target.value) },
+      h("option", { value: "", text: t("labelboard.allSpaces") }),
+      [...new Set([...inSpaces, space].filter(Boolean))].map((sp) => h("option", { value: sp, selected: sp === space,
+        text: `${sp} ${spaces.find((x) => x.key === sp)?.name || ""}` }))))
+    : null;
+  const kept = kanbans.filter((k) => k.label === label && (!space || k.space === space));
+  show(
+    h("p", {}, link("#/tasks", t("nav.tasks")), " / ", link("#/kanbans", t("kanban.tab")), " / " + label),
+    h("div", { class: "page-head" }, h("h1", {}, t("labelboard.title") + " ", labelChip(label))),
+    h("p", { class: "muted", text: t("labelboard.intro") }),
+    kept.length ? h("p", { class: "muted" }, t("labelboard.kept") + " ",
+      kept.map((k) => link(`#/kanban/${encodeURIComponent(k.space)}/${k.id}`, `${k.space} · ${k.name}`, "chip kanban-chip"))) : null,
+    filter,
+    found.truncated ? h("p", { class: "notice", text: t("board.truncated", { n: found.items.length }) }) : null,
+    status,
+    flows.length
+      ? h("div", { id: "labelboard" }, flows.map((ty) => h("section", { class: "labelboard-type", "data-type": ty.name },
+        flows.length > 1 ? h("h2", { text: ty.name }) : null,
+        boardOf(found.items.filter((it) => it.type === ty.name), ty, status,
+          (it) => (space || inSpaces.length < 2 ? null : h("span", { class: "card-key", text: it.space }))))))
+      : h("p", { class: "muted", id: "labelboard-empty", text: t("labelboard.none") }),
+  );
+}
+
 // kanbansView lists the kanbans of one's spaces and makes new ones: a
 // name, a type with a workflow; their cards are the items with its label.
 async function kanbansView() {
   const show = screen();
-  const [{ kanbans }, { spaces }, { types }] = await Promise.all([get("/api/kanbans"), get("/api/spaces"), get("/api/types")]);
+  const [{ kanbans }, { spaces }, { types }, { labels }] = await Promise.all([get("/api/kanbans"), get("/api/spaces"), get("/api/types"),
+    get("/api/labels").catch(() => ({ labels: [] }))]);
   const flows = types.filter((ty) => ty.workflow);
   const editable = spaces.filter((sp) => mayEdit(sp.role));
   const counts = await Promise.all(kanbans.map((k) =>
@@ -1755,10 +1803,15 @@ async function kanbansView() {
       h("h2", { text: `${sp} · ${spaces.find((x) => x.key === sp)?.name || ""}` }),
       h("ul", { class: "space-tiles" }, list.map((k) => h("li", {},
         h("a", { class: "space-tile", href: `#/kanban/${encodeURIComponent(k.space)}/${k.id}` },
-          h("strong", { text: k.name }),
+          h("span", { class: "space-tile-head" }, h("strong", { text: k.name }), kanbanIcon(k, 48)),
           h("span", { class: "muted", text: t("kanban.meta", { type: k.type, label: k.label }) }),
           h("span", { class: "badge", text: t("kanban.cards", { n: k.count }) }))))))))
       : h("p", { class: "muted", text: t("kanban.none") }),
+    labels.length ? h("section", { id: "label-boards" },
+      h("h2", { text: t("labelboard.listTitle") }),
+      h("p", { class: "muted", text: t("labelboard.listIntro") }),
+      h("p", { class: "label-boards" }, labels.map((l) =>
+        link(`#/labelboard/${encodeURIComponent(l.label)}`, `${l.label} (${l.count})`, "chip")))) : null,
     create,
   );
 }
@@ -1944,7 +1997,8 @@ async function kanbanView(space, id) {
     detail);
   show(
     h("p", {}, link("#/tasks", t("nav.tasks")), " / ", link("#/kanbans", t("kanban.tab")), " / " + k.name),
-    h("div", { class: "page-head" }, h("h1", { text: k.name }), h("p", { class: "muted", text: t("kanban.metaLong", { space, type: k.type, label: k.label }) })),
+    h("div", { class: "page-head" }, h("div", { class: "kanban-title" }, kanbanIcon({ ...k, space }, 48), h("h1", { text: k.name })),
+      h("p", { class: "muted", text: t("kanban.metaLong", { space, type: k.type, label: k.label }) })),
     tools,
     settings,
     cards.truncated ? h("p", { class: "notice", text: t("board.truncated", { n: cards.items.length }) }) : null,
@@ -1975,8 +2029,21 @@ function kanbanSettings(k, type, columns, kpath, status) {
   const newColumn = h("input", { id: "kanban-new-column", placeholder: t("kanban.newColumn"), "aria-label": t("kanban.newColumn"), maxlength: 40 });
   const choices = [...type.fields.map((f) => f.name), "labels", "state"];
   const boxes = choices.map((n) => h("input", { type: "checkbox", value: n, checked: k.cardFields.includes(n) }));
+  const picker = h("input", { type: "file", id: "kanban-icon-file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml", "aria-label": t("kanban.iconChoose") });
+  picker.addEventListener("change", () => action(async () => {
+    const file = picker.files[0];
+    if (!file) return;
+    const res = await fetch(kpath + "/icon", { method: "PUT", headers: { "Content-Type": "application/octet-stream" }, body: file });
+    if (!res.ok) throw new ApiError(res.status, (await res.json().catch(() => ({}))).error || res.statusText);
+  }, status));
   return h("details", { class: "card kanban-settings", id: "kanban-settings" },
     h("summary", { text: t("kanban.settings") }),
+    h("h3", { text: t("kanban.icon") }),
+    h("div", { class: "avatar-row", id: "kanban-icon" }, k.icon ? kanbanIcon(k, 64) : h("span", { class: "muted", text: t("kanban.iconNone") }),
+      h("div", {},
+        h("p", { class: "muted", text: t("kanban.iconHelp") }),
+        h("label", { class: "upload" }, h("span", { text: t("kanban.iconChoose") }), picker),
+        k.icon ? h("button", { type: "button", class: "link", id: "kanban-icon-remove", text: t("common.delete"), onclick: () => action(() => del(kpath + "/icon"), status) }) : "")),
     h("h3", { text: t("kanban.cardFields") }),
     h("p", { class: "muted", text: t("kanban.cardFieldsHelp") }),
     h("div", { class: "format-list", id: "kanban-card-fields" }, choices.map((n, i) => h("label", { class: "check" }, boxes[i], " ", n))),

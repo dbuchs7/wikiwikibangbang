@@ -270,7 +270,7 @@ func (s *Settings) Asset(name string) (Asset, bool) {
 // SetAsset stores an asset of the design; checking its content is the
 // caller's concern.
 func (s *Settings) SetAsset(actor, name, mediaType string, data []byte) error {
-	if !slices.Contains(Assets, name) && !s.isDocument(name) && !IsSpaceIcon(name) {
+	if !slices.Contains(Assets, name) && !s.isDocument(name) && !IsSpaceIcon(name) && !IsKanbanIcon(name) {
 		return fmt.Errorf("%w: asset %q", ErrInvalid, name)
 	}
 	if len(data) == 0 {
@@ -283,7 +283,7 @@ func (s *Settings) SetAsset(actor, name, mediaType string, data []byte) error {
 
 // RemoveAsset removes an asset of the design.
 func (s *Settings) RemoveAsset(actor, name string) error {
-	if !slices.Contains(Assets, name) && !s.isDocument(name) && !IsSpaceIcon(name) {
+	if !slices.Contains(Assets, name) && !s.isDocument(name) && !IsSpaceIcon(name) && !IsKanbanIcon(name) {
 		return fmt.Errorf("%w: asset %q", ErrInvalid, name)
 	}
 	s.mu.Lock()
