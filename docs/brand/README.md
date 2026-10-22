@@ -32,7 +32,7 @@ Each artwork comes as `-black` (on light ground) and `-white` (on dark ground):
 
 ## Where the product uses it
 
-The web UI embeds copies (ADR-0009): `internal/web/static/favicon.ico`, and in `internal/web/static/assets/brand/` the horizontal logo in black and white for the top bar, `favicon.svg` and `apple-touch-icon.png`. After a change here, copy them again.
+The web UI embeds copies (ADR-0009): `internal/web/static/favicon.ico`, and in `internal/web/static/assets/brand/` the horizontal logo in black and white for the top bar, `favicon.svg` and `apple-touch-icon.png`. The start page's illustration, `welcome.svg`, holds the horizontal logo too, inline. After a change here, copy them again, and the logo into `welcome.svg`.
 
 ## Regenerate
 
