@@ -533,6 +533,8 @@ export default {
   "members.title": "Einstellungen",
   "members.heading": "Einstellungen von {space}",
   "members.roles": "Mitglieder und Rollen",
+  "space.name": "Anzeigename",
+  "space.nameHelp": "Der Name, unter dem der Bereich angezeigt wird. Der Schlüssel {key} bleibt: Er ist Teil der Nummer jedes Eintrags.",
   "members.help": "Hier direkt vergebene Rollen. Administratorinnen und Administratoren sind überall Bereichsadministration, ohne aufgeführt zu sein; Mitglieder einer aufgeführten @Gruppe halten deren Rolle.",
   "members.revoke": "Entziehen",
   "members.revokeConfirm": "Die Rolle von {name} entziehen?",

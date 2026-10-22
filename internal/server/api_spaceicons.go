@@ -7,6 +7,7 @@ import (
 	"mime"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
@@ -22,7 +23,25 @@ func spaceIconRoutes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/api/spaces/{space}/icon", Summary: "A space's icon or logo; not found when it has none", Handler: http.HandlerFunc(h.spaceIcon)},
 		{Method: http.MethodPut, Pattern: "/api/spaces/{space}/icon", Summary: "Set a space's icon or logo: PNG, JPEG, GIF, WebP or SVG as application/octet-stream (space administrators)", Handler: http.HandlerFunc(h.setSpaceIcon)},
 		{Method: http.MethodDelete, Pattern: "/api/spaces/{space}/icon", Summary: "Remove a space's icon (space administrators)", Handler: http.HandlerFunc(h.removeSpaceIcon)},
+		{Method: http.MethodPut, Pattern: "/api/spaces/{space}/name", Summary: "Rename a space; its key stays (space administrators, ADR-0086)", Handler: http.HandlerFunc(h.renameSpace)},
 	}
+}
+
+// renameSpace changes a space's display name (ADR-0086).
+func (h itemHandlers) renameSpace(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	key := r.PathValue("space")
+	h.write(w, r, http.StatusOK, func(x *item.Session, _ *item.Store) (any, error) {
+		if err := x.RenameSpace(key, req.Name); err != nil {
+			return nil, err
+		}
+		return map[string]string{"key": key, "name": strings.TrimSpace(req.Name)}, nil
+	})
 }
 
 var spaceIconTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/svg+xml": true}

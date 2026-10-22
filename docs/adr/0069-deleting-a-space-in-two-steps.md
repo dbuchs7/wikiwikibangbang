@@ -62,3 +62,7 @@ Strongest form: the same two steps people know from items, at the level of a spa
 
 - Good: recoverable, thorough, consistent with ADR-0021.
 - Bad: three events, a state per space and an invisibility rule to keep in mind.
+
+## Links
+
+- amended by [ADR-0086](0086-a-space-is-renamed-its-key-stays.md) (the kind SpaceRenamed)

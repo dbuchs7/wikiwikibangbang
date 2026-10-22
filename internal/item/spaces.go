@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 // Deleting a space (ADR-0069) takes two steps, as deleting an item does
@@ -37,6 +38,41 @@ func (s *Store) RestoreSpace(actor, key string) error {
 		return notFound("space %q in the trash", key)
 	}
 	return s.record(actor, Event{Kind: SpaceRestored, Space: key})
+}
+
+// maxSpaceName bounds a space's display name, in characters.
+const maxSpaceName = 80
+
+// RenameSpace changes a live space's display name (ADR-0086). The key
+// stays: it is part of every item's key.
+func (s *Store) RenameSpace(actor, key, name string) error {
+	sp, ok := s.spaces[key]
+	if !ok || sp.state != "" {
+		return notFound("space %q", key)
+	}
+	name = strings.TrimSpace(name)
+	switch {
+	case name == "":
+		return invalid("a space needs a name")
+	case utf8.RuneCountInString(name) > maxSpaceName:
+		return invalid("a space's name has at most %d characters", maxSpaceName)
+	case strings.ContainsAny(name, "\n\r\t"):
+		return invalid("a space's name is a single line")
+	case name == sp.name:
+		return nil
+	}
+	return s.record(actor, Event{Kind: SpaceRenamed, Space: key, SpaceName: name})
+}
+
+// RenameSpace changes the name of a space the principal administers.
+func (x *Session) RenameSpace(key, name string) error {
+	if x.s.spaceRole(x.who, key) < SpaceAdmin {
+		if x.s.spaceRole(x.who, key) >= Viewer {
+			return forbidden("only the space's administrators rename it")
+		}
+		return notFound("space %q", key)
+	}
+	return x.s.RenameSpace(x.who, key, name)
 }
 
 // PurgeSpace deletes a space in the trash for good: its items become
@@ -107,8 +143,8 @@ func (s *Store) referencedFromOutside(key string) error {
 		ErrValidation, ErrReferenced, key, strings.Join(referrers, ", "))
 }
 
-// applySpace applies a space's trash, restore or purge; it runs live and
-// on replay.
+// applySpace applies a space's trash, restore, purge or new name; it runs
+// live and on replay.
 func (s *Store) applySpace(e Event, touch func(...ID)) {
 	sp := s.spaces[e.Space]
 	switch e.Kind {
@@ -116,6 +152,8 @@ func (s *Store) applySpace(e Event, touch func(...ID)) {
 		sp.state = spaceTrashed
 	case SpaceRestored:
 		sp.state = ""
+	case SpaceRenamed:
+		sp.name = e.SpaceName
 	case SpacePurged:
 		sp.state = spacePurged
 		touch(s.purgeItems(e.Members...)...)

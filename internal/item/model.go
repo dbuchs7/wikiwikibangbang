@@ -287,7 +287,9 @@ const (
 	// tombstones and keeps only its key (ADR-0069).
 	SpaceTrashed  EventKind = "SpaceTrashed"
 	SpaceRestored EventKind = "SpaceRestored"
-	SpacePurged   EventKind = "SpacePurged"
+	// SpaceRenamed changes a space's display name; its key stays.
+	SpaceRenamed EventKind = "SpaceRenamed"
+	SpacePurged  EventKind = "SpacePurged"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -306,7 +308,7 @@ type Event struct {
 
 	TypeDef     *TypeDef // TypeDefined
 	Space       string   // SpaceCreated, ItemCreated, ItemMoved, SpaceTrashed, SpaceRestored, SpacePurged
-	SpaceName   string   // SpaceCreated
+	SpaceName   string   // SpaceCreated, SpaceRenamed
 	TypeName    string   // ItemCreated
 	TypeVersion int      // ItemCreated
 	Parent      ID       // ItemCreated, ItemMoved
