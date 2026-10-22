@@ -25,7 +25,7 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 
 	got := w.admin.expect("GET", "/api/connectors", "", http.StatusOK)
 	if len(got["connectors"].([]any)) != 0 || field(got["templates"].([]any)[0].(map[string]any), "ckan", "baseURL") != "https://ckan.opendata.swiss/api/3/action" ||
-		field(got, "type") != "interface" {
+		field(got, "type") != "page" {
 		t.Fatalf("before any %s", jsonOf(got))
 	}
 	connector := func(id, space, steward, formats string) string {
@@ -80,11 +80,17 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	if status["credentialVar"] != "WWBB_CONNECTOR_WETTER_TOKEN" || status["credential"] != false {
 		t.Errorf("credential %s", jsonOf(status))
 	}
-	found := w.bert.expect("GET", "/api/items?space=PLAT&type=interface&where=source-id%3Dd1", "", http.StatusOK)
+	// The data set is an ordinary page (ADR-0093), which its steward
+	// watches.
+	found := w.bert.expect("GET", "/api/items?space=PLAT&type=page", "", http.StatusOK)
 	items := found["items"].([]any)
 	if len(items) != 1 || !strings.Contains(jsonOf(items[0]), `"url":"https://opendata.swiss/de/dataset/wetter"`) ||
-		!strings.Contains(jsonOf(items[0]), `"system":"wetter"`) || field(items[0].(map[string]any), "properties", "owner") != w.ids["bert"] {
+		!strings.Contains(jsonOf(items[0]), `"system":"wetter"`) || !strings.Contains(jsonOf(items[0]), `"externalId":"page/d1"`) {
 		t.Fatalf("entry %s", jsonOf(found))
+	}
+	watched := jsonOf(w.bert.expect("GET", "/api/me/watches", "", http.StatusOK))
+	if !strings.Contains(watched, field(items[0].(map[string]any), "key").(string)) {
+		t.Errorf("the steward does not watch the page: %s", watched)
 	}
 	audit := w.admin.expect("GET", "/api/audit", "", http.StatusOK)
 	if !strings.Contains(jsonOf(audit), "catalog.sync.change") || !strings.Contains(jsonOf(audit), `"catalog.sync"`) {
@@ -100,7 +106,7 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	if got := w.admin.expect("GET", "/api/connectors", "", http.StatusOK); len(got["connectors"].([]any)) != 1 {
 		t.Errorf("after removing %s", jsonOf(got))
 	}
-	if found := w.bert.expect("GET", "/api/items?space=PLAT&type=interface", "", http.StatusOK); len(found["items"].([]any)) != 1 {
+	if found := w.bert.expect("GET", "/api/items?space=PLAT&type=page", "", http.StatusOK); len(found["items"].([]any)) != 1 {
 		t.Errorf("the entries went with the connector %s", jsonOf(found))
 	}
 }

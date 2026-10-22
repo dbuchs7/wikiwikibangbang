@@ -178,6 +178,7 @@ A space as a plain container (not an item), as provisionally decided above, was 
 
 ## Links
 
+- amended by [ADR-0094](0094-a-type-nothing-uses-can-be-removed.md) (a type nothing uses can be removed)
 - Prototype: [`internal/item`](../../internal/item), acceptance test `TestScenarioPageWithEmbeddedTask`
 - Reference project for working method and ADR discipline: [pblumer/atlas](https://github.com/pblumer/atlas) (in particular ADR-0001, event sourcing)
 - Follow-up ADRs: persistence, document format/CRDT, query language, permission model, import (not yet written)

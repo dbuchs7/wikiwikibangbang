@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"reflect"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
@@ -27,58 +27,30 @@ func instance(c site.Connector) string {
 	return ""
 }
 
-// TypeName is the type of the catalog's entries.
-const TypeName = "interface"
+// PageType is the type of the catalog's pages: an ordinary wiki page,
+// with a text and no fields or workflow (ADR-0093).
+const PageType = "page"
 
-// The workflow states of an entry: active while the source publishes it,
-// withdrawn once it no longer does.
-const (
-	Active    = "active"
-	Withdrawn = "withdrawn"
-)
+// LegacyType is the type of the catalog's entries before ADR-0093, with
+// fields and a workflow. A run removes them and writes pages instead.
+const LegacyType = "interface"
 
-// The fields of an entry. The synchronisation writes the ones the source
-// knows; owner and reviewed belong to the catalog and are kept. Contact
-// and specification are taken from the source when it has them, and
-// otherwise kept, so a contact added here is not lost.
-const (
-	FieldSourceID      = "source-id"
-	FieldFormat        = "format"
-	FieldEndpoint      = "endpoint"
-	FieldSpecification = "specification"
-	FieldPublisher     = "publisher"
-	FieldContact       = "contact"
-	FieldDataset       = "dataset"
-	FieldModified      = "modified"
-	FieldOwner         = "owner"
-	FieldReviewed      = "reviewed"
-)
+// WithdrawnLabel marks a page whose data set the source no longer
+// publishes; a page has no state to say so (ADR-0093).
+const WithdrawnLabel = "withdrawn"
 
-// TypeDef is the type a connector defines when the space has none:
-// an entry is identified by its source ID, has a publisher, should have an
-// owner here, a contact and a specification, and is reviewed every year
-// (ADR-0074).
-func TypeDef() item.TypeDef {
-	return item.TypeDef{Name: TypeName, Body: true, Fields: []item.FieldDef{
-		{Name: FieldSourceID, Kind: item.KindText, Required: true, Unique: true},
-		{Name: FieldFormat, Kind: item.KindText},
-		{Name: FieldEndpoint, Kind: item.KindURL},
-		{Name: FieldSpecification, Kind: item.KindURL, Recommended: true},
-		{Name: FieldPublisher, Kind: item.KindText, Required: true},
-		{Name: FieldOwner, Kind: item.KindUser, Recommended: true},
-		{Name: FieldContact, Kind: item.KindText, Recommended: true},
-		{Name: FieldDataset, Kind: item.KindURL},
-		{Name: FieldModified, Kind: item.KindDate},
-		{Name: FieldReviewed, Kind: item.KindDate},
-	}, Workflow: &item.Workflow{Initial: Active, States: []string{Active, Withdrawn}, Transitions: []item.Transition{
-		{Name: "withdraw", From: []string{Active}, To: Withdrawn},
-		{Name: "reactivate", From: []string{Withdrawn}, To: Active},
-	}}, Review: &item.Review{EveryDays: 365, Field: FieldReviewed, Owner: FieldOwner}}
-}
+// pageExternalID is a page's ID in its source. It differs from the ID of
+// the entry it replaces, so that entry's erasure does not keep the page
+// from being written (ADR-0026, ADR-0093).
+func pageExternalID(sourceID string) string { return "page/" + sourceID }
+
+// PageTypeDef is the type a connector defines when the site has no page
+// type yet.
+func PageTypeDef() item.TypeDef { return item.TypeDef{Name: PageType, Body: true} }
 
 // Change is one entry a run created, changed or withdrew.
 type Change struct {
-	Kind  string `json:"kind"` // new, changed, withdrawn
+	Kind  string `json:"kind"` // new, changed, withdrawn, removed
 	Key   string `json:"key,omitempty"`
 	Title string `json:"title"`
 }
@@ -97,7 +69,9 @@ type Result struct {
 	Changed   int      `json:"changed"`
 	Unchanged int      `json:"unchanged"`
 	Withdrawn int      `json:"withdrawn"`
-	Problems  []string `json:"problems"`
+	// Removed counts the entries of before ADR-0093 the run erased.
+	Removed  int      `json:"removed"`
+	Problems []string `json:"problems"`
 	// Examples are the first changes, to judge a dry run by.
 	Examples []Change `json:"examples"`
 	Error    string   `json:"error,omitempty"`
@@ -123,6 +97,8 @@ func (r *Result) count(kind, key, title string) {
 		r.Changed++
 	case "withdrawn":
 		r.Withdrawn++
+	case "removed":
+		r.Removed++
 	}
 	if len(r.Examples) < examplesShown {
 		r.Examples = append(r.Examples, Change{Kind: kind, Key: key, Title: title})
@@ -132,23 +108,33 @@ func (r *Result) count(kind, key, title string) {
 // ErrNoSpace is a synchronisation into a space that does not exist.
 var ErrNoSpace = errors.New("connector: the catalog's space does not exist")
 
-// Apply brings the space in step with the entries: new ones are created,
-// changed ones updated, and those the source no longer publishes are
-// withdrawn. With dry, nothing is written.
+// Apply brings the space in step with the entries: a page is written for
+// each new or changed data set, and a page whose data set the source no
+// longer publishes is marked withdrawn. Entries of before ADR-0093 are
+// erased, so their pages take their place. With dry, nothing is written.
 func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Result, error) {
 	res := Result{Connector: cfg.ID, DryRun: dry, Entries: len(entries), Problems: []string{}, Examples: []Change{}}
+	ours := func(it item.Item) bool {
+		return it.Origin != nil && it.Origin.System == cfg.ID && it.Origin.Instance == instance(cfg)
+	}
 	var existing map[string]item.Item
+	var legacy []item.Item
 	var typeErr error
 	hasSpace, hasType := false, false
 	db.Read(func(s *item.Store) {
 		hasSpace = s.HasSpace(cfg.Space)
 		existing = map[string]item.Item{}
-		for _, it := range s.Find(item.Query{Space: cfg.Space, Type: TypeName}) {
-			if it.Origin != nil && it.Origin.System == cfg.ID && it.Origin.Instance == instance(cfg) {
-				existing[it.Origin.ExternalID] = it
+		for _, it := range s.Find(item.Query{Space: cfg.Space, Type: PageType}) {
+			if id, ok := strings.CutPrefix(itemExternalID(it), "page/"); ok && ours(it) {
+				existing[id] = it
 			}
 		}
-		if td := s.Type(TypeName); td.Name != "" {
+		for _, it := range s.Find(item.Query{Space: cfg.Space, Type: LegacyType}) {
+			if ours(it) {
+				legacy = append(legacy, it)
+			}
+		}
+		if td := s.Type(PageType); td.Name != "" {
 			hasType, typeErr = true, fits(td)
 		}
 	})
@@ -159,24 +145,43 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 		return res, typeErr
 	}
 	if !hasType && !dry {
-		if err := db.Write(func(s *item.Store) error { return s.DefineType(Actor(cfg), TypeDef()) }); err != nil {
+		if err := db.Write(func(s *item.Store) error { return s.DefineType(Actor(cfg), PageTypeDef()) }); err != nil {
 			return res, err
 		}
 	}
 
-	withdraw := func(it item.Item) bool {
-		u := item.Upsert{Origin: *it.Origin, Space: it.Space, Type: it.Type, Parent: it.Parent, Title: it.Title,
-			Properties: it.Properties, State: Withdrawn}
+	// The entries of before ADR-0093 go for good: their pages are written
+	// anew below. One that something still points to stays, and says so.
+	for _, it := range legacy {
 		if !dry {
-			if err := db.Write(func(s *item.Store) error { _, _, err := s.Upsert(Actor(cfg), u); return err }); err != nil {
-				res.problem("%s: %v", it.Key, err)
-				return false
+			err := db.Write(func(s *item.Store) error {
+				if err := s.Trash(Actor(cfg), it.ID); err != nil {
+					return err
+				}
+				return s.Purge(Actor(cfg), it.ID)
+			})
+			if err != nil {
+				res.problem("%s is not removed: %v", it.Key, err)
+				continue
 			}
 		}
-		res.count("withdrawn", it.Key, it.Title)
-		return true
+		res.count("removed", it.Key, it.Title)
+	}
+	// Their type goes with the last of them (ADR-0094), unless other items
+	// or a kanban still use it.
+	if !dry && len(legacy) > 0 {
+		err := db.Write(func(s *item.Store) error {
+			if s.Type(LegacyType).Name == "" {
+				return nil
+			}
+			return s.RemoveType(Actor(cfg), LegacyType)
+		})
+		if err != nil && !errors.Is(err, item.ErrReferenced) {
+			res.problem("the type %s is not removed: %v", LegacyType, err)
+		}
 	}
 
+	words := wordsIn(language(cfg))
 	seen := map[string]bool{}
 	for _, e := range entries {
 		seen[e.SourceID] = true
@@ -185,10 +190,11 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 		// The page is the source's: every run writes it anew, and only
 		// when it changed (ADR-0080).
 		body := item.Doc{Blocks: e.Body}
-		newBody := !sameBody(old.Body, body)
+		labels := without(old.Labels, WithdrawnLabel)
+		newBody, newLabels := !sameBody(old.Body, body), !slices.Equal(labels, old.Labels)
 		kind := "new"
 		if had {
-			if same(old, u) && !newBody {
+			if same(old, u) && !newBody && !newLabels {
 				res.Unchanged++
 				continue
 			}
@@ -199,8 +205,16 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 			var it item.Item
 			err := db.Write(func(s *item.Store) error {
 				var err error
-				if it, _, err = s.Upsert(Actor(cfg), u); err != nil || !newBody {
+				if it, _, err = s.Upsert(Actor(cfg), u); err != nil {
 					return err
+				}
+				if newLabels {
+					if err := s.SetLabels(Actor(cfg), it.ID, labels); err != nil {
+						return err
+					}
+				}
+				if !newBody {
+					return nil
 				}
 				return s.CommitBody(Actor(cfg), it.ID, body)
 			})
@@ -209,32 +223,20 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 				continue
 			}
 			key = it.Key
+			if !had && cfg.Steward != "" {
+				watch(db, cfg, it.ID, &res)
+			}
 		}
 		res.count(kind, key, e.Title)
 	}
 
-	// Before ADR-0080 an entry named one interface of a data set; the data
-	// set's entry takes their place, and they are withdrawn, whatever the
-	// share of the source's answer.
-	replaced := map[string]bool{}
-	for _, e := range entries {
-		for _, r := range e.Resources {
-			if it, ok := existing[r]; ok && r != e.SourceID && !seen[r] && it.State != Withdrawn && !replaced[r] {
-				replaced[r] = true
-				if withdraw(it) {
-					res.problem("%s is now part of the entry of its data set, %s", it.Key, e.Title)
-				}
-			}
-		}
-	}
-
-	// An entry the source no longer publishes is withdrawn, not deleted:
-	// its history and what was added here stay. A source that answers far
-	// fewer entries than the catalog holds withdraws nothing, as that is
-	// more likely a failure than a mass withdrawal.
+	// A page the source no longer publishes is marked, not deleted: its
+	// history and what was added here stay. A source that answers far
+	// fewer entries than the catalog holds marks nothing, as that is more
+	// likely a failure than a mass withdrawal.
 	active := 0
-	for id, it := range existing {
-		if it.State != Withdrawn && !replaced[id] {
+	for _, it := range existing {
+		if !slices.Contains(it.Labels, WithdrawnLabel) {
 			active++
 		}
 	}
@@ -244,15 +246,57 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 		}
 		return res, nil
 	}
-	ids := slices.Sorted(maps.Keys(existing))
-	for _, id := range ids {
+	for _, id := range slices.Sorted(maps.Keys(existing)) {
 		it := existing[id]
-		if seen[id] || replaced[id] || it.State == Withdrawn {
+		if seen[id] || slices.Contains(it.Labels, WithdrawnLabel) {
 			continue
 		}
-		withdraw(it)
+		if !dry {
+			body := item.Doc{Blocks: append([]item.Block{{Kind: item.Panel, Tone: "warning", Text: words.withdrawn}}, it.Body.Blocks...)}
+			err := db.Write(func(s *item.Store) error {
+				if err := s.SetLabels(Actor(cfg), it.ID, append(slices.Clone(it.Labels), WithdrawnLabel)); err != nil {
+					return err
+				}
+				return s.CommitBody(Actor(cfg), it.ID, body)
+			})
+			if err != nil {
+				res.problem("%s: %v", it.Key, err)
+				continue
+			}
+		}
+		res.count("withdrawn", it.Key, it.Title)
 	}
 	return res, nil
+}
+
+// itemExternalID is an imported item's ID in its source, or empty.
+func itemExternalID(it item.Item) string {
+	if it.Origin == nil {
+		return ""
+	}
+	return it.Origin.ExternalID
+}
+
+// without returns labels without one of them, in their order.
+func without(labels []string, label string) []string {
+	return slices.DeleteFunc(slices.Clone(labels), func(l string) bool { return l == label })
+}
+
+// language is the one a connector's pages are written in.
+func language(cfg site.Connector) string {
+	if cfg.CKAN != nil && cfg.CKAN.Language != "" {
+		return cfg.CKAN.Language
+	}
+	return "de"
+}
+
+// watch has the connector's steward watch a new page, so they hear of
+// what happens to it (ADR-0046, ADR-0093). A steward who may not read the
+// space watches nothing, and the run says so.
+func watch(db *storage.DB, cfg site.Connector, id item.ID, res *Result) {
+	if err := db.Write(func(s *item.Store) error { return s.As(cfg.Steward).Watch(id, true) }); err != nil {
+		res.problem("the steward does not watch the new page: %v", err)
+	}
 }
 
 // sameBody reports whether a page is the one the source would write; a
@@ -266,81 +310,35 @@ func sameBody(have, want item.Doc) bool {
 	return string(a) == string(b)
 }
 
-// fits checks that an existing type has the fields the synchronisation
-// writes, of the kinds it writes.
+// fits checks that an existing page type takes what the synchronisation
+// writes: a text, and no field it would have to fill.
 func fits(td item.TypeDef) error {
-	for _, need := range TypeDef().Fields {
-		name, kind := need.Name, need.Kind
-		found := false
-		for _, f := range td.Fields {
-			if f.Name == name {
-				if f.Kind != kind {
-					return fmt.Errorf("connector: the field %q of type %q is %s, not %s", name, TypeName, f.Kind, kind)
-				}
-				found = true
-			}
-		}
-		if !found {
-			return fmt.Errorf("connector: type %q has no field %q", TypeName, name)
-		}
+	if !td.Body {
+		return fmt.Errorf("connector: type %q has no text", PageType)
 	}
-	if td.Workflow == nil || !slices.Contains(td.Workflow.States, Active) || !slices.Contains(td.Workflow.States, Withdrawn) {
-		return fmt.Errorf("connector: type %q needs the states %s and %s", TypeName, Active, Withdrawn)
+	for _, f := range td.Fields {
+		if f.Required {
+			return fmt.Errorf("connector: type %q requires the field %q, which a synchronisation cannot fill", PageType, f.Name)
+		}
 	}
 	return nil
 }
 
-// upsertFor is the import of an entry: the source's fields over what the
-// item holds, the catalog's own fields kept.
+// upsertFor is the import of an entry: the source's title and place,
+// the page's own fields, if its type has any, kept.
 func upsertFor(cfg site.Connector, e Entry, old item.Item, had bool) item.Upsert {
-	props := item.Props{}
-	if had {
-		props = maps.Clone(old.Properties)
-	} else if cfg.Steward != "" {
-		props[FieldOwner] = cfg.Steward
-	}
-	set := func(name string, v any, keepWhenEmpty bool) {
-		switch x := v.(type) {
-		case string:
-			if x == "" {
-				if !keepWhenEmpty {
-					delete(props, name)
-				}
-				return
-			}
-		case time.Time:
-			if x.IsZero() {
-				if !keepWhenEmpty {
-					delete(props, name)
-				}
-				return
-			}
-		}
-		props[name] = v
-	}
-	set(FieldSourceID, e.SourceID, false)
-	set(FieldFormat, e.Format, false)
-	set(FieldEndpoint, e.Endpoint, false)
-	set(FieldSpecification, e.Specification, true)
-	set(FieldPublisher, e.Publisher, false)
-	set(FieldContact, e.Contact, true)
-	set(FieldDataset, e.DatasetURL, false)
-	set(FieldModified, e.Modified, false)
-	if props[FieldPublisher] == nil {
-		props[FieldPublisher] = "unknown"
-	}
 	u := item.Upsert{
-		Origin: item.Origin{System: cfg.ID, Instance: instance(cfg), ExternalID: e.SourceID, ExternalKey: e.Dataset, URL: e.DatasetURL},
-		Space:  cfg.Space, Type: TypeName, Title: e.Title, Properties: props, State: Active,
+		Origin: item.Origin{System: cfg.ID, Instance: instance(cfg), ExternalID: pageExternalID(e.SourceID), ExternalKey: e.Dataset, URL: e.DatasetURL},
+		Space:  cfg.Space, Type: PageType, Title: e.Title,
 	}
 	if had {
 		u.Parent = old.Parent
+		u.Properties = maps.Clone(old.Properties)
 	}
 	return u
 }
 
 // same reports whether an import would change nothing.
 func same(it item.Item, u item.Upsert) bool {
-	return it.Title == u.Title && it.State == u.State && it.Parent == u.Parent &&
-		reflect.DeepEqual(it.Properties, u.Properties) && it.Origin != nil && *it.Origin == u.Origin
+	return it.Title == u.Title && it.Parent == u.Parent && it.Origin != nil && *it.Origin == u.Origin
 }

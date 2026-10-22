@@ -24,9 +24,12 @@ type Store struct {
 	// content, for live commands only (ADR-0058); nil turns it off.
 	assess Assessor
 
-	log    []Event
-	types  map[string][]TypeDef // all versions, oldest first
-	spaces map[string]*space
+	log   []Event
+	types map[string][]TypeDef // all versions, oldest first
+	// removed names the types taken out of use (ADR-0094); their versions
+	// stay, for the items purged earlier and their history.
+	removed map[string]bool
+	spaces  map[string]*space
 	// kanbans are the kanbans of each space, in the order made (ADR-0060).
 	kanbans map[string][]Kanban
 	// placed holds where cards were put on each kanban (ADR-0076):
@@ -193,6 +196,34 @@ func (s *Store) DefineType(actor string, td TypeDef) error {
 	}
 	td.Version = len(s.types[td.Name]) + 1
 	return s.record(actor, Event{Kind: TypeDefined, TypeDef: &td})
+}
+
+// RemoveType takes a type out of use (ADR-0094): it is no longer listed
+// and no item can be made of it. Its versions stay, so items purged
+// earlier keep their history. A type is removed only when nothing uses it:
+// no live or trashed item and no kanban. Defining it again starts its
+// next version.
+func (s *Store) RemoveType(actor, name string) error {
+	if _, ok := s.latest(name); !ok {
+		return notFound("type %q", name)
+	}
+	n := 0
+	for _, it := range s.items {
+		if it.Type == name && it.Presence != Purged {
+			n++
+		}
+	}
+	if n > 0 {
+		return referenced("%d items are of the type %s; delete them first", n, name)
+	}
+	for _, sp := range slices.Sorted(maps.Keys(s.kanbans)) {
+		for _, k := range s.kanbans[sp] {
+			if k.Type == name {
+				return referenced("the kanban %q of %s shows items of the type %s; remove it first", k.Name, sp, name)
+			}
+		}
+	}
+	return s.record(actor, Event{Kind: TypeRemoved, TypeName: name})
 }
 
 var spaceKeyRE = regexp.MustCompile(`^[A-Z][A-Z0-9]*$`)
@@ -742,6 +773,12 @@ func (s *Store) apply(e Event) {
 	switch e.Kind {
 	case TypeDefined:
 		s.types[e.TypeDef.Name] = append(s.types[e.TypeDef.Name], *e.TypeDef)
+		delete(s.removed, e.TypeDef.Name)
+	case TypeRemoved:
+		if s.removed == nil {
+			s.removed = map[string]bool{}
+		}
+		s.removed[e.TypeName] = true
 	case SpaceCreated:
 		s.spaces[e.Space] = &space{name: e.SpaceName}
 	case ItemCreated:
@@ -1020,8 +1057,9 @@ func (s *Store) Spaces() []SpaceInfo {
 func (s *Store) Types() []TypeDef {
 	out := make([]TypeDef, 0, len(s.types))
 	for name := range s.types {
-		td, _ := s.latest(name)
-		out = append(out, td)
+		if td, ok := s.latest(name); ok {
+			out = append(out, td)
+		}
 	}
 	slices.SortFunc(out, func(a, b TypeDef) int { return strings.Compare(a.Name, b.Name) })
 	return out
@@ -1116,7 +1154,7 @@ func (s *Store) item(id ID) (*Item, error) {
 
 func (s *Store) latest(name string) (TypeDef, bool) {
 	v := s.types[name]
-	if len(v) == 0 {
+	if len(v) == 0 || s.removed[name] {
 		return TypeDef{}, false
 	}
 	return v[len(v)-1], true

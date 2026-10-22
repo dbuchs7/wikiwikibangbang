@@ -394,3 +394,20 @@ func TestAnItemIsCreatedWithItsBodyThroughTheAPI(t *testing.T) {
 		t.Fatalf("a refused body left an item: %v items", n)
 	}
 }
+
+// Administrators remove a type that nothing uses (ADR-0094).
+func TestRemovingAType(t *testing.T) {
+	w := newWorld(t)
+	w.bert.expect("DELETE", "/api/types/task", "", http.StatusForbidden)
+	created := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"T","properties":{"priority":"low"}}`, http.StatusCreated)
+	id := field(created, "item", "id").(string)
+	w.admin.expect("DELETE", "/api/types/task", "", http.StatusConflict)
+	w.bert.expect("POST", "/api/items/"+id+"/trash", "", http.StatusOK)
+	w.admin.expect("DELETE", "/api/types/task", "", http.StatusConflict)
+	w.admin.expect("POST", "/api/items/"+id+"/purge", "", http.StatusOK)
+	w.admin.expect("DELETE", "/api/types/task", "", http.StatusNoContent)
+	w.admin.expect("DELETE", "/api/types/task", "", http.StatusNotFound)
+	if types := w.admin.expect("GET", "/api/types", "", http.StatusOK)["types"].([]any); len(types) != 0 {
+		t.Fatalf("types after the removal: %v", types)
+	}
+}

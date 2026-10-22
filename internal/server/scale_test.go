@@ -45,9 +45,9 @@ func TestScale(t *testing.T) {
 	var entries []connector.Entry
 	for i := range n {
 		entries = append(entries, connector.Entry{SourceID: fmt.Sprintf("ds-%05d", i), Dataset: fmt.Sprintf("data-%d", i),
-			Title: fmt.Sprintf("Datensatz %d Zürich Statistik", i), Format: "CSV", Endpoint: "https://example.org/x.csv",
+			Title:     fmt.Sprintf("Datensatz %d Zürich Statistik", i),
 			Publisher: "Amt für Statistik", Contact: "Data Shop <a@b.ch>", DatasetURL: fmt.Sprintf("https://opendata.swiss/de/dataset/data-%d", i),
-			Modified: time.Date(2025, 9, 30, 0, 0, 0, 0, time.UTC), Body: body(i)})
+			Body: body(i)})
 	}
 	start := time.Now()
 	res, err := connector.Apply(w.db, c, entries, false)
@@ -60,7 +60,7 @@ func TestScale(t *testing.T) {
 	}
 	var key, id string
 	w.db.Read(func(s *item.Store) {
-		its := s.Find(item.Query{Space: "API", Type: connector.TypeName})
+		its := s.Find(item.Query{Space: "API", Type: connector.PageType})
 		key, id = its[0].Key, string(its[0].ID)
 	})
 	if os.Getenv("PROF") != "" {

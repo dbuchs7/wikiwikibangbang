@@ -3,7 +3,6 @@ package connector
 import (
 	"cmp"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -17,20 +16,13 @@ type Entry struct {
 	SourceID string
 	Dataset  string // the data set's name
 	Title    string
-	// Format lists the formats of its interfaces, e.g. "WMS, WFS".
-	Format        string
-	Endpoint      string
-	Specification string
-	Publisher     string
-	Contact       string
-	DatasetURL    string
-	Modified      time.Time
+	// Publisher, Contact and DatasetURL head its page.
+	Publisher  string
+	Contact    string
+	DatasetURL string
 	// Body is the page written from everything the source says of the
 	// data set; every run replaces it.
 	Body []item.Block
-	// Resources are the IDs of its interfaces, which named entries of
-	// their own before ADR-0080.
-	Resources []string
 }
 
 // aliases map formats as publishers write them to the portal's names.
@@ -80,30 +72,6 @@ func Entries(datasets []Dataset, formats []string, portal, lang, source string) 
 		if e.Title == "" {
 			e.Title = d.Name
 		}
-		var fs []string
-		for _, r := range apis {
-			if f := normalFormat(r.Format); !slices.Contains(fs, f) {
-				fs = append(fs, f)
-			}
-			if r.ID != "" {
-				e.Resources = append(e.Resources, r.ID)
-			}
-			if e.Endpoint == "" {
-				e.Endpoint = address(r)
-			}
-			if e.Specification == "" {
-				if docs := slices.Concat([]string(r.Documentation), []string(r.AccessServices)); len(docs) > 0 {
-					e.Specification = docs[0]
-				}
-			}
-			if m := parseDate(r.Modified); m.After(e.Modified) {
-				e.Modified = m
-			}
-		}
-		e.Format = strings.Join(fs, ", ")
-		if e.Specification == "" && len(d.Documentation) > 0 {
-			e.Specification = d.Documentation[0]
-		}
 		if d.Organization != nil {
 			e.Publisher = cmp.Or(d.Organization.Title.In(lang), d.Organization.Name)
 		}
@@ -113,9 +81,6 @@ func Entries(datasets []Dataset, formats []string, portal, lang, source string) 
 		e.Contact = contacts(d)
 		if d.Name != "" && webLink(portal+d.Name) {
 			e.DatasetURL = portal + d.Name
-		}
-		if m := parseDate(d.Modified); m.After(e.Modified) {
-			e.Modified = m
 		}
 		e.Body = page(d, apis, others, e, lang, source)
 		out = append(out, e)

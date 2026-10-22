@@ -45,7 +45,7 @@ func (h authHandlers) connectors(w http.ResponseWriter, r *http.Request) {
 		"connectors": list,
 		"templates":  site.ConnectorTemplates(),
 		"kinds":      site.ConnectorKinds,
-		"type":       connector.TypeName,
+		"type":       connector.PageType,
 	})
 }
 
