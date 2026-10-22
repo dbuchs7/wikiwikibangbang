@@ -917,6 +917,12 @@ function ckanSource() {
     await page.waitForSelector("#labelboard .board-column[data-state=open] .card-item:has-text('Hero image')");
     await page.goto(base + "/#/labelboard/no-such-label");
     await page.waitForSelector("#labelboard-empty");
+    // Labelling suggests the labels in use while typing.
+    const tidy = (await (await page.request.get(base + "/api/items?label=operations")).json()).items[0].key;
+    await page.goto(base + "/#/item/" + tidy);
+    await page.locator("#labels [name=label]").pressSequentially("relau");
+    await page.waitForSelector("#label-options option[value='website-relaunch']", { state: "attached" });
+    await page.fill("#labels [name=label]", "");
 
     step("task list: tasks on a kanban are listed too, with their label; the labels at the right filter the list");
     await page.goto(base + "/#/tasks/all");

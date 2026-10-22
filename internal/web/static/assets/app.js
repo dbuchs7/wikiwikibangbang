@@ -309,9 +309,26 @@ function labelsLine(path, item, live) {
   };
   const remove = (l) => set(item.labels.filter((x) => x !== l)).catch((err) => status.replaceChildren(errorBox(err)));
   const chips = item.labels.map((l) => labelChip(l, live ? () => remove(l) : null));
-  const input = h("input", { name: "label", placeholder: t("label.placeholder"), "aria-label": t("label.placeholder"), size: 14, autocomplete: "off" });
+  const input = h("input", { name: "label", placeholder: t("label.placeholder"), "aria-label": t("label.placeholder"), size: 14, autocomplete: "off", list: "label-options" });
+  // The labels in use are suggested while typing, the most used first, so
+  // one spelling stays one label; after a comma, for the next label.
+  const options = h("datalist", { id: "label-options" });
+  let timer = 0;
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const cut = input.value.lastIndexOf(",");
+    const before = cut >= 0 ? input.value.slice(0, cut + 1) + " " : "";
+    const typed = input.value.slice(cut + 1).trim();
+    if (!typed) { options.replaceChildren(); return; }
+    timer = setTimeout(async () => {
+      const { labels } = await get("/api/labels?q=" + encodeURIComponent(typed)).catch(() => ({ labels: [] }));
+      options.replaceChildren(...labels.filter((l) => !item.labels.includes(l.label)).slice(0, 12)
+        .map((l) => h("option", { value: before + l.label, label: t("label.suggestion", { n: l.count }) })));
+    }, 150);
+  });
   const add = live ? form({ class: "label-add" }, [
     input,
+    options,
     h("button", { type: "submit", class: "label-add-button", title: t("label.add"), "aria-label": t("label.add"), text: "+" }),
   ], async (data) => {
     status.replaceChildren();
