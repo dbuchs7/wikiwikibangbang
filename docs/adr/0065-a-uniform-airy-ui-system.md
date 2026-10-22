@@ -56,4 +56,5 @@ Strongest form: the cleanest result.
 
 ## Links
 
+- amended by [ADR-0091](0091-rules-every-view-follows.md) (rules every view follows)
 - relates to ADR-0031 (the UI), ADR-0052 (corporate design), ADR-0041 (navigation)

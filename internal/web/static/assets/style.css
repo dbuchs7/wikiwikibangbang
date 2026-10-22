@@ -1104,3 +1104,85 @@ button.state-step.move.finished { border-color: var(--success); color: var(--suc
 .secret-chip-veiled { background: var(--text); color: var(--surface); }
 .secret-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .protect-passage blockquote { margin: 0 0 8px; }
+
+/* ---------- Uniform rules for every view (ADR-0091) ---------- */
+
+/* Colour carries meaning: the accent marks what can be pressed, red what
+   destroys, amber what warns. A notice that only informs is neutral, so it
+   never reads as an error where the accent is red. */
+.notice { background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--text); }
+.notice.warning { background: var(--warning-soft); border-left-color: var(--warning); }
+.notice.success { background: var(--success-soft); border-left-color: var(--success); }
+
+/* Destructive actions are red, as a button or, in rows and lists, as text. */
+button.link.danger, button.link.danger:hover { color: var(--danger); background: none; border-color: transparent; }
+
+/* An empty list or section says so the same way everywhere; standing in a
+   view rather than in a card, it gets a quiet frame of its own. */
+p.empty { margin: 0 0 18px; color: var(--muted); }
+main > p.empty, .with-tree-main > p.empty, main section:not(.card, .side-card) > p.empty {
+  padding: 14px 18px; background: var(--surface); border: 1px dashed var(--border-strong); border-radius: var(--radius);
+}
+
+/* Rhythm: a heading after a table, card, list or empty state keeps its
+   distance; the next section never sticks to the one before. */
+main :is(table, .card, p.empty, ul, ol, .tasks-layout) + :is(h2, h3) { margin-top: var(--space-5); }
+
+/* A view's other views: a row of quiet tabs under its heading. */
+.subnav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 20px; }
+.subnav a { padding: 5px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-weight: 500; font-size: 13px; }
+.subnav a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+
+/* File fields: a button and the chosen names in the page's language. */
+.file-picker { position: relative; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; cursor: pointer; max-width: 100%; }
+.file-picker input[type=file] { position: absolute; inset: 0; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.file-picker .file-button { margin: 0; pointer-events: none; }
+.file-picker:hover .file-button { background: var(--accent-soft); }
+.file-picker:focus-within .file-button { box-shadow: var(--focus); }
+.file-names { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+
+/* One height for every control: the label field of an item is a field
+   like the others, its button a button like the others. */
+.label-add input { min-height: 36px; padding: 6px 12px; font-size: 14px; border-radius: var(--radius-sm); }
+.label-add .label-add-button { min-height: 36px; min-width: 36px; justify-content: center; padding: 0 10px; border-radius: var(--radius-sm); font-size: 16px; line-height: 1; }
+
+/* Tables: the title keeps room to read; short values do not wrap. */
+#tasks td:nth-child(2) { min-width: 12rem; }
+#tasks td:nth-child(3) .chip, .task-labels .chip { white-space: nowrap; }
+#tasks thead select { min-width: 6.5rem; }
+.tasks-filter select { width: 100%; max-width: 100%; }
+
+/* Album: a picture's label field stays inside its card. */
+.album-labels-input { width: 100%; min-width: 0; }
+.album-card { min-width: 0; }
+
+/* Phones: the logo has room above it; fields stack under their labels;
+   rows of a list wrap instead of running off the screen. */
+@media (max-width: 640px) {
+  .top { padding-top: 8px; }
+  .brand img { height: 34px; }
+  #details table.props tr { grid-template-columns: minmax(0, 1fr) auto; }
+  #details table.props th { grid-column: 1 / -1; border: 0; }
+  main { padding: 16px; }
+  .card { padding: 16px; }
+  .admin-sections table tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .admin-sections table td { border: 0; padding: 2px 0; }
+}
+
+/* Touch: everything pressable is at least 40 px high (WCAG 2.5.8 asks
+   24 px; 40 is what a finger hits reliably). */
+@media (pointer: coarse) {
+  button, .button, select, input:not([type=checkbox], [type=radio]) { min-height: 40px; }
+  button.link { min-height: 32px; padding-top: 6px; padding-bottom: 6px; }
+}
+
+/* Notifications: each list in a card, as every other view's sections. */
+main ul.notifications, main #my-findings, main ul#watches {
+  margin: 0 0 18px; padding: 6px 20px; list-style: none; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+}
+main #my-findings { padding: 16px 20px; }
+main #my-findings ul.notifications { margin: 0; padding: 0; border: 0; box-shadow: none; }
+main ul.notifications > li + li { border-top: 1px solid var(--border); }
+main ul#watches { columns: 2 18rem; column-gap: 28px; padding: 12px 20px; }
+main ul#watches li { padding: 4px 0; break-inside: avoid; }

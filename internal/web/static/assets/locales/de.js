@@ -10,6 +10,12 @@ export default {
   "common.edit": "Bearbeiten",
   "common.more": "Mehr",
   "common.nothing": "Nichts gefunden.",
+  "label.heading": "Label",
+  "account.revokeConfirm": "Dieses Token widerrufen? Was es verwendet, kann sich danach nicht mehr anmelden.",
+  "space.views": "Ansichten des Bereichs",
+  "file.choose": "Datei wählen",
+  "file.chooseMany": "Dateien wählen",
+  "file.none": "Keine Datei gewählt",
   "common.save": "Speichern",
   "common.you": "Sie",
 
