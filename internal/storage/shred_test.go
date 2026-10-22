@@ -63,9 +63,16 @@ func hasKey(t *testing.T, dir string, id item.ID) bool {
 func TestContentIsNeverWrittenInPlaintext(t *testing.T) {
 	dir := t.TempDir()
 	db, _ := mustOpen(t, dir)
-	secretItem(t, db.Store)
+	it := secretItem(t, db.Store)
+	// A picture's labels are content too (ADR-0090).
+	noErr(t, db.Store.GrantRole("admin", "PLAT", "anna", item.Editor))
+	const pic = "0123456789abcdef0123456789abcdef"
+	_, err := db.Store.AddAttachment("anna", it.ID, item.Attachment{ID: pic, Name: "plan.png", Type: "image/png", Size: 3, SHA256: strings.Repeat("ab", 32)})
+	noErr(t, err)
+	noErr(t, db.Store.As("anna").SetPictureLabels(it.ID, pic, []string{secret}))
 	noErr(t, db.Close())
-	if bytes.Contains(readFile(t, dir, wal.FileName), []byte(secret)) {
+	log := readFile(t, dir, wal.FileName)
+	if bytes.Contains(log, []byte(secret)) || bytes.Contains(log, []byte(strings.ToLower(secret))) {
 		t.Fatal("the event log holds item content in plaintext")
 	}
 }

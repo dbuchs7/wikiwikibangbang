@@ -22,6 +22,10 @@ type Attachment struct {
 	// another item's file, or a new version of a file of the same item. It
 	// is content, sealed with the rest.
 	Source *Source `json:",omitempty"`
+	// Labels are the picture's own labels (ADR-0090): they narrow the
+	// album and are no labels of the item, so no kanban or label board
+	// shows them. They are content, sealed with the rest.
+	Labels []string `json:",omitempty"`
 	// Author and Created come from the event that added it.
 	Author  string `json:"-"`
 	Created int64  `json:"-"` // Unix seconds
@@ -127,6 +131,10 @@ func (s *Store) applyAttachment(e Event, touch func(...ID)) {
 			// The source stays, so later versions still trace back through
 			// a deleted one (ADR-0055); it names files, not their content.
 			*a = Attachment{ID: a.ID, Source: a.Source, Author: a.Author, Created: a.Created, Deleted: true}
+		}
+	case AttachmentLabelled:
+		if a, ok := it.attachment(e.Attachment.ID); ok {
+			a.Labels = slices.Clone(e.Attachment.Labels)
 		}
 	}
 }
@@ -287,6 +295,9 @@ func (x *Session) DeleteAttachment(id, attachment ID) error {
 type Picture struct {
 	Item       Item
 	Attachment Attachment
+	// Used: the item's body shows it. Editable: the principal may edit the
+	// item, so delete the picture or label it (ADR-0090).
+	Used, Editable bool
 }
 
 // Pictures returns the files of the live items the principal may read,
@@ -299,9 +310,11 @@ func (x *Session) Pictures(space string, keep func(Attachment) bool) []Picture {
 		if it.Presence != Live || (space != "" && it.Space != space) || len(it.Attachments) == 0 || !x.s.canRead(x.who, it) {
 			continue
 		}
+		editable := x.s.canEdit(x.who, it) && it.Managed == ""
 		for _, a := range it.Attachments {
 			if !a.Deleted && keep(a) {
-				out = append(out, Picture{Item: Item{ID: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Type: it.Type}, Attachment: a})
+				out = append(out, Picture{Item: Item{ID: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Type: it.Type, Parent: it.Parent}, Attachment: a,
+					Used: inBody(it.Body, a.ID), Editable: editable})
 			}
 		}
 	}

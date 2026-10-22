@@ -721,6 +721,32 @@ function ckanSource() {
     check(await page.locator("#attachments li:has-text('.drawing.png')").count() === 1, "the copy is a file of the page it was inserted into");
     await page.waitForSelector(`#attachments li:has-text('.drawing.png') .att-origin a:has-text('${drawingKey}')`); // the copy names its origin
 
+    step("album folders: a folder is made, a picture uploaded into it, labelled, found by its label and deleted (ADR-0090)");
+    await page.goto(base + "/#/album");
+    await page.waitForSelector("#album .album-card img");
+    await page.selectOption("#album select[aria-label=Space]", "PLAT");
+    await page.click("#album-new-folder");
+    await page.fill("#album-folder-name", "Logos");
+    await page.click("#album .album-new-folder button[type=submit]");
+    await page.click("#album .album-folder:has-text('Logos')");
+    await page.waitForSelector("#album-upload");
+    await page.setInputFiles("#album-files", { name: "brand.png", mimeType: "image/png", buffer: png });
+    const brandCard = "#album .album-card:has(.album-name:text-is('brand'))";
+    await page.waitForSelector(brandCard + " .album-labels-input");
+    check(await page.locator("#album .album-card").count() === 1, "the folder shows its own picture only");
+    await page.fill(brandCard + " .album-labels-input", "Logo, print");
+    await page.press(brandCard + " .album-labels-input", "Enter");
+    await page.waitForSelector(brandCard + " .album-label:text-is('logo')");
+    await page.click("#album .album-trail button:has-text('All pictures')");
+    await page.waitForSelector("#album-label option[value=logo]", { state: "attached" });
+    await page.selectOption("#album-label", "logo");
+    await page.waitForFunction(() => { const cards = document.querySelectorAll("#album .album-card"); return cards.length === 1 && cards[0].textContent.includes("brand"); });
+    const itemLabels = await page.evaluate(async () => (await (await fetch("/api/labels")).json()).labels.map((l) => l.label));
+    check(!itemLabels.includes("logo"), "a picture's label is no label of an item, so no kanban shows it");
+    answer = true;
+    await page.click(brandCard + " .album-delete");
+    await page.waitForSelector(brandCard, { state: "detached" });
+
     step("provenance: the original is drawn again; its copy learns of it and takes the newer version over");
     await page.goto(base + "/#/item/" + drawingKey + "?edit");
     await page.waitForSelector("#body.editing .pm-redraw");

@@ -55,4 +55,5 @@ Strongest form: a living picture shared by many pages without copies.
 
 ## Links
 
+- amended by [ADR-0090](0090-album-folders-uploads-and-picture-labels.md) (folders, uploads, deleting and labels of pictures)
 - relates to ADR-0022 (permissions), ADR-0026 (erasure), ADR-0033 (search), ADR-0045 (attachments), ADR-0053 (drawings)

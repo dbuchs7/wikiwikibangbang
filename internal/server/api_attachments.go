@@ -23,7 +23,11 @@ func attachmentRoutes(h itemHandlers) []Route {
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/attachments", Summary: "Upload a file: the body is the content (application/octet-stream), name the file name; sourceItem and sourceAttachment name the file it is a copy or a new version of", Handler: http.HandlerFunc(h.uploadAttachment)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/attachments/{id}", Summary: "Download a file; images show inline, everything else downloads", Handler: http.HandlerFunc(h.downloadAttachment)},
 		{Method: http.MethodDelete, Pattern: "/api/items/{ref}/attachments/{id}", Summary: "Delete a file; its content is destroyed", Handler: http.HandlerFunc(h.deleteAttachment)},
-		{Method: http.MethodGet, Pattern: "/api/album", Summary: "The album: images and drawings of every item one may read, newest first; space, q (name, key or title), kind (image or drawing), offset and limit narrow it", Handler: http.HandlerFunc(h.album)},
+		{Method: http.MethodPut, Pattern: "/api/items/{ref}/attachments/{id}/labels", Summary: "Set a picture's labels (labels); they narrow the album and are no labels of the item, so no kanban or label board shows them", Handler: http.HandlerFunc(h.setPictureLabels)},
+		{Method: http.MethodGet, Pattern: "/api/album", Summary: "The album: images and drawings of every item one may read, newest first; space, folder (only its pictures), q (name, label, key or title), label, kind (image or drawing), offset and limit narrow it", Handler: http.HandlerFunc(h.album)},
+		{Method: http.MethodGet, Pattern: "/api/album/folders", Summary: "The album's folders one may read, by name: in space (every space when empty), right below parent (the top when empty)", Handler: http.HandlerFunc(h.albumFolders)},
+		{Method: http.MethodPost, Pattern: "/api/album/folders", Summary: "Make a folder of the album: name, and space or parent (a folder); who may create there may", Handler: http.HandlerFunc(h.createAlbumFolder)},
+		{Method: http.MethodGet, Pattern: "/api/album/labels", Summary: "The labels of the pictures one may read, most used first (space; q: holding it)", Handler: http.HandlerFunc(h.albumLabels)},
 	}
 }
 
@@ -64,13 +68,14 @@ func (h itemHandlers) album(w http.ResponseWriter, r *http.Request) {
 		drawing := strings.HasSuffix(a.Name, DrawingSuffix)
 		return inlineTypes[a.Type] && (kind == "" || (kind == "drawing") == drawing)
 	}
+	folder := item.ID(q.Get("folder"))
+	label, _ := item.NormalLabel(q.Get("label"))
 	h.read(w, r, func(x *item.Session) (any, error) {
 		all := x.Pictures(q.Get("space"), keep)
-		if text != "" {
-			all = slices.DeleteFunc(all, func(p item.Picture) bool {
-				return !strings.Contains(strings.ToLower(p.Attachment.Name+" "+p.Item.Key+" "+p.Item.Title), text)
-			})
-		}
+		all = slices.DeleteFunc(all, func(p item.Picture) bool {
+			return (folder != "" && p.Item.ID != folder) || (label != "" && !slices.Contains(p.Attachment.Labels, label)) ||
+				(text != "" && !strings.Contains(strings.ToLower(p.Attachment.Name+" "+strings.Join(p.Attachment.Labels, " ")+" "+p.Item.Key+" "+p.Item.Title), text))
+		})
 		type itemRef struct {
 			ID    item.ID `json:"id"`
 			Key   string  `json:"key"`
@@ -82,11 +87,15 @@ func (h itemHandlers) album(w http.ResponseWriter, r *http.Request) {
 			Item       itemRef        `json:"item"`
 			Attachment attachmentJSON `json:"attachment"`
 			Drawing    bool           `json:"drawing"`
+			// Used: its item's text shows it, so the album does not delete
+			// it. Editable: the caller may label or delete it (ADR-0090).
+			Used     bool `json:"used"`
+			Editable bool `json:"editable"`
 		}
 		out := []picture{}
 		for _, p := range all[min(offset, len(all)):min(offset+limit, len(all))] {
 			out = append(out, picture{Item: itemRef{p.Item.ID, p.Item.Key, p.Item.Title, p.Item.Space, p.Item.Type},
-				Attachment: toAttachmentJSON(p.Attachment), Drawing: strings.HasSuffix(p.Attachment.Name, DrawingSuffix)})
+				Attachment: toAttachmentJSON(p.Attachment), Drawing: strings.HasSuffix(p.Attachment.Name, DrawingSuffix), Used: p.Used, Editable: p.Editable})
 		}
 		next := 0
 		if offset+limit < len(all) {
@@ -110,6 +119,8 @@ type attachmentJSON struct {
 	// Origin says where a copy came from (ADR-0055), as far as the reader
 	// may know; absent for a file that is no copy.
 	Origin *copyOriginJSON `json:"origin,omitempty"`
+	// Labels are the picture's own (ADR-0090).
+	Labels []string `json:"labels,omitempty"`
 }
 
 type copyOriginJSON struct {
@@ -149,7 +160,79 @@ func withOrigin(x *item.Session, id item.ID, a attachmentJSON) attachmentJSON {
 
 func toAttachmentJSON(a item.Attachment) attachmentJSON {
 	return attachmentJSON{ID: a.ID, Name: a.Name, Type: a.Type, Size: a.Size, SHA256: a.SHA256, Author: a.Author,
-		Created: time.Unix(a.Created, 0).UTC(), Inline: inlineTypes[a.Type]}
+		Created: time.Unix(a.Created, 0).UTC(), Inline: inlineTypes[a.Type], Labels: a.Labels}
+}
+
+func (h itemHandlers) setPictureLabels(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Labels []string `json:"labels"`
+	}
+	if decode(w, r, &req) {
+		h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
+			return x.SetPictureLabels(it.ID, item.ID(r.PathValue("id")), req.Labels)
+		})
+	}
+}
+
+// albumFolders lists the album's folders (ADR-0090).
+func (h itemHandlers) albumFolders(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	h.read(w, r, func(x *item.Session) (any, error) {
+		out := []map[string]any{}
+		for _, f := range x.Folders(q.Get("space"), item.ID(q.Get("parent"))) {
+			out = append(out, map[string]any{"id": f.ID, "key": f.Key, "name": f.Title, "space": f.Space, "parent": f.Parent})
+		}
+		return map[string]any{"folders": out}, nil
+	})
+}
+
+func (h itemHandlers) createAlbumFolder(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Space  string  `json:"space"`
+		Parent item.ID `json:"parent"`
+		Name   string  `json:"name"`
+	}
+	if !decode(w, r, &req) {
+		return
+	}
+	h.write(w, r, http.StatusCreated, func(x *item.Session, _ *item.Store) (any, error) {
+		f, err := x.CreateFolder(req.Space, req.Parent, req.Name)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]itemJSON{"item": toItemJSON(f)}, nil
+	})
+}
+
+// albumLabels counts the labels of the pictures one may read: the
+// suggestions while one labels a picture, and the album's filter.
+func (h itemHandlers) albumLabels(w http.ResponseWriter, r *http.Request) {
+	h.read(w, r, func(x *item.Session) (any, error) {
+		count := map[string]int{}
+		for _, p := range x.Pictures(r.URL.Query().Get("space"), func(a item.Attachment) bool { return len(a.Labels) > 0 }) {
+			for _, l := range p.Attachment.Labels {
+				count[l]++
+			}
+		}
+		q, _ := item.NormalLabel(r.URL.Query().Get("q"))
+		var all []item.LabelCount
+		for l, n := range count {
+			if strings.Contains(l, q) {
+				all = append(all, item.LabelCount{Label: l, Count: n})
+			}
+		}
+		slices.SortFunc(all, func(a, b item.LabelCount) int {
+			if a.Count != b.Count {
+				return b.Count - a.Count
+			}
+			return strings.Compare(a.Label, b.Label)
+		})
+		out := []map[string]any{}
+		for _, l := range all[:min(len(all), budget.Get().PageItems)] {
+			out = append(out, map[string]any{"label": l.Label, "count": l.Count})
+		}
+		return map[string]any{"labels": out, "total": map[string]any{"value": len(all), "exact": true}}, nil
+	})
 }
 
 // inlineTypes are the image formats a browser shows without running

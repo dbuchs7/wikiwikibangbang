@@ -201,3 +201,74 @@ func TestCopiesThroughTheAPI(t *testing.T) {
 		t.Fatalf("an unreadable source tells: %v", o)
 	}
 }
+
+// TestAlbumFoldersAndLabelsThroughTheAPI: folders of the album hold
+// pictures uploaded into them; pictures carry labels of their own, which
+// narrow the album and never count as labels of items (ADR-0090).
+func TestAlbumFoldersAndLabelsThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{7}, 100)...)
+	w.vera.expect("POST", "/api/album/folders", `{"space":"PLAT","name":"Logos"}`, http.StatusForbidden)
+	logos := field(w.bert.expect("POST", "/api/album/folders", `{"space":"PLAT","name":"Logos"}`, http.StatusCreated), "item").(map[string]any)
+	id := logos["id"].(string)
+	brand := field(w.bert.expect("POST", "/api/album/folders", `{"parent":"`+id+`","name":"Brand"}`, http.StatusCreated), "item").(map[string]any)
+	folders := field(w.vera.expect("GET", "/api/album/folders?space=PLAT", "", http.StatusOK), "folders").([]any)
+	if len(folders) != 1 || folders[0].(map[string]any)["name"] != "Logos" {
+		t.Fatalf("top folders %v", folders)
+	}
+	if sub := field(w.vera.expect("GET", "/api/album/folders?parent="+id, "", http.StatusOK), "folders").([]any); len(sub) != 1 || sub[0].(map[string]any)["id"] != brand["id"] {
+		t.Fatalf("sub folders %v", sub)
+	}
+
+	rec := w.bert.upload("/api/items/"+id+"/attachments?name=logo.png", "application/octet-stream", png)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("upload: %d %s", rec.Code, rec.Body)
+	}
+	var up struct {
+		Attachment struct {
+			ID string `json:"id"`
+		} `json:"attachment"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &up); err != nil || up.Attachment.ID == "" {
+		t.Fatalf("upload answer %s", rec.Body)
+	}
+	task := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Patch","properties":{"priority":"low"}}`, http.StatusCreated)
+	if r := w.bert.upload("/api/items/"+field(task, "item", "key").(string)+"/attachments?name=other.png", "application/octet-stream", png); r.Code != http.StatusCreated {
+		t.Fatalf("upload other: %d", r.Code)
+	}
+
+	labels := "/api/items/" + id + "/attachments/" + up.Attachment.ID + "/labels"
+	w.vera.expect("PUT", labels, `{"labels":["brand"]}`, http.StatusForbidden)
+	w.bert.expect("PUT", labels, `{"labels":["bad label!"]}`, http.StatusBadRequest)
+	w.bert.expect("PUT", labels, `{"labels":["Brand","print"]}`, http.StatusOK)
+
+	pictures := func(query string) []map[string]any {
+		var out []map[string]any
+		for _, p := range field(w.vera.expect("GET", "/api/album"+query, "", http.StatusOK), "pictures").([]any) {
+			out = append(out, p.(map[string]any))
+		}
+		return out
+	}
+	if got := pictures("?folder=" + id); len(got) != 1 || got[0]["used"] != false || got[0]["editable"] != false {
+		t.Fatalf("the folder's pictures %v", got)
+	}
+	if got := pictures("?label=Brand"); len(got) != 1 || got[0]["attachment"].(map[string]any)["labels"].([]any)[1] != "print" {
+		t.Fatalf("by label %v", got)
+	}
+	if got := pictures("?q=print"); len(got) != 1 {
+		t.Fatalf("search by label %v", got)
+	}
+	if got := len(pictures("")); got != 2 {
+		t.Fatalf("the whole album has %d pictures", got)
+	}
+	counted := field(w.vera.expect("GET", "/api/album/labels?q=pr", "", http.StatusOK), "labels").([]any)
+	if len(counted) != 1 || counted[0].(map[string]any)["label"] != "print" {
+		t.Fatalf("picture labels %v", counted)
+	}
+	if items := field(w.vera.expect("GET", "/api/labels", "", http.StatusOK), "labels").([]any); len(items) != 0 {
+		t.Fatalf("a picture's labels count as an item's: %v", items)
+	}
+	if got := field(w.carla.expect("GET", "/api/album/labels", "", http.StatusOK), "labels").([]any); len(got) != 0 {
+		t.Fatalf("an outsider sees %v", got)
+	}
+}
