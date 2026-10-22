@@ -48,3 +48,21 @@ func TestSpaceIconUploadsAreChecked(t *testing.T) {
 	}
 	w.admin.expect("DELETE", "/api/spaces/PLAT/icon", "", http.StatusNoContent) // none set: nothing to do
 }
+
+// A space's administrators rename it; editors may not, outsiders do not
+// see it (ADR-0086).
+func TestASpaceIsRenamedThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	w.bert.expect("PUT", "/api/spaces/PLAT/name", `{"name":"Mine"}`, http.StatusForbidden)
+	w.carla.expect("PUT", "/api/spaces/PLAT/name", `{"name":"Mine"}`, http.StatusNotFound)
+	w.admin.expect("PUT", "/api/spaces/PLAT/name", `{"name":" "}`, http.StatusBadRequest)
+	got := w.admin.expect("PUT", "/api/spaces/PLAT/name", `{"name":" Platform team "}`, http.StatusOK)
+	if got["name"] != "Platform team" || got["key"] != "PLAT" {
+		t.Fatalf("renamed %v", got)
+	}
+	for _, sp := range w.bert.expect("GET", "/api/spaces", "", http.StatusOK)["spaces"].([]any) {
+		if m := sp.(map[string]any); m["key"] == "PLAT" && m["name"] != "Platform team" {
+			t.Fatalf("listed as %v", m)
+		}
+	}
+}

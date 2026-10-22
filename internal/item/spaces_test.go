@@ -92,3 +92,43 @@ func TestSpacePurgeLeavesTombstonesAndKeepsTheKey(t *testing.T) {
 		t.Fatalf("restoring a purged space: %v", err)
 	}
 }
+
+// A space's administrators rename it; the key and the items' keys stay
+// (ADR-0086).
+func TestASpaceIsRenamedByItsAdministrators(t *testing.T) {
+	s := permFixture(t)
+	page := mustItem(t)(s.As("anna").Create(NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	noErr(t, s.GrantRole("root", "PLAT", "ben", Viewer))
+	noErr(t, s.GrantRole("root", "PLAT", "dora", SpaceAdmin))
+	if err := s.As("ben").RenameSpace("PLAT", "Mine"); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("a viewer renames: %v", err)
+	}
+	if err := s.As("carl").RenameSpace("PLAT", "Mine"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("an outsider renames: %v", err)
+	}
+	for _, bad := range []string{"", "  ", "two\nlines", strings.Repeat("x", maxSpaceName+1)} {
+		if err := s.As("dora").RenameSpace("PLAT", bad); !errors.Is(err, ErrValidation) {
+			t.Errorf("%q: %v", bad, err)
+		}
+	}
+	before := len(s.Log())
+	noErr(t, s.As("dora").RenameSpace("PLAT", "  Platform team "))
+	noErr(t, s.As("dora").RenameSpace("PLAT", "Platform team")) // unchanged is nothing
+	if len(s.Log()) != before+1 {
+		t.Fatalf("events: %d", len(s.Log())-before)
+	}
+	var name string
+	for _, sp := range s.As("ben").Spaces() {
+		if sp.Key == "PLAT" {
+			name = sp.Name
+		}
+	}
+	got, err := s.As("anna").Get(page.ID)
+	noErr(t, err)
+	if name != "Platform team" || !strings.HasPrefix(got.Key, "PLAT-") {
+		t.Fatalf("name %q, key %s", name, got.Key)
+	}
+	if err := s.RenameSpace("root", "NOPE", "x"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("an unknown space: %v", err)
+	}
+}

@@ -1168,6 +1168,20 @@ function spacesOverview(spaces) {
   return box;
 }
 
+// spaceNameCard renames a space; its key, part of every item's key, stays
+// (ADR-0086).
+function spaceNameCard(sp, key) {
+  return form({ class: "card", id: "space-name" }, [
+    h("h2", { text: t("space.name") }),
+    h("p", { class: "muted", text: t("space.nameHelp", { key }) }),
+    field(t("field.name"), h("input", { name: "name", value: sp.name || "", required: true, maxlength: 80 })),
+    h("button", { type: "submit", text: t("common.save") }),
+  ], async (d, st) => {
+    await put(`/api/spaces/${encodeURIComponent(key)}/name`, { name: d.get("name") });
+    await route();
+  });
+}
+
 // spaceIconCard sets or removes a space's icon (space administrators).
 function spaceIconCard(sp, status) {
   const picker = h("input", { type: "file", id: "space-icon-file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml", "aria-label": t("space.iconChoose") });
@@ -3999,6 +4013,7 @@ async function membersView(key) {
     h("h1", { text: t("members.heading", { space: sp.name }) }),
     h("p", { class: "muted", text: t("members.help") }),
     status,
+    sp.role === "space-admin" ? spaceNameCard(sp, key) : null,
     sp.role === "space-admin" ? spaceIconCard(sp, status) : null,
     h("h2", { text: t("members.roles") }),
     roles.length ? h("table", { id: "members" }, roles.map(row)) : h("p", { class: "muted", text: t("members.none") }),

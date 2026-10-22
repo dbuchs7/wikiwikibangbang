@@ -1007,6 +1007,14 @@ function ckanSource() {
     await page.setInputFiles("#space-icon-file", { name: "icon.png", mimeType: "image/png",
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
     await page.waitForSelector("#space-icon img.space-icon[src*='/api/spaces/PLAT/icon']");
+    // The settings rename the space; its key stays (ADR-0086).
+    const spaceName = await page.inputValue("#space-name [name=name]");
+    await page.fill("#space-name [name=name]", "Platform renamed");
+    await page.click("#space-name button[type=submit]");
+    await page.waitForSelector("h1:has-text('Settings of Platform renamed')");
+    await page.fill("#space-name [name=name]", spaceName);
+    await page.click("#space-name button[type=submit]");
+    await page.waitForSelector(`h1:has-text('Settings of ${spaceName}')`);
 
     step("start page: the spaces as tiles with their icon, or as a list, as each reader chooses");
     await page.click("a.brand");

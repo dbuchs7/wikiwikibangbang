@@ -843,7 +843,7 @@ func (s *Store) apply(e Event) {
 		s.applyHold(e, touch)
 	case KanbanSet, KanbanRemoved, KanbanCardPlaced:
 		s.applyKanban(e)
-	case SpaceTrashed, SpaceRestored, SpacePurged:
+	case SpaceTrashed, SpaceRestored, SpacePurged, SpaceRenamed:
 		s.applySpace(e, touch)
 	case Watched, Unwatched:
 		s.applyWatch(e)

@@ -535,6 +535,8 @@ export default {
   "members.title": "Settings",
   "members.heading": "Settings of {space}",
   "members.roles": "Members and roles",
+  "space.name": "Display name",
+  "space.nameHelp": "The name shown for the space. Its key, {key}, stays: it is part of every entry’s key.",
   "members.help": "Roles granted here directly. Administrators are space administrators everywhere without being listed; members of a listed @group hold its role.",
   "members.revoke": "Take back",
   "members.revokeConfirm": "Take back the role of {name}?",
