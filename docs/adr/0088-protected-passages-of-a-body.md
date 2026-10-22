@@ -106,7 +106,7 @@ Their page says so.
 - **Negative / trade-offs accepted:** the server can read every passage. Encryption at rest protects the log and its backups, not against the server or anyone holding its keys file. A backup holds the keys file, so whoever has a backup's passphrase can read every passage.
 - **Negative / trade-offs accepted:** tables, code blocks and image captions cannot hold a passage, as they have no marks. Neither can titles, fields or comments.
 - **Negative / trade-offs accepted:** veiling quotes and findings errs towards hiding, so it may veil a quote that only shares a common word with a passage.
-- **Follow-ups:** erasing a single passage, by destroying its key, from the page. Passages in tables. A reader who leaves a group keeps nothing they read before.
+- **Follow-ups:** passages in tables. A reader who leaves a group keeps nothing they read before.
 
 ## Pros and cons of the options
 
@@ -130,4 +130,5 @@ Strongest form: no new model; the existing restriction does it.
 
 ## Links
 
+- amended by [ADR-0089](0089-a-protected-passage-is-erased-by-its-key.md) (erasing a passage by destroying its key)
 - relates to ADR-0022 and ADR-0078 (permissions, protecting items), ADR-0026 (keys per item, erasure), ADR-0010 (live sessions), ADR-0043 (versions), ADR-0047 (inline comments), ADR-0040 (governance), ADR-0067 (copying), ADR-0046 (notifications)

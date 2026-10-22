@@ -399,6 +399,8 @@ export default {
   "secret.change": "Change readers",
   "secret.unprotect": "Take protection off",
   "secret.unprotectConfirm": "Take the protection off? Everyone who reads the item then reads the passage.",
+  "secret.erase": "Erase for good",
+  "secret.eraseConfirm": "Erase this passage for good? Its text leaves the page and its key is destroyed, so no earlier version holds it either; versions from before it was protected are withheld. This cannot be undone.",
   "secret.cannotEdit": "This text holds passages you may not read; it is changed by those who read them all. Fields, state, labels and comments stay yours to change.",
   "secret.protectTitle": "Protect a passage",
   "secret.protectHelp": "Only you and the people and groups chosen here read it in clear; everyone else reads ▒▒▒▒▒▒▒▒ and may ask to read it. You and the space’s administrators decide.",

@@ -2812,7 +2812,11 @@ function secretsSection(path, item, status) {
         h("p", { class: "actions-row" },
           h("button", { type: "button", text: t("common.save"), onclick: () => action(() => put(base(sc), { readers: picker.values() }), status) }),
           h("button", { type: "button", class: "danger secret-unprotect", text: t("secret.unprotect"),
-            onclick: () => confirm(t("secret.unprotectConfirm")) && action(() => del(base(sc)), status) }))));
+            onclick: () => confirm(t("secret.unprotectConfirm")) && action(() => del(base(sc)), status) }),
+          // Erasing destroys the passage's own key: no version holds it
+          // any more (ADR-0089).
+          h("button", { type: "button", class: "danger secret-erase", text: t("secret.erase"),
+            onclick: () => confirm(t("secret.eraseConfirm")) && action(() => post(base(sc) + "/erase"), status) }))));
     }
     return h("li", { class: "secret-entry", "data-secret": sc.id }, ...parts);
   };

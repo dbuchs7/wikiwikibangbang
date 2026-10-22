@@ -852,7 +852,7 @@ func (s *Store) apply(e Event) {
 		s.applyKanban(e)
 	case SpaceTrashed, SpaceRestored, SpacePurged, SpaceRenamed:
 		s.applySpace(e, touch)
-	case SecretSet, SecretRemoved, SecretRequested, SecretGranted, SecretDeclined:
+	case SecretSet, SecretRemoved, SecretRequested, SecretGranted, SecretDeclined, SecretErased:
 		s.applySecret(e)
 		touch(e.Item)
 	case Watched, Unwatched:

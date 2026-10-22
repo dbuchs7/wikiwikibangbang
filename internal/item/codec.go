@@ -65,7 +65,9 @@ import (
 //     SecretGranted and SecretDeclined; a sealed body keeps the text of
 //     each passage apart, in secrets, sealed with the passage's own key.
 //     Versions 1 to 20 are still read.
-const CodecVersion = 21
+//   - 22: the kind SecretErased, with secret and the comments it veils in
+//     members (ADR-0089). Versions 1 to 21 are still read.
+const CodecVersion = 22
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

@@ -191,9 +191,16 @@ type Item struct {
 	// Secrets are the protected passages of the body, in the order they
 	// were protected (ADR-0088).
 	Secrets []Secret
+	// ErasedSecrets are the passages erased for good, whose keys are
+	// destroyed (ADR-0089); the text of earlier versions shows them veiled.
+	ErasedSecrets []ID
 
-	created   int // sequence number of the creating event; orders items
-	trashedBy int // sequence number of the event that trashed it, or 0
+	created int // sequence number of the creating event; orders items
+	// erasedBefore withholds the versions of the body before it: they may
+	// hold an erased passage's text from before it was protected
+	// (ADR-0089).
+	erasedBefore int
+	trashedBy    int // sequence number of the event that trashed it, or 0
 }
 
 // EmbedView is how one embed block of a body renders (ADR-0020). Child is
@@ -299,12 +306,14 @@ const (
 	// Protected passages of a body (ADR-0088). SecretSet protects a
 	// passage or changes who reads it; SecretRemoved takes the protection
 	// off; SecretRequested asks to read it (Principal), SecretGranted lets
-	// the one who asked read it, SecretDeclined says no.
+	// the one who asked read it, SecretDeclined says no. SecretErased
+	// erases a passage for good by destroying its key (ADR-0089).
 	SecretSet       EventKind = "SecretSet"
 	SecretRemoved   EventKind = "SecretRemoved"
 	SecretRequested EventKind = "SecretRequested"
 	SecretGranted   EventKind = "SecretGranted"
 	SecretDeclined  EventKind = "SecretDeclined"
+	SecretErased    EventKind = "SecretErased"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -339,7 +348,7 @@ type Event struct {
 	From, To   string // Transitioned
 	Body       *Doc   // BodyCommitted
 	Relation   *Relation
-	Members    []ID // ItemTrashed, ItemRestored, ItemPurged, SpacePurged: every item affected
+	Members    []ID // ItemTrashed, ItemRestored, ItemPurged, SpacePurged: every item affected; SecretErased: the comments whose anchor quoted the passage
 
 	Group       string       // GroupMemberAdded, GroupMemberRemoved
 	Principal   string       // GroupMemberAdded, RoleGranted, SystemRoleGranted, and their revocations
@@ -412,6 +421,7 @@ func (it *Item) clone() Item {
 	c.Comments = slices.Clone(it.Comments)
 	c.Labels = slices.Clone(it.Labels)
 	c.Attachments = slices.Clone(it.Attachments)
+	c.ErasedSecrets = slices.Clone(it.ErasedSecrets)
 	c.Secrets = make([]Secret, len(it.Secrets))
 	for i, sec := range it.Secrets {
 		c.Secrets[i] = sec.clone()

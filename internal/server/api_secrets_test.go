@@ -78,3 +78,42 @@ func TestProtectedPassagesThroughTheAPI(t *testing.T) {
 	}
 	w.admin.expect("POST", path+"/copy", `{"space":"PLAT","title":"Copy"}`, http.StatusCreated)
 }
+
+// Erasing a protected passage through the API (ADR-0089): only who
+// decides, and afterwards no version holds it.
+func TestAProtectedPassageIsErasedThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Review","properties":{"priority":"low"},
+		"body":[{"kind":"paragraph","text":"Pay Paul Muster on Friday."}]}`, http.StatusCreated)
+	path := "/api/items/" + field(it, "item", "key").(string)
+	got := w.bert.expect("POST", path+"/secrets", `{"block":0,"start":4,"end":15}`, http.StatusOK)
+	id := field(got, "item", "secrets").([]any)[0].(map[string]any)["id"].(string)
+	w.vera.expect("POST", path+"/secrets/"+id+"/erase", "", http.StatusForbidden)
+	w.bert.expect("POST", path+"/secrets/nope/erase", "", http.StatusNotFound)
+	got = w.bert.expect("POST", path+"/secrets/"+id+"/erase", "", http.StatusOK)
+	if text := field(got, "item", "body").([]any)[0].(map[string]any)["text"].(string); text != "Pay  on Friday." || field(got, "item", "secrets") != nil {
+		t.Fatalf("after erasure: %q %v", text, field(got, "item", "secrets"))
+	}
+	withheld := 0
+	for _, e := range field(w.bert.expect("GET", path+"/history", "", http.StatusOK), "events").([]any) {
+		m := e.(map[string]any)
+		if m["kind"] != "BodyCommitted" {
+			continue
+		}
+		version := path + "/versions/" + fmt.Sprint(int(m["seq"].(float64)))
+		// The version from before the protection holds the passage under
+		// the item's key; it is withheld.
+		if m["erased"] == true {
+			withheld++
+			w.bert.expect("GET", version, "", http.StatusNotFound)
+			continue
+		}
+		if body := fmt.Sprint(w.bert.expect("GET", version, "", http.StatusOK)); strings.Contains(body, "Paul") {
+			t.Errorf("version %v still holds the passage: %s", m["seq"], body)
+		}
+	}
+	if withheld != 1 {
+		t.Errorf("%d versions withheld, want the one before the protection", withheld)
+	}
+	w.bert.expect("POST", path+"/secrets/"+id+"/erase", "", http.StatusNotFound)
+}

@@ -264,3 +264,98 @@ func TestAPassageIsSealedWithItsOwnKey(t *testing.T) {
 		t.Fatal("an item's key taken for a passage's")
 	}
 }
+
+// Erasing a passage takes its text out of the body and of every version,
+// veils what comments quoted of it, and only those who decide do it
+// (ADR-0089).
+func TestAPassageIsErasedForGood(t *testing.T) {
+	s, page, sec := secretFixture(t)
+	anna := s.As("anna")
+	before := s.History(page.ID)[len(s.History(page.ID))-1].Seq
+	quote, err := anna.Comment(page.ID, NewComment{Text: "check", Anchor: &Anchor{Quote: "Paul Muster", Prefix: "Salary of "}})
+	noErr(t, err)
+	other, err := anna.Comment(page.ID, NewComment{Text: "fine", Anchor: &Anchor{Quote: "Open to all."}})
+	noErr(t, err)
+	for _, who := range []string{"hanna", "vic", "ben"} {
+		if err := s.As(who).EraseSecret(page.ID, sec.ID); !errors.Is(err, ErrForbidden) {
+			t.Errorf("%s erased the passage: %v", who, err)
+		}
+	}
+	if err := anna.EraseSecret(page.ID, "nope"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("erased an unknown passage: %v", err)
+	}
+	// An administrator who cannot read it decides, and may erase it.
+	noErr(t, s.As("pat").EraseSecret(page.ID, sec.ID))
+
+	got := mustItem(t)(anna.Get(page.ID))
+	b := got.Body.Blocks[0]
+	if b.Text != "Salary of  is due." || len(got.Secrets) != 0 || !slices.Equal(got.ErasedSecrets, []ID{sec.ID}) {
+		t.Fatalf("after erasure: %q, secrets %+v, erased %v", b.Text, got.Secrets, got.ErasedSecrets)
+	}
+	if !slices.Equal(b.Marks, []Mark{{Type: MarkBold, Start: 0, End: 9}}) {
+		t.Errorf("marks %+v", b.Marks)
+	}
+	// Every version shows it veiled, to everyone, even before a restart.
+	v, err := anna.BodyAt(page.ID, before)
+	noErr(t, err)
+	if text := v.Body.Blocks[0].Text; text != "Salary of "+SecretPlaceholder+" is due." {
+		t.Errorf("the version before reads %q", text)
+	}
+	cs, err := anna.Comments(page.ID)
+	noErr(t, err)
+	for _, c := range cs {
+		switch c.ID {
+		case quote.ID:
+			if *c.Anchor != (Anchor{Quote: SecretPlaceholder}) {
+				t.Errorf("the quote of the passage reads %+v", c.Anchor)
+			}
+		case other.ID:
+			if c.Anchor.Quote != "Open to all." {
+				t.Errorf("another quote reads %+v", c.Anchor)
+			}
+		}
+	}
+	// Restoring a version that held it does not bring it back.
+	noErr(t, anna.RestoreBody(page.ID, before))
+	got = mustItem(t)(s.As("ben").Get(page.ID))
+	if b := got.Body.Blocks[0]; b.Text != "Salary of  is due." || slices.ContainsFunc(b.Marks, func(m Mark) bool { return m.Type == MarkSecret }) {
+		t.Errorf("restored: %q %+v", b.Text, b.Marks)
+	}
+	// It is gone: it cannot be erased, asked for or used again.
+	if err := anna.EraseSecret(page.ID, sec.ID); !errors.Is(err, ErrNotFound) {
+		t.Errorf("erased twice: %v", err)
+	}
+	if err := anna.CommitBody(page.ID, Doc{Blocks: []Block{{Kind: Paragraph, Text: "Paul", Marks: []Mark{{Type: MarkSecret, Start: 0, End: 4, Ref: sec.ID}}}}}); err == nil {
+		t.Error("a body brought the erased passage back")
+	}
+	// The same state follows from replaying the log.
+	re, err := Replay(s.Log())
+	noErr(t, err)
+	if r := mustItem(t)(re.As("anna").Get(page.ID)); r.Body.Blocks[0].Text != got.Body.Blocks[0].Text || !slices.Equal(r.ErasedSecrets, []ID{sec.ID}) {
+		t.Errorf("replayed: %q %v", r.Body.Blocks[0].Text, r.ErasedSecrets)
+	}
+}
+
+func TestATrashedItemsPassageIsNotErased(t *testing.T) {
+	s, page, sec := secretFixture(t)
+	noErr(t, s.Trash("anna", page.ID))
+	if err := s.As("anna").EraseSecret(page.ID, sec.ID); err == nil {
+		t.Error("erased a passage of a trashed item")
+	}
+}
+
+func TestCutSecretsKeepsTheOtherMarks(t *testing.T) {
+	d := Doc{Blocks: []Block{
+		{Kind: Paragraph, Text: "ab SECRET cd", Marks: []Mark{
+			{Type: MarkBold, Start: 0, End: 5}, {Type: MarkSecret, Start: 3, End: 9, Ref: "s"}, {Type: MarkItalic, Start: 4, End: 8}, {Type: MarkStrike, Start: 9, End: 12}}},
+		{Kind: Paragraph, Text: "untouched"},
+	}}
+	got := cutSecrets(d, map[ID]bool{"s": true})
+	want := []Mark{{Type: MarkBold, Start: 0, End: 3}, {Type: MarkStrike, Start: 3, End: 6}}
+	if got.Blocks[0].Text != "ab  cd" || !slices.Equal(got.Blocks[0].Marks, want) || got.Blocks[1].Text != "untouched" {
+		t.Errorf("cut: %q %+v", got.Blocks[0].Text, got.Blocks[0].Marks)
+	}
+	if d.Blocks[0].Text != "ab SECRET cd" || len(d.Blocks[0].Marks) != 4 {
+		t.Error("cutSecrets changed its argument")
+	}
+}

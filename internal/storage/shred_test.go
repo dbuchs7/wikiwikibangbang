@@ -255,3 +255,48 @@ func TestAPassageHasItsOwnKeyOnDisk(t *testing.T) {
 	}
 	noErr(t, db.Close())
 }
+
+// Erasing a passage destroys its key once the erasure is durable; every
+// version then holds it veiled, after a restart too, and a key left behind
+// by a crash is destroyed on the next start (ADR-0089).
+func TestAnErasedPassagesKeyIsDestroyed(t *testing.T) {
+	dir := t.TempDir()
+	db, _ := mustOpen(t, dir)
+	it := secretItem(t, db.Store)
+	noErr(t, db.Store.GrantRole("admin", "PLAT", "anna", item.Editor))
+	anna := db.Store.As("anna")
+	sec, err := anna.Protect(it.ID, 0, 5, 5+len(secret), nil)
+	noErr(t, err)
+	protected := db.Store.History(it.ID)[len(db.Store.History(it.ID))-1].Seq
+	key := item.SecretKey(it.ID, sec.ID)
+	saved := keyRecords(t, dir)[len(keyRecords(t, dir))-1].Add[key]
+	noErr(t, anna.EraseSecret(it.ID, sec.ID))
+	if hasKey(t, dir, key) {
+		t.Fatal("the erased passage's key is still on disk")
+	}
+	if got, _ := anna.Get(it.ID); got.Body.Blocks[0].Text != "body " {
+		t.Fatalf("after erasure the body reads %q", got.Body.Blocks[0].Text)
+	}
+	noErr(t, db.Close())
+
+	db, _ = mustOpen(t, dir)
+	v, err := db.Store.As("anna").BodyAt(it.ID, protected)
+	noErr(t, err)
+	if text := v.Body.Blocks[0].Text; text != "body "+item.SecretPlaceholder {
+		t.Fatalf("after a restart the version that held it reads %q", text)
+	}
+	noErr(t, db.Close())
+
+	// A crash between the erasure and the key's destruction leaves the key.
+	kr, err := openKeyring(dir)
+	noErr(t, err)
+	data, err := json.Marshal(keyRecord{Add: map[item.ID][]byte{key: saved}})
+	noErr(t, err)
+	noErr(t, kr.log.Append(data))
+	noErr(t, kr.close())
+	db, rec := mustOpen(t, dir)
+	defer db.Close()
+	if rec.Shredded != 1 || hasKey(t, dir, key) {
+		t.Fatalf("the key left behind survived the start: shredded %d", rec.Shredded)
+	}
+}

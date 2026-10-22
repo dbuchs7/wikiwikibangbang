@@ -397,6 +397,8 @@ export default {
   "secret.change": "Leser ändern",
   "secret.unprotect": "Schutz aufheben",
   "secret.unprotectConfirm": "Schutz aufheben? Danach lesen alle, die den Eintrag lesen, auch diese Stelle.",
+  "secret.erase": "Endgültig löschen",
+  "secret.eraseConfirm": "Diese Stelle endgültig löschen? Ihr Text verschwindet aus der Seite und ihr Schlüssel wird vernichtet, sodass auch keine frühere Version ihn mehr enthält; Versionen von vor dem Schützen werden zurückgehalten. Dies lässt sich nicht rückgängig machen.",
   "secret.cannotEdit": "Dieser Text enthält Stellen, die Sie nicht lesen dürfen; ihn ändern jene, die alle lesen. Felder, Status, Labels und Kommentare können Sie weiterhin ändern.",
   "secret.protectTitle": "Stelle schützen",
   "secret.protectHelp": "Nur Sie und die hier gewählten Personen und Gruppen lesen sie im Klartext; alle anderen sehen ▒▒▒▒▒▒▒▒ und können die Freigabe beantragen. Sie und die Administratoren des Bereichs entscheiden.",

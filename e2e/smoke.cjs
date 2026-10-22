@@ -1488,9 +1488,19 @@ function ckanSource() {
     await boss.goto(base + "/#/item/" + salaries);
     await boss.click("#secrets .secret-ask[data-principal] .secret-grant");
     await boss.waitForSelector("#secrets .secret-grant", { state: "detached" });
-    await bossCtx.close();
     await page.reload();
     await page.waitForSelector("#body .pm-secret.secret-readable:text-is('Paul Muster')");
+
+    step("protected passages: admin erases the passage for good; it is gone from the text (ADR-0089)");
+    await boss.click("#secrets .secret-edit summary");
+    boss.once("dialog", (d) => d.accept());
+    await boss.click("#secrets .secret-erase");
+    await boss.waitForSelector("#secrets", { state: "detached" });
+    await bossCtx.close();
+    await page.reload();
+    await page.waitForSelector("#body .ProseMirror p:has-text('Due Friday.')");
+    const erasedText = await page.textContent("#body .ProseMirror");
+    check(!erasedText.includes("Paul") && !erasedText.includes("▒") && await page.$("#body .pm-secret") === null, "the erased passage is gone: " + erasedText);
 
     check(problems.length === 0, problems.join("; "));
     console.log("ok");
