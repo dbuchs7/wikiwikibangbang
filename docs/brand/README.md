@@ -2,7 +2,9 @@
 
 The wikiwikibangbang logo, black and white only. The mark is two exclamation marks ("bang bang"): the strokes are wiki pages with a folded corner, the dots are tasks, one open and one done. Pages and tasks side by side, as items of one model ([ADR-0001](../adr/0001-unified-item-data-model.md)).
 
-The wordmark sets "wikiwiki" in Inter Display Medium and "bangbang" in Inter Display Black. All artwork is outlines: no file needs the font.
+The wordmark sets "wikiwiki" in Inter Display Medium and, in a second line below it, "bangbang" in Inter Display Black. Both lines are as wide: "wikiwiki" is letter-spaced to the width of "bangbang". In the horizontal logo the mark spans both lines: its strokes run from the top of the first line to the baseline of the second, the dots keep their size. All artwork is outlines: no file needs the font.
+
+The icon is the monogram: "ww" above "bb", set as the name is, on a rounded black square. It is the app icon and the favicon.
 
 ## Files
 
@@ -11,21 +13,21 @@ The wordmark sets "wikiwiki" in Inter Display Medium and "bangbang" in Inter Dis
 | `svg/` | vector, the source of every other file; web and further editing |
 | `pdf/` | vector for print, one colour (print as 100 % K or as a black spot colour) |
 | `png/` | raster with a transparent background, in several widths |
-| `favicon/` | `favicon.ico` (16, 32, 48 px), `favicon.svg` (black, white in a dark browser theme), `apple-touch-icon.png` (180 px), `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `site.webmanifest` |
-| `source/` | the generator (`build.py`) and the pixel-drawn 16 px favicon (`fav16.py`) |
+| `favicon/` | the monogram: `favicon.ico` (16, 32, 48 px), `favicon.svg` (a black square, white in a dark browser theme), `apple-touch-icon.png` (180 px), `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `site.webmanifest` |
+| `source/` | the generator (`build.py`) |
 
 Each artwork comes as `-black` (on light ground) and `-white` (on dark ground):
 
-- `horizontal`: mark and wordmark side by side, the default;
+- `horizontal`: the tall mark beside the two-line wordmark, the default;
 - `stacked`: mark above the wordmark, for square spaces;
 - `wordmark`: the name alone;
 - `mark`: the mark alone; `mark-small` is a sturdier version for 24 to 48 px;
-- `app-icon`, `app-icon-inverted`, `maskable`: the mark on a full square, for app launchers.
+- `app-icon`, `app-icon-inverted`: the monogram on a rounded square, for app launchers; `maskable`: the same on a full square, which the platform cuts to its own shape; `favicon`: the monogram larger in its square, for 16 to 48 px.
 
 ## Use
 
 - **Clear space:** around the logo, at least the width of one of the mark's boxes.
-- **Minimum size:** the mark at 24 px or 6 mm; below that, `mark-small` or the favicon.
+- **Minimum size:** the mark at 24 px or 6 mm; below that, `mark-small` or the monogram.
 - **Do not** recolour, outline, stretch, rotate or add effects. Black or white only.
 
 ## Where the product uses it

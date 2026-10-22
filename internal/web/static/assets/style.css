@@ -77,7 +77,7 @@ code { word-break: break-all; }
   border-bottom: 1px solid var(--border);
 }
 .brand { display: inline-flex; align-items: center; color: var(--text); }
-.brand img { display: block; height: 24px; width: auto; } /* the logo (docs/brand) */
+.brand img { display: block; height: 40px; width: auto; } /* the logo (docs/brand), two lines */
 .brand:hover { text-decoration: none; }
 #nav { display: flex; align-items: center; gap: 2px 4px; flex-wrap: wrap; flex: 1; }
 #nav > a, #nav > button.link {
