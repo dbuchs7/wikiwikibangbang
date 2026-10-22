@@ -118,11 +118,12 @@ export function albumBrowser({ pick } = {}) {
       files.value = "";
       load(false);
     });
-    tools.replaceChildren(
-      h("button", { type: "button", id: "album-new-folder", text: t("album.newFolder"), onclick: () => { make.hidden = !make.hidden; if (!make.hidden) name.focus(); } }),
+    // replaceChildren, unlike h, writes null as text.
+    tools.replaceChildren(...[
+      h("button", { type: "button", class: "secondary", id: "album-new-folder", text: t("album.newFolder"), onclick: () => { make.hidden = !make.hidden; if (!make.hidden) name.focus(); } }),
       here() ? h("button", { type: "button", class: "primary", id: "album-upload", text: t("album.upload"), onclick: () => files.click() }) : null,
       here() ? null : h("span", { class: "muted", text: t("album.uploadHint") }),
-      files, make);
+      files, make].filter(Boolean));
   };
 
   const loadFolders = async () => {

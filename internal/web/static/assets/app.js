@@ -17,6 +17,28 @@ let me = null; // the signed-in principal, from GET /api/me
 
 // --- shared pieces -------------------------------------------------------
 
+// dressFilePicker shows a file field as a button and the chosen names in
+// the page's language (ADR-0091); the browser's own button speaks the
+// browser's. The field itself stays, unseen but focusable, inside its label.
+function dressFilePicker(input) {
+  if (input.dataset.dressed || input.hidden) return;
+  input.dataset.dressed = "1";
+  const none = () => t("file.none");
+  const names = h("span", { class: "file-names", text: none() });
+  const label = h("label", { class: "file-picker" });
+  input.replaceWith(label);
+  label.append(input, h("span", { class: "button secondary file-button", text: input.multiple ? t("file.chooseMany") : t("file.choose") }), names);
+  input.addEventListener("change", () => { names.textContent = input.files.length ? [...input.files].map((f) => f.name).join(", ") : none(); });
+}
+new MutationObserver(() => document.querySelectorAll("input[type=file]:not([data-dressed]):not([hidden])").forEach(dressFilePicker))
+  .observe(document.body, { childList: true, subtree: true });
+
+// empty says that a list or section has nothing to show, the same way
+// everywhere (ADR-0091).
+function empty(text, id) {
+  return h("p", { class: "empty", id, text });
+}
+
 function errorBox(err) {
   return h("p", { class: "error", role: "alert", text: err instanceof Error ? err.message : String(err) });
 }
@@ -202,7 +224,7 @@ async function commentsView(tab = "") {
     h("p", { class: "muted", text: t("comments.help") }),
     h("nav", { class: "tabs", "aria-label": t("comments.title") },
       tabLink("", t("comments.all")), tabLink("watched", kinds.watched), tabLink("mine", kinds.mine), tabLink("mentions", kinds.mentions)),
-    first.comments.length ? list : h("p", { class: "muted", id: "comment-feed-empty", text: t("comments.none") }),
+    first.comments.length ? list : empty(t("comments.none"), "comment-feed-empty"),
     more,
   );
 }
@@ -247,14 +269,14 @@ async function notificationsView() {
     h("h1", { text: t("notif.title") }),
     findings,
     findings ? h("h2", { text: t("notif.changes") }) : null,
-    first.notifications.length ? list : h("p", { class: "muted", text: watches.length ? t("notif.none") : t("notif.noWatches") }),
+    first.notifications.length ? list : empty(watches.length ? t("notif.none") : t("notif.noWatches")),
     more,
     h("h2", { text: t("watch.title") }),
     watches.length
       ? h("ul", { class: "list", id: "watches" }, watches.map((w) => h("li", {}, w.item
         ? link("#/item/" + encodeURIComponent(w.key), `${w.key} ${w.title}`)
         : [t("watch.space") + " ", link("#/space/" + encodeURIComponent(w.space), w.space)])))
-      : h("p", { class: "muted", text: t("watch.none") }),
+      : empty(t("watch.none")),
   );
 }
 
@@ -350,7 +372,7 @@ async function labelView(label) {
   const page = await get("/api/items?label=" + encodeURIComponent(label));
   show(
     h("p", {}, link("#/", t("nav.spaces")), " / " + t("label.title")),
-    h("div", { class: "page-head" }, h("h1", {}, labelChip(label)),
+    h("div", { class: "page-head" }, h("h1", {}, t("label.heading") + " ", labelChip(label)),
       page.items.length ? h("p", { class: "actions" }, link(`#/labelboard/${encodeURIComponent(label)}`, t("labelboard.open"), "button secondary", "label-board"),
         csvLink("/api/items.csv?label=" + encodeURIComponent(label), "label-csv")) : null),
     page.items.length
@@ -417,7 +439,7 @@ function attachmentsSection(path, files, live) {
       ? [t("att.copyOf"), " ", link("#/item/" + encodeURIComponent(a.origin.item.key), a.origin.item.key)]
       : t("att.copyOfUnknown"),
     a.origin.newer ? [" ", h("span", { class: "chip", text: t("att.originChanged") })] : null) : null,
-    live ? h("button", { class: "link", text: t("common.delete"), onclick: () => confirm(t("att.deleteConfirm", { name: a.name }))
+    live ? h("button", { class: "link danger", text: t("common.delete"), onclick: () => confirm(t("att.deleteConfirm", { name: a.name }))
       && action(() => del(`${path}/attachments/${a.id}`), status) }) : null);
   const picker = live ? h("input", { type: "file", multiple: true, id: "upload", "aria-label": t("att.upload") }) : null;
   if (picker) {
@@ -427,7 +449,7 @@ function attachmentsSection(path, files, live) {
   }
   return h("section", { id: "attachments" },
     h("h2", { text: t("att.title", { n: files.length }) }),
-    files.length ? h("ul", { class: "attachments" }, files.map(row)) : h("p", { class: "muted", text: t("att.none") }),
+    files.length ? h("ul", { class: "attachments" }, files.map(row)) : empty(t("att.none")),
     picker ? h("label", { class: "upload" }, h("span", { text: t("att.upload") }), picker) : null,
     status);
 }
@@ -975,7 +997,7 @@ async function loginView() {
       await post("/api/password-reset", { username: data.get("username") });
       card.replaceChildren(
         h("h1", { text: t("reset.title") }),
-        h("p", { class: "notice", id: "forgot-sent", text: t("reset.sent") }),
+        h("p", { class: "notice success", id: "forgot-sent", text: t("reset.sent") }),
         h("p", {}, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })));
     }),
     h("p", { class: "login-more" }, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })),
@@ -995,7 +1017,7 @@ async function loginView() {
       await post("/api/signup", { username: data.get("username"), email: data.get("email"), password: data.get("password"), reason: data.get("reason") });
       card.replaceChildren(
         h("h1", { text: t("signup.title") }),
-        h("p", { class: "notice", id: "signup-sent", text: t("signup.sent") }),
+        h("p", { class: "notice success", id: "signup-sent", text: t("signup.sent") }),
         h("p", {}, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })));
     }),
     h("p", { class: "login-more" }, h("button", { type: "button", class: "link", text: t("signup.back"), onclick: signIn })),
@@ -1050,7 +1072,7 @@ function resetView(token) {
       me = null;
       card.replaceChildren(
         h("h1", { text: t("reset.choose") }),
-        h("p", { class: "notice", id: "reset-done", text: t("reset.done") }),
+        h("p", { class: "notice success", id: "reset-done", text: t("reset.done") }),
         h("p", {}, link("#/", t("login.submit"), "button primary", "reset-login")));
     }));
   show(card);
@@ -1109,7 +1131,7 @@ async function searchView(q) {
       first.total.value ? h("p", { class: "actions" }, csvLink("/api/search.csv?q=" + encodeURIComponent(q), "search-csv")) : null),
     box,
     h("p", { class: "muted", text: t("search.results", { n: first.total.value, q }) }),
-    first.total.value === 0 ? h("p", { text: t("search.none") }) : list,
+    first.total.value === 0 ? empty(t("search.none")) : list,
     more,
   );
 }
@@ -1266,7 +1288,7 @@ function spaceIconCard(sp, status) {
       h("div", {},
         h("p", { class: "muted", text: t("space.iconHelp") }),
         h("label", { class: "upload" }, h("span", { text: t("space.iconChoose") }), picker),
-        sp.icon ? h("button", { type: "button", class: "link", text: t("common.delete"), onclick: () => action(() => del(path), status) }) : "")));
+        sp.icon ? h("button", { type: "button", class: "link danger", text: t("common.delete"), onclick: () => action(() => del(path), status) }) : "")));
 }
 
 // newSpaceForm creates a space and opens it (administrators). It starts
@@ -1420,8 +1442,8 @@ async function spaceView(key) {
         create && types.length ? h("button", { class: "primary", id: "space-new-page", text: t("space.newPage"), onclick: toForm }) : null,
         watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status),
         csvLink("/api/items.csv?space=" + encodeURIComponent(key), "space-csv"))),
-    h("p", {}, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance")),
-      sp.role === "space-admin" ? link(`#/members/${encodeURIComponent(key)}`, t("members.title")) : null].filter(Boolean).flatMap((b, i) => i ? [" · ", b] : [b])),
+    h("nav", { class: "subnav", "aria-label": t("space.views") }, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance")),
+      sp.role === "space-admin" ? link(`#/members/${encodeURIComponent(key)}`, t("members.title")) : null].filter(Boolean)),
     status,
     home,
     labels.length ? h("section", { id: "space-labels" }, h("h2", { text: t("label.title") }),
@@ -1460,7 +1482,7 @@ async function boardView(key, typeName) {
     h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("board.crumb", { type: typeName })),
     h("div", { class: "page-head" }, h("h1", { text: `${key} · ${typeName}` }),
       h("p", { class: "actions" }, csvLink(`/api/items.csv?space=${encodeURIComponent(key)}&type=${encodeURIComponent(typeName)}`, "board-csv"))),
-    page.next ? h("p", { class: "notice", text: t("board.truncated", { n: items.length }) }) : null,
+    page.next ? h("p", { class: "notice warning", text: t("board.truncated", { n: items.length }) }) : null,
     status,
     boardOf(items, type, status),
   );
@@ -1688,12 +1710,12 @@ async function tasksView(tab, params) {
   };
   const rows = shown.map((it) => [it, row(it)]);
   const count = h("p", { class: "muted", id: "tasks-count", role: "status" });
-  const empty = h("p", { class: "muted", text: t("tasks.noneFiltered"), hidden: true });
+  const noneShown = h("p", { class: "empty", text: t("tasks.noneFiltered"), hidden: true });
   const apply = () => {
     let n = 0;
     for (const [it, tr] of rows) n += (tr.hidden = !matches(it)) ? 0 : 1;
     count.textContent = n === rows.length ? "" : t("tasks.filtered", { n, total: rows.length });
-    empty.hidden = n > 0;
+    noneShown.hidden = n > 0;
     reset.hidden = !filterNames.some((k) => filters[k]);
     history.replaceState(null, "", `#/tasks/${current}${query()}`);
     relink();
@@ -1767,11 +1789,11 @@ async function tasksView(tab, params) {
     h("div", { class: "tasks-layout" }, h("section", { id: "tasks" }, shown.length
       ? [h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("tasks.labels"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space"), ""]
         .map((c) => h("th", { text: c }))), filterRow),
-      h("tbody", {}, rows.map(([, tr]) => tr))), h("p", { class: "tasks-foot" }, count, reset), empty]
-      : h("p", { class: "muted", text: current === "mine" ? t("tasks.noneMine") : t("tasks.none") })),
+      h("tbody", {}, rows.map(([, tr]) => tr))), h("p", { class: "tasks-foot" }, count, reset), noneShown]
+      : empty(current === "mine" ? t("tasks.noneMine") : t("tasks.none"))),
     labelPanel),
     h("p", { class: "muted", text: t("tasks.conventions") }),
-    page.next ? h("p", { class: "notice", text: t("tasks.truncated", { n: items.length }) }) : null,
+    page.next ? h("p", { class: "notice warning", text: t("tasks.truncated", { n: items.length }) }) : null,
   );
   if (rows.length) apply();
 }
@@ -1822,14 +1844,14 @@ async function labelBoardView(label, space) {
     kept.length ? h("p", { class: "muted" }, t("labelboard.kept") + " ",
       kept.map((k) => link(`#/kanban/${encodeURIComponent(k.space)}/${k.id}`, `${k.space} · ${k.name}`, "chip kanban-chip"))) : null,
     filter,
-    found.truncated ? h("p", { class: "notice", text: t("board.truncated", { n: found.items.length }) }) : null,
+    found.truncated ? h("p", { class: "notice warning", text: t("board.truncated", { n: found.items.length }) }) : null,
     status,
     flows.length
       ? h("div", { id: "labelboard" }, flows.map((ty) => h("section", { class: "labelboard-type", "data-type": ty.name },
         flows.length > 1 ? h("h2", { text: ty.name }) : null,
         boardOf(found.items.filter((it) => it.type === ty.name), ty, status,
           (it) => (space || inSpaces.length < 2 ? null : h("span", { class: "card-key", text: it.space }))))))
-      : h("p", { class: "muted", id: "labelboard-empty", text: t("labelboard.none") }),
+      : empty(t("labelboard.none"), "labelboard-empty"),
   );
 }
 
@@ -1872,7 +1894,7 @@ async function kanbansView() {
           h("span", { class: "space-tile-head" }, h("strong", { text: k.name }), kanbanIcon(k, 48)),
           h("span", { class: "muted", text: t("kanban.meta", { type: k.type, label: k.label }) }),
           h("span", { class: "badge", text: t("kanban.cards", { n: k.count }) }))))))))
-      : h("p", { class: "muted", text: t("kanban.none") }),
+      : empty(t("kanban.none")),
     labels.length ? h("section", { id: "label-boards" },
       h("h2", { text: t("labelboard.listTitle") }),
       h("p", { class: "muted", text: t("labelboard.listIntro") }),
@@ -2066,7 +2088,7 @@ async function kanbanView(space, id) {
       h("p", { class: "muted", text: t("kanban.metaLong", { space, type: k.type, label: k.label }) })),
     tools,
     settings,
-    cards.truncated ? h("p", { class: "notice", text: t("board.truncated", { n: cards.items.length }) }) : null,
+    cards.truncated ? h("p", { class: "notice warning", text: t("board.truncated", { n: cards.items.length }) }) : null,
     status,
     layout,
   );
@@ -2108,7 +2130,7 @@ function kanbanSettings(k, type, columns, kpath, status) {
       h("div", {},
         h("p", { class: "muted", text: t("kanban.iconHelp") }),
         h("label", { class: "upload" }, h("span", { text: t("kanban.iconChoose") }), picker),
-        k.icon ? h("button", { type: "button", class: "link", id: "kanban-icon-remove", text: t("common.delete"), onclick: () => action(() => del(kpath + "/icon"), status) }) : "")),
+        k.icon ? h("button", { type: "button", class: "link danger", id: "kanban-icon-remove", text: t("common.delete"), onclick: () => action(() => del(kpath + "/icon"), status) }) : "")),
     h("h3", { text: t("kanban.cardFields") }),
     h("p", { class: "muted", text: t("kanban.cardFieldsHelp") }),
     h("div", { class: "format-list", id: "kanban-card-fields" }, choices.map((n, i) => h("label", { class: "check" }, boxes[i], " ", n))),
@@ -2211,7 +2233,7 @@ async function governanceView(key) {
   };
   const table = (cols, rows) => rows.length
     ? h("table", {}, h("thead", {}, h("tr", {}, cols.map((c) => h("th", { text: c })))), h("tbody", {}, rows))
-    : h("p", { class: "muted", text: t("common.nothing") });
+    : empty(t("common.nothing"));
   const daysInput = h("input", { type: "number", min: 1, max: 3650, value: days, "aria-label": t("gov.days"), class: "days" });
   show(
     h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("gov.crumb")),
@@ -2290,7 +2312,7 @@ async function linksView(key) {
               h("td", { text: b.problem }),
               h("td", { text: b.responsible ? who(b.responsible) : "—" }),
             ))))
-          : h("p", { text: t("links.none") }))
+          : empty(t("links.none")))
         : null,
     );
     if (report.running) {
@@ -2854,7 +2876,7 @@ async function relationsSection(path, out, inc, self, canEdit) {
   return h("section", { id: "relations" },
     h("h2", { text: t("rel.title") }),
     out.length + inc.length ? h("ul", { class: "list" }, out.map((r) => row(r, r.to, true)), inc.map((r) => row(r, r.from, false)))
-      : h("p", { class: "muted", text: t("rel.none") }),
+      : empty(t("rel.none")),
     add, status);
 }
 
@@ -2988,7 +3010,7 @@ function commentThreads(path, page, live) {
     li.append(head, h("p", { class: "comment-text", text: c.text }), status, mine
       ? h("p", {},
         h("button", { class: "link", text: t("common.edit"), onclick: edit }), " · ",
-        h("button", { class: "link", text: t("common.delete"), onclick: () => confirm(t("comment.deleteConfirm")) && action(() => del(`${path}/comments/${c.id}`), status) }))
+        h("button", { class: "link danger", text: t("common.delete"), onclick: () => confirm(t("comment.deleteConfirm")) && action(() => del(`${path}/comments/${c.id}`), status) }))
       : ""); // append() would write a null out as the word "null"
     return li;
   };
@@ -3056,7 +3078,7 @@ function commentThreads(path, page, live) {
   const section = h("section", { id: "comments" },
     h("h2", { text: t("comment.title", { n: page.total.value }) }),
     pending,
-    open.length ? h("ul", { class: "threads" }, open.map(thread)) : h("p", { class: "muted", text: t("comment.none") }),
+    open.length ? h("ul", { class: "threads" }, open.map(thread)) : empty(t("comment.none")),
     done.length ? h("details", { class: "resolved-threads" }, h("summary", { text: t("comment.resolvedThreads", { n: done.length }) }),
       h("ul", { class: "threads" }, done.map(thread))) : null,
     page.next ? h("p", { class: "muted", text: t("comment.truncated", { n: page.comments.length }) }) : null,
@@ -3155,7 +3177,8 @@ async function accountView() {
       h("h2", { text: t("account.tokens") }),
       h("table", {}, tokens.map((tok) => h("tr", {},
         h("td", { text: tok.name }), h("td", { text: tok.scope }), h("td", { text: t("account.expires", { when: when(tok.expires) }) }),
-        h("td", {}, h("button", { text: t("account.revoke"), onclick: () => action(() => del("/api/tokens/" + tok.id)) })),
+        h("td", {}, h("button", { type: "button", class: "link danger", text: t("account.revoke"),
+          onclick: () => confirm(t("account.revokeConfirm")) && action(() => del("/api/tokens/" + tok.id)) })),
       ))),
       form({ id: "new-token" }, [
         field(t("field.name"), h("input", { name: "name", required: true })),
@@ -3165,7 +3188,7 @@ async function accountView() {
         h("button", { type: "submit", text: t("account.createToken") }),
       ], async (data) => {
         const res = await post("/api/tokens", { name: data.get("name"), scope: data.get("scope"), days: Number(data.get("days")) });
-        secret.replaceChildren(h("p", { class: "notice" }, t("account.copy"), h("code", { text: res.secret })));
+        secret.replaceChildren(h("p", { class: "notice success" }, t("account.copy"), h("code", { text: res.secret })));
       }),
       secret,
       h("p", { class: "muted" }, t("account.mcpHint"), " ", link("#/mcp", t("nav.mcp"))),
@@ -3237,7 +3260,7 @@ function contactsCard(contacts) {
   ], async (data, st) => {
     const saved = await put("/api/me/contacts", { email: data.get("email"), slack: data.get("slack"), teams: data.get("teams"), webhook: data.get("webhook") });
     summary(saved);
-    st.replaceChildren(h("p", { class: "notice", text: t("contacts.saved") }));
+    st.replaceChildren(h("p", { class: "notice success", text: t("contacts.saved") }));
   });
 }
 
@@ -3318,7 +3341,7 @@ async function mcpView() {
       h("div", { class: "muted", text: c.id })),
     h("td", { class: "muted", text: c.redirects.join(", ") }),
     h("td", { class: "muted", text: when(c.created) }),
-    h("td", {}, h("button", { type: "button", class: "danger", text: t("aiaccess.remove"), onclick: async () => {
+    h("td", {}, h("button", { type: "button", class: "link danger", text: t("aiaccess.remove"), onclick: async () => {
       if (!confirm(t("aiaccess.removeConfirm", { name: c.name }))) return;
       await del("/api/oauth/clients/" + encodeURIComponent(c.id));
       route();
@@ -3351,7 +3374,7 @@ async function mcpView() {
       ], async (data) => {
         const res = await post("/api/oauth/clients", { name: data.get("name"), redirects: [data.get("redirect")] });
         result.replaceChildren(
-          h("p", { class: "notice", text: t("aiaccess.created") }),
+          h("p", { class: "notice success", text: t("aiaccess.created") }),
           h("h3", { text: t("aiaccess.mcpUrl") }), copyable(endpoint, "aiaccess-url"),
           h("h3", { text: t("aiaccess.clientId") }), copyable(res.client.id, "aiaccess-client-id"),
           h("h3", { text: t("aiaccess.clientSecret") }), copyable(res.secret, "aiaccess-client-secret"),
@@ -3378,7 +3401,7 @@ async function mcpView() {
           h("td", { text: g.scope === "read" ? t("mcp.scopeRead") : t("mcp.scopeFull") }),
           h("td", { class: "muted", text: when(g.created) }),
           h("td", { class: "muted", text: when(g.last_used) }),
-          h("td", {}, h("button", { type: "button", class: "danger", text: t("aiaccess.withdraw"), onclick: async () => {
+          h("td", {}, h("button", { type: "button", class: "link danger", text: t("aiaccess.withdraw"), onclick: async () => {
             await del("/api/oauth/grants/" + encodeURIComponent(g.client));
             route();
           } }))))))
@@ -3406,7 +3429,7 @@ async function mcpView() {
     ], async (data, status) => {
       const res = await post("/api/tokens", { name: data.get("name"), scope: data.get("scope"), days: Number(data.get("days")) });
       fill(res.secret);
-      status.replaceChildren(h("p", { class: "notice", text: t("mcp.tokenMade") }));
+      status.replaceChildren(h("p", { class: "notice success", text: t("mcp.tokenMade") }));
     }),
     setup,
     h("p", { class: "muted" }, t("mcp.tokensAt"), " ", link("#/account", t("nav.account"))));
@@ -3510,10 +3533,10 @@ async function adminView() {
     spaces.length ? h("table", {}, spaces.map((sp) => h("tr", {},
       h("td", {}, link("#/space/" + encodeURIComponent(sp.key), sp.name)), h("td", { class: "muted", text: sp.key }),
       h("td", {}, link("#/members/" + encodeURIComponent(sp.key), t("admin.members"))),
-      h("td", {}, h("button", { type: "button", class: "secondary", "data-trash-space": sp.key, text: t("admin.trashSpace"), onclick: spaceAction(async () => {
+      h("td", {}, h("button", { type: "button", class: "link danger", "data-trash-space": sp.key, text: t("admin.trashSpace"), onclick: spaceAction(async () => {
         if (!confirm(t("admin.trashSpaceConfirm", { name: sp.name }))) return false;
         await del("/api/spaces/" + encodeURIComponent(sp.key));
-      }) }))))) : h("p", { class: "muted", text: t("admin.none") }),
+      }) }))))) : empty(t("admin.none")),
     spaceStatus,
     trashed.length ? h("div", { id: "space-trash" },
       h("h3", { text: t("admin.spaceTrash") }),
@@ -3521,8 +3544,8 @@ async function adminView() {
       h("table", {}, trashed.map((sp) => h("tr", {},
         h("td", { text: sp.name }), h("td", { class: "muted", text: sp.key }),
         h("td", { class: "muted", text: t("admin.spaceItems", { n: sp.items }) }),
-        h("td", {}, h("button", { type: "button", class: "secondary", text: t("admin.restoreSpace"), onclick: spaceAction(() => post("/api/spaces/" + encodeURIComponent(sp.key) + "/restore")) }),
-          " ", h("button", { type: "button", class: "danger", text: t("admin.purgeSpace"), onclick: spaceAction(async () => {
+        h("td", {}, h("button", { type: "button", class: "link", text: t("admin.restoreSpace"), onclick: spaceAction(() => post("/api/spaces/" + encodeURIComponent(sp.key) + "/restore")) }),
+          " ", h("button", { type: "button", class: "link danger", text: t("admin.purgeSpace"), onclick: spaceAction(async () => {
             const typed = prompt(t("admin.purgeSpaceConfirm", { name: sp.name, key: sp.key }));
             if (typed === null) return false;
             await post("/api/spaces/" + encodeURIComponent(sp.key) + "/purge", { confirm: typed.trim() });
@@ -3605,7 +3628,7 @@ async function adminView() {
           h("button", { type: "button", class: "approve", text: t("requests.approve"), onclick: () => action(() => post(`/api/account-requests/${rq.id}/approve`), status) }), " ",
           h("button", { type: "button", class: "link", text: t("requests.reject"),
             onclick: () => confirm(t("requests.rejectConfirm", { name: rq.username })) && action(() => del(`/api/account-requests/${rq.id}`), status) }))))) :
-      h("p", { class: "muted", id: "no-requests", text: t("requests.none") }));
+      empty(t("requests.none"), "no-requests"));
 
   // A reset link to hand over, for someone without a mail address or when
   // mail is not set up (ADR-0064).
@@ -3798,7 +3821,7 @@ async function regulationsCard() {
         route();
       }),
       isNew ? null : h("p", { class: "regulation-doc" },
-        r.document ? [link(`/api/regulations/${r.id}/document`, t("dp.documentOpen")), " ", h("button", { type: "button", class: "link", text: t("common.delete"), onclick: () => action(() => del(`/api/regulations/${r.id}/document`), status) }), " · "] : null,
+        r.document ? [link(`/api/regulations/${r.id}/document`, t("dp.documentOpen")), " ", h("button", { type: "button", class: "link danger", text: t("common.delete"), onclick: () => action(() => del(`/api/regulations/${r.id}/document`), status) }), " · "] : null,
         h("label", { class: "upload" }, h("span", { text: r.document ? t("dp.documentReplace") : t("dp.documentAttach") }), doc)));
   };
   const have = new Set(regulations.map((r) => r.id));
@@ -3901,7 +3924,7 @@ function connectorsCard(spaces, users) {
       h("p", { class: "muted", text: t("connector.note") }),
       data.connectors.length ? h("table", { id: "connector-list" },
         h("thead", {}, h("tr", {}, [t("connector.name"), t("connector.kind"), t("catalog.space"), t("connector.lastRun"), t("connector.schedule"), ""].map((x) => h("th", { text: x })))),
-        h("tbody", {}, rows)) : h("p", { class: "muted", text: t("connector.none") }),
+        h("tbody", {}, rows)) : empty(t("connector.none")),
       h("p", {}, h("button", { type: "button", id: "connector-new", text: t("connector.new", { name: data.templates[0].name }), onclick: () => { open = "new"; load(); } })),
       chosen ? connectorEditor(chosen, data, spaces, users, list, (id) => { open = id; load(); }) : "",
     );
@@ -4183,7 +4206,7 @@ async function designCard() {
       has && name !== "font" ? h("img", { src: `/branding/${name}?v=${encodeURIComponent(has)}`, alt: "", class: "design-preview" }) : "",
       h("span", { class: "muted", text: has ? t("design.fileSet") : t("design.fileNone") }),
       h("label", { class: "upload" }, h("span", { text: t("design.choose") }), picker),
-      has ? h("button", { type: "button", class: "link", text: t("common.delete"), onclick: change(() => del("/api/branding/" + name)) }) : "");
+      has ? h("button", { type: "button", class: "link danger", text: t("common.delete"), onclick: change(() => del("/api/branding/" + name)) }) : "");
     return box;
   };
   // A ready-made theme (ADR-0085), shown with its header, page and accent
@@ -4270,7 +4293,7 @@ async function membersView(key) {
     return h("tr", {},
       h("td", { text: g.principal.startsWith("@") ? g.principal : person(g.principal) }),
       h("td", {}, sel),
-      h("td", {}, h("button", { type: "button", class: "link", text: t("members.revoke"),
+      h("td", {}, h("button", { type: "button", class: "link danger", text: t("members.revoke"),
         onclick: () => confirm(t("members.revokeConfirm", { name: g.principal.startsWith("@") ? g.principal : person(g.principal) }))
           && action(() => del(base + encodeURIComponent(g.principal)), status) })));
   };
@@ -4283,7 +4306,7 @@ async function membersView(key) {
     sp.role === "space-admin" ? spaceNameCard(sp, key) : null,
     sp.role === "space-admin" ? spaceIconCard(sp, status) : null,
     h("h2", { text: t("members.roles") }),
-    roles.length ? h("table", { id: "members" }, roles.map(row)) : h("p", { class: "muted", text: t("members.none") }),
+    roles.length ? h("table", { id: "members" }, roles.map(row)) : empty(t("members.none")),
     form({ class: "card", id: "add-role" }, [
       h("h2", { text: t("members.add") }),
       field(t("admin.user"), h("select", { name: "principal" }, users.filter((u) => !known.has(u.id)).map((u) => h("option", { value: u.id, text: u.username })))),

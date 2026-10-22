@@ -12,6 +12,12 @@ export default {
   "common.edit": "Edit",
   "common.more": "More",
   "common.nothing": "Nothing found.",
+  "label.heading": "Label",
+  "account.revokeConfirm": "Revoke this token? Whatever uses it can no longer sign in.",
+  "space.views": "Views of the space",
+  "file.choose": "Choose file",
+  "file.chooseMany": "Choose files",
+  "file.none": "No file chosen",
   "common.save": "Save",
   "common.you": "you",
 
