@@ -378,6 +378,10 @@ span.tree-toggle { cursor: default; }
 .label-count { color: var(--muted); font-size: 12px; }
 .label-add { display: inline-flex; margin: 0; }
 .label-add input { padding: 2px 8px; font-size: 12px; border-radius: 999px; }
+.label-add { align-items: center; gap: 4px; flex-wrap: wrap; }
+.label-add .label-add-button { margin: 0; padding: 0 9px; min-height: 0; line-height: 22px; font-size: 14px; border-radius: 999px; }
+.label-add .status:empty, .label-status:empty { display: none; }
+.label-status, .label-add .status { flex-basis: 100%; }
 
 /* Attachments and images (ADR-0045). */
 ul.attachments { list-style: none; padding: 0; margin: 0 0 8px; }
@@ -1062,3 +1066,17 @@ a.requests-notice:hover { border-color: var(--accent); }
 .kanban-title h1 { margin: 0; }
 .label-boards { display: flex; flex-wrap: wrap; gap: 6px; }
 .labelboard-type + .labelboard-type { margin-top: 18px; }
+
+/* ---------- An item's status, at the top of its details ---------- */
+.state-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; padding: 12px 14px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.state-label { font-weight: 600; color: var(--muted); text-transform: uppercase; font-size: 12px; letter-spacing: .04em; }
+.state-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+.state-step { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-height: 36px; padding: 4px 14px;
+  border: 1px dashed var(--border-strong); border-radius: 999px; color: var(--muted); background: transparent; font-weight: 500; line-height: 1.2; margin: 0; }
+.state-step.current { border: 2px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 15px; }
+.state-step.current.finished { border-color: var(--success); background: var(--success); color: #fff; }
+button.state-step.move { border: 1px solid var(--accent); color: var(--accent); background: var(--surface); cursor: pointer; }
+button.state-step.move:hover { background: var(--accent-soft); }
+button.state-step.move.finished { border-color: var(--success); color: var(--success); }
+.state-step small { font-size: 11px; font-weight: 400; opacity: .8; }

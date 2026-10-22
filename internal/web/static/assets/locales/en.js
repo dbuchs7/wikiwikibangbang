@@ -170,6 +170,8 @@ export default {
   "item.purgeConfirm": "Delete for good? The content cannot be recovered.",
   "item.restore": "Restore",
   "item.state": " · state: {state}",
+  "item.status": "Status",
+  "item.stateMove": "Change to {state} ({transition})",
   "item.transitions": "Transitions: ",
   "item.trash": "Move to trash",
   "item.version": " · version {n}",
@@ -320,6 +322,8 @@ export default {
 
   "label.title": "Labels",
   "label.placeholder": "Add a label",
+  "label.add": "Add the label",
+  "label.invalid": "A label has letters and digits, joined by -, _ or ., at most 64 characters; spaces become -. Not possible: {label}",
   "label.remove": "Remove the label {label}",
   "label.noItems": "Nothing you may read carries this label.",
   "label.more": "Showing the first page of {n}.",

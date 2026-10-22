@@ -18,7 +18,7 @@ let me = null; // the signed-in principal, from GET /api/me
 // --- shared pieces -------------------------------------------------------
 
 function errorBox(err) {
-  return h("p", { class: "error", role: "alert", text: err instanceof ApiError ? err.message : String(err) });
+  return h("p", { class: "error", role: "alert", text: err instanceof Error ? err.message : String(err) });
 }
 
 // form wires a submit handler that shows errors next to the form and keeps
@@ -263,19 +263,65 @@ function labelChip(label, onRemove) {
     onRemove ? h("button", { type: "button", class: "label-remove", title: t("label.remove", { label }), "aria-label": t("label.remove", { label }), text: "×", onclick: onRemove }) : null);
 }
 
+// statusBar shows an item's workflow as a row of its states, the current
+// one marked; a state one transition leads to is a button that performs
+// it, named by the state with the transition beside it. perform is null
+// for those who may not edit. Several transitions to one state are each a
+// button.
+function statusBar(wf, state, perform) {
+  const steps = wf.states.map((st) => {
+    const via = perform && st !== state ? wf.transitions.filter((tr) => tr.from.includes(state) && tr.to === st) : [];
+    const done = finished(wf, st);
+    if (st === state) {
+      return h("span", { class: "state-step current" + (done ? " finished" : ""), "aria-current": "step", text: st });
+    }
+    if (!via.length) return h("span", { class: "state-step", text: st });
+    return via.map((tr) => h("button", { type: "button", class: "state-step move" + (done ? " finished" : ""), "data-transition": tr.name,
+      title: t("item.stateMove", { transition: tr.name, state: st }), onclick: () => perform(tr) },
+    st, h("small", { text: tr.name })));
+  });
+  // A transition that ends where it starts, if a workflow has one, stays a
+  // button of its own.
+  const loops = perform ? wf.transitions.filter((tr) => tr.from.includes(state) && tr.to === state)
+    .map((tr) => h("button", { type: "button", class: "secondary", "data-transition": tr.name, text: tr.name, onclick: () => perform(tr) })) : [];
+  return h("div", { class: "state-bar", id: "item-status" },
+    h("span", { class: "state-label", text: t("item.status") }),
+    h("div", { class: "state-steps", role: "group", "aria-label": t("item.status") }, steps.flat(), loops));
+}
+
+// labelRule is the server's rule for a label after it is lowered and its
+// inner spaces joined by "-" (ADR-0044); a label that breaks it is
+// refused, here at once and in the reader's language.
+const labelRule = /^[\p{Ll}\p{Lo}\p{N}](?:[\p{Ll}\p{Lo}\p{N}._-]{0,62}[\p{Ll}\p{Lo}\p{N}])?$/u;
+const normalLabel = (l) => l.toLowerCase().split(/\s+/).filter(Boolean).join("-");
+
 // labelsLine shows an item's labels; on a live item they can be added and
-// removed.
-function labelsLine(path, item, live, status) {
-  const set = (labels) => action(() => put(path + "/labels", { labels }), status);
-  const chips = item.labels.map((l) => labelChip(l, live ? () => set(item.labels.filter((x) => x !== l)) : null));
+// removed. Several labels are added at once, separated by commas; one
+// typed and left is added too. What goes wrong is said beside the labels.
+function labelsLine(path, item, live) {
+  const status = h("div", { class: "status label-status" });
+  const set = async (labels) => {
+    await put(path + "/labels", { labels });
+    route();
+  };
+  const remove = (l) => set(item.labels.filter((x) => x !== l)).catch((err) => status.replaceChildren(errorBox(err)));
+  const chips = item.labels.map((l) => labelChip(l, live ? () => remove(l) : null));
+  const input = h("input", { name: "label", placeholder: t("label.placeholder"), "aria-label": t("label.placeholder"), size: 14, autocomplete: "off" });
   const add = live ? form({ class: "label-add" }, [
-    h("input", { name: "label", placeholder: t("label.placeholder"), "aria-label": t("label.placeholder"), size: 14 }),
+    input,
+    h("button", { type: "submit", class: "label-add-button", title: t("label.add"), "aria-label": t("label.add"), text: "+" }),
   ], async (data) => {
-    const l = String(data.get("label") || "").trim();
-    if (l) await set([...item.labels, l]);
+    status.replaceChildren();
+    const typed = String(data.get("label") || "").split(",").map((l) => l.trim()).filter(Boolean);
+    if (!typed.length) return;
+    const bad = typed.filter((l) => !labelRule.test(normalLabel(l)));
+    if (bad.length) throw new Error(t("label.invalid", { label: bad.join(", ") }));
+    await set([...item.labels, ...typed]);
   }) : null;
+  // A label typed and left behind is added, not lost.
+  input.addEventListener("change", () => { if (input.value.trim()) add?.requestSubmit(); });
   if (!chips.length && !add) return null;
-  return h("div", { class: "labels", id: "labels" }, chips, add);
+  return h("div", { class: "labels", id: "labels" }, chips, add, status);
 }
 
 // labelView lists the readable items that carry a label.
@@ -1947,8 +1993,7 @@ async function kanbanView(space, id) {
       }
       return h("tr", { "data-field": f.name }, h("th", { text: f.name }), h("td", {}, input));
     }));
-    const transitions = editable ? type.workflow.transitions.filter((tr) => tr.from.includes(item.state))
-      .map((tr) => h("button", { type: "button", class: "secondary", text: `${tr.name} → ${tr.to}`, onclick: () => action(() => post(path + "/transitions", { name: tr.name }), status) })) : [];
+    const stateBar = statusBar(type.workflow, item.state, editable ? (tr) => action(() => post(path + "/transitions", { name: tr.name }), status) : null);
     detail.replaceChildren(
       h("div", { class: "kanban-detail-head" },
         h("span", { class: "muted", text: item.key }),
@@ -1958,10 +2003,10 @@ async function kanbanView(space, id) {
           history.replaceState(null, "", `#/kanban/${encodeURIComponent(space)}/${encodeURIComponent(id)}`);
         } })),
       h("h2", {}, link("#/item/" + encodeURIComponent(item.key), item.title || item.key)),
-      h("p", {}, h("span", { class: "chip", text: item.state }), " ", saved),
-      transitions.length ? h("p", { class: "actions-row" }, transitions) : "",
+      stateBar,
+      h("p", {}, saved),
       type.fields.length ? props : "",
-      labelsLine(path, item, editable, status),
+      labelsLine(path, item, editable),
       type.body ? h("section", { class: "kanban-detail-body" }, item.body.length ? readOnlyBody(item, embeds) : h("p", { class: "muted", text: t("item.noBody") })) : "",
       h("p", {}, link("#/item/" + encodeURIComponent(item.key), t("kanban.openItem"), "button")));
   };
@@ -2489,10 +2534,8 @@ async function itemView(ref, params = new URLSearchParams()) {
     );
   }));
 
-  const transitions = type.workflow && canEdit
-    ? type.workflow.transitions.filter((tr) => tr.from.includes(item.state))
-      .map((tr) => h("button", { text: tr.name, onclick: () => action(() => post(path + "/transitions", { name: tr.name }), status) }))
-    : [];
+  const stateBar = type.workflow && item.state ? statusBar(type.workflow, item.state, canEdit
+    ? (tr) => action(() => post(path + "/transitions", { name: tr.name }), status) : null) : null;
 
   const actions = canEdit
     ? [h("button", { text: t("item.trash"), onclick: () => action(() => post(path + "/trash"), status) })]
@@ -2533,9 +2576,9 @@ async function itemView(ref, params = new URLSearchParams()) {
   const card = (id, ...content) => h("section", { class: "side-card", id }, ...content);
   const details = card("details",
     h("h2", { text: t("item.properties") }),
+    stateBar,
     type.fields.length ? props : null,
-    transitions.length ? h("p", { class: "actions-row" }, transitions) : null,
-    labelsLine(path, item, canEdit, status));
+    labelsLine(path, item, canEdit));
   // Copying and moving a page with its child pages, to any place one may
   // create in (ADR-0067); dragging in the tree moves within a space.
   const relocate = h("div", { id: "relocate" });
