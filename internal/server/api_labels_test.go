@@ -26,6 +26,10 @@ func TestLabelsThroughTheAPI(t *testing.T) {
 	if fmt.Sprint(counts["labels"]) != "[map[count:2 label:ops] map[count:1 label:security]]" {
 		t.Fatalf("counts %v", counts)
 	}
+	// Suggestions while typing: the labels holding what is typed.
+	if got := w.vera.expect("GET", "/api/labels?q=Secu", "", http.StatusOK); fmt.Sprint(got["labels"]) != "[map[count:1 label:security]]" {
+		t.Fatalf("suggested %v", got)
+	}
 	found := w.vera.expect("GET", "/api/items?label=security", "", http.StatusOK)["items"].([]any)
 	if len(found) != 1 || found[0].(map[string]any)["key"] != a {
 		t.Fatalf("found %v", found)

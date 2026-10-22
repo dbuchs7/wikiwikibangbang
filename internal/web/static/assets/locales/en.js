@@ -323,6 +323,7 @@ export default {
   "label.title": "Labels",
   "label.placeholder": "Add a label",
   "label.add": "Add the label",
+  "label.suggestion": "used {n}×",
   "label.invalid": "A label has letters and digits, joined by -, _ or ., at most 64 characters; spaces become -. Not possible: {label}",
   "label.remove": "Remove the label {label}",
   "label.noItems": "Nothing you may read carries this label.",

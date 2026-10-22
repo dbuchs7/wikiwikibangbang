@@ -321,6 +321,7 @@ export default {
   "label.title": "Labels",
   "label.placeholder": "Label hinzufügen",
   "label.add": "Label hinzufügen",
+  "label.suggestion": "{n}× verwendet",
   "label.invalid": "Ein Label besteht aus Buchstaben und Ziffern, verbunden mit -, _ oder ., höchstens 64 Zeichen; Leerzeichen werden zu -. Nicht möglich: {label}",
   "label.remove": "Label {label} entfernen",
   "label.noItems": "Nichts, was Sie lesen dürfen, trägt dieses Label.",
