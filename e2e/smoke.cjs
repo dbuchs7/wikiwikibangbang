@@ -949,6 +949,26 @@ function ckanSource() {
     await page.locator("#labels [name=label]").pressSequentially("relau");
     await page.waitForSelector("#label-options option[value='website-relaunch']", { state: "attached" });
     await page.fill("#labels [name=label]", "");
+    // The search in the header finds items by their labels, and offers the
+    // labels themselves (ADR-0092).
+    await page.fill("#nav .search input", "relaunch");
+    await page.press("#nav .search input", "Enter");
+    await page.waitForSelector("#search-labels a:has-text('website-relaunch')");
+    await page.waitForSelector("ol.hits li:has-text('Hero image')");
+    // While typing, the search at the top suggests labels; the arrow keys
+    // and Enter open the chosen one.
+    await page.locator("#nav .search input").fill("");
+    await page.locator("#nav .search input").pressSequentially("relau");
+    await page.waitForSelector("#search-suggest:not([hidden]) [role=option][data-label='website-relaunch']");
+    await page.press("#nav .search input", "ArrowDown");
+    await page.press("#nav .search input", "Enter");
+    await page.waitForFunction(() => location.hash === "#/label/website-relaunch");
+    await page.waitForSelector("#labelled tr:has-text('Hero image')");
+    // The suggestions offer items too; choosing one opens it.
+    await page.locator("#nav .search input").pressSequentially("Hero ima");
+    await page.click("#search-suggest:not([hidden]) [role=option][data-item]:has-text('Hero image')");
+    await page.waitForFunction(() => location.hash.startsWith("#/item/"));
+    await page.waitForSelector("h1:has-text('Hero image'), .page-head :has-text('Hero image')");
 
     step("task list: tasks on a kanban are listed too, with their label; the labels at the right filter the list");
     await page.goto(base + "/#/tasks/all");

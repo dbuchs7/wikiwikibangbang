@@ -70,5 +70,6 @@ Strongest form: cards could be told apart at a glance.
 
 ## Links
 
+- amended by [ADR-0092](0092-labels-in-search-and-task-counts-on-label-boards.md) (counting tasks only on the Kanbans page)
 - amends [ADR-0060](0060-kanbans-are-topics-whose-cards-carry-their-label.md) (kanbans) and [ADR-0076](0076-kanban-columns-card-fields-and-free-moves.md) (kanban settings)
 - relates to ADR-0036 (the board of a type), ADR-0044 (labels), ADR-0052 (corporate design assets), ADR-0062 (space icons)

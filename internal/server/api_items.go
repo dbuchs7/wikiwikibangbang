@@ -53,7 +53,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: get, Pattern: "/api/items/{ref}", Summary: "Get an item by ID or key", Handler: http.HandlerFunc(h.getItem)},
 		{Method: put, Pattern: "/api/items/{ref}/title", Summary: "Set the title", Handler: http.HandlerFunc(h.setTitle)},
 		{Method: put, Pattern: "/api/items/{ref}/labels", Summary: "Replace the labels", Handler: http.HandlerFunc(h.setLabels)},
-		{Method: get, Pattern: "/api/labels", Summary: "The labels of readable items with how many carry each (space; q: holding it), most used first", Handler: http.HandlerFunc(h.listLabels)},
+		{Method: get, Pattern: "/api/labels", Summary: "The labels of readable items with how many carry each (space; q: holding it; tasks: count only items whose type has a workflow), most used first", Handler: http.HandlerFunc(h.listLabels)},
 		{Method: put, Pattern: "/api/items/{ref}/properties/{field}", Summary: "Set a property; null unsets it", Handler: http.HandlerFunc(h.setProperty)},
 		{Method: post, Pattern: "/api/items/{ref}/transitions", Summary: "Perform a workflow transition", Handler: http.HandlerFunc(h.transition)},
 		{Method: put, Pattern: "/api/items/{ref}/body", Summary: "Commit a new version of the body", Handler: http.HandlerFunc(h.commitBody)},
@@ -750,7 +750,13 @@ func (h itemHandlers) setLabels(w http.ResponseWriter, r *http.Request) {
 // listLabels counts the labels of the readable items (ADR-0044).
 func (h itemHandlers) listLabels(w http.ResponseWriter, r *http.Request) {
 	h.read(w, r, func(x *item.Session) (any, error) {
-		all := x.Labels(r.URL.Query().Get("space"))
+		count := x.Labels
+		// tasks counts only the tasks, the items whose type has a
+		// workflow: the labels a board by label shows (ADR-0092).
+		if r.URL.Query().Get("tasks") != "" {
+			count = x.TaskLabels
+		}
+		all := count(r.URL.Query().Get("space"))
 		// q narrows them to those holding it, as typed in a label field:
 		// the suggestions while one labels an item.
 		if q, _ := item.NormalLabel(r.URL.Query().Get("q")); q != "" {

@@ -46,3 +46,25 @@ func TestLabelsThroughTheAPI(t *testing.T) {
 		t.Fatalf("history %s", hist)
 	}
 }
+
+// Boards by label count tasks only, and search finds items by their
+// labels (ADR-0092).
+func TestLabelsCountTasksAndAreSearched(t *testing.T) {
+	w := newWorld(t)
+	w.admin.expect("POST", "/api/types", `{"name":"note","body":true}`, http.StatusCreated)
+	task := field(w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Patch","properties":{"priority":"low"}}`, http.StatusCreated), "item", "key").(string)
+	note := field(w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"note","title":"Minutes"}`, http.StatusCreated), "item", "key").(string)
+	w.bert.expect("PUT", "/api/items/"+task+"/labels", `{"labels":["release"]}`, http.StatusOK)
+	w.bert.expect("PUT", "/api/items/"+note+"/labels", `{"labels":["release","meeting"]}`, http.StatusOK)
+
+	if got := fmt.Sprint(w.vera.expect("GET", "/api/labels", "", http.StatusOK)["labels"]); got != "[map[count:2 label:release] map[count:1 label:meeting]]" {
+		t.Fatalf("all labels %s", got)
+	}
+	if got := fmt.Sprint(w.vera.expect("GET", "/api/labels?tasks=1", "", http.StatusOK)["labels"]); got != "[map[count:1 label:release]]" {
+		t.Fatalf("labels of tasks %s", got)
+	}
+	hits := w.vera.expect("GET", "/api/search?q=meeting", "", http.StatusOK)["hits"].([]any)
+	if len(hits) != 1 || hits[0].(map[string]any)["item"].(map[string]any)["key"] != note {
+		t.Fatalf("search by label %v", hits)
+	}
+}

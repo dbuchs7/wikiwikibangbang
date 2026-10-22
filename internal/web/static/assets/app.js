@@ -669,6 +669,86 @@ function bellIcon(filled = false) {
   return svg;
 }
 
+// searchSuggestions offers, while one types in the search at the top, the
+// labels that hold what is typed and the items that answer it best;
+// choosing one opens it (ADR-0092). Arrow keys move through them, Enter
+// opens the chosen one, Escape closes the list; without a choice, Enter
+// searches as before.
+function searchSuggestions(form) {
+  const input = form.querySelector("input");
+  const list = h("ul", { class: "suggest-list", id: "search-suggest", role: "listbox", "aria-label": t("search.suggestions"), hidden: true });
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-controls", list.id);
+  input.setAttribute("aria-expanded", "false");
+  input.setAttribute("autocomplete", "off");
+  let active = -1;
+  let timer = null;
+  let asked = 0;
+  const options = () => [...list.querySelectorAll("[role=option]")];
+  const close = () => {
+    list.hidden = true;
+    active = -1;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  };
+  const mark = (i) => {
+    const all = options();
+    active = all.length ? (i + all.length) % all.length : -1;
+    all.forEach((o, j) => o.setAttribute("aria-selected", String(j === active)));
+    if (active >= 0) input.setAttribute("aria-activedescendant", all[active].id);
+  };
+  const go = (href) => {
+    close();
+    input.value = "";
+    location.hash = href;
+  };
+  let n = 0;
+  const option = (href, data, ...children) => h("li", { role: "option", id: "search-suggest-" + n++, "aria-selected": "false", class: "suggest-option",
+    "data-href": href, ...data, onmousedown: (ev) => { ev.preventDefault(); go(href); } }, ...children);
+  const group = (text) => h("li", { role: "presentation", class: "suggest-group", text });
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const typed = input.value.trim();
+    if (!/[\p{L}\p{N}]/u.test(typed)) return close();
+    timer = setTimeout(async () => {
+      const mine = ++asked;
+      const [{ labels }, { hits }] = await Promise.all([
+        get("/api/labels?q=" + encodeURIComponent(typed)).catch(() => ({ labels: [] })),
+        get("/api/search?limit=5&q=" + encodeURIComponent(typed)).catch(() => ({ hits: [] }))]);
+      if (mine !== asked || input.value.trim() !== typed) return;
+      n = 0;
+      const shownLabels = labels.slice(0, 4);
+      list.replaceChildren(
+        ...(shownLabels.length ? [group(t("search.labelsGroup")), ...shownLabels.map((l) =>
+          option("#/label/" + encodeURIComponent(l.label), { "data-label": l.label },
+            h("span", { class: "label", text: l.label }), h("span", { class: "muted", text: t("label.suggestion", { n: l.count }) })))] : []),
+        ...(hits.length ? [group(t("search.itemsGroup")), ...hits.map((hit) =>
+          option("#/item/" + encodeURIComponent(hit.item.key), { "data-item": hit.item.key },
+            h("span", { class: "suggest-item" }, h("span", { class: "suggest-key", text: hit.item.key }), " ", h("span", { text: hit.item.title })),
+            h("span", { class: "muted", text: hit.item.type })))] : []));
+      list.hidden = !(shownLabels.length || hits.length);
+      active = -1;
+      input.setAttribute("aria-expanded", String(!list.hidden));
+    }, 200);
+  });
+  input.addEventListener("keydown", (ev) => {
+    if (list.hidden) return;
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      mark(active + (ev.key === "ArrowDown" ? 1 : -1));
+    } else if (ev.key === "Enter" && active >= 0) {
+      ev.preventDefault();
+      go(options()[active].dataset.href);
+    } else if (ev.key === "Escape") {
+      close();
+    }
+  });
+  input.addEventListener("blur", () => setTimeout(close, 100));
+  form.addEventListener("submit", close);
+  form.append(list);
+}
+
 function renderNav() {
   labelChrome();
   if (!me) {
@@ -681,6 +761,7 @@ function renderNav() {
     const q = new FormData(ev.target).get("q").trim();
     if (q) location.hash = "#/search/" + encodeURIComponent(q);
   } }, clearable(h("input", { name: "q", type: "search", placeholder: t("nav.search"), "aria-label": t("nav.search"), value: current })));
+  searchSuggestions(search);
   // The unread count arrives after the navigation is drawn (ADR-0046).
   // A bell with the number of unread notifications; its name says it in
   // words, for screen readers and as a tooltip.
@@ -1104,7 +1185,8 @@ async function searchView(q) {
     return;
   }
   const url = (after) => `/api/search?q=${encodeURIComponent(q)}&limit=50${after ? "&after=" + encodeURIComponent(after) : ""}`;
-  const first = await get(url());
+  // Labels that hold what was typed lead to their items (ADR-0092).
+  const [first, { labels }] = await Promise.all([get(url()), get("/api/labels?q=" + encodeURIComponent(q)).catch(() => ({ labels: [] }))]);
   const list = h("ol", { class: "list hits" });
   const more = h("div");
   const addHits = (page) => {
@@ -1114,6 +1196,7 @@ async function searchView(q) {
         hit.stars ? stars(hit.stars) : null,
         link("#/item/" + encodeURIComponent(it.key), it.key), " ", h("strong", { text: it.title }),
         " ", h("span", { class: "muted", text: `${it.space} · ${it.type}${it.state ? " · " + it.state : ""}` }),
+        it.labels?.length ? [" ", ...it.labels.map((l) => labelChip(l))] : null,
         hit.snippet ? h("p", { class: "snippet", text: hit.comment ? t("search.inComment", { text: hit.snippet }) : hit.snippet }) : null,
         // Which words the hit holds and which it lacks (ADR-0083).
         hit.matched?.length && (hit.missing?.length || hit.matched.length > 1) ? h("p", { class: "hit-words" },
@@ -1130,6 +1213,8 @@ async function searchView(q) {
     h("div", { class: "page-head" }, h("h1", { text: t("search.title") }),
       first.total.value ? h("p", { class: "actions" }, csvLink("/api/search.csv?q=" + encodeURIComponent(q), "search-csv")) : null),
     box,
+    labels.length ? h("p", { class: "search-labels", id: "search-labels" }, h("span", { class: "muted", text: t("search.labels") + " " }),
+      labels.slice(0, 12).map((l) => link("#/label/" + encodeURIComponent(l.label), `${l.label} (${l.count})`, "chip"))) : null,
     h("p", { class: "muted", text: t("search.results", { n: first.total.value, q }) }),
     first.total.value === 0 ? empty(t("search.none")) : list,
     more,
@@ -1860,7 +1945,7 @@ async function labelBoardView(label, space) {
 async function kanbansView() {
   const show = screen();
   const [{ kanbans }, { spaces }, { types }, { labels }] = await Promise.all([get("/api/kanbans"), get("/api/spaces"), get("/api/types"),
-    get("/api/labels").catch(() => ({ labels: [] }))]);
+    get("/api/labels?tasks=1").catch(() => ({ labels: [] }))]);
   const flows = types.filter((ty) => ty.workflow);
   const editable = spaces.filter((sp) => mayEdit(sp.role));
   const counts = await Promise.all(kanbans.map((k) =>
