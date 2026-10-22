@@ -1186,3 +1186,12 @@ main #my-findings ul.notifications { margin: 0; padding: 0; border: 0; box-shado
 main ul.notifications > li + li { border-top: 1px solid var(--border); }
 main ul#watches { columns: 2 18rem; column-gap: 28px; padding: 12px 20px; }
 main ul#watches li { padding: 4px 0; break-inside: avoid; }
+
+/* Label suggestions under the search at the top (ADR-0092). */
+#nav .search { position: relative; }
+.suggest-list { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 25; margin: 0; padding: 4px; list-style: none;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); }
+.suggest-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; padding: 4px 10px;
+  border-radius: 6px; cursor: pointer; }
+.suggest-option:hover, .suggest-option[aria-selected=true] { background: var(--accent-soft); }
+.suggest-option .muted { font-size: 12px; }

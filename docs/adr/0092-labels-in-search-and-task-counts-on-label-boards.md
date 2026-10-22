@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Implementation:** Landed
 - **Date:** 2026-10-22
-- **Deciders:** Project initiators (the maintainer asked that the number beside each board by label counts only the tasks carrying the label, and that labels can be searched from the search at the top, 2026-10-22)
+- **Deciders:** Project initiators (the maintainer asked that the number beside each board by label counts only the tasks carrying the label, that labels can be searched from the search at the top, and that labels are suggested there while typing, 2026-10-22)
 
 ## Context and problem statement
 
@@ -39,6 +39,11 @@ Chosen option: **1**.
 - **Matching:** an item's labels are searched like its properties, so a word of a label finds the item. A word of a label adds to the score as a property does, below the title.
 - **Labels on the results page:** the labels holding the word are listed above the hits, as links to their pages.
 - **Labels on each hit:** each hit shows its labels.
+- **Suggestions while typing:** under the search at the top, the labels holding what is typed are offered, at most six, with how many items carry each.
+  - Choosing one opens the label's items.
+  - Arrow keys move through the list, Enter opens the chosen label, and Escape closes the list.
+  - Without a choice, Enter searches as before.
+  - The list is a listbox the search field controls, so screen readers announce it.
 
 ### Consequences
 
