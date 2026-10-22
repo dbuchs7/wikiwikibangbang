@@ -40,6 +40,13 @@ def checked_box(x0, y0, s, w):
     tick = LineString([(x0 + 4.2 * k, y0 + 9.4 * k), (x0 + 7.7 * k, y0 + 12.9 * k), (x0 + 13.9 * k, y0 + 5.4 * k)])
     return rrect(x0, y0, x0 + s, y0 + s, 3.5).difference(tick.buffer(w / 2, cap_style="flat", join_style="mitre"))
 
+def tall_mark(h):
+    """The mark stretched to h units of the 64 grid: the strokes grow, the
+    dots keep their size, for the two-line lockup."""
+    bars = [page_bar(8, 2, 26, h - 26, 7, 1.6), page_bar(38, 2, 56, h - 26, 7, 1.6)]
+    boxes = [open_box(8, h - 20, 18, 3.5), checked_box(38, h - 20, 18, 3.4)]
+    return unary_union(bars + boxes)
+
 def mark(small=False):
     """The full mark, or the simplified one for 16-32 px."""
     if small:
@@ -88,6 +95,45 @@ def metrics(ff, size):
 
 WORD = [("wikiwiki", "InterDisplay-Medium.otf"), ("bangbang", "InterDisplay-Black.otf")]
 
+# The name is set in two lines: "bangbang" below "wikiwiki", both as wide.
+# "wikiwiki" is the narrower line; it is brought to the width of
+# "bangbang" by FIT: "scale" enlarges it, "track" spaces its letters,
+# "mix" does half of each.
+LEADING = 0.98  # baseline to baseline, in font sizes of the second line
+FIT = os.environ.get("WWBB_FIT", "track")
+
+def first_line(size, words=WORD):
+    """The size and tracking of the first line so it is as wide as the
+    second."""
+    target = text_path([words[1]], size, 0, 0)[1]
+    natural = text_path([words[0]], size, 0, 0)[1]
+    n = len(words[0][0])
+    if natural > target:  # wider: never tighter than set, only smaller
+        return size * target / natural, -0.012
+    if FIT == "track":
+        return size, -0.012 + (target - natural) / (n - 1) / size
+    if FIT == "mix":
+        k = (target / natural) ** 0.5
+        w = text_path([words[0]], size * k, 0, 0)[1]
+        return size * k, -0.012 + (target - w) / (n - 1) / (size * k)
+    return size * target / natural, -0.012
+
+def word_lines(size, x, baseline, centre=None, words=WORD):
+    """Both lines, as wide, left-aligned at x or centred on centre, the
+    first with its baseline at baseline. Returns (svg path d, width, top
+    of the first line above baseline, baseline of the second line)."""
+    s1, tr1 = first_line(size, words)
+    _, cap1 = metrics(words[0][1], s1)
+    _, w = text_path([words[1]], size, 0, 0)
+    lx = x if centre is None else centre - w / 2
+    second = baseline + LEADING * size
+    d = text_path([words[0]], s1, lx, baseline, tracking=tr1)[0] + text_path([words[1]], size, lx, second)[0]
+    return d, w, cap1 * 1.04, second
+
+# The monogram: "ww" above "bb", as the name is set; the icon of the app,
+# the favicon included. The exclamation-mark mark stays in the logo.
+INITIALS = [("ww", WORD[0][1]), ("bb", WORD[1][1])]
+
 # ---------------------------------------------------------------- svg writers
 def svg(w, h, body, bg=None, title="wikiwikibangbang"):
     rect = f'<rect width="{w}" height="{h}" fill="{bg}"/>' if bg else ""
@@ -106,33 +152,42 @@ def lockups(fg):
 
     size = 100
     xh, cap = metrics("InterDisplay-Medium.otf", size)
-    # wordmark only
-    d, w = text_path(WORD, size, 0, 0)
-    asc, desc = cap * 1.04, size * 0.24
-    res["wordmark"] = svg(w + 4, asc + desc, f'<g transform="translate(2 {asc:.2f})">{p(d, fg)}</g>')
+    desc = size * 0.24
+    # wordmark only: two lines as wide
+    d, w, asc, last = word_lines(size, 0, 0)
+    res["wordmark"] = svg(w + 4, asc + last + desc, f'<g transform="translate(2 {asc:.2f})">{p(d, fg)}</g>')
 
-    # horizontal: mark height = cap height x 1.55, centred on the x-height
-    mh = cap * 1.42; s = mh / 64; gap = mh * 0.32
-    my = -xh / 2 - mh / 2
-    d, w = text_path(WORD, size, mh + gap, 0)
-    top, bottom = min(my, -asc), max(my + mh, desc)
-    pad = mh * 0.0
-    body = p(geom_path(big, s, s, 0, my - top), fg) + f'<g transform="translate(0 {-top:.2f})">{p(d, fg)}</g>'
-    res["horizontal"] = svg(mh + gap + w + 2, bottom - top, body)
+    # horizontal: the mark spans both lines, from the top of the first to
+    # the baseline of the second; its strokes are as thick as before.
+    s = cap * 1.42 / 64
+    mh = asc + last; units = mh / s; gap = cap * 1.42 * 0.32
+    d, w, _, _ = word_lines(size, 64 * s + gap, 0)
+    body = p(geom_path(tall_mark(units), s, s, 0, 0), fg) + f'<g transform="translate(0 {asc:.2f})">{p(d, fg)}</g>'
+    res["horizontal"] = svg(64 * s + gap + w + 2, asc + last + desc, body)
 
-    # stacked: mark above, centred
+    # stacked: mark above, the lines centred below it
     mh2 = size * 1.6; s2 = mh2 / 64
-    d, w = text_path(WORD, size, 0, 0)
+    _, w, asc, _ = word_lines(size, 0, 0)
     W = max(w, mh2) + 4
     ty = mh2 + size * 0.42 + asc
-    body = p(geom_path(big, s2, s2, (W - mh2) / 2, 0), fg) + f'<g transform="translate({(W - w) / 2:.2f} {ty:.2f})">{p(d, fg)}</g>'
-    res["stacked"] = svg(W, ty + desc, body)
+    d, _, _, last = word_lines(size, 0, ty, centre=W / 2)
+    body = p(geom_path(big, s2, s2, (W - mh2) / 2, 0), fg) + p(d, fg)
+    res["stacked"] = svg(W, last + desc, body)
     return res
 
-def app_icon(fg, bg, safe):
-    """Square icon: mark centred on a full-bleed square. safe = mark size share."""
-    S = 512; mh = S * safe; s = mh / 64; o = (S - mh) / 2
-    return svg(S, S, p(geom_path(mark(), s, s, o, o), fg), bg=bg)
+def monogram(fg, bg, safe, radius=0):
+    """Square icon: the initials centred on a square. safe = the share of
+    the square their larger side takes; radius rounds the square's corners
+    (0: full bleed)."""
+    S = 512
+    size = 100
+    d, w, top, last = word_lines(size, 0, 0, words=INITIALS)
+    k = S * safe / max(w, top + last)  # the initials are taller than wide
+    h = (top + last) * k
+    tx, ty = (S - w * k) / 2, (S - h) / 2 + top * k
+    rect = f'<rect width="{S}" height="{S}" rx="{radius}" fill="{bg}"/>'
+    body = rect + f'<g transform="translate({tx:.2f} {ty:.2f}) scale({k:.4f})">{p(d, fg)}</g>'
+    return svg(S, S, body)
 
 # ---------------------------------------------------------------- render
 def main():
@@ -142,18 +197,22 @@ def main():
     for tone, fg in (("black", BLACK), ("white", WHITE)):
         for name, s in lockups(fg).items():
             files[f"wwbb-{name}-{tone}"] = s
-    files["wwbb-app-icon"] = app_icon(WHITE, BLACK, 0.58)
-    files["wwbb-app-icon-inverted"] = app_icon(BLACK, WHITE, 0.58)
-    files["wwbb-maskable"] = app_icon(WHITE, BLACK, 0.46)   # inside the 80 % safe circle
+    # The icons are the monogram on a rounded square; the maskable one is
+    # full bleed, as the platform cuts its own shape, with the initials
+    # inside the 80 % safe circle.
+    files["wwbb-app-icon"] = monogram(WHITE, BLACK, 0.66, radius=112)
+    files["wwbb-app-icon-inverted"] = monogram(BLACK, WHITE, 0.66, radius=112)
+    files["wwbb-maskable"] = monogram(WHITE, BLACK, 0.54)
+    # For 16 to 48 px the initials fill more of the square.
+    files["wwbb-favicon"] = monogram(WHITE, BLACK, 0.84, radius=96)
     for n, s in files.items():
         open(os.path.join(OUT, "svg", n + ".svg"), "w").write(s)
 
-    # favicon.svg follows the tab colour scheme
-    d = geom_path(mark(small=True))
-    open(os.path.join(OUT, "favicon", "favicon.svg"), "w").write(
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
-        '<style>path{fill:#000}@media (prefers-color-scheme:dark){path{fill:#fff}}</style>'
-        f'<path fill-rule="evenodd" d="{d}"/></svg>\n')
+    # favicon.svg follows the tab colour scheme: black square in a light
+    # browser theme, white in a dark one.
+    fav_svg = files["wwbb-favicon"].replace('role="img">', 'role="img"><style>rect{fill:#000}path{fill:#fff}'
+        '@media (prefers-color-scheme:dark){rect{fill:#fff}path{fill:#000}}</style>', 1)
+    open(os.path.join(OUT, "favicon", "favicon.svg"), "w").write(fav_svg)
 
     from playwright.sync_api import sync_playwright
     import re
@@ -180,9 +239,9 @@ def main():
             pg.pdf(path=path, width=f"{W:.2f}px", height=f"{H:.2f}px", print_background=True, page_ranges="1")
 
         for n, s in files.items():
-            if not n.startswith("wwbb-app") and not n.startswith("wwbb-maskable") and "small" not in n:
+            if not n.startswith(("wwbb-app", "wwbb-maskable", "wwbb-favicon")) and "small" not in n:
                 pdf(s, os.path.join(OUT, "pdf", n + ".pdf"))
-            if n.startswith(("wwbb-app", "wwbb-maskable")):
+            if n.startswith(("wwbb-app", "wwbb-maskable", "wwbb-favicon")):
                 for px in (1024, 512, 192):
                     png(s, os.path.join(OUT, "png", f"{n}-{px}.png"), width=px)
             elif "-mark-" in n:
@@ -193,17 +252,13 @@ def main():
                     png(s, os.path.join(OUT, "png", f"{n}-{px}w.png"), width=px)
 
         fav = os.path.join(OUT, "favicon")
-        small, big = files["wwbb-mark-small-black"], files["wwbb-mark-black"]
-        png(small, os.path.join(fav, "favicon-32.png"), width=32)
-        png(big, os.path.join(fav, "favicon-48.png"), width=48)
+        for px in (16, 32, 48):
+            png(files["wwbb-favicon"], os.path.join(fav, f"favicon-{px}.png"), width=px)
         png(files["wwbb-app-icon"], os.path.join(fav, "apple-touch-icon.png"), width=180)
         png(files["wwbb-app-icon"], os.path.join(fav, "icon-192.png"), width=192)
         png(files["wwbb-app-icon"], os.path.join(fav, "icon-512.png"), width=512)
         png(files["wwbb-maskable"], os.path.join(fav, "icon-maskable-512.png"), width=512)
         br.close()
-    # 16 px is drawn by hand on the pixel grid; scaled vectors blur at that size.
-    subprocess.run([sys.executable, "-I", os.path.join(os.path.dirname(os.path.abspath(__file__)), "fav16.py"),
-                    os.path.join(fav, "favicon-16.png")], check=True)
     subprocess.run(["convert", *(os.path.join(fav, f"favicon-{px}.png") for px in (16, 32, 48)),
                     os.path.join(fav, "favicon.ico")], check=True)
     open(os.path.join(fav, "site.webmanifest"), "w").write(
