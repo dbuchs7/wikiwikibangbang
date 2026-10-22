@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Implementation:** Landed
 - **Date:** 2026-10-22
-- **Deciders:** Project initiators (the maintainer asked that the number beside each board by label counts only the tasks carrying the label, that labels can be searched from the search at the top, and that labels are suggested there while typing, 2026-10-22)
+- **Deciders:** Project initiators (the maintainer asked that the number beside each board by label counts only the tasks carrying the label, that labels can be searched from the search at the top, and that labels and items are suggested there while typing, 2026-10-22)
 
 ## Context and problem statement
 
@@ -39,8 +39,10 @@ Chosen option: **1**.
 - **Matching:** an item's labels are searched like its properties, so a word of a label finds the item. A word of a label adds to the score as a property does, below the title.
 - **Labels on the results page:** the labels holding the word are listed above the hits, as links to their pages.
 - **Labels on each hit:** each hit shows its labels.
-- **Suggestions while typing:** under the search at the top, the labels holding what is typed are offered, at most six, with how many items carry each.
-  - Choosing one opens the label's items.
+- **Suggestions while typing:** under the search at the top, two groups are offered.
+  - **Labels:** those holding what is typed, at most four, each with how many items carry it.
+  - **Items:** the five that best answer the search, ranked as on the results page, each with its key, title and type.
+  - Choosing a label opens the label's items; choosing an item opens it.
   - Arrow keys move through the list, Enter opens the chosen label, and Escape closes the list.
   - Without a choice, Enter searches as before.
   - The list is a listbox the search field controls, so screen readers announce it.
@@ -49,6 +51,7 @@ Chosen option: **1**.
 
 - **Positive:** the number beside a board is the number of its cards; the search box finds by label without a syntax to learn.
 - **Negative / trade-offs accepted:** a common label can bring many hits for a short word. They rank below hits in the title, and the label's own link leads straight to its items.
+- **Negative / trade-offs accepted:** each pause in typing runs a search, as submitting one does. It waits 200 ms after the last key and asks for five hits; the search scans the live state (ADR-0033, ADR-0081), so this costs one search per pause.
 - **Negative / trade-offs accepted:** picture labels (ADR-0090) are not item labels and are not searched here; the album searches them.
 
 ## Pros and cons of the options

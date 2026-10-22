@@ -669,13 +669,14 @@ function bellIcon(filled = false) {
   return svg;
 }
 
-// labelSuggestions offers, while one types in the search at the top, the
-// labels that hold what is typed; choosing one opens its items (ADR-0092).
-// Arrow keys move through them, Enter opens the chosen one, Escape closes
-// the list; without a choice, Enter searches as before.
-function labelSuggestions(form) {
+// searchSuggestions offers, while one types in the search at the top, the
+// labels that hold what is typed and the items that answer it best;
+// choosing one opens it (ADR-0092). Arrow keys move through them, Enter
+// opens the chosen one, Escape closes the list; without a choice, Enter
+// searches as before.
+function searchSuggestions(form) {
   const input = form.querySelector("input");
-  const list = h("ul", { class: "suggest-list", id: "search-suggest", role: "listbox", "aria-label": t("search.labels"), hidden: true });
+  const list = h("ul", { class: "suggest-list", id: "search-suggest", role: "listbox", "aria-label": t("search.suggestions"), hidden: true });
   input.setAttribute("role", "combobox");
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-controls", list.id);
@@ -697,26 +698,39 @@ function labelSuggestions(form) {
     all.forEach((o, j) => o.setAttribute("aria-selected", String(j === active)));
     if (active >= 0) input.setAttribute("aria-activedescendant", all[active].id);
   };
-  const open = (label) => {
+  const go = (href) => {
     close();
     input.value = "";
-    location.hash = "#/label/" + encodeURIComponent(label);
+    location.hash = href;
   };
+  let n = 0;
+  const option = (href, data, ...children) => h("li", { role: "option", id: "search-suggest-" + n++, "aria-selected": "false", class: "suggest-option",
+    "data-href": href, ...data, onmousedown: (ev) => { ev.preventDefault(); go(href); } }, ...children);
+  const group = (text) => h("li", { role: "presentation", class: "suggest-group", text });
   input.addEventListener("input", () => {
     clearTimeout(timer);
     const typed = input.value.trim();
     if (!/[\p{L}\p{N}]/u.test(typed)) return close();
     timer = setTimeout(async () => {
       const mine = ++asked;
-      const { labels } = await get("/api/labels?q=" + encodeURIComponent(typed)).catch(() => ({ labels: [] }));
+      const [{ labels }, { hits }] = await Promise.all([
+        get("/api/labels?q=" + encodeURIComponent(typed)).catch(() => ({ labels: [] })),
+        get("/api/search?limit=5&q=" + encodeURIComponent(typed)).catch(() => ({ hits: [] }))]);
       if (mine !== asked || input.value.trim() !== typed) return;
-      list.replaceChildren(...labels.slice(0, 6).map((l, i) => h("li", { role: "option", id: "search-suggest-" + i, "aria-selected": "false",
-        class: "suggest-option", "data-label": l.label, onmousedown: (ev) => { ev.preventDefault(); open(l.label); } },
-        h("span", { class: "label", text: l.label }), h("span", { class: "muted", text: t("label.suggestion", { n: l.count }) }))));
-      list.hidden = !labels.length;
+      n = 0;
+      const shownLabels = labels.slice(0, 4);
+      list.replaceChildren(
+        ...(shownLabels.length ? [group(t("search.labelsGroup")), ...shownLabels.map((l) =>
+          option("#/label/" + encodeURIComponent(l.label), { "data-label": l.label },
+            h("span", { class: "label", text: l.label }), h("span", { class: "muted", text: t("label.suggestion", { n: l.count }) })))] : []),
+        ...(hits.length ? [group(t("search.itemsGroup")), ...hits.map((hit) =>
+          option("#/item/" + encodeURIComponent(hit.item.key), { "data-item": hit.item.key },
+            h("span", { class: "suggest-item" }, h("span", { class: "suggest-key", text: hit.item.key }), " ", h("span", { text: hit.item.title })),
+            h("span", { class: "muted", text: hit.item.type })))] : []));
+      list.hidden = !(shownLabels.length || hits.length);
       active = -1;
       input.setAttribute("aria-expanded", String(!list.hidden));
-    }, 150);
+    }, 200);
   });
   input.addEventListener("keydown", (ev) => {
     if (list.hidden) return;
@@ -725,7 +739,7 @@ function labelSuggestions(form) {
       mark(active + (ev.key === "ArrowDown" ? 1 : -1));
     } else if (ev.key === "Enter" && active >= 0) {
       ev.preventDefault();
-      open(options()[active].dataset.label);
+      go(options()[active].dataset.href);
     } else if (ev.key === "Escape") {
       close();
     }
@@ -747,7 +761,7 @@ function renderNav() {
     const q = new FormData(ev.target).get("q").trim();
     if (q) location.hash = "#/search/" + encodeURIComponent(q);
   } }, clearable(h("input", { name: "q", type: "search", placeholder: t("nav.search"), "aria-label": t("nav.search"), value: current })));
-  labelSuggestions(search);
+  searchSuggestions(search);
   // The unread count arrives after the navigation is drawn (ADR-0046).
   // A bell with the number of unread notifications; its name says it in
   // words, for screen readers and as a tooltip.

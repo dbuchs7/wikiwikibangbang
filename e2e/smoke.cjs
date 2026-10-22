@@ -964,6 +964,11 @@ function ckanSource() {
     await page.press("#nav .search input", "Enter");
     await page.waitForFunction(() => location.hash === "#/label/website-relaunch");
     await page.waitForSelector("#labelled tr:has-text('Hero image')");
+    // The suggestions offer items too; choosing one opens it.
+    await page.locator("#nav .search input").pressSequentially("Hero ima");
+    await page.click("#search-suggest:not([hidden]) [role=option][data-item]:has-text('Hero image')");
+    await page.waitForFunction(() => location.hash.startsWith("#/item/"));
+    await page.waitForSelector("h1:has-text('Hero image'), .page-head :has-text('Hero image')");
 
     step("task list: tasks on a kanban are listed too, with their label; the labels at the right filter the list");
     await page.goto(base + "/#/tasks/all");
