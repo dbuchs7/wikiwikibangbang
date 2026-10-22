@@ -1205,3 +1205,11 @@ main ul#watches li { padding: 4px 0; break-inside: avoid; }
 .pm-readbar .button { min-height: 30px; margin: 0; padding: 4px 12px; font-size: 13px; line-height: 20px; align-self: center; }
 /* An item without a text keeps the bar on its own, framed like a text's. */
 #body.no-body .pm-readbar { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
+
+/* An item's status: slimmer steps, so the bar informs without dominating. */
+.state-bar { gap: 6px 12px; padding: 8px 12px; }
+.state-label { font-size: 11px; }
+.state-steps { gap: 4px; }
+.state-step { min-height: 28px; padding: 2px 11px; font-size: 13px; }
+.state-step.current { font-size: 13px; border-width: 1px; }
+.state-step small { font-size: 10px; }
