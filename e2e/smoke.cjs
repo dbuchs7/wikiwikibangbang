@@ -1432,6 +1432,60 @@ function ckanSource() {
     await page.waitForSelector("#nav-notifications[aria-label='Notifications'] .count[hidden]", { state: "attached" }); // seen now
     await page.waitForSelector("#watches a:has-text('PLAT-1')");
 
+    step("protected passages: admin protects a name; bert reads it veiled, may not change the text, asks; admin grants; bert reads it (ADR-0088)");
+    const bossCtx = await browser.newContext();
+    const boss = await bossCtx.newPage();
+    boss.on("pageerror", (e) => problems.push("admin's page error: " + e.message));
+    await boss.goto(base + "/");
+    await boss.fill("#login [name=username]", "admin");
+    await boss.fill("#login [name=password]", adminPassword);
+    await boss.click("#login button[type=submit]");
+    await boss.waitForSelector("#nav a");
+    const salaries = await boss.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ space: "PLAT", type: "ticket", title: "Salaries", properties: { priority: "low" }, body: [{ kind: "paragraph", text: "The salary of Paul Muster is 9000." }] }) })).json()).item.key);
+    await boss.goto(base + "/#/item/" + salaries);
+    await boss.waitForSelector("#body .ProseMirror p");
+    await boss.evaluate(() => {
+      const text = document.querySelector("#body .ProseMirror p").firstChild;
+      const at = text.textContent.indexOf("Paul Muster");
+      const range = document.createRange();
+      range.setStart(text, at);
+      range.setEnd(text, at + "Paul Muster".length);
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+    });
+    await boss.click("#protect-selection");
+    await boss.waitForSelector(".protect-passage blockquote:text-is('Paul Muster')");
+    await boss.click("#protect-save");
+    await boss.waitForSelector("#body .pm-secret.secret-readable:text-is('Paul Muster')");
+    // Editing the text keeps the passage.
+    await boss.goto(base + "/#/item/" + salaries + "?edit");
+    await boss.waitForSelector("#body .ProseMirror[contenteditable=true] .pm-secret");
+    await boss.click("#body .ProseMirror p");
+    await boss.keyboard.press("End");
+    await boss.keyboard.type(" Due Friday.");
+    await boss.click("#edit-done");
+    await boss.waitForSelector("#body.reading .ProseMirror p:has-text('Due Friday.')");
+    await boss.waitForSelector("#body .pm-secret.secret-readable:text-is('Paul Muster')");
+    // Bert reads it veiled, cannot change the text, and asks.
+    await page.goto(base + "/#/item/" + salaries);
+    await page.waitForSelector("#secrets .secret-request");
+    const veiledText = await page.textContent("#body .ProseMirror");
+    check(!veiledText.includes("Paul") && veiledText.includes("▒") && veiledText.includes("Due Friday."), "bert reads the passage veiled: " + veiledText);
+    check(await page.$("#edit") === null && await page.$("#protect-selection") === null, "bert cannot change the text");
+    await page.click("#body .pm-secret.secret-veiled");
+    await page.click("#secrets .secret-request");
+    await page.waitForSelector("#secrets .notice");
+    // Admin is told, and grants it.
+    await boss.goto(base + "/#/notifications");
+    await boss.waitForSelector("#notifications li:has-text('bert asked to read a protected passage of " + salaries + "')");
+    await boss.goto(base + "/#/item/" + salaries);
+    await boss.click("#secrets .secret-ask[data-principal] .secret-grant");
+    await boss.waitForSelector("#secrets .secret-grant", { state: "detached" });
+    await bossCtx.close();
+    await page.reload();
+    await page.waitForSelector("#body .pm-secret.secret-readable:text-is('Paul Muster')");
+
     check(problems.length === 0, problems.join("; "));
     console.log("ok");
   } catch (err) {

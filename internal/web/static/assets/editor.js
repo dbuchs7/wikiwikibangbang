@@ -88,8 +88,32 @@ export const schema = new Schema({
       parseDOM: [{ tag: "a[href]", getAttrs: (dom) => (isSafeLink(dom.getAttribute("href")) ? { href: dom.getAttribute("href") } : false) }],
       toDOM: (m) => ["a", { href: safeHref(m.attrs.href), rel: "noopener noreferrer nofollow", target: "_blank" }, 0],
     },
+    // A protected passage (ADR-0088): ref names its protection. It is made
+    // and taken off from the item's page, not typed; text typed at its end
+    // stays outside it.
+    secret: {
+      attrs: { ref: {} }, inclusive: false, excludes: "",
+      parseDOM: [{ tag: "span[data-secret]", getAttrs: (dom) => ({ ref: dom.getAttribute("data-secret") }) }],
+      toDOM: (m) => ["span", { class: "pm-secret " + secretClass(m.attrs.ref), "data-secret": m.attrs.ref, tabindex: "0", role: "button" }, 0],
+    },
   },
 });
+
+// secretClass says how a protected passage shows: readable or veiled for
+// the reader (ADR-0088). The item's page sets it before drawing its body.
+let secretClass = () => "";
+export function setSecretClass(fn) { secretClass = fn || (() => ""); }
+
+// selectionInBlock returns the selected text as a block of the body and
+// characters of its text, as the model counts them, or null when the
+// selection is empty or leaves one block of text.
+export function selectionInBlock(state) {
+  const { $from, $to, empty } = state.selection;
+  if (empty || $from.depth !== 1 || $to.depth !== 1 || $from.index(0) !== $to.index(0) || !$from.parent.isTextblock) return null;
+  const block = $from.parent;
+  const count = (to) => cp(block.textBetween(0, to, "", (leaf) => leaf.attrs.label || ""));
+  return { block: $from.index(0), start: count($from.parentOffset), end: count($to.parentOffset) };
+}
 
 export function isSafeLink(href) {
   try {
@@ -160,7 +184,9 @@ function inlineContent(text, marks) {
     const next = points.find((p) => p > i) ?? chars.length;
     const pm = marks
       .filter((m) => m.type !== "mention" && m.start <= i && m.end >= next)
-      .map((m) => (m.type === "link" ? schema.marks.link.create({ href: m.href }) : schema.marks[m.type].create()));
+      .filter((m) => schema.marks[m.type])
+      .map((m) => (m.type === "link" ? schema.marks.link.create({ href: m.href })
+        : m.type === "secret" ? schema.marks.secret.create({ ref: m.ref }) : schema.marks[m.type].create()));
     out.push(schema.text(chars.slice(i, next).join(""), pm));
     i = next;
   }
@@ -201,7 +227,8 @@ export function blockFromNode(node) {
     for (const m of child.marks) {
       const mark = { type: m.type.name, start, end: cp(text) };
       if (m.type.name === "link") mark.href = m.attrs.href;
-      const prev = marks.findLast((x) => x.type === mark.type && x.href === mark.href && x.end === start);
+      if (m.type.name === "secret") mark.ref = m.attrs.ref;
+      const prev = marks.findLast((x) => x.type === mark.type && x.href === mark.href && x.ref === mark.ref && x.end === start);
       if (prev) prev.end = mark.end; // one mark across adjacent text nodes
       else marks.push(mark);
     }
@@ -530,7 +557,7 @@ function imageView(node, view, getPos, files) {
 // the attachment. extra adds plugins, such as a live session's (live.js);
 // viewProps adds editor view properties. comment(anchor), if given, starts
 // an inline comment on the selected text (anchors.js, ADR-0047).
-export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment }) {
+export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
   const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
@@ -644,6 +671,13 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     if (!anchor) status.textContent = t("editor.commentNeedsSelection");
     else comment(anchor);
   } }) : null;
+  // Protecting a passage starts from the text read (ADR-0088).
+  const protectButton = protect ? h("button", { type: "button", id: "protect-selection", text: t("editor.protect"), onclick: () => {
+    status.textContent = "";
+    const at = selectionInBlock(view.state);
+    if (!at) status.textContent = t("editor.protectNeedsSelection");
+    else protect(at);
+  } }) : null;
   // The toolbar's groups; buttons that show a state (a mark, an alignment)
   // are pressed while it applies at the selection (ADR-0059).
   const group = (...els) => h("span", { class: "pm-group" }, ...els.filter(Boolean));
@@ -676,7 +710,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     for (const b of alignButtons) b.el.disabled = !canAlign;
   };
   const toolbar = !editable
-    ? (commentButton ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, commentButton, status) : null)
+    ? (commentButton || protectButton ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, commentButton, protectButton, status) : null)
     : h("div", { class: "pm-toolbar", role: "toolbar", "aria-label": t("editor.toolbar") },
     group(kindSelect),
     group(...markButtons.map((b) => b.el)),

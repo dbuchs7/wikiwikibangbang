@@ -59,6 +59,7 @@ func (x *Session) CommentFeed(username, only string, offset, limit int) (out []F
 			if len(why) == 0 || (only != "" && !slices.Contains(why, only)) {
 				continue
 			}
+			c.Anchor = x.veilAnchor(it, c.Anchor)
 			all = append(all, FeedEntry{Item: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Comment: c, Why: why})
 		}
 	}

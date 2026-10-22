@@ -242,6 +242,10 @@ func (s *Store) firstBody(created Event, d Doc) (Event, error) {
 			return Event{}, wrapf(err, "block %d", i+1)
 		}
 	}
+	// A new item has no protected passages yet (ADR-0088).
+	if err := checkSecrets(&Item{}, d); err != nil {
+		return Event{}, err
+	}
 	for _, r := range d.refs() {
 		target, ok := s.items[r.To]
 		if !ok {
@@ -583,6 +587,9 @@ func (s *Store) CommitBody(actor string, id ID, d Doc) error {
 			return invalid("item %s is %s and cannot be newly referenced", target.Key, target.Presence)
 		}
 	}
+	if err := checkSecrets(it, d); err != nil {
+		return err
+	}
 	body := d.clone()
 	return s.record(actor, Event{Kind: BodyCommitted, Item: id, Body: &body})
 }
@@ -845,6 +852,9 @@ func (s *Store) apply(e Event) {
 		s.applyKanban(e)
 	case SpaceTrashed, SpaceRestored, SpacePurged, SpaceRenamed:
 		s.applySpace(e, touch)
+	case SecretSet, SecretRemoved, SecretRequested, SecretGranted, SecretDeclined:
+		s.applySecret(e)
+		touch(e.Item)
 	case Watched, Unwatched:
 		s.applyWatch(e)
 	case RoleRevoked, GroupMemberRemoved, SystemRoleRevoked:
@@ -872,7 +882,7 @@ func (s *Store) purgeItems(ids ...ID) []ID {
 		}
 		it := s.items[id]
 		it.Presence, it.trashedBy = Purged, 0
-		it.Title, it.Properties, it.Body, it.Comments, it.Labels, it.Attachments = "", Props{}, Doc{}, nil, nil, nil
+		it.Title, it.Properties, it.Body, it.Comments, it.Labels, it.Attachments, it.Secrets = "", Props{}, Doc{}, nil, nil, nil, nil
 		if it.Origin != nil {
 			o := *it.Origin
 			o.Raw = ""
@@ -1205,6 +1215,10 @@ func checkBlock(b Block, self ID) error {
 		case MarkMention:
 			if m.Ref == "" || m.Href != "" || !slices.Contains(b.Mentions, m.Ref) {
 				return invalid("a mention mark needs a reference that the block mentions")
+			}
+		case MarkSecret:
+			if m.Ref == "" || m.Href != "" {
+				return invalid("a protected passage names its protection")
 			}
 		default:
 			return invalid("unknown mark %q", m.Type)

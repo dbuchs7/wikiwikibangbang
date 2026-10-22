@@ -9,6 +9,7 @@ import (
 	"math"
 	"strconv"
 	"time"
+	"unicode/utf8"
 )
 
 // CodecVersion is the version of the persisted event format (ADR-0025). A
@@ -59,7 +60,12 @@ import (
 //     KanbanCardPlaced (ADR-0076). Versions 1 to 18 are still read.
 //   - 20: the kind SpaceRenamed (ADR-0086). Versions 1 to 19 are still
 //     read.
-const CodecVersion = 20
+//   - 21: protected passages (ADR-0088): the mark secret, the field
+//     secret and the kinds SecretSet, SecretRemoved, SecretRequested,
+//     SecretGranted and SecretDeclined; a sealed body keeps the text of
+//     each passage apart, in secrets, sealed with the passage's own key.
+//     Versions 1 to 20 are still read.
+const CodecVersion = 21
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
@@ -85,7 +91,10 @@ func EncodeBatchSealed(batch []Event, sl Sealer) ([]byte, error) {
 	for i, e := range batch {
 		w, err := toWire(e)
 		if err == nil && sl != nil && e.HasContent() && !e.Erased {
-			err = seal(&w, sl)
+			err = sealSecrets(&w, sl)
+			if err == nil {
+				err = seal(&w, sl)
+			}
 		}
 		if err != nil {
 			return nil, fmt.Errorf("event %d: %w", e.Seq, err)
@@ -121,6 +130,17 @@ func DecodeBatchSealed(data []byte, sl Sealer) ([]Event, error) {
 			if shredded, err = unseal(&w, sl); err != nil {
 				return nil, fmt.Errorf("event %d: %w", w.Seq, err)
 			}
+		}
+		if w.Secrets != nil {
+			if sl == nil {
+				return nil, fmt.Errorf("event %d: passages are sealed and no keys are available", w.Seq)
+			}
+			if !shredded {
+				if err := unsealSecrets(&w, sl); err != nil {
+					return nil, fmt.Errorf("event %d: %w", w.Seq, err)
+				}
+			}
+			w.Secrets = nil
 		}
 		e, err := fromWire(w)
 		if shredded {
@@ -181,10 +201,15 @@ type wireEvent struct {
 	Hold        *Hold                 `json:"hold,omitempty"`
 	Outcome     string                `json:"outcome,omitempty"`
 	Kanban      *Kanban               `json:"kanban,omitempty"`
+	Secret      *Secret               `json:"secret,omitempty"`
 	Erased      bool                  `json:"erased,omitempty"`
 	// Sealed holds the encrypted content (wireContent) when a Sealer was
 	// used; the plaintext content fields are then empty.
 	Sealed []byte `json:"sealed,omitempty"`
+	// Secrets hold, sealed with each passage's own key, the text of the
+	// protected passages of a sealed body, whose places in it hold only
+	// filler (ADR-0088).
+	Secrets map[ID][]byte `json:"secrets,omitempty"`
 }
 
 // wireContent is the part of an event that is sealed: everything
@@ -251,6 +276,105 @@ func unseal(w *wireEvent, sl Sealer) (bool, error) {
 	return false, nil
 }
 
+// secretFiller stands in a sealed body for each character of a passage
+// whose text is sealed apart; it keeps the marks' offsets.
+const secretFiller = '▒'
+
+func secretAAD(w *wireEvent, id ID) []byte {
+	return append(aad(w), " passage "+string(id)...)
+}
+
+// sealSecrets takes the text of the protected passages out of a body,
+// before the body is sealed with the item's key, and seals it with each
+// passage's own key (ADR-0088): destroying that key erases the passage
+// from every version and leaves the rest.
+func sealSecrets(w *wireEvent, sl Sealer) error {
+	if w.Body == nil {
+		return nil
+	}
+	parts := map[ID][]string{}
+	body := w.Body.clone()
+	for i, b := range body.Blocks {
+		runes := []rune(b.Text)
+		for _, m := range b.Marks {
+			if m.Type != MarkSecret || m.End > len(runes) {
+				continue
+			}
+			parts[m.Ref] = append(parts[m.Ref], string(runes[m.Start:m.End]))
+			for j := m.Start; j < m.End; j++ {
+				runes[j] = secretFiller
+			}
+		}
+		b.Text = string(runes)
+		body.Blocks[i] = b
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	w.Secrets = map[ID][]byte{}
+	for id, p := range parts {
+		pt, err := json.Marshal(p)
+		if err != nil {
+			return err
+		}
+		ct, err := sl.Seal(SecretKey(w.Item, id), pt, secretAAD(w, id))
+		if err != nil {
+			return err
+		}
+		w.Secrets[id] = ct
+	}
+	w.Body = &body
+	return nil
+}
+
+// unsealSecrets puts the passages' text back into a body. A passage whose
+// key was destroyed keeps its filler: its text is gone.
+func unsealSecrets(w *wireEvent, sl Sealer) error {
+	if w.Body == nil {
+		return nil
+	}
+	parts := map[ID][]string{}
+	for id, ct := range w.Secrets {
+		pt, err := sl.Open(SecretKey(w.Item, id), ct, secretAAD(w, id))
+		if errors.Is(err, ErrKeyShredded) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		var p []string
+		if err := json.Unmarshal(pt, &p); err != nil {
+			return fmt.Errorf("sealed passage: %w", err)
+		}
+		parts[id] = p
+	}
+	body := w.Body.clone()
+	for i, b := range body.Blocks {
+		runes := []rune(b.Text)
+		var text []rune
+		last := 0
+		for _, m := range b.Marks {
+			if m.Type != MarkSecret || m.End > len(runes) || m.Start < last {
+				continue
+			}
+			p := parts[m.Ref]
+			if len(p) == 0 || utf8.RuneCountInString(p[0]) != m.End-m.Start {
+				continue // gone, or not this passage's: the filler stays
+			}
+			text = append(text, runes[last:m.Start]...)
+			text = append(text, []rune(p[0])...)
+			parts[m.Ref] = p[1:]
+			last = m.End
+		}
+		if last > 0 {
+			b.Text = string(append(text, runes[last:]...))
+			body.Blocks[i] = b
+		}
+	}
+	w.Body = &body
+	return nil
+}
+
 // wireValue is a property value with its Go type, so that a replayed value
 // is identical to the live one: an int stays an int, a date stays a time.
 type wireValue struct {
@@ -271,7 +395,7 @@ func toWire(e Event) (wireEvent, error) {
 		Members: e.Members, Group: e.Group, Principal: e.Principal, SystemRole: e.SystemRole,
 		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed,
 		Comment: e.Comment, Text: e.Text, Labels: e.Labels, Attachment: e.Attachment, Erased: e.Erased,
-		Anchor: e.Anchor, Reply: e.Reply, Hold: e.Hold, Outcome: e.Outcome, Kanban: e.Kanban,
+		Anchor: e.Anchor, Reply: e.Reply, Hold: e.Hold, Outcome: e.Outcome, Kanban: e.Kanban, Secret: e.Secret,
 	}
 	if e.Role != 0 {
 		name, ok := roleNames[e.Role]
@@ -310,7 +434,7 @@ func fromWire(w wireEvent) (Event, error) {
 		Members: w.Members, Group: w.Group, Principal: w.Principal, SystemRole: w.SystemRole,
 		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed,
 		Comment: w.Comment, Text: w.Text, Labels: w.Labels, Attachment: w.Attachment, Erased: w.Erased,
-		Anchor: w.Anchor, Reply: w.Reply, Hold: w.Hold, Outcome: w.Outcome, Kanban: w.Kanban,
+		Anchor: w.Anchor, Reply: w.Reply, Hold: w.Hold, Outcome: w.Outcome, Kanban: w.Kanban, Secret: w.Secret,
 	}
 	if w.Role != "" {
 		for r, name := range roleNames {

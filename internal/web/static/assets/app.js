@@ -2,7 +2,7 @@
 // data through the HTTP API. Plain ES modules, no build step.
 import { api, get, post, put, del, download, upload, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
-import { createEditor } from "./editor.js";
+import { createEditor, setSecretClass } from "./editor.js";
 import { liveBody } from "./live.js";
 import { pageTree, ancestors } from "./tree.js";
 import { renderDiff } from "./diff.js";
@@ -151,6 +151,9 @@ function what(n) {
     case "RestrictionSet": return t("notif.restrictedSensitive");
     case "HoldSet": return t("notif.held");
     case "HoldReleased": return t("notif.released");
+    case "SecretRequested": return t("notif.secretRequested");
+    case "SecretGranted": return t("notif.secretGranted");
+    case "SecretDeclined": return t("notif.secretDeclined");
     default: return n.kind;
   }
 }
@@ -2460,7 +2463,8 @@ async function itemView(ref, params = new URLSearchParams()) {
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
   const level = `/api/spaces/${encodeURIComponent(item.space)}/tree` + (item.parent ? "?parent=" + item.parent : "");
   const [, open, siblings] = await Promise.all([
-    learnNames([...history.events.map((e) => e.actor), ...type.fields.filter((f) => f.kind === "user").map((f) => item.properties[f.name]), ...comments.comments.flatMap((c) => c.resolvedBy ? [c.author, c.resolvedBy] : [c.author]), ...attachments.map((a) => a.author)]),
+    learnNames([...history.events.map((e) => e.actor), ...type.fields.filter((f) => f.kind === "user").map((f) => item.properties[f.name]), ...comments.comments.flatMap((c) => c.resolvedBy ? [c.author, c.resolvedBy] : [c.author]), ...attachments.map((a) => a.author),
+      ...(item.secrets || []).flatMap((sc) => [sc.by, ...(sc.readers || []), ...(sc.requests || [])]).filter((p) => !p.startsWith("@"))]),
     ancestors(item),
     item.presence === "live" ? get(level) : { items: [] },
   ]);
@@ -2469,7 +2473,11 @@ async function itemView(ref, params = new URLSearchParams()) {
   // Changes are offered only to who may make them (role, restriction,
   // import hold); the server decides again on every request.
   const canEdit = live && editable;
-  const editing = canEdit && params.has("edit");
+  // The text is changed by those who read all of its protected passages,
+  // so nothing they cannot read is lost (ADR-0088); fields, state, labels
+  // and comments stay theirs to change.
+  const readsAll = item.readsAllSecrets !== false;
+  const editing = canEdit && readsAll && params.has("edit");
   const itemHref = "#/item/" + encodeURIComponent(item.key);
   here.space = item.space;
   here.parent = item.id;
@@ -2564,12 +2572,18 @@ async function itemView(ref, params = new URLSearchParams()) {
   } });
   const headActions = h("p", { class: "actions" },
     live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null,
-    editing ? done : canEdit ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null,
+    editing ? done : canEdit && readsAll ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null,
     canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null,
     !editing ? exportMenu(item) : null);
   let body = null;
+  const protecting = h("div", { id: "protect-passage" });
   if (type.body) {
-    const b = bodySection(item, embeds.embeds, editing, threads, attachments);
+    // Protected passages show readable or veiled; one who may change the
+    // text protects a passage from what they read (ADR-0088).
+    const secretOf = new Map((item.secrets || []).map((sc) => [sc.id, sc]));
+    setSecretClass((ref) => (secretOf.get(ref)?.readable ? "secret-readable" : "secret-veiled"));
+    const protect = canEdit && readsAll && live && !editing ? (at) => protectPassageForm(protecting, path, item, at, status) : null;
+    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect);
     body = b.element;
     session = b.session;
   }
@@ -2604,13 +2618,14 @@ async function itemView(ref, params = new URLSearchParams()) {
     h("div", { class: "item-layout" },
       // The owner and details lead the main column, above the text, so a
       // catalog entry reads as one page (ADR-0079).
-      h("div", { class: "item-main" }, details, body || h("p", { class: "muted", text: t("item.noBody") })),
+      h("div", { class: "item-main" }, details, protecting, body || h("p", { class: "muted", text: t("item.noBody") })),
       h("aside", { class: "item-side", "aria-label": t("item.side") },
+        secretsSection(path, item, status),
         threads.section,
         attachmentsSection(path, attachments, canEdit),
         await relationsSection(path, out.relations, inc.relations, item.id, canEdit),
         await accessSection(path, item, canEdit, spaceAdmin),
-        historySection(path, history.events, canEdit),
+        historySection(path, history.events, canEdit, readsAll),
         more)),
   ));
 }
@@ -2659,17 +2674,135 @@ async function relocateForm(box, item, mode, spaces, status) {
 // commented on highlighted and commenting on a selection offered; or, when
 // editing, in its live session (ADR-0010), where changes reach everyone at
 // once and are saved as one leaves a block.
-function bodySection(item, embeds, editing, threads, attachments) {
+function bodySection(item, embeds, editing, threads, attachments, protect) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!editing) {
     const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
-      extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined });
-    return { element: h("section", { id: "body", class: "reading" }, view.element), session: null };
+      extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined, protect: protect || undefined });
+    const section = h("section", { id: "body", class: "reading" }, view.element);
+    // A click on a protected passage shows it in the list of passages.
+    const open = (ev) => {
+      const el = ev.target.closest?.(".pm-secret");
+      if (!el || (ev.type === "keydown" && ev.key !== "Enter")) return;
+      const entry = document.querySelector(`#secrets li[data-secret="${CSS.escape(el.dataset.secret)}"]`);
+      if (!entry) return;
+      entry.scrollIntoView({ block: "nearest" });
+      entry.classList.add("secret-focus");
+      setTimeout(() => entry.classList.remove("secret-focus"), 1500);
+      entry.querySelector("button")?.focus();
+    };
+    section.addEventListener("click", open);
+    section.addEventListener("keydown", open);
+    return { element: section, session: null };
   }
   const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item, attachments),
     extra: [threads.plugin], comment: threads.start });
   onLeave(session.close);
   return { element: h("section", { id: "body", class: "editing" }, session.element), session };
+}
+
+// principalPicker chooses people and groups, found by typing, as the
+// protection of an item does (ADR-0078); values() are the user IDs and
+// @groups chosen.
+function principalPicker(id, initial) {
+  let chosen = [...initial];
+  const list = h("ul", { class: "access-entries", id: id + "-entries" });
+  const draw = () => list.replaceChildren(...chosen.map((p) => h("li", { class: "chip access-entry" + (p.startsWith("@") ? " group" : ""), "data-principal": p },
+    h("span", { text: p.startsWith("@") ? p : person(p) }),
+    h("button", { type: "button", class: "link", text: "×", "aria-label": t("access.removeWho", { who: p.startsWith("@") ? p : person(p) }),
+      onclick: () => { chosen = chosen.filter((x) => x !== p); draw(); } }))));
+  draw();
+  const options = h("datalist", { id: id + "-options" });
+  const found = new Map();
+  const who = h("input", { id: id + "-who", list: id + "-options", autocomplete: "off", placeholder: t("access.whoPlaceholder"), "aria-label": t("access.who") });
+  let timer = 0;
+  who.addEventListener("input", () => {
+    clearTimeout(timer);
+    const typed = who.value.trim().replace(/^@/, "");
+    if (!typed || found.has(who.value.trim())) return;
+    timer = setTimeout(async () => {
+      const q = encodeURIComponent(typed);
+      const [{ users }, { groups }] = await Promise.all([
+        get("/api/users/search?q=" + q).catch(() => ({ users: [] })), get("/api/groups/search?q=" + q).catch(() => ({ groups: [] }))]);
+      for (const u of users) { found.set(u.username, u.id); names.set(u.id, u.username); }
+      for (const g of groups) found.set("@" + g, "@" + g);
+      options.replaceChildren(...users.map((u) => h("option", { value: u.username })), ...groups.map((g) => h("option", { value: "@" + g, label: t("access.group", { name: g }) })));
+    }, 150);
+  });
+  const note = h("p", { class: "muted", role: "status" });
+  const add = () => {
+    const p = found.get(who.value.trim());
+    if (!p) { note.textContent = t("access.unknown"); return; }
+    note.textContent = "";
+    if (!chosen.includes(p)) chosen.push(p);
+    who.value = "";
+    draw();
+  };
+  who.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); add(); } });
+  return {
+    element: h("div", { class: "principal-picker" }, list,
+      h("p", { class: "inline-form" }, who, options, h("button", { type: "button", id: id + "-add", text: t("access.add"), onclick: add })), note),
+    values: () => chosen,
+  };
+}
+
+// protectPassageForm protects the selected passage (ADR-0088): it names
+// the text, and who reads it besides the one who protects it.
+function protectPassageForm(box, path, item, at, status) {
+  const text = Array.from(item.body[at.block]?.text || "").slice(at.start, at.end).join("");
+  const picker = principalPicker("secret-readers", []);
+  box.replaceChildren(h("section", { class: "card protect-passage" },
+    h("h2", { text: t("secret.protectTitle") }),
+    h("blockquote", { class: "comment-quote", text: text }),
+    h("p", { class: "muted", text: t("secret.protectHelp") }),
+    picker.element,
+    h("p", { class: "actions-row" },
+      h("button", { type: "button", class: "primary", id: "protect-save", text: t("secret.protect"),
+        onclick: () => action(() => post(path + "/secrets", { ...at, readers: picker.values() }), status) }),
+      h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => box.replaceChildren() }))));
+  box.scrollIntoView({ block: "nearest" });
+}
+
+// secretsSection lists an item's protected passages as the reader sees
+// them (ADR-0088): who reads each; for one veiled, who decides and a
+// button to ask; for one who decides, the requests to answer, the readers
+// to change and the protection to take off.
+function secretsSection(path, item, status) {
+  const secrets = item.secrets || [];
+  if (!secrets.length) return null;
+  const named = (p) => (p.startsWith("@") ? t("access.group", { name: p.slice(1) }) : person(p));
+  const base = (sc) => `${path}/secrets/${encodeURIComponent(sc.id)}`;
+  const entry = (sc, i) => {
+    const readers = [sc.by, ...(sc.readers || [])].map(named).join(", ");
+    const parts = [h("strong", { text: t("secret.passage", { n: i + 1 }) }), " ",
+      h("span", { class: "chip " + (sc.readable ? "secret-chip-readable" : "secret-chip-veiled"), text: sc.readable ? t("secret.readable") : t("secret.veiled") })];
+    if (sc.readable || sc.decides) parts.push(h("p", { class: "muted", text: t("secret.readers", { who: readers }) }));
+    if (!sc.readable) {
+      parts.push(h("p", { class: "muted", text: t("secret.decidedBy", { who: named(sc.by) }) }));
+      parts.push(sc.requested
+        ? h("p", { class: "notice", text: t("secret.waiting") })
+        : h("button", { type: "button", class: "secondary secret-request", text: t("secret.request"), onclick: () => action(() => post(base(sc) + "/request"), status) }));
+    }
+    if (sc.decides) {
+      for (const p of sc.requests || []) {
+        parts.push(h("p", { class: "secret-ask", "data-principal": p }, t("secret.asks", { who: named(p) }), " ",
+          h("button", { type: "button", class: "primary secret-grant", text: t("secret.grant"), onclick: () => action(() => post(`${base(sc)}/requests/${encodeURIComponent(p)}`, { grant: true }), status) }),
+          h("button", { type: "button", class: "secret-decline", text: t("secret.decline"), onclick: () => action(() => post(`${base(sc)}/requests/${encodeURIComponent(p)}`, { grant: false }), status) })));
+      }
+      const picker = principalPicker("secret-" + sc.id, sc.readers || []);
+      parts.push(h("details", { class: "secret-edit" }, h("summary", { text: t("secret.change") }),
+        picker.element,
+        h("p", { class: "actions-row" },
+          h("button", { type: "button", text: t("common.save"), onclick: () => action(() => put(base(sc), { readers: picker.values() }), status) }),
+          h("button", { type: "button", class: "danger secret-unprotect", text: t("secret.unprotect"),
+            onclick: () => confirm(t("secret.unprotectConfirm")) && action(() => del(base(sc)), status) }))));
+    }
+    return h("li", { class: "secret-entry", "data-secret": sc.id }, ...parts);
+  };
+  return h("section", { id: "secrets" },
+    h("h2", { text: t("secret.title", { n: secrets.length }) }),
+    item.readsAllSecrets === false ? h("p", { class: "muted", text: t("secret.cannotEdit") }) : null,
+    h("ul", { class: "list secret-list" }, secrets.map(entry)));
 }
 
 // relationsSection lists an item's relations both ways, with the related
@@ -2927,7 +3060,7 @@ function commentThreads(path, page, live) {
 // historySection lists an item's history. A change of the body can be
 // compared with the body before it and, on a live item, restored
 // (ADR-0043).
-function historySection(path, events, live) {
+function historySection(path, events, live, versions = true) {
   const shown = h("div", { id: "version" });
   const bodies = events.filter((e) => e.kind === "BodyCommitted" && !e.erased);
   const version = async (seq) => (await get(`${path}/versions/${seq}`)).body;
@@ -2947,6 +3080,9 @@ function historySection(path, events, live) {
   const details = (e) => {
     if (e.erased) return t("history.erased");
     if (e.kind === "BodyCommitted") {
+      // Earlier versions of a text with protected passages are shown to
+      // those who read them all (ADR-0088).
+      if (!versions) return "";
       return h("button", { class: "link", text: t("version.changes"), onclick: () => compare(e).catch((err) => mount(shown, errorBox(err))) });
     }
     return [e.title, e.field && `${e.field} = ${JSON.stringify(e.value ?? null)}`, e.to, e.comment && t("history.comment", { id: e.comment.slice(0, 8) })].filter(Boolean).join(" ");

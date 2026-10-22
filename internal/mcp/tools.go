@@ -101,7 +101,7 @@ var tools = []tool{
 			{"type", str, inQuery, false, "Limit to a type name."},
 			{"state", str, inQuery, false, "Limit to a workflow state."},
 		}, paging...)},
-	{Name: "get_item", Description: "Get one item: title, type, state, properties and body.", Method: "GET", Path: "/api/items/{ref}",
+	{Name: "get_item", Description: "Get one item: title, type, state, properties and body. A protected passage your caller may not read shows as ▒▒▒▒▒▒▒▒ under a mark of type secret; secrets says who protected it.", Method: "GET", Path: "/api/items/{ref}",
 		Params: []param{refParam}},
 	{Name: "get_history", Description: "The item's history: who changed what, and when.", Method: "GET", Path: "/api/items/{ref}/history",
 		Params: []param{refParam}},
@@ -138,7 +138,7 @@ var tools = []tool{
 	{Name: "transition", Description: "Perform a workflow transition, e.g. finish.", Method: "POST", Path: "/api/items/{ref}/transitions",
 		Params: []param{refParam, {"name", str, inBody, true, "The transition's name."}}},
 	{Name: "commit_body", Description: "Replace the item's body with a new version; the earlier one stays in the history. " +
-		"Refused while people edit it in a live session. To add to a body, read it with get_item and send it back extended. " + blockFormat,
+		"Refused while people edit it in a live session, and when it holds protected passages your caller may not read. To add to a body, read it with get_item and send it back extended. " + blockFormat,
 		Method: "PUT", Path: "/api/items/{ref}/body", Params: []param{refParam, {"blocks", array, inBody, true, "The body's blocks."}}},
 	{Name: "add_relation", Description: "Relate two items with a typed relation, e.g. blocks or implements.",
 		Method: "POST", Path: "/api/relations", Params: []param{

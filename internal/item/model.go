@@ -89,6 +89,9 @@ const (
 	MarkUnderline MarkType = "underline"
 	MarkStrike    MarkType = "strike"
 	MarkHighlight MarkType = "highlight"
+	// MarkSecret protects its text (ADR-0088): Ref names the item's Secret
+	// that says who reads it in clear; others read a placeholder.
+	MarkSecret MarkType = "secret"
 )
 
 // TextAligns are the alignments of a block of text, ImageAligns those of
@@ -185,6 +188,9 @@ type Item struct {
 	// Cleared are the findings a review judged false alarms; they do not
 	// hold the item again.
 	Cleared []string
+	// Secrets are the protected passages of the body, in the order they
+	// were protected (ADR-0088).
+	Secrets []Secret
 
 	created   int // sequence number of the creating event; orders items
 	trashedBy int // sequence number of the event that trashed it, or 0
@@ -290,6 +296,15 @@ const (
 	// SpaceRenamed changes a space's display name; its key stays.
 	SpaceRenamed EventKind = "SpaceRenamed"
 	SpacePurged  EventKind = "SpacePurged"
+	// Protected passages of a body (ADR-0088). SecretSet protects a
+	// passage or changes who reads it; SecretRemoved takes the protection
+	// off; SecretRequested asks to read it (Principal), SecretGranted lets
+	// the one who asked read it, SecretDeclined says no.
+	SecretSet       EventKind = "SecretSet"
+	SecretRemoved   EventKind = "SecretRemoved"
+	SecretRequested EventKind = "SecretRequested"
+	SecretGranted   EventKind = "SecretGranted"
+	SecretDeclined  EventKind = "SecretDeclined"
 )
 
 // Event is one immutable change. Values that are not deterministic (time,
@@ -344,6 +359,7 @@ type Event struct {
 	Hold        *Hold        // HoldSet: the hold as it is after the event
 	Outcome     string       // HoldReleased: HoldRestricted or HoldFalseAlarm; Text holds the reason
 	Kanban      *Kanban      // KanbanSet; KanbanRemoved and KanbanCardPlaced: only its ID
+	Secret      *Secret      // SecretSet; the other secret kinds: only its ID
 
 	// Erased is set on an event whose content (title, properties, body, raw
 	// source) was removed because its item was purged or redacted. The
@@ -396,6 +412,13 @@ func (it *Item) clone() Item {
 	c.Comments = slices.Clone(it.Comments)
 	c.Labels = slices.Clone(it.Labels)
 	c.Attachments = slices.Clone(it.Attachments)
+	c.Secrets = make([]Secret, len(it.Secrets))
+	for i, sec := range it.Secrets {
+		c.Secrets[i] = sec.clone()
+	}
+	if it.Secrets == nil {
+		c.Secrets = nil
+	}
 	if it.Origin != nil {
 		o := *it.Origin
 		c.Origin = &o
