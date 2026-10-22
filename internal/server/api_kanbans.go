@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 )
 
 // kanbanRoutes are the kanbans of the spaces (ADR-0060): named boards on a
@@ -32,6 +33,9 @@ type kanbanJSON struct {
 	// states; CardFields what its cards show (ADR-0076).
 	Columns    []columnJSON `json:"columns"`
 	CardFields []string     `json:"cardFields"`
+	// Icon names the content of the kanban's picture, empty for none
+	// (ADR-0087).
+	Icon string `json:"icon,omitempty"`
 }
 
 type columnJSON struct {
@@ -62,7 +66,9 @@ func (h itemHandlers) kanbans(w http.ResponseWriter, r *http.Request) {
 		slices.Sort(spaces)
 		for _, sp := range spaces {
 			for _, k := range all[sp] {
-				out = append(out, toKanbanJSON(sp, k))
+				j := toKanbanJSON(sp, k)
+				j.Icon = kanbanIconTag(h.d.DB.Site, sp, k.ID)
+				out = append(out, j)
 			}
 		}
 		return map[string]any{"kanbans": out}, nil
@@ -124,7 +130,9 @@ func (h itemHandlers) kanbanBoard(w http.ResponseWriter, r *http.Request) {
 		for _, c := range board {
 			cols = append(cols, columnJSON{ID: c.ID, Name: c.Name, State: c.State, Cards: c.Cards})
 		}
-		return map[string]any{"kanban": toKanbanJSON(space, k), "columns": cols}, nil
+		j := toKanbanJSON(space, k)
+		j.Icon = kanbanIconTag(h.d.DB.Site, space, k.ID)
+		return map[string]any{"kanban": j, "columns": cols}, nil
 	})
 }
 
@@ -170,8 +178,15 @@ func (h itemHandlers) addTransition(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h itemHandlers) removeKanban(w http.ResponseWriter, r *http.Request) {
-	space := r.PathValue("space")
+	space, id := r.PathValue("space"), item.ID(r.PathValue("id"))
+	removed := false
 	h.write(w, r, http.StatusNoContent, func(x *item.Session, _ *item.Store) (any, error) {
-		return nil, x.RemoveKanban(space, item.ID(r.PathValue("id")))
+		err := x.RemoveKanban(space, id)
+		removed = err == nil
+		return nil, err
 	})
+	// The kanban's picture goes with it (ADR-0087).
+	if _, ok := h.d.DB.Site.Asset(site.KanbanIcon(space, string(id))); removed && ok {
+		_ = h.d.DB.Site.RemoveAsset(who(r), site.KanbanIcon(space, string(id)))
+	}
 }

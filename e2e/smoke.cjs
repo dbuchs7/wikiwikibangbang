@@ -881,6 +881,23 @@ function ckanSource() {
     await page.click("#kanban-add-transition");
     await page.waitForSelector("#kanban .board-column[data-state=open] .card-item:has-text('Hero image')");
 
+    step("kanban picture and boards by label: a kanban shows its logo; every label is a board without making one (ADR-0087)");
+    if (!(await page.$("#kanban-settings[open]"))) await page.click("#kanban-settings summary");
+    await page.setInputFiles("#kanban-icon-file", { name: "logo.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
+    await page.waitForSelector(".kanban-title img.kanban-icon[src*='/icon?v=']");
+    await page.goto(base + "/#/kanbans");
+    await page.waitForSelector("#kanbans .space-tile:has-text('Website relaunch') img.kanban-icon");
+    await page.click("#label-boards a:has-text('relaunch')");
+    await page.waitForSelector("#labelboard .board-column[data-state=open] .card-item:has-text('Hero image')");
+    await page.waitForSelector("a.kanban-chip:has-text('Website relaunch')"); // the kept kanban of the label
+    await page.dragAndDrop("#labelboard .card-item:has-text('Hero image')", "#labelboard .board-column[data-state=closed]");
+    await page.waitForSelector("#labelboard .board-column[data-state=closed] .card-item:has-text('Hero image')");
+    await page.dragAndDrop("#labelboard .card-item:has-text('Hero image')", "#labelboard .board-column[data-state=open]");
+    await page.waitForSelector("#labelboard .board-column[data-state=open] .card-item:has-text('Hero image')");
+    await page.goto(base + "/#/labelboard/no-such-label");
+    await page.waitForSelector("#labelboard-empty");
+
     step("task list: tasks on a kanban are listed too, with their label; the labels at the right filter the list");
     await page.goto(base + "/#/tasks/all");
     await page.waitForSelector("#tasks tr:has-text('Hero image') .task-labels a.kanban-chip");

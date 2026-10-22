@@ -42,3 +42,24 @@ func TestThemesApplyUnderTheDesign(t *testing.T) {
 		t.Fatal("a theme with a dark scheme keeps it")
 	}
 }
+
+// A kanban's picture is an asset of its own, listed with its space so it
+// goes with it (ADR-0087).
+func TestKanbanIconsAreAssetsOfTheirSpace(t *testing.T) {
+	for name, want := range map[string]bool{
+		KanbanIcon("PLAT", "0a1b"): true, "kanban-PLAT-": false, "kanban-plat-1": false, "kanban-PLAT-a/b": false, "kanban-PLAT": false, "space-PLAT": false,
+	} {
+		if IsKanbanIcon(name) != want {
+			t.Errorf("%s: %v", name, !want)
+		}
+	}
+	s, _ := New(nil, func([]byte) error { return nil })
+	for _, name := range []string{KanbanIcon("PLAT", "a1"), KanbanIcon("PLAT", "b2"), KanbanIcon("OPS", "c3")} {
+		if err := s.SetAsset("admin", name, "image/png", []byte("x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := s.KanbanIcons("PLAT"); len(got) != 2 {
+		t.Fatalf("PLAT's pictures: %v", got)
+	}
+}

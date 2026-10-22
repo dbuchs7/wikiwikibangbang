@@ -1056,3 +1056,9 @@ a.requests-notice:hover { border-color: var(--accent); }
 .theme-preview { display: flex; height: 28px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 4px; }
 .theme-preview span { flex: 1; }
 .theme-preview span:first-child { flex: 2; }
+
+/* ---------- Kanban pictures and boards by label (ADR-0087) ---------- */
+.kanban-title { display: flex; align-items: center; gap: 12px; }
+.kanban-title h1 { margin: 0; }
+.label-boards { display: flex; flex-wrap: wrap; gap: 6px; }
+.labelboard-type + .labelboard-type { margin-top: 18px; }
