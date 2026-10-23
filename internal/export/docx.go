@@ -44,6 +44,9 @@ type Page struct {
 	Images map[item.ID]Image
 	// Children are the titles of the child pages, for a list of them.
 	Children []string
+	// Tasks are, by label, the tasks a task list shows: key, title and
+	// state, as the reader may read them (ADR-0114).
+	Tasks map[string][]string
 	// Depth is the page's level below the root.
 	Depth int
 }
@@ -241,6 +244,13 @@ func (b *docxBuilder) block(bl item.Block, p Page, base, listNum int) string {
 			if h.Kind == item.Heading && strings.TrimSpace(h.Text) != "" {
 				out.WriteString(paraPr(fmt.Sprintf(`<w:ind w:left="%d"/>`, (max(h.Level, 1)-1)*360), run(h.Text, "")))
 			}
+		}
+		return out.String()
+	case item.TaskList:
+		out := strings.Builder{}
+		out.WriteString(para("", "", run("# "+bl.Text, "")))
+		for _, c := range p.Tasks[bl.Text] {
+			out.WriteString(paraPr(`<w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>`, run(c, "")))
 		}
 		return out.String()
 	case item.Children:

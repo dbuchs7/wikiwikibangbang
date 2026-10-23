@@ -57,7 +57,7 @@ var HeartbeatInterval = 20 * time.Second
 
 func liveRoutes(h itemHandlers) []Route {
 	return []Route{
-		{Method: http.MethodGet, Pattern: "/api/items/{ref}/live", Summary: "Join the item's live editing session: a stream of server-sent events, starting with a snapshot", Handler: http.HandlerFunc(h.liveEvents)},
+		{Method: http.MethodGet, Pattern: "/api/items/{ref}/live", Summary: "Join the item's live editing session: a stream of server-sent events, starting with a snapshot; watch=1 follows it as a reader, who edits nothing and is no participant", Handler: http.HandlerFunc(h.liveEvents)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/live", Summary: "Apply operations in the live session (lock, set, insert, delete, release); a release commits the body", Handler: http.HandlerFunc(h.liveOps)},
 	}
 }
@@ -81,7 +81,13 @@ func (h itemHandlers) liveEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, _ := PrincipalFrom(r.Context())
-	sub, err := h.d.Collab.Join(id, string(p.User), p.Username)
+	// A reader follows the session with watch=1: they see who edits and
+	// the text as it changes, and edit nothing (ADR-0115).
+	join := h.d.Collab.Join
+	if r.URL.Query().Get("watch") == "1" {
+		join = h.d.Collab.Watch
+	}
+	sub, err := join(id, string(p.User), p.Username)
 	if err != nil {
 		h.liveFail(w, err)
 		return

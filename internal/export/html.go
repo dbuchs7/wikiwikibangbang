@@ -177,6 +177,12 @@ func (h *htmlBuilder) block(bl item.Block, p Page, base int) {
 			h.printf("<li>%s</li>", html.EscapeString(c))
 		}
 		h.out.WriteString("</ul>")
+	case item.TaskList:
+		h.printf(`<p class="tasklist-label">%s</p><ul class="tasklist">`, html.EscapeString("# "+bl.Text))
+		for _, c := range p.Tasks[bl.Text] {
+			h.printf("<li>%s</li>", html.EscapeString(c))
+		}
+		h.out.WriteString("</ul>")
 	default:
 		h.printf("<p%s>%s</p>", cls, text)
 	}

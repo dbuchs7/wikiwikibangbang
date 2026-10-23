@@ -75,7 +75,9 @@ import (
 //   - 26: an attachment may carry Retention, and the kind
 //     AttachmentRetentionSet with attachment, sealed (ADR-0104). Versions 1
 //     to 25 are still read.
-const CodecVersion = 26
+//   - 27: the block kind tasklist, its text a label (ADR-0114). Versions 1
+//     to 26 are still read.
+const CodecVersion = 27
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

@@ -317,7 +317,8 @@ function ckanSource() {
     await other.waitForSelector("#account-button[aria-label='Account of bert']");
     await other.goto(base + "/#/item/PLAT-2?edit");
     await other.waitForSelector(".ProseMirror h3");
-    await page.waitForSelector(".live-presence:has-text('bert')");
+    // Who edits shows as faces beside the bell (ADR-0115).
+    await page.waitForSelector("#live-editors .live-editor[title='bert is editing'] .avatar");
     // admin types in the heading; bert sees it live, marked as held.
     await page.click(".ProseMirror h3");
     await page.keyboard.press("End");
@@ -337,6 +338,18 @@ function ckanSource() {
     await other.click("#details h2");
     await page.waitForSelector(".live[data-pending='0']");
     await other.waitForSelector(".live[data-pending='0']");
+    // A reader sees who edits, and what they save, without a reload; the
+    // reader is no editor (ADR-0115).
+    await other.goto(base + "/#/item/PLAT-2");
+    await other.waitForSelector("#body.reading .ProseMirror h3");
+    await other.waitForSelector("#live-editors .live-editor[title='admin is editing']");
+    check(await page.locator("#live-editors .live-editor").count() === 0, "a reader is not shown as editing");
+    await page.click(".ProseMirror .pm-bullet >> nth=1");
+    await page.keyboard.press("End");
+    await page.keyboard.type(" (live)");
+    await page.click("#details h2");
+    await page.waitForSelector(".live[data-pending='0']");
+    await other.waitForSelector("#body.reading .pm-bullet >> text=second item (live)");
     await other.close();
     await page.reload();
     await page.waitForSelector(".ProseMirror h3");
@@ -1743,6 +1756,47 @@ function ckanSource() {
     await page.selectOption("#notifications-filterbar select[data-choice=kind]", "");
     await page.waitForFunction(() => !location.hash.includes("notifications.kind"));
     await page.waitForFunction((n) => document.querySelectorAll("#notifications li").length >= n, mentionsShown);
+
+    step("tasks in a text: a new task below the item, as a link and shown whole; a list of the tasks of a label, sorted and filtered (ADR-0114)");
+    const plan = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ space: "PLAT", type: "task", title: "Release plan", properties: { priority: "low" } }) })).json()).item);
+    await page.goto(base + "/#/item/" + plan.key + "?edit");
+    await page.waitForSelector(".ProseMirror[contenteditable=true]");
+    await page.click(".ProseMirror");
+    const newTask = async (title, display) => {
+      await page.selectOption(".pm-toolbar select[aria-label='Insert…']", "newtask");
+      await page.fill("#newtask-dialog [name=title]", title);
+      if (await page.locator("#newtask-dialog [name=type]").count()) await page.selectOption("#newtask-dialog [name=type]", "task");
+      await page.selectOption("#newtask-dialog [name='p:priority']", "high");
+      await page.check(`#newtask-dialog [name=display][value=${display}]`);
+      await page.click("#newtask-dialog-ok");
+      await page.waitForSelector("#newtask-dialog", { state: "detached" });
+    };
+    await newTask("Write the release notes", "full");
+    await page.waitForSelector(".ProseMirror .pm-embed .pm-embed-title:has-text('Write the release notes')");
+    await newTask("Tag the build", "link");
+    await page.waitForSelector(".ProseMirror .pm-mention:has-text('Tag the build')");
+    const below = await page.evaluate(async (k) => (await (await fetch(`/api/spaces/PLAT/tree?parent=${k}`)).json()).items.map((n) => n.key), plan.key);
+    check(below.length === 2, "both tasks are made below the item: " + below.join(", "));
+    for (const key of below) {
+      await page.evaluate(async (k) => fetch(`/api/items/${k}/labels`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ labels: ["release-2"] }) }), key);
+    }
+    await page.selectOption(".pm-toolbar select[aria-label='Insert…']", "tasklist");
+    await page.fill("#tasklist-dialog [name=label]", "Release 2");
+    await page.click("#tasklist-dialog-ok");
+    await page.waitForSelector(".ProseMirror section.pm-tasklist[data-label='release-2'] tbody tr >> nth=1");
+    await page.click("#details h2");
+    await page.waitForSelector(".live[data-pending='0']");
+    await page.goto(base + "/#/item/" + plan.key);
+    const rows = "#body section.pm-tasklist tbody tr";
+    await page.waitForSelector(rows + " >> nth=1");
+    await page.click("#body section.pm-tasklist th button[data-sort=title]");
+    check((await page.locator(rows + " td:nth-child(2)").allTextContents()).join("|") === "Tag the build|Write the release notes", "sorted by title");
+    await page.click("#body section.pm-tasklist th button[data-sort=title]");
+    check(await page.getAttribute("#body section.pm-tasklist th:has(button[data-sort=title])", "aria-sort") === "descending" &&
+      (await page.locator(rows + " td:nth-child(2)").first().textContent()) === "Write the release notes", "and the other way round");
+    await page.fill("#body section.pm-tasklist .filter-text", "notes");
+    await page.waitForFunction((sel) => [...document.querySelectorAll(sel)].filter((r) => !r.hidden).length === 1, rows);
 
     step("log out, log in as bert, read the item");
     await page.click("#account-button");

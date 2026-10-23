@@ -3,7 +3,7 @@
 import { api, get, post, put, del, download, upload, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
 import { createEditor, setSecretClass } from "./editor.js";
-import { liveBody } from "./live.js";
+import { liveBody, watchLive } from "./live.js";
 import { pageTree, ancestors } from "./tree.js";
 import { renderDiff } from "./diff.js";
 import { commentPlugin } from "./anchors.js";
@@ -541,7 +541,7 @@ const filesOf = (item, attachments = []) => {
 function readOnlyBody(item, embeds, edit) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   return createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
-    actions: edit ? [edit] : [], embedContent: embedLoader([item.id]) }).element;
+    actions: edit ? [edit] : [], embedContent: embedLoader([item.id]), tasks: taskTools(item, false) }).element;
 }
 
 // embedDepth is how many embedded items deep a text shows content; deeper
@@ -564,8 +564,115 @@ function embedLoader(chain) {
       props.length ? h("dl", { class: "pm-embed-props" }, props.flatMap(([k, v]) => [h("dt", { text: k }),
         h("dd", { text: (Array.isArray(v) ? v : [v]).map((x) => (names.has(x) ? names.get(x) : String(x))).join(", ") })])) : null,
       item.body.length ? createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
-        embedContent: embedLoader([...chain, ref]) }).element : null);
+        embedContent: embedLoader([...chain, ref]), tasks: taskTools(item, false) }).element : null);
   };
+}
+
+// taskTools are what a text needs for its tasks (ADR-0114): list(label)
+// shows the tasks that carry a label, in every space the reader may read,
+// as a table one sorts by a column and filters; with item and editing,
+// pickLabel asks for a label and create makes a task below the item and
+// says whether it goes into the text as a link or shown whole.
+function taskTools(item, editing) {
+  let typesOnce = null;
+  const taskTypes = async () => (typesOnce ??= get("/api/types").then(({ types }) => types.filter((ty) => ty.workflow)));
+  const list = async (label) => {
+    const [flows, found] = await Promise.all([taskTypes(), readAll(`/api/items?label=${encodeURIComponent(label)}&limit=100`)]);
+    const rows = found.items.filter((it) => flows.some((ty) => ty.name === it.type));
+    if (!rows.length) return null;
+    const cols = [["key", t("col.key")], ["title", t("col.title")], ["state", t("col.state")], ["space", t("col.space")]];
+    let by = "key", up = true;
+    const order = (a, b) => String(a[by] || "").localeCompare(String(b[by] || ""), undefined, { numeric: true }) * (up ? 1 : -1);
+    const body = h("tbody");
+    const draw = () => body.replaceChildren(...[...rows].sort(order).map((it) => h("tr", { "data-f-state": it.state || "", "data-f-space": it.space },
+      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)), h("td", { text: it.title }),
+      h("td", {}, it.state ? h("span", { class: "chip", text: it.state }) : ""), h("td", { text: it.space }))));
+    const head = h("tr", {}, cols.map(([k, name]) => h("th", { scope: "col", "aria-sort": k === by ? (up ? "ascending" : "descending") : "none" },
+      h("button", { type: "button", class: "link sort", "data-sort": k, text: name, onclick: (ev) => {
+        up = by === k ? !up : true;
+        by = k;
+        head.querySelectorAll("th").forEach((th) => th.setAttribute("aria-sort", th.querySelector("button").dataset.sort === by ? (up ? "ascending" : "descending") : "none"));
+        draw();
+        box.applyFilter();
+        ev.currentTarget.focus();
+      } }))));
+    draw();
+    const table = h("table", { class: "list tasklist-table" }, h("thead", {}, head), body);
+    const box = filtered(table, { id: "tasks-" + label, label: t("editor.taskListOf", { label }), min: 0,
+      choices: [{ key: "state", label: t("col.state") }, { key: "space", label: t("col.space") }] });
+    return h("div", { class: "tasklist-box" }, box, found.truncated ? h("p", { class: "muted", text: t("board.truncated", { n: rows.length }) }) : null);
+  };
+  if (!editing) return { list };
+  // dialog shows a form in a modal; it answers what done() gave, or null.
+  const dialog = (title, id, fields, submit) => new Promise((resolve) => {
+    const status = h("p", { class: "error", role: "alert", hidden: true });
+    let result = null;
+    const f = h("form", { method: "dialog", class: "note-form" }, fields, status,
+      h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", id: id + "-ok", text: t("common.create") }),
+        h("button", { type: "button", class: "link", id: id + "-cancel", text: t("common.cancel"), onclick: () => d.close() })));
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        result = await submit(f);
+        d.close();
+      } catch (err) {
+        status.textContent = err.message;
+        status.hidden = false;
+      }
+    });
+    const name = title.replace(/…$/, "");
+    const d = h("dialog", { class: "note-dialog", id, "aria-label": name }, h("div", { class: "drawing-bar" }, h("strong", { text: name })), f);
+    d.addEventListener("close", () => { d.remove(); resolve(result); });
+    document.body.append(d);
+    d.showModal();
+    f.querySelector("input, select")?.focus();
+  });
+  const pickLabel = async () => {
+    const { labels } = await get("/api/labels?tasks=1").catch(() => ({ labels: [] }));
+    const input = h("input", { name: "label", required: true, list: "tasklist-labels", autocomplete: "off", placeholder: t("editor.taskListPlaceholder") });
+    return dialog(t("editor.taskList"), "tasklist-dialog", [
+      field(t("kanban.label"), input),
+      h("datalist", { id: "tasklist-labels" }, labels.map((l) => h("option", { value: l.label }))),
+      h("p", { class: "muted", text: t("editor.taskListHint") }),
+    ], async () => {
+      const label = input.value.trim().toLowerCase().split(/\s+/).join("-");
+      if (!label) throw new Error(t("editor.taskListNeedsLabel"));
+      return label;
+    });
+  };
+  const create = async () => {
+    const flows = (await taskTypes()).filter(isTaskType);
+    const types = flows.length ? flows : await taskTypes();
+    if (!types.length) throw new Error(t("editor.newTaskNoType"));
+    const fields = h("div");
+    const typeSelect = h("select", { name: "type" }, types.map((ty) => h("option", { value: ty.name, text: ty.name, selected: ty.name === "task" })));
+    const showFields = () => {
+      const ty = types.find((x) => x.name === typeSelect.value);
+      fields.replaceChildren(...ty.fields.filter((f) => f.required).map((f) => field(f.name + " *", propertyInput(f))));
+    };
+    typeSelect.addEventListener("change", showFields);
+    showFields();
+    const title = h("input", { name: "title", required: true, maxlength: 200, id: "newtask-title" });
+    return dialog(t("editor.newTask"), "newtask-dialog", [
+      field(t("col.title"), title),
+      types.length > 1 ? field(t("col.type"), typeSelect) : null,
+      fields,
+      h("fieldset", { class: "newtask-display" }, h("legend", { text: t("editor.newTaskShow") }),
+        h("label", { class: "check" }, h("input", { type: "radio", name: "display", value: "link", checked: true }), " ", t("editor.newTaskLink")),
+        h("label", { class: "check" }, h("input", { type: "radio", name: "display", value: "full" }), " ", t("editor.newTaskFull"))),
+      h("p", { class: "muted", text: t("editor.newTaskHint", { title: item.title || item.key }) }),
+    ], async (f) => {
+      const ty = types.find((x) => x.name === typeSelect.value);
+      const properties = {};
+      for (const fd of ty.fields.filter((x) => x.required)) {
+        const v = readProperty(fd, f.querySelector(`[name="p:${CSS.escape(fd.name)}"]`));
+        if (v !== null) properties[fd.name] = v;
+      }
+      const { item: made } = await post("/api/items", { space: item.space, type: ty.name, parent: item.id, title: title.value.trim(), properties });
+      return { item: made, display: f.querySelector("[name=display]:checked").value };
+    });
+  };
+  return { list, pickLabel, create };
 }
 
 // sizeText shows a number of bytes for people.
@@ -3023,6 +3130,19 @@ async function itemView(ref, params = new URLSearchParams()) {
   const threads = commentThreads(path, comments, canEdit);
   // One's own notes on passages, seen by no one else (ADR-0107).
   const notes = live ? personalNotes(path, myNotes.notes) : null;
+  // Who edits the text now, as faces beside the bell, for readers too
+  // (ADR-0115).
+  const editors = h("span", { class: "live-editors", id: "live-editors", role: "status", hidden: true });
+  const showEditors = async (participants) => {
+    const others = participants.filter((p) => p.principal !== me.user.id);
+    await learnNames(others.map((p) => p.principal)).catch(() => {});
+    editors.replaceChildren(...others.map((p) => {
+      const name = t("live.holder", { name: p.name });
+      const f = face(p.principal, 32);
+      return h("span", { class: "live-editor", "data-principal": p.principal, title: name, role: "img", "aria-label": name }, f);
+    }));
+    editors.hidden = others.length === 0;
+  };
 
   // Moving up or down among the siblings: the keyboard's way to reorder,
   // besides dragging in the tree (ADR-0041).
@@ -3120,6 +3240,7 @@ async function itemView(ref, params = new URLSearchParams()) {
     editing && !type.body ? done : null,
     canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null,
     !editing ? exportMenu(item) : null,
+    live && type.body ? editors : null,
     live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null);
   let body = null;
   const protecting = h("div", { id: "protect-passage" });
@@ -3135,9 +3256,28 @@ async function itemView(ref, params = new URLSearchParams()) {
     setSecretClass((ref) => (secretOf.get(ref)?.readable ? "secret-readable" : "secret-veiled"));
     const protect = canEdit && readsAll && live && !editing ? (at) => protectPassageForm(protecting, path, item, at, status) : null;
     const edit = editing ? done : canEdit && readsAll ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null;
-    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit, notes);
+    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit, notes, showEditors);
     body = b.element;
     session = b.session;
+    // A reader follows the text: who edits it, and each version saved by
+    // someone else shows without a reload (ADR-0115). A selection made to
+    // comment or note is not taken away; the text follows after it.
+    if (!editing && live && readsAll) {
+      let timer = null;
+      const redraw = async () => {
+        const sel = document.getSelection();
+        if (sel && !sel.isCollapsed && body.contains(sel.anchorNode)) return void (timer = setTimeout(redraw, 2000));
+        const [{ item: fresh }, fresher] = await Promise.all([get(path), get(path + "/embeds")]);
+        const next = bodySection(fresh, fresher.embeds, false, threads, attachments, protect, edit, notes, showEditors).element;
+        body.replaceWith(next);
+        body = next;
+      };
+      const stop = watchLive(item.id, {
+        onPresence: (ps) => { showEditors(ps); },
+        onCommitted: (e) => { if (e.by !== me.user.id) { clearTimeout(timer); timer = setTimeout(() => redraw().catch(() => {}), 300); } },
+      });
+      onLeave(() => { stop(); clearTimeout(timer); });
+    }
   }
   const card = (id, ...content) => h("section", { class: "side-card", id }, ...content);
   const details = card("details",
@@ -3229,13 +3369,13 @@ async function relocateForm(box, item, mode, spaces, status) {
 // commented on highlighted and commenting on a selection offered; or, when
 // editing, in its live session (ADR-0010), where changes reach everyone at
 // once and are saved as one leaves a block.
-function bodySection(item, embeds, editing, threads, attachments, protect, edit, notes) {
+function bodySection(item, embeds, editing, threads, attachments, protect, edit, notes, onPresence) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!editing) {
     const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
       extra: item.presence === "live" ? [threads.plugin, ...(notes ? [notes.plugin] : [])] : [], comment: item.presence === "live" ? threads.start : undefined,
       note: notes ? notes.start : undefined, protect: protect || undefined,
-      actions: edit ? [edit] : [], embedContent: embedLoader([item.id]) });
+      actions: edit ? [edit] : [], embedContent: embedLoader([item.id]), tasks: taskTools(item, false) });
     const section = h("section", { id: "body", class: "reading" }, view.element);
     // A click on a protected passage shows it in the list of passages.
     const open = (ev) => {
@@ -3253,7 +3393,7 @@ function bodySection(item, embeds, editing, threads, attachments, protect, edit,
     return { element: section, session: null };
   }
   const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item, attachments),
-    extra: [threads.plugin], comment: threads.start, actions: edit ? [edit] : [], embedContent: embedLoader([item.id]) });
+    extra: [threads.plugin], comment: threads.start, actions: edit ? [edit] : [], embedContent: embedLoader([item.id]), tasks: taskTools(item, true), onPresence });
   onLeave(session.close);
   return { element: h("section", { id: "body", class: "editing" }, session.element), session };
 }

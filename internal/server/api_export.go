@@ -194,6 +194,14 @@ func (h itemHandlers) exportDocument(r *http.Request, children, withData bool) (
 					p.Children = append(p.Children, k.Item.Title)
 				}
 			}
+			for _, b := range it.Body.Blocks {
+				if b.Kind == item.TaskList && p.Tasks[b.Text] == nil {
+					if p.Tasks == nil {
+						p.Tasks = map[string][]string{}
+					}
+					p.Tasks[b.Text] = taskLines(x, s, b.Text)
+				}
+			}
 			shown := map[item.ID]item.BlockKind{}
 			for _, b := range it.Body.Blocks {
 				if b.Kind == item.Image || b.Kind == item.Video {
@@ -407,4 +415,22 @@ func (h itemHandlers) exportSearch(w http.ResponseWriter, r *http.Request) {
 		}
 		return items, err
 	})
+}
+
+// taskLines are the tasks that carry a label, as a task list shows them
+// (ADR-0114): the items of a type with a workflow the reader may read, by
+// key, with title and state.
+func taskLines(x *item.Session, s *item.Store, label string) []string {
+	out := []string{}
+	for _, it := range x.Find(item.Query{Label: label}) {
+		if s.Type(it.Type).Workflow == nil {
+			continue
+		}
+		line := it.Key + " " + it.Title
+		if it.State != "" {
+			line += " · " + it.State
+		}
+		out = append(out, line)
+	}
+	return out
 }

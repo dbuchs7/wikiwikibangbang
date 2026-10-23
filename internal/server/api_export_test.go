@@ -138,3 +138,34 @@ func TestAHandbookHoldsTheSubpagesAndWhatTheyEmbed(t *testing.T) {
 	defer budget.Set(budget.Default())
 	w.bert.expect("GET", "/api/items/"+root+"/export/docx?children=true", "", http.StatusRequestEntityTooLarge)
 }
+
+// TestExportListsTheTasksOfALabel: a task list in a text exports the
+// tasks that carry its label, as the exporting reader may read them
+// (ADR-0114).
+func TestExportListsTheTasksOfALabel(t *testing.T) {
+	w := newWorld(t)
+	w.admin.expect("POST", "/api/types", `{"name":"page","body":true,"fields":[]}`, http.StatusCreated)
+	mk := func(typ, title, props string) string {
+		return field(w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"`+typ+`","title":"`+title+`","properties":`+props+`}`, http.StatusCreated), "item", "key").(string)
+	}
+	open := mk("task", "Tag the build", `{"priority":"high"}`)
+	hidden := mk("task", "Pay the vendor", `{"priority":"low"}`)
+	note := mk("page", "Not a task", `{}`)
+	for _, k := range []string{open, hidden, note} {
+		w.bert.expect("PUT", "/api/items/"+k+"/labels", `{"labels":["release-2"]}`, http.StatusOK)
+	}
+	w.bert.expect("PUT", "/api/items/"+hidden+"/restriction", `{"read":["`+w.ids["bert"]+`"]}`, http.StatusOK)
+	plan := mk("page", "Plan", `{}`)
+	w.bert.expect("PUT", "/api/items/"+plan+"/body", `{"blocks":[{"kind":"tasklist","text":"release-2"}]}`, http.StatusOK)
+	w.bert.expect("PUT", "/api/items/"+plan+"/body", `{"blocks":[{"kind":"tasklist","text":"Release 2"}]}`, http.StatusBadRequest)
+	html := func(c *client) string { return c.do("GET", "/api/items/"+plan+"/export/html", "").Body.String() }
+	if got := html(w.bert); !strings.Contains(got, open+" Tag the build · open") || !strings.Contains(got, hidden+" Pay the vendor") || strings.Contains(got, "Not a task") {
+		t.Fatalf("bert's export: %s", got)
+	}
+	if got := html(w.vera); !strings.Contains(got, open+" Tag the build") || strings.Contains(got, "Pay the vendor") {
+		t.Fatalf("vera's export shows a task she may not read: %s", got)
+	}
+	if r := w.bert.do("GET", "/api/items/"+plan+"/export/docx", ""); r.Code != http.StatusOK || !bytes.Contains(r.Body.Bytes(), []byte("PK")) {
+		t.Fatalf("docx %d", r.Code)
+	}
+}

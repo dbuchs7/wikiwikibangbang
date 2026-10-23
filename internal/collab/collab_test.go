@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
@@ -459,5 +460,81 @@ func TestShutdownCommitsAndEndsEveryStream(t *testing.T) {
 	}
 	if got := f.store.commits; len(got) != 1 || got[0].by != "anna" {
 		t.Fatalf("commits %v", got)
+	}
+}
+
+// TestWatchersFollowWithoutEditing: a watcher sees the text as it changes
+// and who edits, edits nothing even when it may, is no participant, and
+// takes no room from editors (ADR-0115).
+func TestWatchersFollowWithoutEditing(t *testing.T) {
+	f := newFixture(t, "one", "two")
+	anna := f.join("anna")
+	sub, err := f.hub.Watch(page, "bert", "bert")
+	noErr(t, err)
+	bert := &conn{f: f, sub: sub, who: "bert"}
+	bert.drain()
+	if bert.events[0].Kind != Snapshot || bert.events[0].Editable {
+		t.Fatalf("a watcher's snapshot: %+v", bert.events[0])
+	}
+	if p := bert.events[0].Participants; len(p) != 1 || p[0].Name != "anna" {
+		t.Fatalf("the watcher is told who edits: %+v", p)
+	}
+	if p := anna.last(Presence).Participants; len(p) != 1 || p[0].Name != "anna" {
+		t.Fatalf("a watcher counts as a participant: %+v", p)
+	}
+	ids := anna.ids()
+	noErr(t, anna.apply(Op{Op: "set", ID: ids[0], Block: para("one, edited")}))
+	if e := bert.last(Set); e.Block.Text != "one, edited" || e.Holder.Name != "anna" {
+		t.Fatalf("the watcher sees %+v", e)
+	}
+	if err := bert.apply(Op{Op: "set", ID: ids[1], Block: para("x")}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("a watcher who may edit edits: %v", err)
+	}
+	if _, err := f.hub.Watch(page, "carl", "carl"); !errors.Is(err, item.ErrNotFound) {
+		t.Fatalf("an outsider watches: %v", err)
+	}
+
+	// Watchers fill their own room, not the editors'.
+	b := budget.Get()
+	b.LiveClients = 3
+	budget.Set(b)
+	t.Cleanup(func() { budget.Set(budget.Default()) })
+	_, err = f.hub.Watch(page, "vera", "vera")
+	noErr(t, err)
+	_, err = f.hub.Watch(page, "vera", "vera")
+	noErr(t, err)
+	if _, err := f.hub.Watch(page, "vera", "vera"); !errors.Is(err, ErrBusy) {
+		t.Fatalf("a fourth watcher: %v", err)
+	}
+	f.join("bert")
+	f.join("bert")
+	bert.sub.Leave()
+	if p := anna.last(Presence).Participants; len(p) != 2 {
+		t.Fatalf("leaving watchers and joining editors: %+v", p)
+	}
+}
+
+// TestReleasingABlockNoLongerHeldIsAnswered: a client that releases a
+// block it no longer holds, e.g. after its lock lapsed or was taken over,
+// is told who holds it, so it does not wait for its release forever.
+func TestReleasingABlockNoLongerHeldIsAnswered(t *testing.T) {
+	f := newFixture(t, "one", "two")
+	anna, bert := f.join("anna"), f.join("bert")
+	ids := anna.ids()
+	noErr(t, bert.apply(Op{Op: "set", ID: ids[0], Block: para("bert's")}))
+	n := len(anna.events)
+	noErr(t, anna.apply(Op{Op: "release", ID: ids[1]}))
+	if len(anna.events) == n {
+		t.Fatal("a release of a block nobody holds goes unanswered")
+	}
+	if e := anna.last(Lock); e.ID != ids[1] || e.Holder != nil {
+		t.Fatalf("answer %+v", e)
+	}
+	noErr(t, anna.apply(Op{Op: "release", ID: ids[0]}))
+	if e := anna.last(Lock); e.ID != ids[0] || e.Holder == nil || e.Holder.Name != "bert" {
+		t.Fatalf("answer for a block bert holds %+v", e)
+	}
+	if len(f.store.commits) != 0 {
+		t.Fatalf("releasing what one does not hold commits: %v", f.store.commits)
 	}
 }

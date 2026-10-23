@@ -1440,3 +1440,18 @@ html.reading-mode .reading-exit:hover, html.reading-mode .reading-exit:focus { o
 @media print { .reading-exit { display: none !important; } }
 /* On a phone the screen is the content already; the button gives way. */
 @media (max-width: 480px) { .reading-toggle { display: none; } }
+
+/* ---------- Tasks in a text (ADR-0114) ---------- */
+.pm-tasklist { margin: 12px 0; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.pm-tasklist .tasklist-table { width: 100%; margin: 6px 0 0; }
+.pm-tasklist .tasklist-table th button.sort { font-weight: 600; color: inherit; }
+.pm-tasklist .tasklist-table th[aria-sort="ascending"] button.sort::after { content: " ▲"; font-size: 10px; }
+.pm-tasklist .tasklist-table th[aria-sort="descending"] button.sort::after { content: " ▼"; font-size: 10px; }
+.newtask-display { border: 0; padding: 0; margin: 8px 0; display: flex; gap: 16px; flex-wrap: wrap; }
+.newtask-display legend { font-weight: 600; margin-bottom: 4px; }
+
+/* ---------- Who edits now (ADR-0115) ---------- */
+.live-editors { display: inline-flex; align-items: center; }
+.live-editors[hidden] { display: none; }
+.live-editor { display: inline-flex; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.live-editor + .live-editor { margin-left: -6px; }

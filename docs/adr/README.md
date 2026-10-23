@@ -126,3 +126,5 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0111](0111-protecting-removing-and-copying-respect-the-whole-tree.md) | Protecting, removing and copying respect the whole page tree | Accepted | Landed |
 | [0112](0112-the-bell-is-the-last-of-a-heads-buttons.md) | The bell is the last of a head's buttons, and the tree makes no pages | Accepted | Landed |
 | [0113](0113-ones-notes-from-the-start-page.md) | One's notes from the start page | Accepted | Landed |
+| [0114](0114-tasks-in-a-text.md) | Tasks in a text: made below the page, shown as a link or whole, listed by label | Accepted | Landed |
+| [0115](0115-who-edits-shows-as-faces-and-readers-follow-the-text.md) | Who edits shows as faces, and readers follow the text | Accepted | Landed |
