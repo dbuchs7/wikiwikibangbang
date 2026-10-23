@@ -584,10 +584,11 @@ function imageView(node, view, getPos, files) {
 // where a file is served, and upload(file), which stores a file and returns
 // the attachment. extra adds plugins, such as a live session's (live.js);
 // viewProps adds editor view properties. comment(anchor), if given, starts
-// an inline comment on the selected text (anchors.js, ADR-0047).
+// an inline comment on the selected text (anchors.js, ADR-0047); note(anchor)
+// a personal note on it (notes.js, ADR-0107).
 // embedContent(ref), if given, returns the content of an embedded item,
 // shown in its block (ADR-0106).
-export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, actions = [], embedContent }) {
+export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, note, actions = [], embedContent }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
   const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
@@ -717,6 +718,13 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     if (!anchor) status.textContent = t("editor.commentNeedsSelection");
     else comment(anchor);
   } }) : null;
+  // A personal note on a passage, seen by its maker alone (ADR-0107).
+  const noteButton = note ? h("button", { type: "button", id: "note-selection", text: t("editor.note"), title: t("editor.noteTitle"), onclick: () => {
+    status.textContent = "";
+    const anchor = anchorOf(view.state);
+    if (!anchor) status.textContent = t("editor.noteNeedsSelection");
+    else note(anchor);
+  } }) : null;
   // Protecting a passage starts from the text read (ADR-0088).
   const protectButton = protect ? h("button", { type: "button", id: "protect-selection", text: t("editor.protect"), onclick: () => {
     status.textContent = "";
@@ -757,7 +765,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   };
   const toolbar = !editable
     // The text's own actions, such as editing it, stand beside them.
-    ? (commentButton || protectButton || actions.length ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, commentButton, protectButton, ...actions, status) : null)
+    ? (commentButton || noteButton || protectButton || actions.length ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, commentButton, noteButton, protectButton, ...actions, status) : null)
     : h("div", { class: "pm-toolbar", role: "toolbar", "aria-label": t("editor.toolbar") },
     group(kindSelect),
     group(...markButtons.map((b) => b.el)),

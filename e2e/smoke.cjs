@@ -670,6 +670,44 @@ function ckanSource() {
     await page.waitForSelector(".resolved-threads summary:has-text('Resolved (1)')");
     check(await page.locator("#body .comment-anchor").count() === 0, "a resolved thread's text is not highlighted");
 
+    step("personal notes: a note on selected text, marked and listed for its maker alone, also in reading mode (ADR-0107)");
+    await page.click("#body .ProseMirror p");
+    await page.evaluate(() => {
+      const text = document.querySelector("#body .ProseMirror p").firstChild;
+      const at = text.data.indexOf("primary");
+      const range = document.createRange();
+      range.setStart(text, at);
+      range.setEnd(text, at + "primary".length);
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+    });
+    await page.waitForTimeout(100);
+    await page.click("#note-selection");
+    await page.waitForSelector("dialog#note-dialog[open] .note-quote:text-is('primary')");
+    await page.fill("#note-text", "Check the failover with the ops team");
+    await page.click("#note-save");
+    await page.waitForSelector("#note-dialog", { state: "detached" });
+    await page.waitForSelector("#body .note-anchor:text-is('primary')");
+    await page.waitForSelector("#notes-list .note-text:has-text('Check the failover')");
+    check((await page.textContent("#notes")).includes("Only you see your notes"), "the list says the notes are private");
+    const shared = await page.evaluate(async () => (await (await fetch(location.hash.replace("#/item/", "/api/items/").split("?")[0] + "/history")).text()));
+    check(!shared.includes("failover"), "a note is in no shared view of the item, such as its history");
+    await page.click("#reading-toggle");
+    await page.waitForSelector("html.reading-mode");
+    await page.click("#body .note-anchor");
+    await page.waitForSelector("dialog#note-dialog[open]");
+    check(await page.inputValue("#note-text") === "Check the failover with the ops team", "in reading mode the note opens from its passage");
+    await page.fill("#note-text", "Failover tested on Monday");
+    await page.click("#note-save");
+    await page.waitForSelector("#note-dialog", { state: "detached" });
+    await page.click("#reading-exit");
+    await page.waitForSelector("#notes-list .note-text:has-text('Failover tested on Monday')");
+    await page.click("#notes-list .note-open");
+    answer = true;
+    await page.click("#note-delete");
+    await page.waitForSelector("#body .note-anchor", { state: "detached" });
+    await page.waitForSelector("#notes-list li.muted");
+
     step("relations and access: a page is related by key and unrelated; only I may edit it, then everyone again");
     await page.fill("#add-relation [name=type]", "depends-on");
     await page.fill("#add-relation [name=target]", "PLAT-1");

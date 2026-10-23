@@ -23,7 +23,7 @@ var BackupFiles = []string{wal.FileName, KeysFile, AccountsFile, AuditFile}
 
 // OptionalBackupFiles are files a backup contains when they exist: a
 // backup made before they were introduced restores without them.
-var OptionalBackupFiles = []string{SiteFile}
+var OptionalBackupFiles = []string{SiteFile, NotesFile}
 
 // BackedUpDirs are the directories of a data directory whose files a
 // backup contains, each file under its path relative to the data directory:
@@ -188,7 +188,7 @@ func (db *DB) Sizes() map[string]int64 {
 	db.mu.Lock()
 	out[wal.FileName], out[KeysFile] = db.log.Size(), db.keys.log.Size()
 	db.mu.Unlock()
-	for _, name := range []string{AccountsFile, AuditFile, SiteFile} {
+	for _, name := range []string{AccountsFile, AuditFile, SiteFile, NotesFile} {
 		if st, err := os.Stat(filepath.Join(db.dir, name)); err == nil {
 			out[name] = st.Size()
 		}
