@@ -1354,10 +1354,24 @@ function ckanSource() {
     await page.waitForSelector(".design-asset[data-asset=welcome] .design-asset-status:has-text('still set')");
     await page.unroute("**/api/branding/welcome");
     expectedConsole = null;
+    // And one for the dark look, shown when the look is dark (ADR-0109).
+    await page.setInputFiles("#design-welcome-dark", { name: "welcome-dark.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
+    await page.waitForSelector(".design-asset[data-asset=welcome-dark] img.design-preview-dark");
     await page.goto(base + "/#/");
     await page.waitForSelector("#welcome-art.welcome-own[src^='/branding/welcome']");
+    const startLook = await page.evaluate(() => document.documentElement.dataset.theme);
+    const startArt = () => page.$eval("#welcome-art", (i) => new URL(i.src).pathname);
+    check((await startArt()) === (startLook === "dark" ? "/branding/welcome-dark" : "/branding/welcome"), "the start picture fits the look");
+    await page.click("#theme-toggle");
+    await page.waitForFunction((was) => document.documentElement.dataset.theme !== was, startLook);
+    check((await startArt()) === (startLook === "dark" ? "/branding/welcome" : "/branding/welcome-dark"), "the start picture follows the chosen look");
+    await page.click("#theme-toggle");
+    await page.waitForFunction((was) => document.documentElement.dataset.theme === was, startLook);
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");
+    await page.click(".design-asset[data-asset=welcome-dark] button.danger");
+    await page.waitForSelector(".design-asset[data-asset=welcome-dark]:not(:has(img))");
     await page.fill("#design [name=name]", "ACME");
     await page.check("#design [name=accent-on]");
     await page.fill("#design [name=accent]", "#d40000");

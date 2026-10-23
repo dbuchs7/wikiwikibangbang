@@ -1247,6 +1247,20 @@ async function chooseLanguage() {
 // changes with its content.
 const welcomeArt = document.querySelector("meta[name=wwbb-welcome]")?.content || "/assets/brand/welcome.svg";
 
+// ownWelcome is the design's picture for the start page, and in the dark
+// look its picture for the dark look, when it has one (ADR-0109).
+function ownWelcome(b) {
+  const src = (name) => `/branding/${name}?v=` + encodeURIComponent(b.assets[name]);
+  const img = h("img", { class: "welcome-art welcome-own", id: "welcome-art", src: src("welcome"), alt: "" });
+  if (b.assets["welcome-dark"]) {
+    const pick = () => { img.src = src(darkOffered && isDark() ? "welcome-dark" : "welcome"); };
+    pick();
+    document.addEventListener("themechange", pick);
+    onLeave(() => document.removeEventListener("themechange", pick));
+  }
+  return img;
+}
+
 // The product's own logo, kept to come back to when a design's logo goes.
 // The browser's icon stays the product's, whatever the design.
 const productLogo = document.querySelector(".brand picture")?.cloneNode(true);
@@ -1576,9 +1590,7 @@ async function homeView() {
           anyEditable ? link("#/new", t("home.newPage"), "button primary") : null,
           link("#/tasks", t("home.myTasks"), "button"))),
       // The design's own picture replaces the product's (ADR-0095).
-      brand.assets?.welcome
-        ? h("img", { class: "welcome-art welcome-own", id: "welcome-art", src: "/branding/welcome?v=" + encodeURIComponent(brand.assets.welcome), alt: "" })
-        : h("img", { class: "welcome-art", id: "welcome-art", src: welcomeArt, alt: "", width: 480, height: 320 }),
+      brand.assets?.welcome ? ownWelcome(brand) : h("img", { class: "welcome-art", id: "welcome-art", src: welcomeArt, alt: "", width: 480, height: 320 }),
       // The installed version, small, for support questions and releases.
       me.version ? h("span", { class: "welcome-version", id: "home-version", title: me.revision ? t("home.revision", { revision: me.revision }) : "", text: t("home.version", { version: me.version }) }) : ""),
     // Account requests wait on an administrator (ADR-0061): said first,
@@ -4704,7 +4716,9 @@ async function designCard() {
         // The server answers for what it holds: a file still set after
         // removing it did not go, whatever the answer was on the way.
         if (removing && now.assets?.[name]) throw new Error(t("design.stillSet"));
-        box.replaceWith(asset(name, label, accept, now.assets?.[name]));
+        // "" and not undefined: a file gone must not fall back to the
+        // design the form was drawn with.
+        box.replaceWith(asset(name, label, accept, now.assets?.[name] || ""));
       } catch (err) {
         own.replaceChildren(errorBox(err));
       }
@@ -4718,7 +4732,7 @@ async function designCard() {
     }));
     box.append(
       h("strong", { text: label }),
-      has && name !== "font" ? h("img", { src: `/branding/${name}?v=${encodeURIComponent(has)}`, alt: "", class: name === "logo-dark" ? "design-preview design-preview-dark" : "design-preview" }) : "",
+      has && name !== "font" ? h("img", { src: `/branding/${name}?v=${encodeURIComponent(has)}`, alt: "", class: name.endsWith("-dark") ? "design-preview design-preview-dark" : "design-preview" }) : "",
       h("span", { class: "muted", text: has ? t("design.fileSet") : t("design.fileNone") }),
       h("label", { class: "upload" }, h("span", { text: t("design.choose") }), picker),
       has ? h("button", { type: "button", class: "link danger", text: t("common.delete"), onclick: change(() => del("/api/branding/" + name), true) }) : "",
@@ -4760,6 +4774,7 @@ async function designCard() {
       asset("logo-dark", t("design.logoDark"), "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"),
       asset("background", t("design.background"), "image/png,image/jpeg,image/gif,image/webp"),
       asset("welcome", t("design.welcome"), "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"),
+      asset("welcome-dark", t("design.welcomeDark"), "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"),
       asset("font", t("design.fontFile"), ".woff2,.woff,.ttf,.otf")),
     form({ id: "design" }, [
       themePicker,
