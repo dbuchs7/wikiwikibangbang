@@ -41,6 +41,7 @@ Chosen option: **1**.
 ### Fixes found on the way
 - **Waiting for an answer:** a client noted a lock or release only after the server answered the request. The server's event can come first, and then the client waited for it forever, showing "Saving…". It now notes the operation before it sends it.
 - **Releasing a lost block:** the server now answers a release of a block the client no longer holds (its lock lapsed, or it was taken over) with who holds it.
+- **Nothing left to send:** when a scheduled send found nothing left to send, the client did not clear the "Saving…" it had shown for it. It now does.
 
 ### Consequences
 

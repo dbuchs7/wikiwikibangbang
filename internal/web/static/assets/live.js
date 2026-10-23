@@ -205,7 +205,9 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
   async function send() {
     if (closed || sending || !view) return;
     const batch = ops();
-    if (batch.length === 0) return;
+    // Nothing left to send, e.g. the server answered before this ran:
+    // what schedule marked as unsaved is saved.
+    if (batch.length === 0) return pending(false);
     sending = true;
     // A lock or release is noted before it is sent: the server's answer on
     // the event stream can arrive before the response to the request, and
