@@ -26,6 +26,10 @@ type Attachment struct {
 	// album and are no labels of the item, so no kanban or label board
 	// shows them. They are content, sealed with the rest.
 	Labels []string `json:",omitempty"`
+	// Retention is the rule of the file's versions (ADR-0104), kept on its
+	// first version; nil follows the album's default. It is content,
+	// sealed with the rest.
+	Retention *Retention `json:",omitempty"`
 	// Author and Created come from the event that added it.
 	Author  string `json:"-"`
 	Created int64  `json:"-"` // Unix seconds
@@ -130,11 +134,22 @@ func (s *Store) applyAttachment(e Event, touch func(...ID)) {
 		if a, ok := it.attachment(e.Attachment.ID); ok {
 			// The source stays, so later versions still trace back through
 			// a deleted one (ADR-0055); it names files, not their content.
-			*a = Attachment{ID: a.ID, Source: a.Source, Author: a.Author, Created: a.Created, Deleted: true}
+			// So does the rule of the versions, which the first one holds
+			// (ADR-0104).
+			*a = Attachment{ID: a.ID, Source: a.Source, Retention: a.Retention, Author: a.Author, Created: a.Created, Deleted: true}
 		}
 	case AttachmentLabelled:
 		if a, ok := it.attachment(e.Attachment.ID); ok {
 			a.Labels = slices.Clone(e.Attachment.Labels)
+		}
+	case AttachmentRetentionSet:
+		if a, ok := it.attachment(e.Attachment.ID); ok {
+			if r := e.Attachment.Retention; r != nil {
+				c := *r
+				a.Retention = &c
+			} else {
+				a.Retention = nil
+			}
 		}
 	}
 }
@@ -303,6 +318,9 @@ type Picture struct {
 	// and all versions of one file share First. A file that is no new
 	// version is its own First. Deleted versions still link the chain.
 	First ID
+	// Retention is the rule of the file's versions, set on its first
+	// version (ADR-0104); nil follows the album's default.
+	Retention *Retention
 	// order is the file's place among its item's files: of two added in
 	// the same second, the later is the newer.
 	order int
@@ -334,8 +352,9 @@ func (x *Session) Pictures(space string, keep func(Attachment) bool) []Picture {
 		editable := x.s.canEdit(x.who, it) && it.Managed == ""
 		for i, a := range it.Attachments {
 			if !a.Deleted && keep(a) {
+				first := firstVersion(it, a)
 				out = append(out, Picture{Item: Item{ID: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Type: it.Type, Parent: it.Parent}, Attachment: a,
-					Used: inBody(it.Body, a.ID), Editable: editable, First: firstVersion(it, a), order: i})
+					Used: inBody(it.Body, a.ID), Editable: editable, First: first, Retention: ruleOf(it, first), order: i})
 			}
 		}
 	}

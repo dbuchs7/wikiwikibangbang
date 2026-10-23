@@ -285,11 +285,14 @@ const (
 	AttachmentDeleted EventKind = "AttachmentDeleted"
 	// AttachmentLabelled sets the labels of a picture (ADR-0090).
 	AttachmentLabelled EventKind = "AttachmentLabelled"
-	Watched            EventKind = "Watched"
-	Unwatched          EventKind = "Unwatched"
-	CommentDeleted     EventKind = "CommentDeleted"
-	CommentResolved    EventKind = "CommentResolved"
-	CommentReopened    EventKind = "CommentReopened"
+	// AttachmentRetentionSet sets or clears how many older versions of a
+	// file are kept, on the file's first version (ADR-0104).
+	AttachmentRetentionSet EventKind = "AttachmentRetentionSet"
+	Watched                EventKind = "Watched"
+	Unwatched              EventKind = "Unwatched"
+	CommentDeleted         EventKind = "CommentDeleted"
+	CommentResolved        EventKind = "CommentResolved"
+	CommentReopened        EventKind = "CommentReopened"
 	// Taking access back (ADR-0048).
 	RoleRevoked        EventKind = "RoleRevoked"
 	GroupMemberRemoved EventKind = "GroupMemberRemoved"
@@ -394,7 +397,7 @@ type Event struct {
 func (e Event) HasContent() bool {
 	switch e.Kind {
 	case ItemCreated, TitleSet, PropertySet, BodyCommitted, ItemImported, CommentAdded, CommentEdited, LabelsSet, AttachmentAdded,
-		AttachmentLabelled, HoldSet, HoldReleased:
+		AttachmentLabelled, AttachmentRetentionSet, HoldSet, HoldReleased:
 		return true
 	}
 	return false
@@ -411,7 +414,7 @@ func (e *Event) erase() {
 	if e.Kind == HoldSet && e.Hold != nil {
 		e.Hold = &Hold{Savers: e.Hold.Savers}
 	}
-	if e.Kind == AttachmentAdded || e.Kind == AttachmentLabelled {
+	if e.Kind == AttachmentAdded || e.Kind == AttachmentLabelled || e.Kind == AttachmentRetentionSet {
 		e.Attachment = nil
 	}
 	if e.Kind == BodyCommitted {

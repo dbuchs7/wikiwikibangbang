@@ -116,3 +116,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0101](0101-a-reading-mode.md) | A reading mode | Accepted | Landed |
 | [0102](0102-owner-and-details-beside-the-text-sign-in-centred.md) | Owner and details beside the text; the sign-in card centred | Accepted | Landed |
 | [0103](0103-the-versions-of-a-file-form-one-stack-in-the-album.md) | The versions of a file form one stack in the album | Accepted | Landed |
+| [0104](0104-rules-for-the-older-versions-of-pictures.md) | Rules for the older versions of pictures | Accepted | Landed |

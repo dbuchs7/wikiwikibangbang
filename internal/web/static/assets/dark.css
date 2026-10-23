@@ -40,3 +40,7 @@
 #access.access-restricted .access-bar { color: #f5c37a; }
 
 .pm-editor mark { background: #6b5a00; }
+/* Cleaning up older versions of a picture (ADR-0104). */
+.album-own-rule, .retention-version.used .retention-state { background: #33240c !important; color: #f5c37a !important; }
+.retention-version.remove { background: #3a1616; border-color: #8a2a2a; }
+.retention-version.remove .retention-state { background: #5a1f1f; color: #ffb4b4; }

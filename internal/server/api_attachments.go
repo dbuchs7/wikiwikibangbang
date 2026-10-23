@@ -119,6 +119,9 @@ func (h itemHandlers) album(w http.ResponseWriter, r *http.Request) {
 			// Versions are the older versions of the file, newest first
 			// (ADR-0103); absent for a file with one version.
 			Versions []picture `json:"versions,omitempty"`
+			// Retention is the stack's own rule for its older versions
+			// (ADR-0104); absent while the album's default applies.
+			Retention *retentionJSON `json:"retention,omitempty"`
 		}
 		one := func(p item.Picture) picture {
 			return picture{Item: itemRef{p.Item.ID, p.Item.Key, p.Item.Title, p.Item.Space, p.Item.Type},
@@ -127,6 +130,10 @@ func (h itemHandlers) album(w http.ResponseWriter, r *http.Request) {
 		out := []picture{}
 		for _, st := range all[min(offset, len(all)):min(offset+limit, len(all))] {
 			top := one(st[0])
+			if r := st[0].Retention; r != nil {
+				rule := ruleJSON(*r)
+				top.Retention = &rule
+			}
 			for _, p := range st[1:] {
 				top.Versions = append(top.Versions, one(p))
 			}

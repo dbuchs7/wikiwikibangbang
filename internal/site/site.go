@@ -127,8 +127,10 @@ type event struct {
 	// Connector is set by ConnectorSet; ConnectorRemoved names it in
 	// Asset (ADR-0077).
 	Connector *Connector `json:"connector,omitempty"`
-	Type      string     `json:"type,omitempty"`
-	Data      []byte     `json:"data,omitempty"`
+	// AlbumRetention is set by AlbumRetentionSet (ADR-0104).
+	AlbumRetention *AlbumRetention `json:"albumRetention,omitempty"`
+	Type           string          `json:"type,omitempty"`
+	Data           []byte          `json:"data,omitempty"`
 }
 
 const (
@@ -147,6 +149,8 @@ const (
 
 	connectorSet     = "ConnectorSet"
 	connectorRemoved = "ConnectorRemoved"
+
+	albumRetentionSet = "AlbumRetentionSet"
 )
 
 // Settings is safe for concurrent use.
@@ -163,6 +167,8 @@ type Settings struct {
 	access      Access
 	backup      *Backup
 	connectors  map[string]Connector
+	// albumRetention is the album's default rule (ADR-0104).
+	albumRetention AlbumRetention
 }
 
 // New rebuilds the settings from records and journals later changes.
@@ -227,6 +233,11 @@ func (s *Settings) apply(e event) error {
 		s.connectors[e.Connector.ID] = *e.Connector
 	case connectorRemoved:
 		delete(s.connectors, e.Asset)
+	case albumRetentionSet:
+		if e.AlbumRetention == nil {
+			return errors.New("an album retention event without a rule")
+		}
+		s.albumRetention = *e.AlbumRetention
 	default:
 		return fmt.Errorf("unknown event %q", e.Kind)
 	}

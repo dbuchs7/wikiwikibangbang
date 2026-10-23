@@ -62,6 +62,11 @@ const (
 	// fills a catalog and changes to its settings (ADR-0075, ADR-0077).
 	CatalogSynced      = "catalog.sync"
 	CatalogSyncChanged = "catalog.sync.change"
+	// AlbumRetentionChanged and AlbumCleaned are changes to the album's
+	// default rule for older versions and the clean-ups that removed
+	// versions by it, automatic or started by an administrator (ADR-0104).
+	AlbumRetentionChanged = "album.retention.change"
+	AlbumCleaned          = "album.clean"
 	// The account requests and contacts (ADR-0061).
 	AccountRequested = "account.request"
 	AccountApproved  = "account.approve"
