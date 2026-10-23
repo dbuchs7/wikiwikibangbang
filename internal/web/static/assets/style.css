@@ -126,7 +126,7 @@ main { padding: 22px; }
   box-shadow: var(--shadow); padding: 22px; margin: 0 0 18px;
 }
 .card:has(> table) { overflow-x: auto; }
-.narrow { max-width: 24rem; margin: 3rem auto; }
+.narrow { max-width: 24rem; margin: 3rem 0; }
 
 /* ---------- Buttons ---------- */
 button, .button {
@@ -788,7 +788,8 @@ body { font-size: 14.5px; line-height: 1.55; -webkit-font-smoothing: antialiased
 h1 { font-size: 26px; line-height: 1.25; font-weight: 650; letter-spacing: -0.015em; margin: 0 0 6px; }
 h2 { font-size: 16px; line-height: 1.35; font-weight: 600; margin: 0 0 12px; }
 h3 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; }
-main { padding: 28px clamp(16px, 3vw, 40px) 40px; max-width: 1680px; margin: 0 auto; }
+/* The layout starts at the left edge, not in the middle (ADR-0099). */
+main { padding: 28px clamp(16px, 3vw, 40px) 40px; max-width: 1680px; margin: 0; }
 :focus-visible { outline: none; box-shadow: var(--focus); }
 
 /* ---------- The frame of a view ---------- */
@@ -822,7 +823,7 @@ details.card[open] > summary { margin-bottom: 14px; }
 .side-card, .item-side > section { border-radius: var(--radius); padding: var(--space-4) 18px; box-shadow: var(--shadow); }
 .notice { border-radius: var(--radius-sm); border-left-width: 3px; padding: 12px 14px; }
 .notice-card { border-left: 4px solid var(--accent); }
-.narrow { max-width: 26rem; margin: 8vh auto; }
+.narrow { max-width: 26rem; margin: 8vh 0; }
 .narrow.card { padding: 32px; box-shadow: var(--shadow-lg); }
 
 /* ---------- Buttons ---------- */
@@ -945,7 +946,7 @@ ul.notifications li, .comment, li.attachment, .thread { padding: 10px 0; }
 .tree-box { border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; }
 .tree-row a { padding: 5px 6px; border-radius: 6px; }
 .tree-row a.current { color: var(--accent); }
-.footer { text-align: center; padding: 8px 22px 28px; }
+.footer { text-align: left; padding: 8px clamp(16px, 3vw, 40px) 28px; }
 
 /* ---------- Details ---------- */
 .pm-toolbar button { min-height: 30px; padding: 4px 9px; box-shadow: none; border-radius: 6px; font-weight: 600; }
