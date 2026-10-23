@@ -4,7 +4,7 @@
 // stays where it is, unchanged. Folders (ADR-0090) are items of their own
 // that hold the pictures uploaded into them; pictures carry labels of
 // their own, which only narrow the album.
-import { h } from "./dom.js";
+import { h, when } from "./dom.js";
 import { t } from "./i18n.js";
 import { get, post, put, del, upload } from "./api.js";
 import { DRAWING } from "./drawing.js";
@@ -67,12 +67,16 @@ export function albumBrowser({ pick } = {}) {
     return h("div", { class: "album-labels" }, ...chips, input);
   };
 
-  const card = (p) => h("li", { class: "album-card", "data-attachment": p.attachment.id },
+  // card shows one picture; version numbers it within its stack.
+  const card = (p, version, picture) => h("li", { class: "album-card", "data-attachment": p.attachment.id },
     h("figure", {},
-      h("img", { src: fileURL(p), alt: captionOf(p.attachment.name), loading: "lazy" }),
+      picture || h("img", { src: fileURL(p), alt: captionOf(p.attachment.name), loading: "lazy" }),
       h("figcaption", {},
         h("span", { class: "album-name", text: captionOf(p.attachment.name) }),
-        p.drawing ? h("span", { class: "chip", text: t("album.drawing") }) : null,
+        h("span", { class: "album-chips" },
+          p.drawing ? h("span", { class: "chip", text: t("album.drawing") }) : null,
+          version ? h("span", { class: "chip album-version", text: t("album.version", { n: version }) }) : null),
+        version ? h("span", { class: "muted album-when", text: when(p.attachment.created) }) : null,
         h("a", { href: "#/item/" + encodeURIComponent(p.item.key), class: "muted album-item", text: `${p.item.key} ${p.item.title}`,
           target: pick ? "_blank" : null, rel: pick ? "noopener" : null }))),
     labelsOf(p),
@@ -88,6 +92,41 @@ export function albumBrowser({ pick } = {}) {
         } catch (err) { fail(err); }
       } }) : null,
     !pick && p.editable && p.used ? h("p", { class: "muted album-used", text: t("album.used") }) : null);
+
+  // stack shows a file with older versions (ADR-0103): the newest on top,
+  // the older ones half hidden behind it. The top fans them out below the
+  // stack, newest first, and folds them again.
+  const stack = (p) => {
+    const versions = p.versions || [];
+    if (!versions.length) return card(p);
+    const n = versions.length + 1;
+    let fan = null;
+    const top = h("button", { type: "button", class: "album-stack-top", "aria-expanded": "false",
+      title: t("album.versionsShow", { n }), "aria-label": `${captionOf(p.attachment.name)}: ${t("album.versionsShow", { n })}` },
+      // The nearer an older version, the less it is hidden; the farthest
+      // is drawn first, beneath.
+      versions.slice(0, 2).map((v, i) => h("img", { class: `album-behind album-behind-${i + 1}`, src: fileURL(v), alt: "", loading: "lazy", "aria-hidden": "true" })).reverse(),
+      h("img", { class: "album-front", src: fileURL(p), alt: captionOf(p.attachment.name), loading: "lazy" }),
+      h("span", { class: "album-stack-count", "aria-hidden": "true", text: String(n) }));
+    const li = card(p, n, top);
+    li.classList.add("album-stack");
+    top.addEventListener("click", () => {
+      const open = !fan;
+      top.setAttribute("aria-expanded", String(open));
+      top.title = t(open ? "album.versionsHide" : "album.versionsShow", { n });
+      top.setAttribute("aria-label", `${captionOf(p.attachment.name)}: ${top.title}`);
+      li.classList.toggle("fanned", open);
+      if (open) {
+        fan = h("li", { class: "album-fan", "aria-label": t("album.versionsOf", { name: captionOf(p.attachment.name) }) },
+          h("ul", { class: "album-grid" }, versions.map((v, i) => card(v, n - 1 - i))));
+        li.after(fan);
+      } else {
+        fan.remove();
+        fan = null;
+      }
+    });
+    return li;
+  };
 
   const showTrail = () => {
     const step = (name, to) => h("button", { type: "button", class: "link", text: name, onclick: () => { path = path.slice(0, to); open(); } });
@@ -152,7 +191,7 @@ export function albumBrowser({ pick } = {}) {
       const page = await get("/api/album?" + q);
       if (mine !== generation) return;
       if (!append) grid.replaceChildren();
-      grid.append(...page.pictures.map(card));
+      grid.append(...page.pictures.map((p) => stack(p)));
       next = page.next;
       more.hidden = !page.next;
       // The album's filters work as every list's do (ADR-0098).

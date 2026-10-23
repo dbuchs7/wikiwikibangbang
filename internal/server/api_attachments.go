@@ -24,7 +24,7 @@ func attachmentRoutes(h itemHandlers) []Route {
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/attachments/{id}", Summary: "Download a file; images show inline, everything else downloads", Handler: http.HandlerFunc(h.downloadAttachment)},
 		{Method: http.MethodDelete, Pattern: "/api/items/{ref}/attachments/{id}", Summary: "Delete a file; its content is destroyed", Handler: http.HandlerFunc(h.deleteAttachment)},
 		{Method: http.MethodPut, Pattern: "/api/items/{ref}/attachments/{id}/labels", Summary: "Set a picture's labels (labels); they narrow the album and are no labels of the item, so no kanban or label board shows them", Handler: http.HandlerFunc(h.setPictureLabels)},
-		{Method: http.MethodGet, Pattern: "/api/album", Summary: "The album: images and drawings of every item one may read, newest first; space, folder (only its pictures), q (name, label, key or title), label, kind (image or drawing), offset and limit narrow it", Handler: http.HandlerFunc(h.album)},
+		{Method: http.MethodGet, Pattern: "/api/album", Summary: "The album: images and drawings of every item one may read, newest first, the versions of one file stacked under the newest (versions); space, folder (only its pictures), q (name, label, key or title), label, kind (image or drawing), offset and limit narrow it", Handler: http.HandlerFunc(h.album)},
 		{Method: http.MethodGet, Pattern: "/api/album/folders", Summary: "The album's folders one may read, by name: in space (every space when empty), right below parent (the top when empty)", Handler: http.HandlerFunc(h.albumFolders)},
 		{Method: http.MethodPost, Pattern: "/api/album/folders", Summary: "Make a folder of the album: name, and space or parent (a folder); who may create there may", Handler: http.HandlerFunc(h.createAlbumFolder)},
 		{Method: http.MethodGet, Pattern: "/api/album/labels", Summary: "The labels of the pictures one may read, most used first (space; q: holding it)", Handler: http.HandlerFunc(h.albumLabels)},
@@ -71,11 +71,36 @@ func (h itemHandlers) album(w http.ResponseWriter, r *http.Request) {
 	folder := item.ID(q.Get("folder"))
 	label, _ := item.NormalLabel(q.Get("label"))
 	h.read(w, r, func(x *item.Session) (any, error) {
-		all := x.Pictures(q.Get("space"), keep)
-		all = slices.DeleteFunc(all, func(p item.Picture) bool {
-			return (folder != "" && p.Item.ID != folder) || (label != "" && !slices.Contains(p.Attachment.Labels, label)) ||
-				(text != "" && !strings.Contains(strings.ToLower(p.Attachment.Name+" "+strings.Join(p.Attachment.Labels, " ")+" "+p.Item.Key+" "+p.Item.Title), text))
-		})
+		match := func(p item.Picture) bool {
+			return (folder == "" || p.Item.ID == folder) && (label == "" || slices.Contains(p.Attachment.Labels, label)) &&
+				(text == "" || strings.Contains(strings.ToLower(p.Attachment.Name+" "+strings.Join(p.Attachment.Labels, " ")+" "+p.Item.Key+" "+p.Item.Title), text))
+		}
+		// The versions of one file form a stack (ADR-0103), newest on top.
+		// Pictures come newest first, so a stack's first picture is its
+		// top. A stack shows when any of its versions matches the filter.
+		type stackKey struct{ item, first item.ID }
+		var stacks [][]item.Picture
+		at := map[stackKey]int{}
+		matched := map[int]bool{}
+		for _, p := range x.Pictures(q.Get("space"), keep) {
+			k := stackKey{p.Item.ID, p.First}
+			i, ok := at[k]
+			if !ok {
+				i = len(stacks)
+				at[k] = i
+				stacks = append(stacks, nil)
+			}
+			stacks[i] = append(stacks[i], p)
+			if match(p) {
+				matched[i] = true
+			}
+		}
+		var all [][]item.Picture
+		for i, st := range stacks {
+			if matched[i] {
+				all = append(all, st)
+			}
+		}
 		type itemRef struct {
 			ID    item.ID `json:"id"`
 			Key   string  `json:"key"`
@@ -91,11 +116,21 @@ func (h itemHandlers) album(w http.ResponseWriter, r *http.Request) {
 			// it. Editable: the caller may label or delete it (ADR-0090).
 			Used     bool `json:"used"`
 			Editable bool `json:"editable"`
+			// Versions are the older versions of the file, newest first
+			// (ADR-0103); absent for a file with one version.
+			Versions []picture `json:"versions,omitempty"`
+		}
+		one := func(p item.Picture) picture {
+			return picture{Item: itemRef{p.Item.ID, p.Item.Key, p.Item.Title, p.Item.Space, p.Item.Type},
+				Attachment: toAttachmentJSON(p.Attachment), Drawing: strings.HasSuffix(p.Attachment.Name, DrawingSuffix), Used: p.Used, Editable: p.Editable}
 		}
 		out := []picture{}
-		for _, p := range all[min(offset, len(all)):min(offset+limit, len(all))] {
-			out = append(out, picture{Item: itemRef{p.Item.ID, p.Item.Key, p.Item.Title, p.Item.Space, p.Item.Type},
-				Attachment: toAttachmentJSON(p.Attachment), Drawing: strings.HasSuffix(p.Attachment.Name, DrawingSuffix), Used: p.Used, Editable: p.Editable})
+		for _, st := range all[min(offset, len(all)):min(offset+limit, len(all))] {
+			top := one(st[0])
+			for _, p := range st[1:] {
+				top.Versions = append(top.Versions, one(p))
+			}
+			out = append(out, top)
 		}
 		next := 0
 		if offset+limit < len(all) {

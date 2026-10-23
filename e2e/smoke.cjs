@@ -855,6 +855,24 @@ function ckanSource() {
     await page.waitForSelector("#body.reading");
     check(await page.locator("#attachments li:has-text('.drawing.png')").count() === 2, "the newer version is a copy of its own");
 
+    step("album versions: the drawing drawn again is one stack, the newest on top; it fans out and folds (ADR-0103)");
+    await page.goto(base + "/#/album");
+    await page.waitForSelector("#album .album-card img");
+    await page.fill("#album input[type=search]", drawingKey);
+    await page.selectOption("#album select[aria-label=Kind]", "drawing");
+    const stackCard = "#album .album-stack";
+    await page.waitForSelector(stackCard + " .album-stack-top[aria-expanded=false]");
+    check(await page.locator(stackCard).count() === 1, "the versions of the drawing are one stack");
+    const versions = Number(await page.locator(stackCard + " .album-stack-count").textContent());
+    check(versions >= 2, "the stack counts the drawing's versions");
+    check(await page.locator(stackCard + " .album-version").textContent() === "Version " + versions, "the top is the newest version");
+    check(await page.locator(stackCard + " .album-behind").count() === Math.min(versions - 1, 2), "older versions lie half hidden behind it");
+    await page.click(stackCard + " .album-stack-top");
+    await page.waitForSelector("#album .album-fan .album-card .album-version:text-is('Version 1')");
+    check(await page.locator("#album .album-fan .album-card").count() === versions - 1, "fanned out, every older version shows");
+    await page.click(stackCard + " .album-stack-top");
+    await page.waitForSelector("#album .album-fan", { state: "detached" });
+
     step("links: the link check page says when checking is off");
     await page.click("a.brand");
     await page.click("a:has-text('Platform')");

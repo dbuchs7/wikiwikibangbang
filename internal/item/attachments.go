@@ -298,6 +298,27 @@ type Picture struct {
 	// Used: the item's body shows it. Editable: the principal may edit the
 	// item, so delete the picture or label it (ADR-0090).
 	Used, Editable bool
+	// First is the first version of the file in its item (ADR-0103): a
+	// file edited again, e.g. a drawing, names the one it was made from,
+	// and all versions of one file share First. A file that is no new
+	// version is its own First. Deleted versions still link the chain.
+	First ID
+	// order is the file's place among its item's files: of two added in
+	// the same second, the later is the newer.
+	order int
+}
+
+// firstVersion follows a file's versions within its item back to the
+// first. A copy from another item begins a chain of its own.
+func firstVersion(it *Item, a Attachment) ID {
+	for seen := 0; a.Source != nil && a.Source.Item == it.ID && seen < len(it.Attachments); seen++ {
+		prev, ok := it.attachment(a.Source.Attachment)
+		if !ok {
+			break
+		}
+		a = *prev
+	}
+	return a.ID
 }
 
 // Pictures returns the files of the live items the principal may read,
@@ -311,10 +332,10 @@ func (x *Session) Pictures(space string, keep func(Attachment) bool) []Picture {
 			continue
 		}
 		editable := x.s.canEdit(x.who, it) && it.Managed == ""
-		for _, a := range it.Attachments {
+		for i, a := range it.Attachments {
 			if !a.Deleted && keep(a) {
 				out = append(out, Picture{Item: Item{ID: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Type: it.Type, Parent: it.Parent}, Attachment: a,
-					Used: inBody(it.Body, a.ID), Editable: editable})
+					Used: inBody(it.Body, a.ID), Editable: editable, First: firstVersion(it, a), order: i})
 			}
 		}
 	}
@@ -322,7 +343,10 @@ func (x *Session) Pictures(space string, keep func(Attachment) bool) []Picture {
 		if c := cmp.Compare(b.Attachment.Created, a.Attachment.Created); c != 0 {
 			return c
 		}
-		return strings.Compare(string(a.Attachment.ID), string(b.Attachment.ID))
+		if c := strings.Compare(string(a.Item.ID), string(b.Item.ID)); c != 0 {
+			return c
+		}
+		return cmp.Compare(b.order, a.order)
 	})
 	return out
 }
