@@ -32,7 +32,7 @@ Chosen option: **1**.
   - **F11:** when the browser enters its full screen, reading mode starts (`display-mode: fullscreen`); when it leaves it, reading mode ends.
   - **Button:** the button beside the bulb in the top bar.
   - **Keys:** Ctrl+Shift+F (Cmd+Shift+F on a Mac), the key of Google Docs' compact mode.
-  - Started from the page, it asks the browser for the full screen too.
+  - Started from the page, it leaves the browser's window as it is: the page does not ask for the full screen, so the keys and the browser never contradict each other.
 - **Ending it:** Esc (unless a dialog is open), the same keys, or "Leave reading mode (Esc)", a quiet button at the top right that stays while reading.
 - **Narrow screens:** below 480 px the button gives way, since the screen holds the content already. The keys still work.
 

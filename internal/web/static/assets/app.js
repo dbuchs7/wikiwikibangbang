@@ -922,12 +922,10 @@ function renderNav() {
 // screen (F11); Esc, the same keys or its button end it.
 const readingMode = {
   on: false,
-  set(on, fullscreen) {
+  set(on) {
+    if (on === this.on) return;
     this.on = on;
     document.documentElement.classList.toggle("reading-mode", on);
-    // Started from the page, it takes the whole screen too, as F11 does.
-    if (fullscreen && on && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
-    if (!on && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   },
 };
 const readingExit = h("button", { type: "button", class: "reading-exit", id: "reading-exit", onclick: () => readingMode.set(false) });
@@ -935,16 +933,15 @@ document.body.append(readingExit);
 document.addEventListener("keydown", (ev) => {
   if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key.toLowerCase() === "f") {
     ev.preventDefault();
-    readingMode.set(!readingMode.on, true);
+    readingMode.set(!readingMode.on);
   } else if (ev.key === "Escape" && readingMode.on && !document.querySelector("dialog[open]")) {
     readingMode.set(false);
   }
 });
 // The browser's own full screen (F11) is reading mode too, and leaving it
-// ends it.
-const fullscreenMedia = window.matchMedia("(display-mode: fullscreen)");
-fullscreenMedia.addEventListener("change", (ev) => readingMode.set(ev.matches));
-document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && !fullscreenMedia.matches && readingMode.on) readingMode.set(false); });
+// ends it. The page itself never asks for the full screen: a request and
+// its late answer would race with the keys.
+window.matchMedia("(display-mode: fullscreen)").addEventListener("change", (ev) => readingMode.set(ev.matches));
 
 // expandIcon draws four corners pointing outwards.
 function expandIcon() {
@@ -1025,7 +1022,7 @@ function lookToggles() {
   onLeave(() => document.removeEventListener("themechange", draw));
   draw();
   const reader = h("button", { type: "button", class: "icon-btn reading-toggle", id: "reading-toggle",
-    title: t("reading.enter"), "aria-label": t("reading.enter"), onclick: () => readingMode.set(true, true) }, expandIcon());
+    title: t("reading.enter"), "aria-label": t("reading.enter"), onclick: () => readingMode.set(true) }, expandIcon());
   return h("span", { class: "look-toggles" }, langs, bulb, reader);
 }
 
