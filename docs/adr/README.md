@@ -120,3 +120,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0105](0105-the-automatic-clean-up-runs-at-a-fixed-hour.md) | The automatic clean-up of the album runs at a fixed hour | Accepted | Landed |
 | [0106](0106-an-embedded-item-is-shown-whole.md) | An embedded item is shown whole | Accepted | Landed |
 | [0107](0107-personal-notes-seen-by-their-maker-alone.md) | Personal notes, seen by their maker alone | Accepted | Landed |
+| [0108](0108-a-picture-is-copied-in-the-album-and-pasted-into-a-text.md) | A picture is copied in the album and pasted into a text | Accepted | Landed |

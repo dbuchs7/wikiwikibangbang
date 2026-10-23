@@ -11,6 +11,57 @@ import { DRAWING } from "./drawing.js";
 
 const fileURL = (p) => `/api/items/${p.item.id}/attachments/${p.attachment.id}`;
 
+// The album's clipboard (ADR-0108): a picture copied in the album is pasted
+// into a text as a copy of its original file, with its source, as "Insert…
+// → From the album" does. The system clipboard carries a marker that names
+// the picture, beside the picture itself as PNG for other programs; this
+// browser keeps the last picture copied, for Insert… → Copied picture where
+// the clipboard cannot be written.
+const CLIP = "wwbb.albumClip";
+export const clipMark = /data-wwbb-album="([A-Za-z0-9_-]{1,64})\/([0-9a-f]{32})"/;
+
+// copiedPicture is the picture last copied in this browser, or null.
+export function copiedPicture() {
+  try {
+    const p = JSON.parse(localStorage.getItem(CLIP));
+    return p?.item?.id && p?.attachment?.id ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+// asPNG gives a picture's bytes as PNG, the image format clipboards take.
+async function asPNG(blob) {
+  if (blob.type === "image/png") return blob;
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext("2d").drawImage(bitmap, 0, 0);
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("png"))), "image/png"));
+}
+
+// copyPicture copies a picture of the album. It answers true when the
+// system clipboard holds it, false when only this browser does.
+export async function copyPicture(p) {
+  const clip = { item: { id: p.item.id, key: p.item.key, title: p.item.title }, attachment: { id: p.attachment.id, name: p.attachment.name, type: p.attachment.type } };
+  try { localStorage.setItem(CLIP, JSON.stringify(clip)); } catch { /* the system clipboard alone */ }
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") return false;
+  const mark = `<img data-wwbb-album="${p.item.id}/${p.attachment.id}">`;
+  try {
+    // The picture's bytes are fetched inside the promise, so the click
+    // that copies still counts as the user's gesture.
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/html": new Blob([mark], { type: "text/html" }),
+      "text/plain": new Blob([p.attachment.name], { type: "text/plain" }),
+      "image/png": fetch(fileURL(p), { credentials: "same-origin" }).then((r) => r.blob()).then(asPNG),
+    })]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // captionOf makes a caption from a file name.
 export const captionOf = (name) => (name.endsWith(DRAWING) ? name.slice(0, -DRAWING.length) : name.replace(/\.[^.]*$/, ""));
 
@@ -80,7 +131,11 @@ export function albumBrowser({ pick } = {}) {
         h("a", { href: "#/item/" + encodeURIComponent(p.item.key), class: "muted album-item", text: `${p.item.key} ${p.item.title}`,
           target: pick ? "_blank" : null, rel: pick ? "noopener" : null }))),
     labelsOf(p),
-    pick ? h("button", { type: "button", class: "primary album-pick", text: t("album.insert"), onclick: () => pick(p) }) : null,
+    pick ? h("button", { type: "button", class: "primary album-pick", text: t("album.insert"), onclick: () => pick(p) })
+      : h("button", { type: "button", class: "secondary album-copy", text: t("album.copy"), title: t("album.copyTitle"), onclick: async () => {
+        const system = await copyPicture(p);
+        status.replaceChildren(h("p", { class: "notice", role: "status", text: t(system ? "album.copied" : "album.copiedHere", { name: captionOf(p.attachment.name) }) }));
+      } }),
     // A picture its item's text shows is deleted there, not here.
     !pick && p.editable && !p.used ? h("button", { type: "button", class: "danger album-delete", text: t("album.delete"),
       onclick: async () => {
@@ -126,12 +181,16 @@ export function albumBrowser({ pick } = {}) {
       reset.hidden = !plan.own;
     };
     let timer = 0;
+    let asked = 0;
     const preview = () => {
       clearTimeout(timer);
       timer = setTimeout(async () => {
         const r = rule();
+        const mine = ++asked;
         try {
-          plan = { ...(await get(`${base}?keep=${r.keep}&days=${r.days}`)), own: plan.own };
+          const next = await get(`${base}?keep=${r.keep}&days=${r.days}`);
+          if (mine !== asked) return;
+          plan = { ...next, own: plan.own };
           dstatus.replaceChildren();
           show();
         } catch (err) { dstatus.replaceChildren(h("p", { class: "error", role: "alert", text: err.message })); }
@@ -308,9 +367,11 @@ export function albumBrowser({ pick } = {}) {
   } });
   let timer = null;
   search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => load(false), 250); });
-  kind.addEventListener("change", () => load(false));
-  label.addEventListener("change", () => load(false));
-  space.addEventListener("change", () => { loadFolders(); load(false); });
+  // A choice loads at once, with the text typed so far: a search still
+  // waiting would only load the same again, after the reader acted on it.
+  kind.addEventListener("change", () => { clearTimeout(timer); load(false); });
+  label.addEventListener("change", () => { clearTimeout(timer); load(false); });
+  space.addEventListener("change", () => { clearTimeout(timer); loadFolders(); load(false); });
   more.addEventListener("click", () => load(true));
   get("/api/spaces").then(({ spaces }) => space.append(...spaces.map((s) => h("option", { value: s.key, text: `${s.key} ${s.name}` })))).catch(() => {});
   loadLabels().catch(() => {});
@@ -363,10 +424,15 @@ export async function retentionCard() {
   const status = h("div", { class: "status", role: "status" });
   const fail = (err) => status.replaceChildren(h("p", { class: "error", role: "alert", text: err.message }));
   const rule = () => ({ keep: Number(keep.value) || 0, days: Number(days.value) || 0 });
+  // Only the latest preview shows: an earlier answer arriving late does
+  // not overwrite it.
+  let asked = 0;
   const showPreview = async () => {
     const r = rule();
+    const mine = ++asked;
     try {
       const p = await get(`/api/album/retention/preview?keep=${r.keep}&days=${r.days}`);
+      if (mine !== asked) return;
       preview.replaceChildren(...(p.versions ? [
         h("p", { text: `${t("retention.previewCount", { n: p.versions })} ${t("retention.inPictures", { n: p.stacks })}` }),
         h("table", { class: "history", id: "album-retention-pictures" }, p.pictures.map((x) => h("tr", {},

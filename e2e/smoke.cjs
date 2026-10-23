@@ -947,6 +947,29 @@ function ckanSource() {
     await page.waitForFunction(() => !document.querySelector("#album .album-stack"));
     check(await page.locator("#album .album-card").count() === 1, "one version is left, so the stack is a single picture");
 
+    step("album copy: a picture copied in the album is pasted into a page with Ctrl+V as a copy of its original, or inserted as the copied picture (ADR-0108)");
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: base });
+    await page.goto(base + "/#/album");
+    await page.waitForSelector("#album .album-card img");
+    await page.fill("#album input[type=search]", drawingKey);
+    await page.selectOption("#album select[aria-label=Kind]", "drawing");
+    await page.waitForFunction(() => document.querySelectorAll("#album .album-card").length === 1);
+    await page.click("#album .album-card .album-copy");
+    await page.waitForSelector("#album .notice:has-text('copied')");
+    check(await page.evaluate(() => Boolean(JSON.parse(localStorage.getItem("wwbb.albumClip"))?.attachment?.id)), "this browser keeps the copied picture");
+    await page.goto(base + "/#/item/PLAT-2?edit");
+    await page.waitForSelector("#body.editing .ProseMirror");
+    const copiesBefore = await page.locator("#body .pm-image").count();
+    await page.click("#body .ProseMirror");
+    await page.keyboard.press("End");
+    await page.keyboard.press("Control+V");
+    await page.waitForFunction((n) => document.querySelectorAll("#body .pm-image").length === n + 1, copiesBefore);
+    await page.selectOption("#body .pm-toolbar select:has(option[value=clip])", "clip");
+    await page.waitForFunction((n) => document.querySelectorAll("#body .pm-image").length === n + 2, copiesBefore);
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    check(await page.locator(`#attachments li:has-text('.drawing.png') .att-origin a:has-text('${drawingKey}')`).count() >= 3, "each pasted picture is a copy that names its original");
+
     step("links: the link check page says when checking is off");
     await page.click("a.brand");
     await page.click("a:has-text('Platform')");

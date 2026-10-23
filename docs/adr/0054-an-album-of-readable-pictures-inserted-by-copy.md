@@ -58,3 +58,4 @@ Strongest form: a living picture shared by many pages without copies.
 - amended by [ADR-0090](0090-album-folders-uploads-and-picture-labels.md) (folders, uploads, deleting and labels of pictures)
 - relates to ADR-0022 (permissions), ADR-0026 (erasure), ADR-0033 (search), ADR-0045 (attachments), ADR-0053 (drawings)
 - amended by [ADR-0103](0103-the-versions-of-a-file-form-one-stack-in-the-album.md) (the versions of a file form one stack)
+- amended by [ADR-0108](0108-a-picture-is-copied-in-the-album-and-pasted-into-a-text.md) (pictures are copied from the album itself)

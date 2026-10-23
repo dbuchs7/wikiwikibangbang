@@ -629,6 +629,7 @@ dialog.drawing::backdrop { background: rgba(20, 22, 26, .45); }
 /* Cleaning up a picture's older versions (ADR-0104): the limits, then
    every version with what becomes of it. */
 .album-stack > .album-retention { align-self: flex-start; font-size: 13px; padding: 4px 10px; }
+.album-card > .album-copy { align-self: flex-start; font-size: 13px; padding: 4px 10px; }
 .album-own-rule { background: #fff5e6 !important; color: #8a4b00 !important; }
 dialog.retention-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 64px); padding: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: inherit; }
 dialog.retention-dialog::backdrop { background: rgba(20, 22, 26, .45); }
