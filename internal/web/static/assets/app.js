@@ -109,10 +109,14 @@ function downloadCSV(name, rows) {
 // browser's print dialog saves it as PDF.
 function printExport(path, children) {
   document.getElementById("export-frame")?.remove();
-  const frame = h("iframe", { id: "export-frame", title: t("export.pdf"), class: "export-frame" });
-  frame.addEventListener("load", () => frame.contentWindow.print());
+  // The address is set before the frame is placed: a frame placed without
+  // one loads an empty page first, which was printed as an empty PDF.
+  const frame = h("iframe", { id: "export-frame", title: t("export.pdf"), class: "export-frame",
+    src: path + "/export/html" + (children ? "?children=true" : "") });
+  frame.addEventListener("load", () => {
+    if (frame.contentWindow.location.href !== "about:blank") frame.contentWindow.print();
+  });
   document.body.append(frame);
-  frame.src = path + "/export/html" + (children ? "?children=true" : "");
 }
 
 // exportMenu offers a page as PDF and as a Word document, both with what

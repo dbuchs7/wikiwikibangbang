@@ -1576,10 +1576,24 @@ function ckanSource() {
     const [book] = await Promise.all([page.waitForEvent("download"), page.click("#export-docx-handbook")]);
     check(book.suggestedFilename().endsWith("Tidy the wiki.docx"), "the handbook is named after its root page: " + book.suggestedFilename());
     await page.click("#item-export summary");
+    // Each print the frame asks for is noted instead of opening the dialog.
+    await page.evaluate(() => {
+      window.printed = [];
+      const own = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, "contentWindow");
+      Object.defineProperty(HTMLIFrameElement.prototype, "contentWindow", { configurable: true, get() {
+        const w = own.get.call(this);
+        if (w) w.print = () => window.printed.push(w.location.href);
+        return w;
+      } });
+    });
     await page.click("#export-pdf-handbook");
     const frame = await (await page.waitForSelector("#export-frame")).contentFrame();
     await frame.waitForSelector("h2.page-title:text-is('Runbook template')");
     check(await frame.isVisible("nav.contents"), "the printable handbook lists its pages");
+    await page.waitForFunction(() => window.printed.length > 0);
+    await page.waitForTimeout(300);
+    const printed = await page.evaluate(() => window.printed);
+    check(printed.length === 1 && printed[0].includes("/export/html?children=true"), "the handbook is printed once, with its content: " + JSON.stringify(printed));
     // The search without a term asks for one instead of failing; the start
     // page has no search button of its own, the top bar searches.
     await page.goto(base + "/#/");
