@@ -581,6 +581,25 @@ dialog.drawing::backdrop { background: rgba(20, 22, 26, .45); }
 .album-name { font-weight: 600; overflow-wrap: anywhere; }
 .album-item { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Folders, tools and picture labels (ADR-0090). */
+/* A file's versions as a stack (ADR-0103): the newest in front, up to two
+   older ones offset behind it, half hidden. The front fans them out into
+   a row of their own below the stack. */
+.album-stack-top { position: relative; display: block; width: 100%; height: 164px; padding: 0; margin: 0; border: 0; background: none; cursor: pointer; }
+.album-stack-top img { position: absolute; top: 0; left: 0; width: calc(100% - 24px); height: 140px; object-fit: contain; background: #fff; border: 1px solid var(--border); border-radius: 4px; transition: transform .18s ease; }
+.album-stack-top .album-behind-1 { transform: translate(12px, 12px); }
+.album-stack-top .album-behind-2 { transform: translate(24px, 24px); }
+.album-stack-top .album-behind { opacity: .85; box-shadow: 0 1px 2px rgba(0, 0, 0, .08); }
+@media (prefers-reduced-motion: reduce) { .album-stack-top img { transition: none; } }
+.album-stack-top .album-front { box-shadow: 0 2px 6px rgba(0, 0, 0, .12); }
+.album-stack-top:hover .album-behind-1, .album-stack-top:focus-visible .album-behind-1 { transform: translate(16px, 12px) rotate(2deg); }
+.album-stack-top:hover .album-behind-2, .album-stack-top:focus-visible .album-behind-2 { transform: translate(30px, 22px) rotate(4deg); }
+.album-stack-top:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.album-stack-count { position: absolute; top: 6px; right: 30px; min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; text-align: center; }
+.album-stack.fanned { border-color: var(--accent); }
+.album-fan { grid-column: 1 / -1; background: var(--accent-soft); border-radius: 8px; padding: 4px 12px; }
+.album-fan > .album-grid { margin: 8px 0; }
+.album-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.album-when { font-size: 12px; }
 .album-trail { margin: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .album-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
 .album-new-folder { display: flex; gap: 8px; flex: 1 1 100%; }

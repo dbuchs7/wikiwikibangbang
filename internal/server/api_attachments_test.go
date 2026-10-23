@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -201,6 +202,78 @@ func TestCopiesThroughTheAPI(t *testing.T) {
 	w.bert.expect("PUT", "/api/items/"+planID+"/restriction", `{"read":["`+w.ids["bert"]+`"],"edit":[]}`, http.StatusOK)
 	if o := origin(w.vera); o["readable"] != false || o["item"] != nil || o["newer"] != nil {
 		t.Fatalf("an unreadable source tells: %v", o)
+	}
+}
+
+// TestAlbumStacksVersions: the versions of one file form one stack in the
+// album, the newest on top and the older below it, newest first; a deleted
+// version still links the chain, a copy into another item is a stack of
+// its own, and a stack shows when any of its versions matches (ADR-0103).
+func TestAlbumStacksVersions(t *testing.T) {
+	w := newWorld(t)
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{7}, 100)...)
+	mk := func(title string) string {
+		it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"`+title+`","properties":{"priority":"low"}}`, http.StatusCreated)
+		return field(it, "item", "id").(string)
+	}
+	plans, runbook := mk("Plans"), mk("Runbook")
+	up := func(itemID, name, query string, content []byte) string {
+		r := w.bert.upload("/api/items/"+itemID+"/attachments?name="+name+query, "application/octet-stream", content)
+		if r.Code != http.StatusCreated {
+			t.Fatalf("upload %s: %d %s", name, r.Code, r.Body)
+		}
+		var out map[string]any
+		_ = json.Unmarshal(r.Body.Bytes(), &out)
+		return field(out, "attachment", "id").(string)
+	}
+	from := func(item, id string) string { return "&sourceItem=" + item + "&sourceAttachment=" + id }
+	v1 := up(plans, "plan"+DrawingSuffix, "", png)
+	v2 := up(plans, "plan"+DrawingSuffix, from(plans, v1), append(png, 2))
+	v3 := up(plans, "plan"+DrawingSuffix, from(plans, v2), append(png, 3))
+	v4 := up(plans, "plan"+DrawingSuffix, from(plans, v3), append(png, 4))
+	other := up(plans, "rack.png", "", append(png, 5))
+	copied := up(runbook, "plan"+DrawingSuffix, from(plans, v1), png)
+	w.bert.expect("DELETE", "/api/items/"+plans+"/attachments/"+v3, "", http.StatusOK)
+	w.bert.expect("PUT", "/api/items/"+plans+"/attachments/"+v1+"/labels", `{"labels":["first draft"]}`, http.StatusOK)
+
+	type pic struct {
+		id       string
+		versions []string
+	}
+	album := func(query string) (out []pic) {
+		for _, p := range field(w.vera.expect("GET", "/api/album"+query, "", http.StatusOK), "pictures").([]any) {
+			m := p.(map[string]any)
+			got := pic{id: m["attachment"].(map[string]any)["id"].(string)}
+			vs, _ := m["versions"].([]any)
+			for _, v := range vs {
+				got.versions = append(got.versions, v.(map[string]any)["attachment"].(map[string]any)["id"].(string))
+			}
+			out = append(out, got)
+		}
+		return out
+	}
+	stacks := album("")
+	if len(stacks) != 3 {
+		t.Fatalf("three stacks expected, got %v", stacks)
+	}
+	byTop := map[string][]string{}
+	for _, p := range stacks {
+		byTop[p.id] = p.versions
+	}
+	if vs, ok := byTop[v4]; !ok || !slices.Equal(vs, []string{v2, v1}) {
+		t.Errorf("the drawing's stack: %v", stacks)
+	}
+	if vs, ok := byTop[other]; !ok || vs != nil {
+		t.Errorf("a picture of one version: %v", stacks)
+	}
+	if vs, ok := byTop[copied]; !ok || vs != nil {
+		t.Errorf("a copy into another item stacks apart: %v", stacks)
+	}
+	if got := album("?label=first+draft"); len(got) != 1 || got[0].id != v4 || len(got[0].versions) != 2 {
+		t.Errorf("an older version's label finds the stack, newest on top: %v", got)
+	}
+	if page := w.vera.expect("GET", "/api/album?limit=2", "", http.StatusOK); field(page, "total").(float64) != 3 {
+		t.Errorf("paging counts stacks: %v", page)
 	}
 }
 
