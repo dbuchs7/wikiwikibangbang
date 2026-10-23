@@ -108,3 +108,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0093](0093-the-interface-catalog-is-ordinary-pages.md) | The interface catalog is ordinary pages | Accepted | Landed |
 | [0094](0094-a-type-nothing-uses-can-be-removed.md) | A type nothing uses can be removed | Accepted | Landed |
 | [0095](0095-language-and-look-in-the-header-and-an-own-start-picture.md) | Language and look in the header, an own start picture, an empty sheet to write on | Accepted | Landed |
+| [0096](0096-links-mentions-and-embeds-as-in-a-word-processor.md) | Links, mentions and embeds as in a word processor | Accepted | Landed |

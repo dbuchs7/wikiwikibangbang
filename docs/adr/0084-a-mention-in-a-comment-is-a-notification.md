@@ -58,4 +58,5 @@ Strongest form: no new kind of notification; the person then hears of everything
 
 ## Links
 
+- amended by [ADR-0096](0096-links-mentions-and-embeds-as-in-a-word-processor.md) (a mention in a text is told too)
 - relates to ADR-0046 (watching and notifications), ADR-0063 (comment feed), ADR-0064 (digest to channels), ADR-0078 (people search), ADR-0026 (erasure)

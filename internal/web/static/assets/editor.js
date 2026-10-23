@@ -14,6 +14,7 @@ import { t } from "./i18n.js";
 import { anchorOf } from "./anchors.js";
 import { openDrawing, drawingName } from "./drawing.js";
 import { pickFromAlbum, pictureFile, captionOf } from "./album.js";
+import { assist } from "./assist.js";
 
 // Every block carries bid, its ID in a live session (ADR-0010); it is not
 // stored. Text blocks keep the mentions they had without a mention mark
@@ -565,8 +566,11 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   // one's own or another's in a live session (ADR-0059).
   let onUpdate = () => {};
   const statePlugin = new Plugin({ view: () => ({ update: (v) => onUpdate(v.state) }) });
+  // Links, "@" and embedding as in a word processor (ADR-0096).
+  const aids = assist(schema, isSafeLink);
+  const aidKeys = keymap({ "Mod-k": (state, dispatch, v) => { aids.openLink(v); return true; } });
   const view = new EditorView(mount, {
-    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...plugins(), tocPlugin, statePlugin] }),
+    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...(editable ? [...aids.plugins, aidKeys] : []), ...plugins(), tocPlugin, statePlugin] }),
     editable: () => editable,
     attributes: { "aria-label": t("editor.body"), role: "textbox", "aria-multiline": "true" },
     nodeViews: {
@@ -602,8 +606,9 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind === "image") picker.click();
     else if (kind === "drawing") draw();
     else if (kind === "album") fromAlbum();
+    else if (kind === "embed") embed();
     else if (kind) insertBlock(schema.nodes[kind].create());
-  } }, [["", t("editor.insert")], ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["children", t("editor.children")],
+  } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["children", t("editor.children")],
     files ? ["image", t("editor.image")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
@@ -648,21 +653,13 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       status.textContent = err.message;
     }
   };
-  const target = h("input", { class: "pm-target", placeholder: t("editor.target"), "aria-label": t("editor.targetLabel") });
   const status = h("span", { class: "error", role: "status" });
-  const withTarget = (fn) => async () => {
+  // An item shown in the text, chosen by searching (ADR-0096).
+  const embed = async () => {
     status.textContent = "";
-    const value = target.value;
-    try {
-      if (!value.trim()) throw new Error(t("editor.needTarget"));
-      await fn(value.trim());
-      // Clear only what this action used: the field may have been edited
-      // while the item was being resolved.
-      if (target.value === value) target.value = "";
-    } catch (err) {
-      status.textContent = err.message;
-    }
-    view.focus();
+    const it = await aids.pickItem(t("assist.embedItem"));
+    if (!it) return view.focus();
+    insertBlock(schema.nodes.embed.create({ ref: it.id, label: `${it.key} ${it.title}`, href: "#/item/" + encodeURIComponent(it.key) }));
   };
   // Commenting on a passage works while reading too (ADR-0047).
   const commentButton = comment ? h("button", { type: "button", id: "comment-selection", text: t("editor.comment"), onclick: () => {
@@ -717,22 +714,14 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     group(...markButtons.map((b) => b.el)),
     group(...alignButtons.map((b) => b.el)),
     group(listButton("bullet", "•", t("editor.bullet")), listButton("ordered", "1.", t("editor.ordered")), listButton("task", "☑", t("editor.task"))),
-    group(target,
-    h("button", { type: "button", text: t("editor.link"), onclick: withTarget(async (href) => {
-      if (!isSafeLink(href)) throw new Error(t("editor.linkNeedsURL"));
-      if (view.state.selection.empty) throw new Error(t("editor.linkNeedsSelection"));
-      toggleMark(schema.marks.link, { href })(view.state, view.dispatch);
-    }) }),
-    h("button", { type: "button", text: t("editor.mention"), onclick: withTarget(async (ref) => {
-      const it = await resolve(ref);
-      view.dispatch(view.state.tr.replaceSelectionWith(schema.nodes.mention.create({ ref: it.id, label: "@" + it.key })));
-    }) }),
-    h("button", { type: "button", text: t("editor.embed"), onclick: withTarget(async (ref) => {
-      const it = await resolve(ref);
-      const node = schema.nodes.embed.create({ ref: it.id, label: `${it.key} ${it.title}`, href: "#/item/" + encodeURIComponent(it.key) });
-      const { $to } = view.state.selection;
-      view.dispatch(view.state.tr.insert($to.depth >= 1 ? $to.after(1) : $to.pos, node));
-    }) })),
+    group(
+      h("button", { type: "button", id: "pm-link", title: t("assist.linkTitle"), "aria-label": t("assist.linkTitle"), text: t("editor.link"), onclick: () => aids.openLink(view) }),
+      h("button", { type: "button", id: "pm-at-button", title: t("assist.mentionTitle"), "aria-label": t("assist.mentionTitle"), text: "@", onclick: () => {
+        const { from, to } = view.state.selection;
+        const before = from > 0 ? view.state.doc.textBetween(from - 1, from, null, " ") : "";
+        view.dispatch(view.state.tr.insertText(before && !/\s/.test(before) ? " @" : "@", from, to));
+        view.focus();
+      } })),
     group(insertSelect, picker),
     commentButton,
     h("button", { type: "button", title: t("editor.undo"), text: "↶", onclick: run(undo) }),
