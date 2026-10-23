@@ -121,7 +121,7 @@ function ckanSource() {
     await page.waitForSelector("#welcome h1:has-text('admin')");
     await page.waitForSelector("#welcome img.welcome-art");
     await page.waitForSelector("#welcome #home-version:has-text('Version')");
-    check(await page.locator(".home-tiles a").count() === 4, "four quick accesses");
+    check(await page.locator(".home-tiles a").count() === 5, "five quick accesses, one's notes among them");
 
     step("the footer names the running version");
     await page.waitForSelector("footer.footer:has-text('wikiwikibangbang')");
@@ -712,6 +712,17 @@ function ckanSource() {
     await page.click("#note-save");
     await page.waitForSelector("#note-dialog", { state: "detached" });
     await page.click("#reading-exit");
+    await page.waitForSelector("#notes-list .note-text:has-text('Failover tested on Monday')");
+    // The start page leads to one's notes, wherever they were made, and
+    // each back to its page (ADR-0113).
+    const notedAt = await page.evaluate(() => location.hash);
+    await page.goto(base + "/#/");
+    await page.waitForSelector("#home-my-notes:has-text('1 note')");
+    await page.click("#home-my-notes");
+    await page.waitForSelector("#my-notes li:has-text('Failover tested on Monday') blockquote.my-note-quote:text-is('primary')");
+    check((await page.textContent("main")).includes("Only you see your notes"), "the list says the notes are private");
+    await page.click("#my-notes li a");
+    await page.waitForFunction((h) => location.hash.split("?")[0] === h.split("?")[0], notedAt);
     await page.waitForSelector("#notes-list .note-text:has-text('Failover tested on Monday')");
     await page.click("#notes-list .note-open");
     answer = true;

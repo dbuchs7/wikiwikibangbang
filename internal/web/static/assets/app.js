@@ -1218,6 +1218,7 @@ async function route() {
       case "item": return await itemView(arg, params);
       case "label": return await labelView(arg);
       case "notifications": return await notificationsView();
+      case "my-notes": return await myNotesView();
       case "comments": return await commentsView(arg);
       case "album": return albumView();
       case "search": return await searchView(arg || "");
@@ -1536,6 +1537,24 @@ async function searchView(q) {
   emptyNow(first.total.value);
 }
 
+// myNotesView lists one's personal notes on every item one may still
+// read, newest first, each with its passage and a link to its item
+// (ADR-0113). Nobody else sees them (ADR-0107).
+async function myNotesView() {
+  const show = screen();
+  const { notes } = await get("/api/notes");
+  const list = h("ul", { class: "list my-notes", id: "my-notes" }, [...notes].reverse().map((n) => h("li", { "data-f-item": n.key },
+    h("p", {}, link("#/item/" + encodeURIComponent(n.key), n.key), " ", h("strong", { text: n.title }),
+      h("span", { class: "muted", text: " · " + when(n.updated || n.created) })),
+    n.anchor?.quote ? h("blockquote", { class: "my-note-quote", text: n.anchor.quote }) : null,
+    h("p", { class: "my-note-text", text: n.text }))));
+  show(
+    h("div", { class: "page-head" }, h("h1", { text: t("note.title") })),
+    h("p", { class: "muted", text: t("note.private") }),
+    notes.length ? filtered(list, { id: "mynotes", label: t("note.title") }) : empty(t("note.noneAnywhere"), "my-notes-empty"),
+  );
+}
+
 // --- spaces ------------------------------------------------------------------
 
 // roleText names a space role for people.
@@ -1553,9 +1572,10 @@ const mayEdit = (role) => role === "editor" || role === "space-admin";
 
 async function homeView() {
   const show = screen();
-  const [{ spaces }, { types }, notes, brand, { requests }] = await Promise.all([get("/api/spaces"), get("/api/types"),
+  const [{ spaces }, { types }, notes, brand, { requests }, mine] = await Promise.all([get("/api/spaces"), get("/api/types"),
     get("/api/notifications?limit=1").catch(() => ({ unread: 0 })), get("/branding.json").catch(() => ({})),
-    me.admin ? get("/api/account-requests").catch(() => ({ requests: [] })) : { requests: [] }]);
+    me.admin ? get("/api/account-requests").catch(() => ({ requests: [] })) : { requests: [] },
+    get("/api/notes").catch(() => ({ notes: [] }))]);
   if (me.admin) setRequests(requests.length);
   const anyEditable = spaces.some((s) => mayEdit(s.role));
   // A greeting by the time of day, the reader's own clock.
@@ -1606,6 +1626,8 @@ async function homeView() {
         requests.length ? h("span", { class: "chip", text: t("nav.requestsWaiting", { n: requests.length }) }) : null),
       quick("#/notifications", t("nav.notifications"), notes.unread ? t("home.notesUnread", { n: notes.unread }) : t("home.notesNone"), "home-notes",
         findings ? h("span", { class: "chip", text: t("nav.findingsOpen", { n: findings }) }) : null),
+      // One's personal notes, wherever they were made (ADR-0113).
+      quick("#/my-notes", t("note.title"), mine.notes.length ? t("home.myNotesText", { n: mine.notes.length }) : t("home.myNotesNone"), "home-my-notes"),
       quick("#/album", t("nav.album"), t("home.albumText"), "home-album"),
       quick("#/mcp", t("nav.mcp"), t("home.mcpText"), "home-mcp")),
     h("h2", { text: t("spaces.title") }),

@@ -82,4 +82,5 @@ Strongest form: the server never holds a note at all.
 
 ## Links
 
+- amended by [ADR-0113](0113-ones-notes-from-the-start-page.md) (all of one's notes from the start page)
 - relates to ADR-0047 (inline comments and their anchors), ADR-0026 (erasure), ADR-0022 (permissions), ADR-0016 and ADR-0073 (backups), ADR-0101 (reading mode)
