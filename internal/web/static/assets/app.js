@@ -8,7 +8,7 @@ import { pageTree, ancestors } from "./tree.js";
 import { renderDiff } from "./diff.js";
 import { commentPlugin } from "./anchors.js";
 import { isDrawing } from "./drawing.js";
-import { albumBrowser } from "./album.js";
+import { albumBrowser, retentionCard } from "./album.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 import { applyTheme, setTheme, isDark } from "./theme.js";
 import { filtered, serverFilter, filterParams } from "./filter.js";
@@ -4146,6 +4146,7 @@ async function adminView() {
     }),
     autoBackupCard());
 
+  const albumSection = section("album", t("retention.title"), await retentionCard());
   const catalogSection = section("connectors", t("connector.title"), connectorsCard(spaces, users));
   const designSection = section("design", t("design.title"), await designCard());
   const regulationsSection = section("regulations", t("dp.adminTitle"), await regulationsCard());
@@ -4211,7 +4212,7 @@ async function adminView() {
     h("div", { class: "admin-layout" },
       h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, ...tocLinks),
       h("div", { class: "admin-sections" },
-        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, catalogSection, designSection, regulationsSection, importSection, auditSection)),
+        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, albumSection, catalogSection, designSection, regulationsSection, importSection, auditSection)),
   );
 }
 

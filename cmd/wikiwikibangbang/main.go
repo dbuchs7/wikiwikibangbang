@@ -35,6 +35,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
 	"github.com/dbuchs7/wikiwikibangbang/internal/mcp"
 	"github.com/dbuchs7/wikiwikibangbang/internal/notify"
@@ -168,6 +169,9 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	go expireAudit(ctx, db, log, ticker.C)
+	albumTicker := time.NewTicker(24 * time.Hour)
+	defer albumTicker.Stop()
+	go cleanAlbum(ctx, db, log, albumTicker.C)
 
 	proxies, err := server.ParseTrustedProxies(os.Getenv("WWBB_TRUSTED_PROXIES"))
 	if err != nil {
@@ -339,6 +343,29 @@ func expireAudit(ctx context.Context, db *storage.DB, log *slog.Logger, tick <-c
 				log.Error("audit entries not expired", "err", err)
 			case n > 0:
 				log.Info("expired audit entries", "removed", n)
+			}
+		}
+	}
+}
+
+// cleanAlbum removes, once a day while the album's default says
+// automatic, the older versions of pictures their rules do not keep
+// (ADR-0104).
+func cleanAlbum(ctx context.Context, db *storage.DB, log *slog.Logger, tick <-chan time.Time) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-tick:
+			if !db.Site.AlbumRetention().Automatic {
+				continue
+			}
+			done, err := server.CleanAlbum(db, item.RetentionActor, now)
+			switch {
+			case err != nil:
+				log.Error("older versions of pictures not cleaned up", "err", err)
+			case len(done) > 0:
+				log.Info("cleaned up older versions of pictures", "pictures", len(done))
 			}
 		}
 	}

@@ -72,7 +72,10 @@ import (
 //   - 24: the kind TypeRemoved with the type's name (ADR-0094). Versions 1
 //     to 23 are still read.
 //   - 25: the block kind video (ADR-0097). Versions 1 to 24 are still read.
-const CodecVersion = 25
+//   - 26: an attachment may carry Retention, and the kind
+//     AttachmentRetentionSet with attachment, sealed (ADR-0104). Versions 1
+//     to 25 are still read.
+const CodecVersion = 26
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

@@ -93,6 +93,93 @@ export function albumBrowser({ pick } = {}) {
       } }) : null,
     !pick && p.editable && p.used ? h("p", { class: "muted album-used", text: t("album.used") }) : null);
 
+  // cleanUp lets whoever may edit a picture remove its older versions and
+  // give them a rule of their own (ADR-0104). The values start from the
+  // picture's own rule or the album's default; a preview shows what stays
+  // and what goes before anything is removed.
+  const cleanUp = async (p) => {
+    const base = `/api/items/${p.item.id}/attachments/${p.attachment.id}/retention`;
+    const name = captionOf(p.attachment.name);
+    let plan;
+    try { plan = await get(base); } catch (err) { return fail(err); }
+    const number = (id, value) => h("input", { type: "number", id, min: 0, max: id === "retention-keep" ? 1000 : 36500, step: 1, value: String(value) });
+    const keep = number("retention-keep", plan.rule.keep);
+    const days = number("retention-days", plan.rule.days);
+    const source = h("p", { class: "muted", id: "retention-source" });
+    const list = h("ul", { class: "retention-list", id: "retention-list" });
+    const dstatus = h("div", { class: "status", role: "status" });
+    const clean = h("button", { type: "button", class: "danger", id: "retention-clean" });
+    const rule = () => ({ keep: Number(keep.value) || 0, days: Number(days.value) || 0 });
+    const stateText = { keep: t("retention.keepState"), used: t("retention.used"), remove: t("retention.remove") };
+    const show = () => {
+      source.textContent = plan.own ? t("retention.fromOwn") : t("retention.fromDefault");
+      const n = plan.versions.length;
+      list.replaceChildren(...plan.versions.map((v, i) => h("li", { class: "retention-version " + v.state, "data-state": v.state, "data-attachment": v.id },
+        h("img", { src: `/api/items/${p.item.id}/attachments/${v.id}`, alt: "", loading: "lazy" }),
+        h("span", { class: "retention-what" },
+          h("strong", { text: t("album.version", { n: n - i }) }), " ",
+          h("span", { class: "muted", text: when(v.created) })),
+        h("span", { class: "chip retention-state", text: i === 0 ? t("retention.current") : stateText[v.state] }))));
+      const goes = plan.remove.length;
+      clean.textContent = goes ? t("retention.clean", { n: goes }) : t("retention.nothing");
+      clean.disabled = !goes;
+      reset.hidden = !plan.own;
+    };
+    let timer = 0;
+    const preview = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const r = rule();
+        try {
+          plan = { ...(await get(`${base}?keep=${r.keep}&days=${r.days}`)), own: plan.own };
+          dstatus.replaceChildren();
+          show();
+        } catch (err) { dstatus.replaceChildren(h("p", { class: "error", role: "alert", text: err.message })); }
+      }, 200);
+    };
+    keep.addEventListener("input", preview);
+    days.addEventListener("input", preview);
+    const act = (fn) => async () => {
+      try {
+        await fn();
+        load(false);
+      } catch (err) { dstatus.replaceChildren(h("p", { class: "error", role: "alert", text: err.message })); }
+    };
+    const save = h("button", { type: "button", class: "secondary", id: "retention-save", text: t("retention.save"), onclick: act(async () => {
+      plan = await put(base, rule());
+      show();
+      dstatus.replaceChildren(h("p", { class: "notice", text: t("retention.ruleSaved") }));
+    }) });
+    const reset = h("button", { type: "button", class: "link", id: "retention-default", text: t("retention.useDefault"), onclick: act(async () => {
+      plan = await put(base, { default: true });
+      keep.value = String(plan.rule.keep);
+      days.value = String(plan.rule.days);
+      show();
+    }) });
+    clean.addEventListener("click", act(async () => {
+      if (!confirm(t("retention.cleanConfirm", { n: plan.remove.length, name }))) return;
+      plan = { ...(await post(base + "/clean", rule())), own: plan.own };
+      show();
+      dstatus.replaceChildren(h("p", { class: "notice", text: t("retention.cleaned") }));
+    }));
+    const dialog = h("dialog", { class: "retention-dialog", id: "retention-dialog", "aria-label": t("retention.dialogTitle", { name }) },
+      h("div", { class: "drawing-bar" }, h("strong", { text: t("retention.dialogTitle", { name }) }),
+        h("button", { type: "button", id: "retention-close", text: t("common.close"), onclick: () => dialog.close() })),
+      h("div", { class: "retention-body" },
+        source,
+        h("div", { class: "retention-fields" },
+          h("label", { class: "field" }, h("span", { text: t("retention.keep") }), keep),
+          h("label", { class: "field" }, h("span", { text: t("retention.days") }), days)),
+        h("p", { class: "muted", text: t("retention.always") }),
+        list,
+        dstatus,
+        h("div", { class: "actions-row" }, clean, save, reset)));
+    dialog.addEventListener("close", () => dialog.remove());
+    document.body.append(dialog);
+    show();
+    dialog.showModal();
+  };
+
   // stack shows a file with older versions (ADR-0103): the newest on top,
   // the older ones half hidden behind it. The top fans them out below the
   // stack, newest first, and folds them again.
@@ -110,6 +197,8 @@ export function albumBrowser({ pick } = {}) {
       h("span", { class: "album-stack-count", "aria-hidden": "true", text: String(n) }));
     const li = card(p, n, top);
     li.classList.add("album-stack");
+    if (p.retention) li.querySelector(".album-chips").append(h("span", { class: "chip album-own-rule", text: t("retention.chip") }));
+    if (!pick && p.editable) li.append(h("button", { type: "button", class: "secondary album-retention", text: t("retention.open"), onclick: () => cleanUp(p) }));
     top.addEventListener("click", () => {
       const open = !fan;
       top.setAttribute("aria-expanded", String(open));
@@ -257,4 +346,64 @@ export async function pictureFile(p) {
   const res = await fetch(fileURL(p), { credentials: "same-origin" });
   if (!res.ok) throw new Error(res.statusText);
   return new File([await res.blob()], p.attachment.name, { type: p.attachment.type });
+}
+
+// retentionCard is the album's default rule for older versions of
+// pictures, in the administration (ADR-0104): the limits, whether the
+// server applies them every day, a preview of what a clean-up would
+// remove now, each picture by its own rule or this default, and a
+// clean-up started at once.
+export async function retentionCard() {
+  const { settings } = await get("/api/album/retention");
+  const number = (name, value, max) => h("input", { type: "number", name, id: "album-retention-" + name, min: 0, max, step: 1, value: String(value) });
+  const keep = number("keep", settings.keep, 1000);
+  const days = number("days", settings.days, 36500);
+  const automatic = h("input", { type: "checkbox", id: "album-retention-automatic", checked: settings.automatic });
+  const preview = h("div", { id: "album-retention-preview", "aria-live": "polite" });
+  const status = h("div", { class: "status", role: "status" });
+  const fail = (err) => status.replaceChildren(h("p", { class: "error", role: "alert", text: err.message }));
+  const rule = () => ({ keep: Number(keep.value) || 0, days: Number(days.value) || 0 });
+  const showPreview = async () => {
+    const r = rule();
+    try {
+      const p = await get(`/api/album/retention/preview?keep=${r.keep}&days=${r.days}`);
+      preview.replaceChildren(...(p.versions ? [
+        h("p", { text: `${t("retention.previewCount", { n: p.versions })} ${t("retention.inPictures", { n: p.stacks })}` }),
+        h("table", { class: "history", id: "album-retention-pictures" }, p.pictures.map((x) => h("tr", {},
+          h("td", {}, h("a", { href: "#/item/" + encodeURIComponent(x.item), text: `${x.item} ${x.title}` })),
+          h("td", { text: x.name.replace(/(\.drawing)?\.[^.]*$/, "") }),
+          h("td", { class: "muted", text: x.own ? t("retention.chip") : "" }),
+          h("td", { text: t("retention.removes", { n: x.removes }) })))),
+      ] : [h("p", { class: "muted", text: t("retention.previewNone") })]));
+    } catch (err) { fail(err); }
+  };
+  let timer = 0;
+  for (const el of [keep, days]) el.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(showPreview, 250); });
+  const save = h("button", { type: "button", class: "primary", id: "album-retention-save", text: t("retention.saveDefault"), onclick: async () => {
+    try {
+      await put("/api/album/retention", { automatic: automatic.checked, ...rule() });
+      status.replaceChildren(h("p", { class: "notice", text: t("retention.saved") }));
+      showPreview();
+    } catch (err) { fail(err); }
+  } });
+  const run = h("button", { type: "button", class: "danger", id: "album-retention-run", text: t("retention.runNow"), onclick: async () => {
+    if (!confirm(t("retention.runConfirm"))) return;
+    try {
+      const r = await post("/api/album/retention/run");
+      status.replaceChildren(h("p", { class: "notice", text: `${t("retention.ran", { n: r.versions })} ${t("retention.inPictures", { n: r.stacks })}` }));
+      showPreview();
+    } catch (err) { fail(err); }
+  } });
+  showPreview();
+  return h("div", { id: "album-retention" },
+    h("p", { class: "muted", text: t("retention.adminNote") }),
+    h("div", { class: "retention-fields" },
+      h("label", { class: "field" }, h("span", { text: t("retention.keep") }), keep),
+      h("label", { class: "field" }, h("span", { text: t("retention.days") }), days)),
+    h("label", { class: "check" }, automatic, t("retention.automatic")),
+    h("p", { class: "muted", text: t("retention.always") }),
+    h("div", { class: "actions-row" }, save, run),
+    status,
+    h("h3", { text: t("retention.previewTitle") }),
+    preview);
 }
