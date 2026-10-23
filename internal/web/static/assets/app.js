@@ -3,7 +3,7 @@
 import { api, get, post, put, del, download, upload, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
 import { createEditor, setSecretClass } from "./editor.js";
-import { liveBody } from "./live.js";
+import { liveBody, watchLive } from "./live.js";
 import { pageTree, ancestors } from "./tree.js";
 import { renderDiff } from "./diff.js";
 import { commentPlugin } from "./anchors.js";
@@ -3130,6 +3130,19 @@ async function itemView(ref, params = new URLSearchParams()) {
   const threads = commentThreads(path, comments, canEdit);
   // One's own notes on passages, seen by no one else (ADR-0107).
   const notes = live ? personalNotes(path, myNotes.notes) : null;
+  // Who edits the text now, as faces beside the bell, for readers too
+  // (ADR-0115).
+  const editors = h("span", { class: "live-editors", id: "live-editors", role: "status", hidden: true });
+  const showEditors = async (participants) => {
+    const others = participants.filter((p) => p.principal !== me.user.id);
+    await learnNames(others.map((p) => p.principal)).catch(() => {});
+    editors.replaceChildren(...others.map((p) => {
+      const name = t("live.holder", { name: p.name });
+      const f = face(p.principal, 32);
+      return h("span", { class: "live-editor", "data-principal": p.principal, title: name, role: "img", "aria-label": name }, f);
+    }));
+    editors.hidden = others.length === 0;
+  };
 
   // Moving up or down among the siblings: the keyboard's way to reorder,
   // besides dragging in the tree (ADR-0041).
@@ -3227,6 +3240,7 @@ async function itemView(ref, params = new URLSearchParams()) {
     editing && !type.body ? done : null,
     canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null,
     !editing ? exportMenu(item) : null,
+    live && type.body ? editors : null,
     live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null);
   let body = null;
   const protecting = h("div", { id: "protect-passage" });
@@ -3242,9 +3256,28 @@ async function itemView(ref, params = new URLSearchParams()) {
     setSecretClass((ref) => (secretOf.get(ref)?.readable ? "secret-readable" : "secret-veiled"));
     const protect = canEdit && readsAll && live && !editing ? (at) => protectPassageForm(protecting, path, item, at, status) : null;
     const edit = editing ? done : canEdit && readsAll ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null;
-    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit, notes);
+    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit, notes, showEditors);
     body = b.element;
     session = b.session;
+    // A reader follows the text: who edits it, and each version saved by
+    // someone else shows without a reload (ADR-0115). A selection made to
+    // comment or note is not taken away; the text follows after it.
+    if (!editing && live && readsAll) {
+      let timer = null;
+      const redraw = async () => {
+        const sel = document.getSelection();
+        if (sel && !sel.isCollapsed && body.contains(sel.anchorNode)) return void (timer = setTimeout(redraw, 2000));
+        const [{ item: fresh }, fresher] = await Promise.all([get(path), get(path + "/embeds")]);
+        const next = bodySection(fresh, fresher.embeds, false, threads, attachments, protect, edit, notes, showEditors).element;
+        body.replaceWith(next);
+        body = next;
+      };
+      const stop = watchLive(item.id, {
+        onPresence: (ps) => { showEditors(ps); },
+        onCommitted: (e) => { if (e.by !== me.user.id) { clearTimeout(timer); timer = setTimeout(() => redraw().catch(() => {}), 300); } },
+      });
+      onLeave(() => { stop(); clearTimeout(timer); });
+    }
   }
   const card = (id, ...content) => h("section", { class: "side-card", id }, ...content);
   const details = card("details",
@@ -3336,7 +3369,7 @@ async function relocateForm(box, item, mode, spaces, status) {
 // commented on highlighted and commenting on a selection offered; or, when
 // editing, in its live session (ADR-0010), where changes reach everyone at
 // once and are saved as one leaves a block.
-function bodySection(item, embeds, editing, threads, attachments, protect, edit, notes) {
+function bodySection(item, embeds, editing, threads, attachments, protect, edit, notes, onPresence) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!editing) {
     const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
@@ -3360,7 +3393,7 @@ function bodySection(item, embeds, editing, threads, attachments, protect, edit,
     return { element: section, session: null };
   }
   const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item, attachments),
-    extra: [threads.plugin], comment: threads.start, actions: edit ? [edit] : [], embedContent: embedLoader([item.id]), tasks: taskTools(item, true) });
+    extra: [threads.plugin], comment: threads.start, actions: edit ? [edit] : [], embedContent: embedLoader([item.id]), tasks: taskTools(item, true), onPresence });
   onLeave(session.close);
   return { element: h("section", { id: "body", class: "editing" }, session.element), session };
 }

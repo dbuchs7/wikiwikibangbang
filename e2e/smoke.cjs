@@ -317,7 +317,8 @@ function ckanSource() {
     await other.waitForSelector("#account-button[aria-label='Account of bert']");
     await other.goto(base + "/#/item/PLAT-2?edit");
     await other.waitForSelector(".ProseMirror h3");
-    await page.waitForSelector(".live-presence:has-text('bert')");
+    // Who edits shows as faces beside the bell (ADR-0115).
+    await page.waitForSelector("#live-editors .live-editor[title='bert is editing'] .avatar");
     // admin types in the heading; bert sees it live, marked as held.
     await page.click(".ProseMirror h3");
     await page.keyboard.press("End");
@@ -337,6 +338,18 @@ function ckanSource() {
     await other.click("#details h2");
     await page.waitForSelector(".live[data-pending='0']");
     await other.waitForSelector(".live[data-pending='0']");
+    // A reader sees who edits, and what they save, without a reload; the
+    // reader is no editor (ADR-0115).
+    await other.goto(base + "/#/item/PLAT-2");
+    await other.waitForSelector("#body.reading .ProseMirror h3");
+    await other.waitForSelector("#live-editors .live-editor[title='admin is editing']");
+    check(await page.locator("#live-editors .live-editor").count() === 0, "a reader is not shown as editing");
+    await page.click(".ProseMirror .pm-bullet >> nth=1");
+    await page.keyboard.press("End");
+    await page.keyboard.type(" (live)");
+    await page.click("#details h2");
+    await page.waitForSelector(".live[data-pending='0']");
+    await other.waitForSelector("#body.reading .pm-bullet >> text=second item (live)");
     await other.close();
     await page.reload();
     await page.waitForSelector(".ProseMirror h3");

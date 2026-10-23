@@ -137,6 +137,10 @@ type sblock struct {
 type client struct {
 	id, principal, name string
 	ch                  chan Event
+	// watch marks a reader who follows the session without editing: it
+	// receives every event, sends no operations and is no participant
+	// (ADR-0115).
+	watch bool
 }
 
 type session struct {
@@ -196,15 +200,34 @@ var clientIDRE = regexp.MustCompile(`^[A-Za-z0-9_-]{1,40}$`)
 // opening the session if needed. Reading is enough to join; editing is
 // checked per operation.
 func (h *Hub) Join(id item.ID, principal, name string) (*Sub, error) {
+	return h.join(id, principal, name, false)
+}
+
+// Watch adds a reader who follows the session without editing, to see
+// who edits and the text as it changes (ADR-0115). Watchers never take
+// room from editors: they count apart from them, and do not open a
+// session where only a quarter of the sessions is left.
+func (h *Hub) Watch(id item.ID, principal, name string) (*Sub, error) {
+	return h.join(id, principal, name, true)
+}
+
+func (h *Hub) join(id item.ID, principal, name string, watch bool) (*Sub, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	read, edit := h.b.Access(id, principal)
 	if !read {
 		return nil, fmt.Errorf("%w: item %s", item.ErrNotFound, id)
 	}
+	if watch {
+		edit = false
+	}
 	s := h.sessions[id]
 	if s == nil {
-		if len(h.sessions) >= budget.Get().LiveSessions {
+		limit := budget.Get().LiveSessions
+		if watch {
+			limit -= limit / 4
+		}
+		if len(h.sessions) >= limit {
 			return nil, ErrBusy
 		}
 		doc, err := h.b.Body(id)
@@ -223,10 +246,10 @@ func (h *Hub) Join(id item.ID, principal, name string) (*Sub, error) {
 			h.reset(s, doc)
 		}
 	}
-	if len(s.clients) >= budget.Get().LiveClients {
+	if s.count(watch) >= budget.Get().LiveClients {
 		return nil, ErrBusy
 	}
-	c := &client{id: newID(), principal: principal, name: name, ch: make(chan Event, buffer)}
+	c := &client{id: newID(), principal: principal, name: name, ch: make(chan Event, buffer), watch: watch}
 	s.clients[c.id] = c
 	h.send(s, c, Event{Kind: Snapshot, Client: c.id, Editable: edit, Blocks: s.snapshot(), Order: s.order(), Participants: s.participants()})
 	h.broadcast(s, Event{Kind: Presence, Participants: s.participants()})
@@ -257,9 +280,26 @@ func (s *session) order() []string {
 	return out
 }
 
+// count is the number of the session's editing clients, or of its
+// watchers.
+func (s *session) count(watch bool) int {
+	n := 0
+	for _, c := range s.clients {
+		if c.watch == watch {
+			n++
+		}
+	}
+	return n
+}
+
+// participants are the principals editing in the session; watchers are
+// none of them.
 func (s *session) participants() []Participant {
 	var out []Participant
 	for _, c := range s.clients {
+		if c.watch {
+			continue
+		}
 		if !slices.ContainsFunc(out, func(p Participant) bool { return p.Principal == c.principal }) {
 			out = append(out, Participant{Principal: c.principal, Name: c.name})
 		}
@@ -505,7 +545,7 @@ func (h *Hub) Apply(id item.ID, clientID, principal string, ops []Op) error {
 	if c == nil || c.principal != principal {
 		return ErrNotJoined
 	}
-	if _, edit := h.b.Access(id, principal); !edit {
+	if _, edit := h.b.Access(id, principal); !edit || c.watch {
 		return ErrForbidden
 	}
 	if len(ops) == 0 {
@@ -522,6 +562,10 @@ func (h *Hub) Apply(id item.ID, clientID, principal string, ops []Op) error {
 	now := h.now()
 	var events []Event
 	var released []string
+	// unheld are blocks the client releases but no longer holds, e.g. after
+	// its lock lapsed: it is told who holds them, or it would wait for a
+	// release that never comes.
+	var unheld []string
 	take := func(b *sblock) error {
 		if b.holder != nil && b.holder != c {
 			return fmt.Errorf("%w: %s is editing this block", ErrLocked, b.holder.name)
@@ -589,6 +633,8 @@ func (h *Hub) Apply(id item.ID, clientID, principal string, ops []Op) error {
 		case "release":
 			if work[at].holder == c && !slices.Contains(released, op.ID) {
 				released = append(released, op.ID)
+			} else if work[at].holder != c {
+				unheld = append(unheld, op.ID)
 			}
 		default:
 			return fmt.Errorf("%w: operation %d: unknown operation %q", ErrInvalid, n+1, op.Op)
@@ -603,6 +649,11 @@ func (h *Hub) Apply(id item.ID, clientID, principal string, ops []Op) error {
 			e.Order = s.order()
 		}
 		h.broadcast(s, e)
+	}
+	for _, id := range unheld {
+		if i := s.find(id); i >= 0 {
+			h.send(s, c, Event{Kind: Lock, ID: id, Holder: holder(s.blocks[i].holder)})
+		}
 	}
 	var rel []*sblock
 	for _, r := range released {

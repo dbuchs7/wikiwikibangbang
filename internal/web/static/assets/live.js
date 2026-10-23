@@ -38,7 +38,7 @@ function blockAt(doc, pos) {
 // childPages() lists the item's child pages and files serves and stores
 // its attachments (editor.js); extra adds plugins and comment starts an
 // inline comment (anchors.js).
-export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], comment, actions = [], embedContent, tasks }) {
+export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], comment, actions = [], embedContent, tasks, onPresence }) {
   const el = h("div", { class: "live" });
   const presence = h("p", { class: "muted live-presence", "aria-live": "polite" });
   const status = h("p", { class: "status live-status", role: "status" });
@@ -207,12 +207,15 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     const batch = ops();
     if (batch.length === 0) return;
     sending = true;
+    // A lock or release is noted before it is sent: the server's answer on
+    // the event stream can arrive before the response to the request, and
+    // noted after it, it would be waited for forever.
+    for (const o of batch) if (o.op === "lock" || o.op === "release") asked.set(o.id, o.op);
     try {
       await post(`/api/items/${encodeURIComponent(ref)}/live`, { client: me, ops: batch.map(({ json, ...op }) => op) });
       for (const o of batch) {
         if (o.op === "set" || o.op === "insert") known.set(o.id, o.json);
         if (o.op === "delete") known.delete(o.id);
-        if (o.op === "lock" || o.op === "release") asked.set(o.id, o.op);
       }
     } catch (err) {
       // The batch was refused as a whole; the snapshot of a fresh
@@ -314,6 +317,8 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
       handlers.presence(e);
     },
     presence(e) {
+      // The page may show who edits itself, as faces (ADR-0115).
+      if (onPresence) return onPresence(e.participants || []);
       const others = (e.participants || []).map((p) => p.name);
       presence.textContent = others.length ? t("live.present", { names: others.join(", ") }) : "";
     },
@@ -428,4 +433,17 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
   }
 
   return { element: el, close, finish, view: () => view };
+}
+
+// watchLive follows an item's live session as a reader (ADR-0115): it
+// tells who edits the text now, and each version someone saves. It edits
+// nothing and is no participant; close ends it.
+export function watchLive(ref, { onPresence, onCommitted }) {
+  const source = new EventSource(`/api/items/${encodeURIComponent(ref)}/live?watch=1`);
+  const on = (kind, fn) => source.addEventListener(kind, (ev) => fn(JSON.parse(ev.data)));
+  on("snapshot", (e) => onPresence(e.participants || []));
+  on("presence", (e) => onPresence(e.participants || []));
+  on("committed", (e) => onCommitted(e));
+  on("closed", () => { source.close(); onPresence([]); });
+  return () => source.close();
 }

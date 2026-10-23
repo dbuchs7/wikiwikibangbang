@@ -1449,3 +1449,9 @@ html.reading-mode .reading-exit:hover, html.reading-mode .reading-exit:focus { o
 .pm-tasklist .tasklist-table th[aria-sort="descending"] button.sort::after { content: " ▼"; font-size: 10px; }
 .newtask-display { border: 0; padding: 0; margin: 8px 0; display: flex; gap: 16px; flex-wrap: wrap; }
 .newtask-display legend { font-weight: 600; margin-bottom: 4px; }
+
+/* ---------- Who edits now (ADR-0115) ---------- */
+.live-editors { display: inline-flex; align-items: center; }
+.live-editors[hidden] { display: none; }
+.live-editor { display: inline-flex; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+.live-editor + .live-editor { margin-left: -6px; }

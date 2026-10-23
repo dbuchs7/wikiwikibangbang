@@ -80,5 +80,6 @@ Strongest form: the state of the art (Confluence, Google Docs, Notion); conflict
 
 ## Links
 
+- amended by [ADR-0115](0115-who-edits-shows-as-faces-and-readers-follow-the-text.md) (readers watch the session; editors show as faces)
 - atlas [ADR-0140](https://github.com/pblumer/atlas/blob/main/docs/adr/0140-live-collaborative-modeling-sessions.md)
 - realises the "document body format and CRDT/OT" follow-up of [ADR-0001](0001-unified-item-data-model.md) in part
