@@ -773,6 +773,32 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .kanban-off { font-size: 12px; color: var(--muted); }
 #new-kanban .form-row { display: flex; flex-wrap: wrap; gap: 10px; }
 #new-kanban .form-row .field { flex: 1 1 200px; }
+/* The kanbans page (ADR-0110): boards by label on the left, the kanbans
+   in the middle, a new kanban on the right; on narrow screens the
+   kanbans come first. */
+.kanbans-layout { display: grid; grid-template-columns: clamp(200px, 15vw, 260px) minmax(0, 1fr) clamp(260px, 20vw, 340px);
+  grid-template-areas: "labels main new"; gap: 20px; align-items: start; }
+.kanbans-labels { grid-area: labels; position: sticky; top: 12px; }
+.kanbans-main { grid-area: main; min-width: 0; }
+.kanbans-main > p.muted:first-child { margin-top: 0; }
+.kanbans-new { grid-area: new; }
+.kanbans-new #new-kanban { margin: 0; }
+.kanbans-new #new-kanban h2 { margin-top: 0; font-size: 15px; }
+.kanbans-new #new-kanban .form-row { flex-direction: column; }
+.kanbans-new #new-kanban .form-row .field { flex: none; }
+.kanbans-layout:not(:has(.kanbans-labels)) { grid-template-columns: minmax(0, 1fr) clamp(260px, 20vw, 340px); grid-template-areas: "main new"; }
+.kanbans-layout:not(:has(.kanbans-new)) { grid-template-columns: clamp(200px, 15vw, 260px) minmax(0, 1fr); grid-template-areas: "labels main"; }
+.kanbans-layout:not(:has(.kanbans-labels)):not(:has(.kanbans-new)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main"; }
+.kanbans-labels ul.label-boards { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 8px 0 0; padding: 0; max-height: 60vh; overflow-y: auto; }
+.kanbans-labels ul.label-boards li { padding: 4px 6px; border-radius: var(--radius-sm); }
+.kanbans-labels ul.label-boards li:hover { background: var(--row-hover); }
+.kanbans-labels .filter-bar { flex-wrap: wrap; }
+.kanbans-labels .filter-text { width: 100%; }
+@media (max-width: 1100px) {
+  .kanbans-layout, .kanbans-layout:not(:has(.kanbans-labels)), .kanbans-layout:not(:has(.kanbans-new)) {
+    grid-template-columns: minmax(0, 1fr); grid-template-areas: "main" "new" "labels"; }
+  .kanbans-labels { position: static; }
+}
 
 /* Account requests (ADR-0061): a dot on the account button while requests
    wait for an administrator, and the way to ask on the sign-in page. */
@@ -1156,7 +1182,6 @@ a.requests-notice:hover { border-color: var(--accent); }
 /* ---------- Kanban pictures and boards by label (ADR-0087) ---------- */
 .kanban-title { display: flex; align-items: center; gap: 12px; }
 .kanban-title h1 { margin: 0; }
-.label-boards { display: flex; flex-wrap: wrap; gap: 6px; }
 .labelboard-type + .labelboard-type { margin-top: 18px; }
 
 /* ---------- An item's status, at the top of its details ---------- */

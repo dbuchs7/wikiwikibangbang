@@ -122,3 +122,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0107](0107-personal-notes-seen-by-their-maker-alone.md) | Personal notes, seen by their maker alone | Accepted | Landed |
 | [0108](0108-a-picture-is-copied-in-the-album-and-pasted-into-a-text.md) | A picture is copied in the album and pasted into a text | Accepted | Landed |
 | [0109](0109-a-design-logo-and-start-picture-for-the-dark-look-and-the-product-icon-in-the-tab.md) | A design logo and start picture for the dark look, and the product's icon in the browser tab | Accepted | Landed |
+| [0110](0110-the-kanbans-page-in-three-columns.md) | The kanbans page in three columns | Accepted | Landed |

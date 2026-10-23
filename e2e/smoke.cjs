@@ -1129,6 +1129,20 @@ function ckanSource() {
     await page.waitForSelector(".kanban-title img.kanban-icon[src*='/icon?v=']");
     await page.goto(base + "/#/kanbans");
     await page.waitForSelector("#kanbans .space-tile:has-text('Website relaunch') img.kanban-icon");
+    // Boards by label on the left, the kanbans in the middle, a new kanban
+    // on the right (ADR-0110).
+    const leftOf = async (sel) => (await page.locator(sel).boundingBox()).x;
+    check(await leftOf("#label-boards") < await leftOf(".kanbans-main") && await leftOf(".kanbans-main") < await leftOf(".kanbans-new #new-kanban"),
+      "boards by label left, kanbans in the middle, a new kanban right");
+    // The labels are filtered as one types, suggested, and Enter opens the
+    // one left.
+    check(await page.getAttribute("#labelboards-filter", "list") === "labelboards-suggest" &&
+      await page.locator("#labelboards-suggest option[value*=relaunch]").count() === 1, "the filter suggests the labels");
+    await page.fill("#labelboards-filter", "relaun");
+    await page.waitForFunction(() => [...document.querySelectorAll("#label-boards li")].filter((li) => !li.hidden).length === 1);
+    await page.press("#labelboards-filter", "Enter");
+    await page.waitForFunction(() => location.hash.startsWith("#/labelboard/") && location.hash.includes("relaunch"));
+    await page.goto(base + "/#/kanbans");
     await page.click("#label-boards a:has-text('relaunch')");
     await page.waitForSelector("#labelboard .board-column[data-state=open] .card-item:has-text('Hero image')");
     await page.waitForSelector("a.kanban-chip:has-text('Website relaunch')"); // the kept kanban of the label

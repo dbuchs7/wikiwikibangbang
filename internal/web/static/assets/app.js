@@ -12,7 +12,7 @@ import { isDrawing } from "./drawing.js";
 import { albumBrowser, retentionCard } from "./album.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 import { applyTheme, setTheme, isDark } from "./theme.js";
-import { filtered, serverFilter, filterParams } from "./filter.js";
+import { filtered, serverFilter, filterParams, norm } from "./filter.js";
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -2334,22 +2334,48 @@ async function kanbansView() {
     h("nav", { class: "tabs", "aria-label": t("tasks.title") },
       link("#/tasks/mine", t("tasks.mine"), "tab"), link("#/tasks/unassigned", t("tasks.unassigned"), "tab"), link("#/tasks/all", t("tasks.all"), "tab"),
       link("#/kanbans", t("kanban.tab"), "tab active", "tab-kanbans")),
-    h("p", { class: "muted", text: t("kanban.intro") }),
-    kanbans.length ? filteredKanbans(h("div", { id: "kanbans" }, [...bySpace].map(([sp, list]) => h("section", {},
-      h("h2", { text: `${sp} · ${spaces.find((x) => x.key === sp)?.name || ""}` }),
-      h("ul", { class: "space-tiles" }, list.map((k) => h("li", { "data-f-space": k.space },
-        h("a", { class: "space-tile", href: `#/kanban/${encodeURIComponent(k.space)}/${k.id}` },
-          h("span", { class: "space-tile-head" }, h("strong", { text: k.name }), kanbanIcon(k, 48)),
-          h("span", { class: "muted", text: t("kanban.meta", { type: k.type, label: k.label }) }),
-          h("span", { class: "badge", text: t("kanban.cards", { n: k.count }) })))))))))
-      : empty(t("kanban.none")),
-    labels.length ? h("section", { id: "label-boards" },
-      h("h2", { text: t("labelboard.listTitle") }),
-      h("p", { class: "muted", text: t("labelboard.listIntro") }),
-      filtered(h("p", { class: "label-boards" }, labels.map((l) =>
-        link(`#/labelboard/${encodeURIComponent(l.label)}`, `${l.label} (${l.count})`, "chip"))), { id: "labelboards", label: t("labelboard.listTitle") })) : null,
-    create,
+    // The boards by label lead on the left, the kanbans stand in the
+    // middle, a new kanban is made on the right (ADR-0110).
+    h("div", { class: "kanbans-layout" },
+      labels.length ? labelBoardNav(labels) : null,
+      h("div", { class: "kanbans-main" },
+        h("p", { class: "muted", text: t("kanban.intro") }),
+        kanbans.length ? filteredKanbans(h("div", { id: "kanbans" }, [...bySpace].map(([sp, list]) => h("section", {},
+          h("h2", { text: `${sp} · ${spaces.find((x) => x.key === sp)?.name || ""}` }),
+          h("ul", { class: "space-tiles" }, list.map((k) => h("li", { "data-f-space": k.space },
+            h("a", { class: "space-tile", href: `#/kanban/${encodeURIComponent(k.space)}/${k.id}` },
+              h("span", { class: "space-tile-head" }, h("strong", { text: k.name }), kanbanIcon(k, 48)),
+              h("span", { class: "muted", text: t("kanban.meta", { type: k.type, label: k.label }) }),
+              h("span", { class: "badge", text: t("kanban.cards", { n: k.count }) })))))))))
+          : empty(t("kanban.none"))),
+      create ? h("aside", { class: "kanbans-new", "aria-label": t("kanban.new") }, create) : null),
   );
+}
+
+// labelBoardNav lists the boards by label as the page's navigation: the
+// filter always shows and suggests the labels as one types; Enter opens
+// the one board left.
+function labelBoardNav(labels) {
+  const list = h("ul", { class: "label-boards" }, labels.map((l) => h("li", { "data-filter-text": l.label },
+    link(`#/labelboard/${encodeURIComponent(l.label)}`, l.label), " ", h("span", { class: "muted", text: `(${l.count})` }))));
+  const box = filtered(list, { id: "labelboards", label: t("labelboard.listTitle"), min: 0 });
+  const input = box.querySelector(".filter-text");
+  input.setAttribute("list", "labelboards-suggest");
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    const left = [...list.children].filter((li) => !li.hidden);
+    const exact = left.find((li) => norm(li.dataset.filterText) === norm(input.value));
+    const open = exact || (left.length === 1 ? left[0] : null);
+    if (open) {
+      ev.preventDefault();
+      location.hash = open.querySelector("a").getAttribute("href");
+    }
+  });
+  return h("aside", { class: "kanbans-labels side-card", id: "label-boards", "aria-label": t("labelboard.listTitle") },
+    h("h2", { text: t("labelboard.listTitle") }),
+    h("p", { class: "muted", text: t("labelboard.listIntro") }),
+    box,
+    h("datalist", { id: "labelboards-suggest" }, labels.map((l) => h("option", { value: l.label }))));
 }
 
 // kanbanView shows one kanban: its cards in the columns of the type's
