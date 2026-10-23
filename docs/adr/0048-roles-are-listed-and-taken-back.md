@@ -38,3 +38,7 @@ Chosen option: **1**. Option 2 would avoid three event kinds, but a grant that m
 - Good: a space administrator manages the space alone.
 - Bad: space administrators learn every account's username. In an internal wiki that is the directory people expect; a server for unrelated parties would need a narrower lookup.
 - Neutral: watches and notifications need no change: a notification shows only what its reader may read now (ADR-0046).
+
+## Links
+
+- amended by [ADR-0111](0111-protecting-removing-and-copying-respect-the-whole-tree.md) (the last space admin role stays)

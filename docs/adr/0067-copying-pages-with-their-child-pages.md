@@ -55,4 +55,5 @@ Strongest form: no duplicated bytes.
 
 ## Links
 
+- amended by [ADR-0111](0111-protecting-removing-and-copying-respect-the-whole-tree.md) (a copy keeps the protection it inherits)
 - relates to ADR-0041 (page tree), ADR-0045 (files), ADR-0055 (copied files carry their source)

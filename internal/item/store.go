@@ -681,28 +681,40 @@ func (s *Store) Trash(actor string, id ID) error {
 		return err
 	}
 	var members []ID
-	inSubtree := map[ID]bool{}
 	for _, m := range s.subtree(id) {
-		inSubtree[m] = true
 		if s.items[m].Presence == Live {
 			members = append(members, m)
 		}
 	}
-	var referrers []string
+	if refs := s.referrers(id); len(refs) > 0 {
+		keys := make([]string, len(refs))
+		for i, r := range refs {
+			keys[i] = r.Key
+		}
+		return fmt.Errorf("%w: %w: %s is referenced by %s; remove those references first",
+			ErrValidation, ErrReferenced, s.items[id].Key, strings.Join(keys, ", "))
+	}
+	return s.record(actor, Event{Kind: ItemTrashed, Item: id, Members: members})
+}
+
+// referrers are the live items outside a subtree that reference into it,
+// by key.
+func (s *Store) referrers(id ID) []*Item {
+	inSubtree := map[ID]bool{}
+	for _, m := range s.subtree(id) {
+		inSubtree[m] = true
+	}
+	var out []*Item
 	seen := map[ID]bool{}
 	for _, r := range s.rels {
 		from := s.items[r.From]
 		if inSubtree[r.To] && !inSubtree[r.From] && from.Presence == Live && !seen[from.ID] {
 			seen[from.ID] = true
-			referrers = append(referrers, from.Key)
+			out = append(out, from)
 		}
 	}
-	if len(referrers) > 0 {
-		slices.Sort(referrers)
-		return fmt.Errorf("%w: %w: %s is referenced by %s; remove those references first",
-			ErrValidation, ErrReferenced, s.items[id].Key, strings.Join(referrers, ", "))
-	}
-	return s.record(actor, Event{Kind: ItemTrashed, Item: id, Members: members})
+	slices.SortFunc(out, func(a, b *Item) int { return strings.Compare(a.Key, b.Key) })
+	return out
 }
 
 // Restore brings back exactly the items trashed together with id. It must be

@@ -115,4 +115,5 @@ Found while prototyping:
 
 ## Links
 
+- amended by [ADR-0111](0111-protecting-removing-and-copying-respect-the-whole-tree.md) (protecting a page needs edit rights on every page below it)
 - relates to [ADR-0001](0001-unified-item-data-model.md) (decision 5, D5), [ADR-0011](0011-http-api-route-table-and-access-classes.md), [ADR-0012](0012-mcp-adapter-over-http-api.md), [ADR-0013](0013-authentication-and-security-boundary.md), [ADR-0020](0020-embedding-and-containment-are-independent.md), [ADR-0021](0021-deletion-only-when-unreferenced.md) (D8 and its exception)

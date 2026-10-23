@@ -359,7 +359,14 @@ function ckanSource() {
     const beforeSearch = await page.evaluate(() => location.hash);
     await page.fill("nav input[name=q]", "alert body");
     await page.press("nav input[name=q]", "Enter");
-    await page.waitForSelector(".hits li");
+    // This wait has failed now and then on CI only; say what the page
+    // showed instead, to find out why.
+    await page.waitForSelector(".hits li").catch(async (err) => {
+      console.log("search diagnostics: " + JSON.stringify(await page.evaluate(() => ({ hash: location.hash,
+        h1: document.querySelector("main h1")?.textContent, total: document.querySelector("#search-total")?.textContent,
+        typed: document.querySelector("nav input[name=q]")?.value, none: document.querySelector("main .empty:not([hidden])")?.textContent }))));
+      throw err;
+    });
     check((await page.textContent(".hits li a")) === "PLAT-2", "the runbook is the hit");
     check((await page.textContent(".hits .snippet")).includes("<script>alert('body')</script>"), "the snippet shows the script as text");
     await page.fill("nav input[name=q]", "staging hosts");
