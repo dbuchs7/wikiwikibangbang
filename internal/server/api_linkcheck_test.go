@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
 )
 
@@ -106,5 +107,19 @@ func TestLinkCheckIsOffByDefaultAndBounded(t *testing.T) {
 	r := awaitReport(t, w.admin)
 	if r["checked"] != 2.0 || r["truncated"] != true {
 		t.Fatalf("report %v, want 2 checked and truncated", r)
+	}
+}
+
+// TestBrokenLinksInVeiledPassagesStayHidden: a link is reported only when
+// the text as the reader gets it still holds its address; Get veils a
+// passage the reader may not read, and its links with it (ADR-0088).
+func TestBrokenLinksInVeiledPassagesStayHidden(t *testing.T) {
+	shown := item.Doc{Blocks: []item.Block{{Kind: item.Paragraph, Text: "see docs",
+		Marks: []item.Mark{{Type: item.MarkLink, Start: 4, End: 8, Href: "https://example.org/a?b=1&c=2"}}}}}
+	if !textShows(shown, "https://example.org/a?b=1&c=2") {
+		t.Error("a link the reader sees is hidden")
+	}
+	if textShows(item.Doc{Blocks: []item.Block{{Kind: item.Paragraph, Text: "…"}}}, "https://example.org/a?b=1&c=2") {
+		t.Error("a veiled link is shown")
 	}
 }

@@ -34,7 +34,12 @@ func (h itemHandlers) copyItem(w http.ResponseWriter, r *http.Request) {
 	}
 	var root item.Item
 	var err error
-	h.d.DB.Read(func(s *item.Store) { root, err = resolveItem(s.As(who(r)), r.PathValue("ref")) })
+	h.d.DB.Read(func(s *item.Store) {
+		x := s.As(who(r))
+		if root, err = resolveItem(x, r.PathValue("ref")); err == nil {
+			err = x.KeepsInherited(root.ID, req.Parent)
+		}
+	})
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -103,6 +108,15 @@ func (h itemHandlers) copyOne(r *http.Request, space string, t copyTask) (item.I
 			err = fmt.Errorf("%w: %s holds protected passages you may not read; ask for them or copy without it", item.ErrForbidden, src.Key)
 			return
 		}
+		// The restriction the copy will carry is checked before anything
+		// is made: the store keeps what is written even when a later
+		// command fails, so the copy must never stand unprotected.
+		if len(src.Restriction.Read)+len(src.Restriction.Edit) > 0 {
+			if err = x.MayRestrictIn(space, src.Restriction); err != nil {
+				err = fmt.Errorf("%w; ask to be let into %s, or copy what you may edit", err, src.Key)
+				return
+			}
+		}
 		files, err = x.Attachments(src.ID)
 	})
 	if err != nil {
@@ -120,19 +134,19 @@ func (h itemHandlers) copyOne(r *http.Request, space string, t copyTask) (item.I
 		if err != nil {
 			return err
 		}
+		// A restricted page stays as restricted as its source, from its
+		// first moment on.
+		if len(src.Restriction.Read)+len(src.Restriction.Edit) > 0 {
+			if err := x.Restrict(made.ID, src.Restriction); err != nil {
+				return err
+			}
+		}
 		if len(src.Labels) > 0 {
 			if err := x.SetLabels(made.ID, src.Labels); err != nil {
 				return err
 			}
 		}
-		if err := x.CopySecrets(src.ID, made.ID); err != nil {
-			return err
-		}
-		// A restricted page stays as restricted as its source.
-		if len(src.Restriction.Read)+len(src.Restriction.Edit) > 0 {
-			return x.Restrict(made.ID, src.Restriction)
-		}
-		return nil
+		return x.CopySecrets(src.ID, made.ID)
 	})
 	if err != nil {
 		return item.Item{}, err

@@ -2961,7 +2961,7 @@ function newItemForm({ space, spaces = null, types, parent = null, heading = t("
 // comments, files, relations, access and history.
 async function itemView(ref, params = new URLSearchParams()) {
   const show = screen();
-  const { item, editable } = await get("/api/items/" + encodeURIComponent(ref));
+  const { item, editable, may = {} } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
   const [{ types }, history, out, inc, embeds, comments, { attachments }, { watches }, { spaces }, myNotes] = await Promise.all([
     get("/api/types"),
@@ -3063,11 +3063,13 @@ async function itemView(ref, params = new URLSearchParams()) {
   const stateBar = type.workflow && item.state ? statusBar(type.workflow, item.state, canEdit
     ? (tr) => action(() => post(path + "/transitions", { name: tr.name }), status) : null) : null;
 
+  // Only what the server allows is offered (may): trashing needs every
+  // page below editable, purging a space admin.
   const actions = canEdit
-    ? [h("button", { text: t("item.trash"), onclick: () => action(() => post(path + "/trash"), status) })]
-    : item.presence === "trashed" && editable
-      ? [h("button", { text: t("item.restore"), onclick: () => action(() => post(path + "/restore"), status) }),
-        h("button", { class: "danger", text: t("item.purge"), onclick: () => confirm(t("item.purgeConfirm")) && action(() => post(path + "/purge"), status) })]
+    ? [may.trash ? h("button", { text: t("item.trash"), onclick: () => action(() => post(path + "/trash"), status) }) : null].filter(Boolean)
+    : item.presence === "trashed"
+      ? [may.restore ? h("button", { text: t("item.restore"), onclick: () => action(() => post(path + "/restore"), status) }) : null,
+        may.purge ? h("button", { class: "danger", text: t("item.purge"), onclick: () => confirm(t("item.purgeConfirm")) && action(() => post(path + "/purge"), status) }) : null].filter(Boolean)
       : [];
 
   const lastRestriction = history.events.filter((e) => e.kind === "RestrictionSet").pop();

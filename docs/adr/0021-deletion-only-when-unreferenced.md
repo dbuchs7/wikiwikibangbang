@@ -114,5 +114,6 @@ Strongest form: deletion is never blocked; whoever deletes does not depend on ow
 
 ## Links
 
+- amended by [ADR-0111](0111-protecting-removing-and-copying-respect-the-whole-tree.md) (restoring needs every page of the batch; hidden referrers are not named)
 - refines [ADR-0001](0001-unified-item-data-model.md) ("Prototype findings", point 6; D2, D4, D5)
 - relates to [ADR-0008](0008-event-sourced-persistence.md) (erasure in an append-only log), [ADR-0020](0020-embedding-and-containment-are-independent.md) (children and embeds), [ADR-0022](0022-permission-model.md) (who may trash, restore, purge; redaction as the logged exception to D8)

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
@@ -153,10 +155,26 @@ func (h itemHandlers) linkReport(w http.ResponseWriter, r *http.Request) {
 			if err != nil || it.Presence != item.Live {
 				continue
 			}
+			// A link in a passage the reader may not read is not shown:
+			// Get veils the passage, and its address with it (ADR-0088).
+			if l.Block >= 0 && !textShows(it.Body, l.Href) {
+				continue
+			}
 			broken = append(broken, brokenLinkJSON{Item: l.Item, Key: it.Key, Title: it.Title, Block: l.Block, Field: l.Field, Href: l.Href,
 				Status: res.Status, Problem: res.Problem, Responsible: l.Responsible})
 		}
 		out["broken"] = broken
 		return out, nil
 	})
+}
+
+// textShows reports whether a text, as the reader gets it, still holds an
+// address.
+func textShows(d item.Doc, href string) bool {
+	body, err := json.Marshal(d)
+	if err != nil {
+		return false
+	}
+	quoted, _ := json.Marshal(href)
+	return bytes.Contains(body, quoted[1:len(quoted)-1])
 }

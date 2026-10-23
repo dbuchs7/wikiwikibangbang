@@ -124,7 +124,25 @@ func (x *Session) Revoke(space, principal string) error {
 	if x.s.spaceRole(x.who, space) < SpaceAdmin {
 		return forbidden("%s may not revoke roles in %s", x.who, space)
 	}
+	if err := x.keepsAnAdmin(space, principal, 0); err != nil {
+		return err
+	}
 	return x.s.RevokeRole(x.who, space, principal)
+}
+
+// keepsAnAdmin refuses a change that would leave a space without a space
+// admin granted in it: principal would hold role instead of its grant, 0
+// for none. Only an administrator, who manages every space, may do that.
+func (x *Session) keepsAnAdmin(space, principal string, role Role) error {
+	if x.s.hasSystemRole(x.who, RoleAdmin) || role == SpaceAdmin || x.s.spaceRoles[space][principal] != SpaceAdmin {
+		return nil
+	}
+	for p, r := range x.s.spaceRoles[space] {
+		if p != principal && r == SpaceAdmin && (!strings.HasPrefix(p, "@") || x.s.GroupSize(p) > 0) {
+			return nil
+		}
+	}
+	return invalid("%s would be left without a space admin; grant the role to someone else first", space)
 }
 
 // EditsASpace reports whether the principal may edit in some space, and

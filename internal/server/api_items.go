@@ -666,7 +666,16 @@ func (h itemHandlers) getItem(w http.ResponseWriter, r *http.Request) {
 		}
 		// editable tells the UI whether to offer changes: the caller's
 		// role, the item's restriction and an import's hold decide it.
-		return map[string]any{"item": withSecrets(x, toItemJSON(it)), "editable": x.CanEdit(it.ID)}, nil
+		// may names the removals the server would allow, so the UI offers
+		// no button it refuses: trashing needs every page below editable,
+		// restoring everything trashed with it, purging a space admin.
+		may := map[string]bool{}
+		if it.Presence == item.Live {
+			may["trash"] = x.MayTrash(it.ID)
+		} else if it.Presence == item.Trashed {
+			may["restore"], may["purge"] = x.MayRestore(it.ID), x.MayPurge(it.ID)
+		}
+		return map[string]any{"item": withSecrets(x, toItemJSON(it)), "editable": x.CanEdit(it.ID), "may": may}, nil
 	})
 }
 

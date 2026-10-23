@@ -90,3 +90,56 @@ func decodeBody(t *testing.T, r interface{ Result() *http.Response }) map[string
 	}
 	return m
 }
+
+// TestCopyNeverLeavesAnOpenCopy: a copy whose restriction would lock its
+// maker out is refused before anything is made, and a page protected
+// through a page above it is not copied out from under it.
+func TestCopyNeverLeavesAnOpenCopy(t *testing.T) {
+	w := newWorld(t)
+	w.admin.expect("POST", "/api/types", `{"name":"page","body":true,"fields":[]}`, http.StatusCreated)
+	w.admin.expect("PUT", "/api/spaces/PLAT/roles/"+w.ids["carla"], `{"role":"editor"}`, http.StatusNoContent)
+	page := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"page","title":"Salaries 2027"}`, http.StatusCreated)
+	key := field(page, "item", "key").(string)
+	w.bert.expect("PUT", "/api/items/"+key+"/restriction", `{"read":["`+w.ids["bert"]+`","`+w.ids["carla"]+`"],"edit":["`+w.ids["bert"]+`"]}`, http.StatusOK)
+	before := treeTitles(t, w.admin, "/api/spaces/PLAT/tree")
+	w.carla.expect("POST", "/api/items/"+key+"/copy", `{"space":"PLAT","title":"Salaries (copy)"}`, http.StatusBadRequest)
+	if after := treeTitles(t, w.admin, "/api/spaces/PLAT/tree"); !slices.Equal(before, after) {
+		t.Fatalf("a refused copy left %v behind", after)
+	}
+
+	parent := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"page","title":"HR"}`, http.StatusCreated)
+	parentKey, parentID := field(parent, "item", "key").(string), field(parent, "item", "id").(string)
+	child := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"page","title":"Reviews","parent":"`+parentID+`"}`, http.StatusCreated)
+	childKey := field(child, "item", "key").(string)
+	w.bert.expect("PUT", "/api/items/"+parentKey+"/restriction", `{"read":["`+w.ids["bert"]+`"]}`, http.StatusOK)
+	w.bert.expect("POST", "/api/items/"+childKey+"/copy", `{"space":"PLAT","title":"Reviews (copy)"}`, http.StatusBadRequest)
+	w.bert.expect("POST", "/api/items/"+childKey+"/copy", `{"space":"PLAT","parent":"`+parentID+`","title":"Reviews (copy)"}`, http.StatusCreated)
+	if got := treeTitles(t, w.vera, "/api/spaces/PLAT/tree"); slices.Contains(got, "Reviews (copy)") {
+		t.Fatalf("vera reads the copy: %v", got)
+	}
+}
+
+// TestItemTellsWhichRemovalsAreAllowed: the item names the removals the
+// server allows, so the UI offers no button it refuses.
+func TestItemTellsWhichRemovalsAreAllowed(t *testing.T) {
+	w := newWorld(t)
+	w.admin.expect("POST", "/api/types", `{"name":"page","body":true,"fields":[]}`, http.StatusCreated)
+	w.admin.expect("PUT", "/api/spaces/PLAT/roles/"+w.ids["carla"], `{"role":"editor"}`, http.StatusNoContent)
+	page := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"page","title":"Handbook"}`, http.StatusCreated)
+	key, id := field(page, "item", "key").(string), field(page, "item", "id").(string)
+	may := func(c *client, what string) any {
+		return field(c.expect("GET", "/api/items/"+key, "", http.StatusOK), "may", what)
+	}
+	if may(w.bert, "trash") != true {
+		t.Fatal("bert may trash his page")
+	}
+	hidden := w.carla.expect("POST", "/api/items", `{"space":"PLAT","type":"page","title":"Private","parent":"`+id+`"}`, http.StatusCreated)
+	w.carla.expect("PUT", "/api/items/"+field(hidden, "item", "key").(string)+"/restriction", `{"read":["`+w.ids["carla"]+`"]}`, http.StatusOK)
+	if may(w.bert, "trash") != false {
+		t.Fatal("bert is offered to trash a page holding one he cannot see")
+	}
+	w.admin.expect("POST", "/api/items/"+key+"/trash", "", http.StatusOK)
+	if may(w.bert, "restore") != false || may(w.bert, "purge") != false || may(w.admin, "restore") != true || may(w.admin, "purge") != true {
+		t.Fatal("restore and purge are offered to the wrong people")
+	}
+}

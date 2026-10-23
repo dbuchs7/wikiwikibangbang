@@ -1,6 +1,7 @@
 package item
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 )
@@ -302,10 +303,27 @@ func (x *Session) editableAll(root ID) error {
 	if _, err := x.editable(root); err != nil {
 		return err
 	}
+	var below []*Item
 	for _, id := range x.s.subtree(root) {
-		if it := x.s.items[id]; it.Presence == Live && (!x.s.canEdit(x.who, it) || it.Managed != "") {
-			return forbidden("%s may not edit %s below %s", x.who, it.Key, x.s.items[root].Key)
+		if it := x.s.items[id]; it.Presence == Live {
+			below = append(below, it)
 		}
+	}
+	return x.editableEach(root, below)
+}
+
+// editableEach checks edit rights on the items below root. An item the
+// principal may not read is not named: its key would tell that it exists
+// (D10).
+func (x *Session) editableEach(root ID, below []*Item) error {
+	for _, it := range below {
+		if it.ID == root || (x.s.canEdit(x.who, it) && it.Managed == "") {
+			continue
+		}
+		if !x.s.canRead(x.who, it) {
+			return forbidden("%s may not change %s: it holds pages %s may not see", x.who, x.s.items[root].Key, x.who)
+		}
+		return forbidden("%s may not edit %s below %s", x.who, it.Key, x.s.items[root].Key)
 	}
 	return nil
 }
@@ -739,20 +757,83 @@ func (x *Session) RemoveRelation(id ID) error {
 	return x.s.RemoveRelation(x.who, id)
 }
 
-// Trash trashes a subtree the principal may edit entirely.
+// Trash trashes a subtree the principal may edit entirely. The items
+// that still reference it are named only when the principal may read them
+// (D10).
 func (x *Session) Trash(id ID) error {
 	if err := x.editableAll(id); err != nil {
 		return err
 	}
+	if refs := x.s.referrers(id); len(refs) > 0 {
+		var named []string
+		hidden := 0
+		for _, r := range refs {
+			if x.s.canRead(x.who, r) {
+				named = append(named, r.Key)
+			} else {
+				hidden++
+			}
+		}
+		if hidden > 0 {
+			named = append(named, fmt.Sprintf("%d item(s) you may not see", hidden))
+		}
+		return fmt.Errorf("%w: %w: %s is referenced by %s; remove those references first",
+			ErrValidation, ErrReferenced, x.s.items[id].Key, strings.Join(named, ", "))
+	}
 	return x.s.Trash(x.who, id)
 }
 
-// Restore restores a trash batch the principal may edit.
+// Restore restores a trash batch the principal may edit entirely: every
+// item trashed with it, not only the one it was trashed from.
 func (x *Session) Restore(id ID) error {
-	if err := x.editableAll(id); err != nil {
+	if _, err := x.editable(id); err != nil {
+		return err
+	}
+	members, err := x.s.trashBatch(id)
+	if err != nil {
+		return err
+	}
+	below := make([]*Item, len(members))
+	for i, m := range members {
+		below[i] = x.s.items[m]
+	}
+	if err := x.editableEach(id, below); err != nil {
 		return err
 	}
 	return x.s.Restore(x.who, id)
+}
+
+// MayTrash reports whether the principal may trash an item with what is
+// below it, as Trash checks it.
+func (x *Session) MayTrash(id ID) bool { return x.editableAll(id) == nil }
+
+// MayRestore reports whether the principal may restore an item from the
+// trash: it is the item the trash started from, and the principal may
+// edit everything trashed with it.
+func (x *Session) MayRestore(id ID) bool {
+	if _, err := x.editable(id); err != nil {
+		return false
+	}
+	members, err := x.s.trashBatch(id)
+	if err != nil {
+		return false
+	}
+	below := make([]*Item, len(members))
+	for i, m := range members {
+		below[i] = x.s.items[m]
+	}
+	return x.editableEach(id, below) == nil
+}
+
+// MayPurge reports whether the principal may purge an item from the
+// trash, as Purge checks it.
+func (x *Session) MayPurge(id ID) bool {
+	it, err := x.readable(id)
+	if err != nil || x.s.spaceRole(x.who, it.Space) < SpaceAdmin {
+		return false
+	}
+	_, err = x.s.trashBatch(id)
+	return err == nil
 }
 
 // Purge needs the space admin role.
@@ -767,23 +848,63 @@ func (x *Session) Purge(id ID) error {
 	return x.s.Purge(x.who, id)
 }
 
-// Restrict sets a restriction on an editable item. A principal who is not a
-// space admin cannot restrict itself out.
+// Restrict sets a restriction on an item. Every page below inherits it,
+// so, as for moving it (ADR-0022), the principal must be able to edit them
+// all. A principal who is not a space admin cannot restrict itself out.
 func (x *Session) Restrict(id ID, r Restriction) error {
-	it, err := x.editable(id)
+	if err := x.editableAll(id); err != nil {
+		return err
+	}
+	it := x.s.items[id]
+	if err := x.MayRestrictIn(it.Space, r); err != nil {
+		return fmt.Errorf("%w of %s", err, it.Key)
+	}
+	return x.s.Restrict(x.who, id, r)
+}
+
+// KeepsInherited refuses a copy of src below toParent (or at the top of a
+// space when empty) that would shed a restriction src inherits from a page
+// above it: the copy carries only src's own restriction, so it would
+// otherwise be open to people the original is closed to.
+func (x *Session) KeepsInherited(src, toParent ID) error {
+	it, err := x.readable(src)
 	if err != nil {
 		return err
 	}
-	if x.s.spaceRole(x.who, it.Space) < SpaceAdmin && (!x.s.admits(r.Read, x.who) || !x.s.admits(r.Edit, x.who)) {
-		return invalid("%s would lock itself out of %s", x.who, it.Key)
+	under := map[ID]bool{}
+	if toParent != "" {
+		p, err := x.readable(toParent)
+		if err != nil {
+			return err
+		}
+		for _, a := range x.s.ancestry(p) {
+			under[a.ID] = true
+		}
 	}
-	return x.s.Restrict(x.who, id, r)
+	for _, a := range x.s.ancestry(it)[1:] {
+		if len(a.Restriction.Read)+len(a.Restriction.Edit) > 0 && !under[a.ID] {
+			return invalid("%s is protected through a page above it; copy it below that page, or protect the copy's place first", it.Key)
+		}
+	}
+	return nil
+}
+
+// MayRestrictIn checks, before anything is made, that the principal may
+// put a restriction on an item of a space without locking itself out.
+func (x *Session) MayRestrictIn(space string, r Restriction) error {
+	if x.s.spaceRole(x.who, space) < SpaceAdmin && (!x.s.admits(r.Read, x.who) || !x.s.admits(r.Edit, x.who)) {
+		return invalid("%s would lock itself out", x.who)
+	}
+	return nil
 }
 
 // Grant needs the space admin role.
 func (x *Session) Grant(space, principal string, role Role) error {
 	if x.s.spaceRole(x.who, space) < SpaceAdmin {
 		return forbidden("%s may not grant roles in %s", x.who, space)
+	}
+	if err := x.keepsAnAdmin(space, principal, role); err != nil {
+		return err
 	}
 	return x.s.GrantRole(x.who, space, principal, role)
 }
