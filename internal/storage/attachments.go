@@ -152,8 +152,10 @@ func (db *DB) StoreAttachment(id item.ID, content io.Reader, limit int64) (item.
 }
 
 // OpenAttachment returns the decrypted content of an attachment. A read
-// fails if the file was changed, cut short or extended.
-func (db *DB) OpenAttachment(id, attachment item.ID) (io.ReadCloser, error) {
+// fails if the file was changed, cut short or extended. The content can be
+// read from any position, as a video player asks for its parts (ADR-0097);
+// each chunk is authenticated as it is read.
+func (db *DB) OpenAttachment(id, attachment item.ID) (io.ReadSeekCloser, error) {
 	if !item.ValidAttachmentID(string(attachment)) {
 		return nil, fmt.Errorf("storage: attachment %q: %w", attachment, os.ErrNotExist)
 	}
@@ -170,49 +172,99 @@ func (db *DB) OpenAttachment(id, attachment item.ID) (io.ReadCloser, error) {
 		f.Close()
 		return nil, err
 	}
-	in := bufio.NewReaderSize(f, chunkSize+gcm.Overhead())
 	head := make([]byte, len(attachmentMagic)+gcm.NonceSize()-4)
-	if _, err := io.ReadFull(in, head); err != nil || string(head[:len(attachmentMagic)]) != attachmentMagic {
+	info, err := f.Stat()
+	if err == nil {
+		_, err = io.ReadFull(f, head)
+	}
+	if err != nil || string(head[:len(attachmentMagic)]) != attachmentMagic {
 		f.Close()
 		return nil, fmt.Errorf("storage: attachment %s is not an attachment file", attachment)
 	}
-	return &attachmentReader{f: f, in: in, open: func(n uint32, ct []byte, last bool) ([]byte, error) {
-		return gcm.Open(nil, chunkNonce(head[len(attachmentMagic):], n), ct, chunkAAD(id, attachment, n, last))
-	}, sealedSize: chunkSize + gcm.Overhead()}, nil
+	sealed := int64(chunkSize + gcm.Overhead())
+	body := info.Size() - int64(len(head))
+	chunks := (body + sealed - 1) / sealed
+	if chunks < 1 {
+		f.Close()
+		return nil, fmt.Errorf("storage: attachment %s is cut short", attachment)
+	}
+	return &attachmentReader{f: f, head: int64(len(head)), sealed: sealed, chunks: chunks, size: body - chunks*int64(gcm.Overhead()),
+		open: func(n uint32, ct []byte, last bool) ([]byte, error) {
+			return gcm.Open(nil, chunkNonce(head[len(attachmentMagic):], n), ct, chunkAAD(id, attachment, n, last))
+		}, loaded: -1}, nil
 }
 
+// attachmentReader reads an attachment's content from any position: the
+// chunk holding it is read and authenticated, the last chunk as the last.
 type attachmentReader struct {
-	f          *os.File
-	in         *bufio.Reader
-	open       func(n uint32, ct []byte, last bool) ([]byte, error)
-	sealedSize int
-	n          uint32
-	plain      []byte
-	done       bool
+	f      *os.File
+	open   func(n uint32, ct []byte, last bool) ([]byte, error)
+	head   int64 // bytes before the first chunk
+	sealed int64 // the size of a full chunk, sealed
+	chunks int64
+	size   int64 // the content's size
+	pos    int64
+	loaded int64 // the chunk in plain, or -1
+	plain  []byte
 }
 
 func (r *attachmentReader) Read(p []byte) (int, error) {
-	for len(r.plain) == 0 {
-		if r.done {
-			return 0, io.EOF
+	if r.pos >= r.size {
+		// An empty file is one empty chunk, which must still authenticate.
+		if r.size == 0 && r.loaded != 0 {
+			if err := r.load(0); err != nil {
+				return 0, err
+			}
 		}
-		ct := make([]byte, r.sealedSize)
-		got, err := io.ReadFull(r.in, ct)
-		if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !(errors.Is(err, io.EOF) && got == 0) {
+		return 0, io.EOF
+	}
+	k := r.pos / chunkSize
+	if k != r.loaded {
+		if err := r.load(k); err != nil {
 			return 0, err
 		}
-		_, peek := r.in.Peek(1)
-		last := got < r.sealedSize || errors.Is(peek, io.EOF)
-		pt, err := r.open(r.n, ct[:got], last)
-		if err != nil {
-			return 0, fmt.Errorf("storage: attachment content does not authenticate: %w", err)
-		}
-		r.n++
-		r.plain, r.done = pt, last
 	}
-	n := copy(p, r.plain)
-	r.plain = r.plain[n:]
+	n := copy(p, r.plain[r.pos-k*chunkSize:])
+	r.pos += int64(n)
 	return n, nil
+}
+
+func (r *attachmentReader) load(k int64) error {
+	ct := make([]byte, r.sealed)
+	got, err := r.f.ReadAt(ct, r.head+k*r.sealed)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	last := k == r.chunks-1
+	if !last && int64(got) < r.sealed {
+		return errors.New("storage: attachment content is cut short")
+	}
+	pt, err := r.open(uint32(k), ct[:got], last)
+	if err != nil {
+		return fmt.Errorf("storage: attachment content does not authenticate: %w", err)
+	}
+	if !last && len(pt) != chunkSize {
+		return errors.New("storage: attachment content does not authenticate")
+	}
+	r.plain, r.loaded = pt, k
+	return nil
+}
+
+func (r *attachmentReader) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekStart:
+	case io.SeekCurrent:
+		offset += r.pos
+	case io.SeekEnd:
+		offset += r.size
+	default:
+		return 0, errors.New("storage: invalid whence")
+	}
+	if offset < 0 {
+		return 0, errors.New("storage: negative position")
+	}
+	r.pos = offset
+	return offset, nil
 }
 
 func (r *attachmentReader) Close() error { return r.f.Close() }

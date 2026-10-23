@@ -266,8 +266,8 @@ func (s *Store) firstBody(created Event, d Doc) (Event, error) {
 		return Event{}, invalid("type %q has no body", td.Name)
 	}
 	for i, b := range d.Blocks {
-		if b.Kind == Image {
-			return Event{}, wrapf(invalid("an image shows a file of the item; add it after creating the item"), "block %d", i+1)
+		if b.Kind == Image || b.Kind == Video {
+			return Event{}, wrapf(invalid("an image or a video shows a file of the item; add it after creating the item"), "block %d", i+1)
 		}
 		if err := checkBlock(b, created.Item); err != nil {
 			return Event{}, wrapf(err, "block %d", i+1)
@@ -595,11 +595,14 @@ func (s *Store) CommitBody(actor string, id ID, d Doc) error {
 		}
 		// An image shows an attachment of this item; one deleted since
 		// may stay if the current body still shows it (ADR-0045).
-		if b.Kind == Image {
+		if b.Kind == Image || b.Kind == Video {
 			a, ok := it.attachment(b.Ref)
-			kept := slices.ContainsFunc(it.Body.Blocks, func(o Block) bool { return o.Kind == Image && o.Ref == b.Ref })
+			kept := slices.ContainsFunc(it.Body.Blocks, func(o Block) bool { return o.Kind == b.Kind && o.Ref == b.Ref })
 			if !ok || (a.Deleted && !kept) {
 				return wrapf(notFound("attachment %s of item %s", b.Ref, id), "block %d", i+1)
+			}
+			if b.Kind == Video && !slices.Contains(VideoTypes, a.Type) {
+				return wrapf(invalid("%s is no video a browser plays (%s)", a.Name, strings.Join(VideoTypes, ", ")), "block %d", i+1)
 			}
 		}
 	}
@@ -1197,15 +1200,15 @@ func checkBlock(b Block, self ID) error {
 		if b.Text != "" || len(b.Marks) > 0 || len(b.Mentions) > 0 {
 			return invalid("a %s block has no text", b.Kind)
 		}
-	case Image:
+	case Image, Video:
 		if !ValidAttachmentID(string(b.Ref)) || len(b.Marks) > 0 || len(b.Mentions) > 0 {
-			return invalid("an image names an attachment and has a plain caption")
+			return invalid("an image or a video names an attachment and has a plain caption")
 		}
 	default:
 		return invalid("unknown block kind %q", b.Kind)
 	}
-	if b.Kind != Embed && b.Kind != Image && b.Ref != "" {
-		return invalid("only an embed or an image has a reference")
+	if b.Kind != Embed && b.Kind != Image && b.Kind != Video && b.Ref != "" {
+		return invalid("only an embed, an image or a video has a reference")
 	}
 	if b.Checked && b.Kind != TaskItem {
 		return invalid("only a task is checked")
@@ -1219,7 +1222,7 @@ func checkBlock(b Block, self ID) error {
 			if !slices.Contains(TextAligns, b.Align) {
 				return invalid("align %q: text is aligned %s", b.Align, strings.Join(TextAligns, ", "))
 			}
-		case Image:
+		case Image, Video:
 			if !slices.Contains(ImageAligns, b.Align) {
 				return invalid("align %q: an image is aligned %s", b.Align, strings.Join(ImageAligns, ", "))
 			}
@@ -1227,8 +1230,8 @@ func checkBlock(b Block, self ID) error {
 			return invalid("a %s block has no alignment", b.Kind)
 		}
 	}
-	if b.Width != 0 && (b.Kind != Image || b.Width < 10 || b.Width > 100) {
-		return invalid("width %d: only images have a width, 10 to 100 percent", b.Width)
+	if b.Width != 0 && ((b.Kind != Image && b.Kind != Video) || b.Width < 10 || b.Width > 100) {
+		return invalid("width %d: only images and videos have a width, 10 to 100 percent", b.Width)
 	}
 	if b.Kind != Heading && b.Level != 0 || b.Level < 0 || b.Level > 3 {
 		return invalid("level %d: only headings have a level, 1 to 3", b.Level)

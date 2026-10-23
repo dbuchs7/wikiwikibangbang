@@ -26,6 +26,10 @@ func TestTheCorporateDesignThroughTheAPI(t *testing.T) {
 	if b := anon.expect("GET", "/branding.json", "", http.StatusOK); b["accent"] != "#d40000" {
 		t.Fatalf("branding.json %v", b)
 	}
+	// The browser's tab names the instance from the start (ADR-0097).
+	if page := anon.do("GET", "/", ""); page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "<title>ACME</title>") {
+		t.Fatalf("the page's title: %d %.300s", page.Code, page.Body)
+	}
 	css := anon.do("GET", "/branding.css", "")
 	if css.Code != http.StatusOK || !strings.HasPrefix(css.Header().Get("Content-Type"), "text/css") || !strings.Contains(css.Body.String(), "--accent: #d40000") || !strings.Contains(css.Body.String(), ".brand{gap:2px}") {
 		t.Fatalf("branding.css %d %s", css.Code, css.Body)

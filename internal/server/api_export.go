@@ -194,17 +194,20 @@ func (h itemHandlers) exportDocument(r *http.Request, children, withData bool) (
 					p.Children = append(p.Children, k.Item.Title)
 				}
 			}
-			shown := map[item.ID]bool{}
+			shown := map[item.ID]item.BlockKind{}
 			for _, b := range it.Body.Blocks {
-				if b.Kind == item.Image {
-					shown[b.Ref] = true
+				if b.Kind == item.Image || b.Kind == item.Video {
+					shown[b.Ref] = b.Kind
 				}
 			}
 			if atts, err := x.Attachments(it.ID); err == nil {
 				for _, a := range atts {
-					if !a.Deleted && shown[a.ID] {
+					if kind, ok := shown[a.ID]; ok && !a.Deleted {
 						p.Images[a.ID] = export.Image{Name: a.Name, Type: a.Type}
-						files = append(files, file{it.ID, a})
+						// A video is named, not copied into the document (ADR-0097).
+						if kind == item.Image {
+							files = append(files, file{it.ID, a})
+						}
 					}
 				}
 			}
@@ -276,7 +279,7 @@ func (h itemHandlers) exportDOCX(w http.ResponseWriter, r *http.Request) {
 // ExportPolicy is the content security policy of a page's printable form:
 // no script at all, its stylesheet and pictures from this server, and
 // framed only by the UI, which prints it.
-const ExportPolicy = "default-src 'none'; style-src 'self'; img-src 'self'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
+const ExportPolicy = "default-src 'none'; style-src 'self'; img-src 'self'; media-src 'self'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'"
 
 // exportHTML answers the page, or the handbook, as a page to print: the
 // UI prints it as PDF (ADR-0071).

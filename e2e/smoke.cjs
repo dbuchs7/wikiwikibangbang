@@ -283,6 +283,10 @@ function ckanSource() {
     await page.fill("dialog.pm-dialog [name=q]", "PLAT-1");
     await page.click("dialog.pm-dialog .pm-result[data-key='PLAT-1']");
     await page.waitForSelector(".ProseMirror .pm-embed");
+    // A video plays in the text (ADR-0097).
+    await page.setInputFiles(".pm-toolbar input[type=file][accept^='video']", { name: "clip.mp4", mimeType: "video/mp4",
+      buffer: Buffer.concat([Buffer.from("00000018667479706d70343200000000", "hex"), Buffer.from("mp42isom"), Buffer.alloc(4000, 9)]) });
+    await page.waitForSelector(".ProseMirror figure.pm-video video[controls][src*='/attachments/']");
     await page.click("#details h2"); // leaving the editor releases its blocks, which saves them
     await page.waitForSelector(".live[data-pending='0']");
 
@@ -296,6 +300,7 @@ function ckanSource() {
     check(await page.locator(".ProseMirror a[href^='https://example.com/docs']").count() === 1, "the typed address stays a link");
     check((await page.textContent(".pm-embed")).includes("PLAT-1"), "the embed");
     check((await editor.textContent()).includes("<script>alert('body')</script>"), "the script shows as text");
+    check(await page.locator(".ProseMirror figure.pm-video video[controls]").count() === 1, "the video stays in the text");
 
     step("live: two people edit one body at once");
     const other = await browser.newPage();
@@ -1178,7 +1183,7 @@ function ckanSource() {
     await page.waitForSelector("#design .notice");
     await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() === "#d40000");
     // The title follows once the design is fetched again, which may be after the stylesheet.
-    await page.waitForFunction(() => document.title.startsWith("ACME"));
+    await page.waitForFunction(() => document.title === "ACME"); // the instance's name, nothing else (ADR-0097)
     check(await page.locator("#design-contrast li").count() === 0, "a readable design brings no contrast warning");
     // In the dark scheme the corporate red is lightened until it reads on the
     // dark cards, and its buttons carry dark text (ADR-0052).

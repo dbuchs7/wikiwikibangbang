@@ -71,7 +71,14 @@ const (
 	// Image shows an image attachment of the item; Ref names the
 	// attachment and Text is its caption (ADR-0045).
 	Image BlockKind = "image"
+	// Video plays a video attachment of the item, like an image shows a
+	// picture: Ref names it and Text is its caption (ADR-0097).
+	Video BlockKind = "video"
 )
+
+// VideoTypes are the formats of a video a body plays, as read from the
+// file's bytes; browsers play them without a plug-in (ADR-0097).
+var VideoTypes = []string{"video/mp4", "video/webm"}
 
 // PanelTones are the tones of a panel block.
 var PanelTones = []string{"info", "note", "warning", "tip", "error"}

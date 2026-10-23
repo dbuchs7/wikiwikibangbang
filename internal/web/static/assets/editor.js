@@ -59,6 +59,8 @@ export const schema = new Schema({
     // width is percent of the column, 0 for the picture's own size (ADR-0056).
     // align is left or right (the text flows beside it) or center (ADR-0059).
     image: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" }, width: { default: 0 }, align: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-image" }, ["figcaption", n.attrs.text]] },
+    // A video plays in the text, sized and placed like a picture (ADR-0097).
+    video: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" }, width: { default: 0 }, align: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-image pm-video" }, ["figcaption", n.attrs.text]] },
     // Content an importer could not convert (ADR-0023), kept as it came and
     // shown as text; it cannot be created in the editor.
     unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, attrs: bid, toDOM: () => ["pre", { class: "pm-unsupported", title: t("editor.unsupported") }, 0] },
@@ -148,7 +150,7 @@ export function nodeFromBlock(b, embeds = []) {
   const id = b.id ?? null;
   if (b.kind === "table") return schema.nodes.table.create({ bid: id, text: b.text || "" });
   if (b.kind === "toc" || b.kind === "children" || b.kind === "divider") return schema.nodes[b.kind].create({ bid: id });
-  if (b.kind === "image") return schema.nodes.image.create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0, align: b.align || "" });
+  if (b.kind === "image" || b.kind === "video") return schema.nodes[b.kind].create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0, align: b.align || "" });
   if (b.kind === "embed") {
     const v = embeds.find((e) => e.ref === b.ref);
     return schema.nodes.embed.create({
@@ -207,8 +209,8 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
   if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
   if (node.type === schema.nodes.toc || node.type === schema.nodes.children || node.type === schema.nodes.divider) return { kind: node.type.name };
-  if (node.type === schema.nodes.image) {
-    const b = { kind: "image", text: node.attrs.text, ref: node.attrs.ref };
+  if (node.type === schema.nodes.image || node.type === schema.nodes.video) {
+    const b = { kind: node.type.name, text: node.attrs.text, ref: node.attrs.ref };
     if (node.attrs.width) b.width = node.attrs.width;
     if (node.attrs.align) b.align = node.attrs.align;
     return b;
@@ -430,11 +432,15 @@ const imageSizes = [0, 25, 50, 75, 100];
 // imageView shows an image attachment; an editor edits its caption and
 // its width, and a drawing (ADR-0053) in the drawing editor.
 function imageView(node, view, getPos, files) {
-  const img = h("img", { src: files ? files.url(node.attrs.ref) : "", alt: node.attrs.text, loading: "lazy" });
+  // A video block plays its file with the browser's own controls (ADR-0097).
+  const video = node.type.name === "video";
+  const img = video
+    ? h("video", { src: files ? files.url(node.attrs.ref) : "", controls: true, preload: "metadata", playsinline: true, title: node.attrs.text })
+    : h("img", { src: files ? files.url(node.attrs.ref) : "", alt: node.attrs.text, loading: "lazy" });
   const handle = h("span", { class: "pm-resize", title: t("editor.imageResize"), "aria-hidden": "true" });
   const frame = h("span", { class: "pm-image-frame" }, img, handle);
   const caption = h("figcaption");
-  const dom = h("figure", { class: "pm-image", contenteditable: "false" }, frame, caption);
+  const dom = h("figure", { class: video ? "pm-image pm-video" : "pm-image", contenteditable: "false" }, frame, caption);
   let shown = null;
   // The width is set through the style object, which the content security
   // policy allows (unlike a style attribute). A width in percent applies to
@@ -518,8 +524,11 @@ function imageView(node, view, getPos, files) {
     const key = node.attrs.ref + node.attrs.text + node.attrs.width + node.attrs.align + view.editable;
     if (shown === key) return;
     shown = key;
-    img.src = files ? files.url(node.attrs.ref) : "";
-    img.alt = node.attrs.text;
+    const src = files ? files.url(node.attrs.ref) : "";
+    // A video keeps its place in the playback while only its caption changes.
+    if (img.getAttribute("src") !== src) img.src = src;
+    if (video) img.title = node.attrs.text;
+    else img.alt = node.attrs.text;
     showWidth(node.attrs.width);
     dom.classList.toggle("pm-sizable", view.editable);
     for (const a of ["left", "center", "right"]) dom.classList.toggle("pm-image-" + a, node.attrs.align === a);
@@ -579,6 +588,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       toc: (node, v) => tocView(node, v, tocs),
       children: (node) => childrenView(node, childPages),
       image: (node, v, getPos) => imageView(node, v, getPos, files),
+      video: (node, v, getPos) => imageView(node, v, getPos, files),
     },
     ...viewProps,
   });
@@ -604,12 +614,13 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     e.target.value = "";
     if (kind === "table") insertBlock(schema.nodes.table.create({ text: `${t("editor.heading", { n: 1 })}\t${t("editor.heading", { n: 2 })}\n\t` }));
     else if (kind === "image") picker.click();
+    else if (kind === "video") videoPicker.click();
     else if (kind === "drawing") draw();
     else if (kind === "album") fromAlbum();
     else if (kind === "embed") embed();
     else if (kind) insertBlock(schema.nodes[kind].create());
   } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["children", t("editor.children")],
-    files ? ["image", t("editor.image")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null].filter(Boolean)
+    files ? ["image", t("editor.image")] : null, files ? ["video", t("editor.video")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
   const picker = h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp", hidden: true, "aria-label": t("editor.image") });
@@ -622,6 +633,23 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       const a = await files.upload(file);
       if (!a.inline) throw new Error(t("editor.notAnImage"));
       insertBlock(schema.nodes.image.create({ ref: a.id, text: a.name.replace(/\.[^.]*$/, "") }));
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  });
+  // A video is uploaded as an attachment of the item, then played in the
+  // text (ADR-0097); the server reads its format from its bytes.
+  const videoPicker = h("input", { type: "file", accept: "video/mp4,video/webm", hidden: true, "aria-label": t("editor.video") });
+  videoPicker.addEventListener("change", async () => {
+    const file = videoPicker.files[0];
+    videoPicker.value = "";
+    if (!file) return;
+    status.textContent = t("editor.uploading");
+    try {
+      const a = await files.upload(file);
+      if (!["video/mp4", "video/webm"].includes(a.type)) throw new Error(t("editor.notAVideo"));
+      status.textContent = "";
+      insertBlock(schema.nodes.video.create({ ref: a.id, text: a.name.replace(/\.[^.]*$/, "") }));
     } catch (err) {
       status.textContent = err.message;
     }
@@ -722,10 +750,13 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
         view.dispatch(view.state.tr.insertText(before && !/\s/.test(before) ? " @" : "@", from, to));
         view.focus();
       } })),
-    group(insertSelect, picker),
+    group(insertSelect, picker, videoPicker),
     commentButton,
     h("button", { type: "button", title: t("editor.undo"), text: "↶", onclick: run(undo) }),
     h("button", { type: "button", title: t("editor.redo"), text: "↷", onclick: run(redo) }),
+    // The text's own actions, such as ending the editing, stand where
+    // they stand while reading (ADR-0091).
+    actions.length ? h("span", { class: "pm-actions" }, ...actions) : null,
     status,
   );
   if (editable) {

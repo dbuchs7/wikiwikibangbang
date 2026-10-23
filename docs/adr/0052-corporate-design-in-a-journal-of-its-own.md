@@ -63,6 +63,7 @@ Strongest form: history, access and encryption already exist for items.
 
 ## Links
 
+- amended by [ADR-0097](0097-videos-in-the-text-the-instance-in-the-tab-done-beside-the-text.md) (the name is the browser tab's title)
 - amended by [ADR-0095](0095-language-and-look-in-the-header-and-an-own-start-picture.md) (an own picture on the start page)
 - relates to ADR-0014 (no markup from data), ADR-0027 (accounts journal), ADR-0045 (files served inertly), ADR-0050 (profile pictures)
 - amended by [ADR-0085](0085-ready-made-themes-under-the-corporate-design.md) (ready-made themes under the design)

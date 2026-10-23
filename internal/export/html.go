@@ -154,6 +154,15 @@ func (h *htmlBuilder) block(bl item.Block, p Page, base int) {
 			h.printf("<figcaption>%s</figcaption>", html.EscapeString(bl.Text))
 		}
 		h.out.WriteString("</figure>")
+	case item.Video:
+		h.out.WriteString(`<figure class="` + imageClass(bl) + `">`)
+		if v, ok := p.Images[bl.Ref]; ok {
+			h.printf(`<video controls preload="metadata" src="/api/items/%s/attachments/%s" title="%s"></video>`, url.PathEscape(string(p.ID)), url.PathEscape(string(bl.Ref)), html.EscapeString(v.Name))
+		}
+		if strings.TrimSpace(bl.Text) != "" {
+			h.printf("<figcaption>%s</figcaption>", html.EscapeString(bl.Text))
+		}
+		h.out.WriteString("</figure>")
 	case item.TOC:
 		h.out.WriteString(`<ul class="toc">`)
 		for _, x := range p.Body {

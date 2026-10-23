@@ -328,7 +328,7 @@ func (h itemHandlers) downloadAttachment(w http.ResponseWriter, r *http.Request)
 	defer content.Close()
 	hd := w.Header()
 	disposition := "attachment"
-	if inlineTypes[a.Type] {
+	if inlineTypes[a.Type] || slices.Contains(item.VideoTypes, a.Type) {
 		disposition = "inline"
 		hd.Set("Content-Type", a.Type)
 	} else {
@@ -339,19 +339,30 @@ func (h itemHandlers) downloadAttachment(w http.ResponseWriter, r *http.Request)
 	} else {
 		hd.Set("Content-Disposition", disposition)
 	}
-	hd.Set("Content-Length", strconv.FormatInt(a.Size, 10))
 	hd.Set("X-Content-Type-Options", "nosniff")
 	hd.Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	hd.Set("Cache-Control", "private, max-age=3600")
 	hd.Set("ETag", strconv.Quote(a.SHA256))
-	if r.Header.Get("If-None-Match") == strconv.Quote(a.SHA256) {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-	if _, err := io.Copy(w, content); err != nil {
+	// Parts of a file are sent as asked for (Range), so a video plays and
+	// seeks (ADR-0097); the ETag answers a repeated request.
+	http.ServeContent(w, r, "", time.Time{}, readLogged{content, func(err error) {
 		// The status is sent; a broken file shows as a cut-off download.
 		h.log.Error("attachment content does not read", "item", it.ID, "attachment", a.ID, "err", err)
+	}})
+}
+
+// readLogged reports a read that fails other than at the end.
+type readLogged struct {
+	io.ReadSeeker
+	failed func(error)
+}
+
+func (r readLogged) Read(p []byte) (int, error) {
+	n, err := r.ReadSeeker.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) {
+		r.failed(err)
 	}
+	return n, err
 }
 
 func (h itemHandlers) deleteAttachment(w http.ResponseWriter, r *http.Request) {

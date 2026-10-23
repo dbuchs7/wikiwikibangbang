@@ -3,12 +3,14 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
 // upload sends content as a file of an item.
@@ -270,5 +272,45 @@ func TestAlbumFoldersAndLabelsThroughTheAPI(t *testing.T) {
 	}
 	if got := field(w.carla.expect("GET", "/api/album/labels", "", http.StatusOK), "labels").([]any); len(got) != 0 {
 		t.Fatalf("an outsider sees %v", got)
+	}
+}
+
+// A video plays in the text: it is sent inline and in the parts a player
+// asks for, and only a video a browser plays makes a video block
+// (ADR-0097).
+func TestVideosPlayInTheText(t *testing.T) {
+	w := newWorld(t)
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Clip","properties":{"priority":"low"}}`, http.StatusCreated)
+	key := field(it, "item", "key").(string)
+	base := "/api/items/" + key + "/attachments"
+	mp4 := append([]byte("\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom"), bytes.Repeat([]byte{9}, 200000)...)
+	var up struct{ Attachment attachmentJSON }
+	rec := w.bert.upload(base+"?name=clip.mp4", "application/octet-stream", mp4)
+	_ = json.Unmarshal(rec.Body.Bytes(), &up)
+	if rec.Code != http.StatusCreated || up.Attachment.Type != "video/mp4" {
+		t.Fatalf("upload: %d %s", rec.Code, rec.Body)
+	}
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{7}, 100)...)
+	var pic struct{ Attachment attachmentJSON }
+	_ = json.Unmarshal(w.bert.upload(base+"?name=still.png", "application/octet-stream", png).Body.Bytes(), &pic)
+
+	req := httptest.NewRequest(http.MethodGet, base+"/"+string(up.Attachment.ID), nil)
+	req.RemoteAddr = "192.0.2.1:4000"
+	req.AddCookie(w.bert.cookie)
+	req.Header.Set("Range", "bytes=70000-70009")
+	part := httptest.NewRecorder()
+	w.bert.h.ServeHTTP(part, req)
+	if part.Code != http.StatusPartialContent || !bytes.Equal(part.Body.Bytes(), mp4[70000:70010]) ||
+		part.Header().Get("Content-Type") != "video/mp4" || !strings.HasPrefix(part.Header().Get("Content-Disposition"), "inline") ||
+		part.Header().Get("Content-Range") != fmt.Sprintf("bytes 70000-70009/%d", len(mp4)) {
+		t.Fatalf("a part: %d %v %q", part.Code, part.Header(), part.Body.Bytes())
+	}
+	body := func(ref item.ID) string {
+		return `{"blocks":[{"kind":"video","ref":"` + string(ref) + `","text":"The clip","width":60,"align":"center"}]}`
+	}
+	w.bert.expect("PUT", "/api/items/"+key+"/body", body(pic.Attachment.ID), http.StatusBadRequest)
+	got := w.bert.expect("PUT", "/api/items/"+key+"/body", body(up.Attachment.ID), http.StatusOK)
+	if b := field(got, "item", "body").([]any)[0].(map[string]any); b["kind"] != "video" || b["text"] != "The clip" {
+		t.Fatalf("the video block %v", b)
 	}
 }

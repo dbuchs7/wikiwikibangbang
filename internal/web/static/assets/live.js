@@ -38,7 +38,7 @@ function blockAt(doc, pos) {
 // childPages() lists the item's child pages and files serves and stores
 // its attachments (editor.js); extra adds plugins and comment starts an
 // inline comment (anchors.js).
-export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], comment }) {
+export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], comment, actions = [] }) {
   const el = h("div", { class: "live" });
   const presence = h("p", { class: "muted live-presence", "aria-live": "polite" });
   const status = h("p", { class: "status live-status", role: "status" });
@@ -265,7 +265,7 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     });
     if (blocks.length === 0) blocks.push({ kind: "paragraph", text: "", id: newID() });
     if (!view) {
-      const ed = createEditor({ blocks, embeds, editable: e.editable, resolve, childPages, files, extra: [plugin, ...extra], comment });
+      const ed = createEditor({ blocks, embeds, editable: e.editable, resolve, childPages, files, extra: [plugin, ...extra], comment, actions });
       view = ed.view;
       el.insertBefore(ed.element, status);
       // Leaving the editor releases its blocks, after a moment: a click on
@@ -283,8 +283,8 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     const out = { kind: b.kind, text: b.text ?? "" };
     if (b.kind === "embed") return { kind: "embed", ref: b.ref };
     if (b.kind === "toc" || b.kind === "children" || b.kind === "divider") return { kind: b.kind };
-    if (b.kind === "image") {
-      const img = { kind: "image", text: b.text ?? "", ref: b.ref };
+    if (b.kind === "image" || b.kind === "video") {
+      const img = { kind: b.kind, text: b.text ?? "", ref: b.ref };
       if (b.width) img.width = b.width;
       if (b.align) img.align = b.align;
       return img;

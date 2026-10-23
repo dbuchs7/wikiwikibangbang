@@ -134,7 +134,7 @@ func toDoc(blocks []blockJSON, kept func(text string) bool) (item.Doc, error) {
 	for i, b := range blocks {
 		switch b.Kind {
 		case item.Paragraph, item.Heading, item.Embed, item.BulletItem, item.OrderedItem, item.Quote, item.CodeBlock,
-			item.TaskItem, item.Panel, item.Table, item.TOC, item.Children, item.Image, item.Divider:
+			item.TaskItem, item.Panel, item.Table, item.TOC, item.Children, item.Image, item.Video, item.Divider:
 		case item.Unsupported:
 			if kept == nil || !kept(b.Text) {
 				return d, badInput("block %d: unsupported blocks come only from imports", i+1)

@@ -228,6 +228,13 @@ func (b *docxBuilder) block(bl item.Block, p Page, base, listNum int) string {
 		return paraPr(`<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="BFBFBF"/></w:pBdr>`, "")
 	case item.Image:
 		return b.picture(bl, p.Images)
+	case item.Video:
+		// A document does not play a video; it names it (ADR-0097).
+		out := para("", "", run("[Video: "+p.Images[bl.Ref].Name+"]", ""))
+		if strings.TrimSpace(bl.Text) != "" {
+			out += para("Caption", "", run(bl.Text, ""))
+		}
+		return out
 	case item.TOC:
 		var out strings.Builder
 		for _, h := range p.Body {
