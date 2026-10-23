@@ -38,7 +38,7 @@ function blockAt(doc, pos) {
 // childPages() lists the item's child pages and files serves and stores
 // its attachments (editor.js); extra adds plugins and comment starts an
 // inline comment (anchors.js).
-export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], comment, actions = [] }) {
+export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], comment, actions = [], embedContent }) {
   const el = h("div", { class: "live" });
   const presence = h("p", { class: "muted live-presence", "aria-live": "polite" });
   const status = h("p", { class: "status live-status", role: "status" });
@@ -265,7 +265,7 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     });
     if (blocks.length === 0) blocks.push({ kind: "paragraph", text: "", id: newID() });
     if (!view) {
-      const ed = createEditor({ blocks, embeds, editable: e.editable, resolve, childPages, files, extra: [plugin, ...extra], comment, actions });
+      const ed = createEditor({ blocks, embeds, editable: e.editable, resolve, childPages, files, extra: [plugin, ...extra], comment, actions, embedContent });
       view = ed.view;
       el.insertBefore(ed.element, status);
       // Leaving the editor releases its blocks, after a moment: a click on

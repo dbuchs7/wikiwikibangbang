@@ -92,3 +92,4 @@ Strongest form: every child is visible in its parent without extra work, so noth
 
 - refines [ADR-0001](0001-unified-item-data-model.md) (decisions 4 and 5, D4, D5; "Prototype findings", point 4)
 - relates to [ADR-0008](0008-event-sourced-persistence.md) (atomic multi-event commands), [ADR-0021](0021-deletion-only-when-unreferenced.md) (deletion)
+- amended by [ADR-0106](0106-an-embedded-item-is-shown-whole.md) (an embed shows its target whole)

@@ -411,6 +411,24 @@ function tocView(node, view, tocs) {
   return { dom, ...own, update: (n) => n.type === node.type, destroy: () => tocs.delete(refresh) };
 }
 
+// embedView shows an embedded item whole (ADR-0106): a heading that leads
+// to it, then what load(ref) returns, its content read-only, or nothing
+// where the reader may not see it. Events inside the content stay there.
+function embedView(node, load) {
+  const dom = h("div", { class: "pm-embed", contenteditable: "false" });
+  const visible = Boolean(node.attrs.href);
+  dom.append(visible ? h("a", { class: "pm-embed-title", href: safeHref(node.attrs.href), text: node.attrs.label })
+    : h("span", { class: "muted", text: node.attrs.label || t("editor.hidden") }));
+  const body = h("div", { class: "pm-embed-body", "aria-busy": "true" });
+  if (visible && load) {
+    dom.append(body);
+    load(node.attrs.ref).then((el) => body.replaceChildren(...(el ? [el] : [])))
+      .catch(() => body.replaceChildren(h("p", { class: "muted", text: t("embed.failed") })))
+      .finally(() => body.removeAttribute("aria-busy"));
+  }
+  return { dom, ignoreMutation: () => true, stopEvent: (ev) => body.contains(ev.target) };
+}
+
 // childrenView lists the child pages of the item, from childPages().
 function childrenView(node, childPages) {
   const dom = h("nav", { class: "pm-children", contenteditable: "false", "aria-label": t("editor.children") },
@@ -567,7 +585,9 @@ function imageView(node, view, getPos, files) {
 // the attachment. extra adds plugins, such as a live session's (live.js);
 // viewProps adds editor view properties. comment(anchor), if given, starts
 // an inline comment on the selected text (anchors.js, ADR-0047).
-export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, actions = [] }) {
+// embedContent(ref), if given, returns the content of an embedded item,
+// shown in its block (ADR-0106).
+export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, actions = [], embedContent }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
   const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
@@ -589,6 +609,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       children: (node) => childrenView(node, childPages),
       image: (node, v, getPos) => imageView(node, v, getPos, files),
       video: (node, v, getPos) => imageView(node, v, getPos, files),
+      embed: (node) => embedView(node, embedContent),
     },
     ...viewProps,
   });
