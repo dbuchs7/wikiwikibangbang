@@ -581,6 +581,7 @@ button.watch-bell svg { width: 20px; height: 20px; }
 .design-assets { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 8px 0 16px; }
 .design-asset { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius); }
 .design-preview { max-width: 100%; max-height: 80px; object-fit: contain; align-self: flex-start; background: repeating-conic-gradient(#eee 0 25%, #fff 0 50%) 0 0 / 12px 12px; }
+.design-preview-dark { background: repeating-conic-gradient(#1d2430 0 25%, #10151d 0 50%) 0 0 / 12px 12px; } /* the logo for dark mode, on dark */
 .design-colours { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; }
 .design-colour input[type=color] { width: 44px; height: 32px; padding: 0; border: 1px solid var(--border); }
 textarea.code { font-family: var(--font-mono); font-size: 13px; }
