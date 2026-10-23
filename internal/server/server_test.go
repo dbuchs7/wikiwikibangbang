@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -196,5 +197,25 @@ func TestServeReportsListenerFailure(t *testing.T) {
 	err = Serve(context.Background(), ln, http.NotFoundHandler(), slog.New(slog.DiscardHandler))
 	if err == nil {
 		t.Fatal("Serve on a closed listener returned nil")
+	}
+}
+
+// TestPageVersionsItsLogosAndIcons: the page names each logo and icon by
+// an address that carries its content's hash, so a browser that kept an
+// earlier one fetches a changed one, and the address serves it.
+func TestPageVersionsItsLogosAndIcons(t *testing.T) {
+	h := testHandler(t)
+	page := get(t, h, "/").Body.String()
+	refs := regexp.MustCompile(`"(/(?:assets/brand/[a-z0-9-]+\.(?:svg|png)|favicon\.ico))\?v=([0-9a-f]{12})"`).FindAllStringSubmatch(page, -1)
+	if len(refs) < 5 {
+		t.Fatalf("versioned references: %v", refs)
+	}
+	for _, ref := range refs {
+		if rec := get(t, h, ref[1]+"?v="+ref[2]); rec.Code != 200 {
+			t.Errorf("%s answers %d", ref[1], rec.Code)
+		}
+	}
+	if strings.Contains(page, `"/assets/brand/logo-black.svg"`) || strings.Contains(page, `"/assets/brand/favicon.svg"`) {
+		t.Error("an unversioned logo or icon is left")
 	}
 }

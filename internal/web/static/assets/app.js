@@ -1243,17 +1243,13 @@ async function chooseLanguage() {
 
 // --- corporate design (ADR-0052) -----------------------------------------------
 
-// The product's own logo and icons, kept to come back to when a design's
-// logo goes.
-const productLogo = document.querySelector(".brand picture")?.cloneNode(true);
-const productIcons = [...document.querySelectorAll("link[rel=icon]")].map((l) => l.cloneNode());
+// The start page's picture, by the address the page gives it, which
+// changes with its content.
+const welcomeArt = document.querySelector("meta[name=wwbb-welcome]")?.content || "/assets/brand/welcome.svg";
 
-// setFavicon shows the design's logo as the browser's icon, or the
-// product's icons without one.
-function setFavicon(href) {
-  document.querySelectorAll("link[rel=icon]").forEach((l) => l.remove());
-  document.head.append(...(href ? [h("link", { rel: "icon", href })] : productIcons.map((l) => l.cloneNode())));
-}
+// The product's own logo, kept to come back to when a design's logo goes.
+// The browser's icon stays the product's, whatever the design.
+const productLogo = document.querySelector(".brand picture")?.cloneNode(true);
 
 // applyBranding shows the installation's logo and name; the colours, fonts
 // and background come with /branding.css. reload asks for the stylesheet
@@ -1265,10 +1261,8 @@ async function applyBranding(reload = false) {
   if (b.assets?.logo) {
     const logo = "/branding/logo?v=" + encodeURIComponent(b.assets.logo);
     brand.replaceChildren(h("img", { src: logo, alt: b.name || "wikiwikibangbang", class: "brand-logo" }));
-    setFavicon(logo);
   } else {
     if (productLogo) brand.replaceChildren(productLogo.cloneNode(true));
-    setFavicon("");
   }
   // Without a dark scheme (ADR-0070) the product's logo stays the dark one,
   // and there is no look to switch to.
@@ -1579,7 +1573,7 @@ async function homeView() {
       // The design's own picture replaces the product's (ADR-0095).
       brand.assets?.welcome
         ? h("img", { class: "welcome-art welcome-own", id: "welcome-art", src: "/branding/welcome?v=" + encodeURIComponent(brand.assets.welcome), alt: "" })
-        : h("img", { class: "welcome-art", id: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 480, height: 320 }),
+        : h("img", { class: "welcome-art", id: "welcome-art", src: welcomeArt, alt: "", width: 480, height: 320 }),
       // The installed version, small, for support questions and releases.
       me.version ? h("span", { class: "welcome-version", id: "home-version", title: me.revision ? t("home.revision", { revision: me.revision }) : "", text: t("home.version", { version: me.version }) }) : ""),
     // Account requests wait on an administrator (ADR-0061): said first,

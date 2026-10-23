@@ -1320,8 +1320,8 @@ function ckanSource() {
     await page.setInputFiles("#design-logo", { name: "logo.png", mimeType: "image/png",
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
     await page.waitForSelector("header .brand img.brand-logo[src^='/branding/logo']");
-    await page.waitForSelector("head link[rel=icon][href^='/branding/logo']", { state: "attached" });
-    check(await page.locator("head link[rel=icon]").count() === 1, "the logo is the browser's icon");
+    check(await page.locator("head link[rel=icon][href^='/branding/logo']").count() === 0, "the design's logo is not the browser's icon");
+    check(await page.locator("head link[rel=icon][href^='/favicon.ico']").count() === 1, "the browser's icon stays the product's");
     // An own picture on the start page (ADR-0095).
     await page.setInputFiles("#design-welcome", { name: "welcome.png", mimeType: "image/png",
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
@@ -1377,7 +1377,7 @@ function ckanSource() {
     await page.waitForFunction(() => document.querySelectorAll("#design-contrast li").length === 0);
     await page.click("#admin-design button:has-text('Delete')"); // the product's logo comes back
     await page.waitForSelector("header .brand picture");
-    await page.waitForSelector("head link[rel=icon][href='/favicon.ico']", { state: "attached" });
+    await page.waitForSelector("head link[rel=icon][href^='/favicon.ico']", { state: "attached" });
     // A ready-made theme applies under the design; the comic one has no
     // dark scheme (ADR-0085).
     await page.click("#design-themes label.theme-comic");

@@ -11,14 +11,19 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"html"
 	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
@@ -196,21 +201,47 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("ok\n"))
 }
 
+// brandRef is a reference of the page to a logo or icon file.
+var brandRef = regexp.MustCompile(`"/(assets/brand/[a-z0-9-]+\.(?:svg|png)|favicon\.ico)"`)
+
+// versioned gives the page's logos and icons an address that names their
+// content, so a browser that kept an earlier icon (browsers keep icons
+// long, by address) asks for a changed one.
+func versioned(ui fs.FS, page []byte) []byte {
+	return brandRef.ReplaceAllFunc(page, func(ref []byte) []byte {
+		name := string(ref[2 : len(ref)-1])
+		data, err := fs.ReadFile(ui, name)
+		if err != nil {
+			return ref
+		}
+		sum := sha256.Sum256(data)
+		return []byte(fmt.Sprintf(`"/%s?v=%s"`, name, hex.EncodeToString(sum[:6])))
+	})
+}
+
 // index sends the UI's page, titled with the installation's name, so the
 // browser's tab names the instance from the start (ADR-0097).
 func index(d Deps) http.Handler {
+	var once sync.Once
+	var page []byte
+	var err error
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		page, err := fs.ReadFile(d.UI, "index.html")
+		once.Do(func() {
+			if page, err = fs.ReadFile(d.UI, "index.html"); err == nil {
+				page = versioned(d.UI, page)
+			}
+		})
 		if err != nil {
 			http.Error(w, "the UI is missing", http.StatusInternalServerError)
 			return
 		}
+		out := page
 		if name := d.DB.Site.Design().Name; name != "" {
-			page = bytes.Replace(page, []byte("<title>wikiwikibangbang</title>"), []byte("<title>"+html.EscapeString(name)+"</title>"), 1)
+			out = bytes.Replace(page, []byte("<title>wikiwikibangbang</title>"), []byte("<title>"+html.EscapeString(name)+"</title>"), 1)
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")
-		_, _ = w.Write(page)
+		_, _ = w.Write(out)
 	})
 }
 
