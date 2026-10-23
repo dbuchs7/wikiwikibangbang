@@ -727,6 +727,7 @@ function renderModules(section) {
 
 // labelChrome translates the fixed parts of index.html.
 function labelChrome() {
+  readingExit.textContent = t("reading.exit");
   for (const el of [switcher, drawer, document.getElementById("drawer-apps")]) el.setAttribute("aria-label", t("nav.modules"));
   switcher.title = t("nav.modules");
   const close = document.getElementById("drawer-close");
@@ -914,6 +915,48 @@ function renderNav() {
   );
 }
 
+// --- reading mode (ADR-0101) --------------------------------------------------
+
+// readingMode shows the content alone: no top bar, no page tree, no side
+// column. It starts with its button, Ctrl+Shift+F, or the browser's full
+// screen (F11); Esc, the same keys or its button end it.
+const readingMode = {
+  on: false,
+  set(on, fullscreen) {
+    this.on = on;
+    document.documentElement.classList.toggle("reading-mode", on);
+    // Started from the page, it takes the whole screen too, as F11 does.
+    if (fullscreen && on && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  },
+};
+const readingExit = h("button", { type: "button", class: "reading-exit", id: "reading-exit", onclick: () => readingMode.set(false) });
+document.body.append(readingExit);
+document.addEventListener("keydown", (ev) => {
+  if ((ev.ctrlKey || ev.metaKey) && ev.shiftKey && ev.key.toLowerCase() === "f") {
+    ev.preventDefault();
+    readingMode.set(!readingMode.on, true);
+  } else if (ev.key === "Escape" && readingMode.on && !document.querySelector("dialog[open]")) {
+    readingMode.set(false);
+  }
+});
+// The browser's own full screen (F11) is reading mode too, and leaving it
+// ends it.
+const fullscreenMedia = window.matchMedia("(display-mode: fullscreen)");
+fullscreenMedia.addEventListener("change", (ev) => readingMode.set(ev.matches));
+document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && !fullscreenMedia.matches && readingMode.on) readingMode.set(false); });
+
+// expandIcon draws four corners pointing outwards.
+function expandIcon() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", width: "18", height: "18", "aria-hidden": "true" })) svg.setAttribute(k, v);
+  const p = document.createElementNS(ns, "path");
+  for (const [k, v] of Object.entries({ d: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" })) p.setAttribute(k, v);
+  svg.append(p);
+  return svg;
+}
+
 // --- language and look (ADR-0095) -------------------------------------------
 
 // localLanguage is the language chosen in this browser before signing in.
@@ -981,7 +1024,9 @@ function lookToggles() {
   document.addEventListener("themechange", draw);
   onLeave(() => document.removeEventListener("themechange", draw));
   draw();
-  return h("span", { class: "look-toggles" }, langs, bulb);
+  const reader = h("button", { type: "button", class: "icon-btn reading-toggle", id: "reading-toggle",
+    title: t("reading.enter"), "aria-label": t("reading.enter"), onclick: () => readingMode.set(true, true) }, expandIcon());
+  return h("span", { class: "look-toggles" }, langs, bulb, reader);
 }
 
 // avatar shows a user's profile picture, or their initials when they have

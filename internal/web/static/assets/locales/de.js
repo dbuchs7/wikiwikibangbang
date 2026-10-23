@@ -325,6 +325,8 @@ export default {
   "fold.showTree": "Seitenbaum einblenden",
   "fold.hideSide": "Seitenspalte ausblenden",
   "fold.showSide": "Seitenspalte einblenden",
+  "reading.enter": "Lesemodus (Ctrl+Shift+F, F11)",
+  "reading.exit": "Lesemodus beenden (Esc)",
   "editor.link": "Link",
   "editor.linkNeedsURL": "Ein Link braucht eine http-, https- oder mailto-Adresse.",
   "editor.ordered": "Nummerierter Punkt",

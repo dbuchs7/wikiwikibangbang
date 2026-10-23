@@ -68,5 +68,6 @@ Strongest form: any width one likes.
 
 ## Links
 
+- amended by [ADR-0101](0101-a-reading-mode.md) (a reading mode)
 - amends [ADR-0095](0095-language-and-look-in-the-header-and-an-own-start-picture.md) (the language switch) and [ADR-0041](0041-page-tree-and-sibling-order.md) (the page tree beside the content)
 - relates to ADR-0065, ADR-0091 and ADR-0099 (the UI's frame), ADR-0079 (the item's side column)

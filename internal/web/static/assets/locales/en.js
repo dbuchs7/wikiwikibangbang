@@ -327,6 +327,8 @@ export default {
   "fold.showTree": "Show the page tree",
   "fold.hideSide": "Hide the side column",
   "fold.showSide": "Show the side column",
+  "reading.enter": "Reading mode (Ctrl+Shift+F, F11)",
+  "reading.exit": "Leave reading mode (Esc)",
   "editor.link": "Link",
   "editor.linkNeedsURL": "A link needs an http, https or mailto URL.",
   "editor.ordered": "Numbered item",

@@ -1339,3 +1339,16 @@ html.side-folded .item-side > :not(.col-toggle) { display: none; }
   .account-button { padding: 0; }
   .brand img { height: 24px; }
 }
+
+/* Reading mode (ADR-0101): the content alone, with a way back. */
+.reading-toggle { margin: 0; color: var(--text); }
+.reading-exit { display: none; }
+html.reading-mode header.top, html.reading-mode .tree-col, html.reading-mode .item-side, html.reading-mode #footer, html.reading-mode .col-toggle { display: none !important; }
+html.reading-mode .with-tree, html.reading-mode .item-layout { grid-template-columns: minmax(0, 1fr) !important; }
+html.reading-mode main { max-width: 1100px; }
+html.reading-mode .reading-exit { display: inline-flex; position: fixed; top: 10px; right: 12px; z-index: 30; min-height: 32px; padding: 4px 12px;
+  font-size: 13px; opacity: .55; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; color: var(--text); box-shadow: var(--shadow); }
+html.reading-mode .reading-exit:hover, html.reading-mode .reading-exit:focus { opacity: 1; }
+@media print { .reading-exit { display: none !important; } }
+/* On a phone the screen is the content already; the button gives way. */
+@media (max-width: 480px) { .reading-toggle { display: none; } }

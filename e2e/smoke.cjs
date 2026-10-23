@@ -604,6 +604,18 @@ function ckanSource() {
     await page.click("#fold-tree");
     await page.waitForSelector("#comments");
 
+    step("reading mode: the content alone, by its button or Ctrl+Shift+F, ended by Esc (ADR-0101)");
+    await page.click("#reading-toggle");
+    await page.waitForSelector("html.reading-mode header.top", { state: "hidden" });
+    await page.waitForSelector("#reading-exit:visible");
+    check(await page.locator(".item-side").isHidden(), "the side column is away while reading");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("header.top", { state: "visible" });
+    await page.keyboard.press("Control+Shift+F");
+    await page.waitForSelector("html.reading-mode");
+    await page.click("#reading-exit");
+    await page.waitForSelector("#reading-toggle", { state: "visible" });
+
     step("labels: a label added to a page lists the page");
     await page.fill("#labels [name=label]", "Disaster Recovery");
     await page.press("#labels [name=label]", "Enter");
