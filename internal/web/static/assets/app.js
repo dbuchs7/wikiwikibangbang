@@ -7,6 +7,7 @@ import { liveBody } from "./live.js";
 import { pageTree, ancestors } from "./tree.js";
 import { renderDiff } from "./diff.js";
 import { commentPlugin } from "./anchors.js";
+import { personalNotes } from "./notes.js";
 import { isDrawing } from "./drawing.js";
 import { albumBrowser, retentionCard } from "./album.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
@@ -2921,7 +2922,7 @@ async function itemView(ref, params = new URLSearchParams()) {
   const show = screen();
   const { item, editable } = await get("/api/items/" + encodeURIComponent(ref));
   const path = "/api/items/" + item.id;
-  const [{ types }, history, out, inc, embeds, comments, { attachments }, { watches }, { spaces }] = await Promise.all([
+  const [{ types }, history, out, inc, embeds, comments, { attachments }, { watches }, { spaces }, myNotes] = await Promise.all([
     get("/api/types"),
     get(path + "/history"),
     get(path + "/relations?direction=outgoing"),
@@ -2931,6 +2932,7 @@ async function itemView(ref, params = new URLSearchParams()) {
     get(path + "/attachments"),
     get("/api/me/watches"),
     get("/api/spaces"),
+    get(path + "/notes").catch(() => ({ notes: [] })),
   ]);
   const spaceAdmin = spaces.find((sp) => sp.key === item.space)?.role === "space-admin";
   const type = types.find((ty) => ty.name === item.type) || { fields: [], workflow: null, body: false };
@@ -2955,6 +2957,8 @@ async function itemView(ref, params = new URLSearchParams()) {
   here.space = item.space;
   here.parent = item.id;
   const threads = commentThreads(path, comments, canEdit);
+  // One's own notes on passages, seen by no one else (ADR-0107).
+  const notes = live ? personalNotes(path, myNotes.notes) : null;
 
   // Moving up or down among the siblings: the keyboard's way to reorder,
   // besides dragging in the tree (ADR-0041).
@@ -3064,7 +3068,7 @@ async function itemView(ref, params = new URLSearchParams()) {
     setSecretClass((ref) => (secretOf.get(ref)?.readable ? "secret-readable" : "secret-veiled"));
     const protect = canEdit && readsAll && live && !editing ? (at) => protectPassageForm(protecting, path, item, at, status) : null;
     const edit = editing ? done : canEdit && readsAll ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null;
-    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit);
+    const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit, notes);
     body = b.element;
     session = b.session;
   }
@@ -3105,6 +3109,7 @@ async function itemView(ref, params = new URLSearchParams()) {
         details,
         secretsSection(path, item, status),
         threads.section,
+        notes ? notes.section : null,
         attachmentsSection(path, attachments, canEdit),
         await relationsSection(path, out.relations, inc.relations, item.id, canEdit),
         await accessSection(path, item, canEdit, spaceAdmin),
@@ -3157,11 +3162,12 @@ async function relocateForm(box, item, mode, spaces, status) {
 // commented on highlighted and commenting on a selection offered; or, when
 // editing, in its live session (ADR-0010), where changes reach everyone at
 // once and are saved as one leaves a block.
-function bodySection(item, embeds, editing, threads, attachments, protect, edit) {
+function bodySection(item, embeds, editing, threads, attachments, protect, edit, notes) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!editing) {
     const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
-      extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined, protect: protect || undefined,
+      extra: item.presence === "live" ? [threads.plugin, ...(notes ? [notes.plugin] : [])] : [], comment: item.presence === "live" ? threads.start : undefined,
+      note: notes ? notes.start : undefined, protect: protect || undefined,
       actions: edit ? [edit] : [], embedContent: embedLoader([item.id]) });
     const section = h("section", { id: "body", class: "reading" }, view.element);
     // A click on a protected passage shows it in the list of passages.

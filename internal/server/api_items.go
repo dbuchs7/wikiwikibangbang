@@ -18,6 +18,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/wikiwikibangbang/internal/notes"
 )
 
 // itemRoutes are the item API (ADR-0028). Every handler acts through
@@ -83,6 +84,7 @@ func itemRoutes(d Deps) []Route {
 	routes = append(routes, kanbanRoutes(h)...)
 	routes = append(routes, attachmentRoutes(h)...)
 	routes = append(routes, retentionRoutes(h)...)
+	routes = append(routes, noteRoutes(h)...)
 	routes = append(routes, watchRoutes(h)...)
 	return append(routes, liveRoutes(h)...)
 }
@@ -109,8 +111,10 @@ func (h itemHandlers) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, item.ErrForbidden):
 		writeError(w, http.StatusForbidden, err.Error())
-	case errors.Is(err, errBadInput):
+	case errors.Is(err, errBadInput), errors.Is(err, notes.ErrInvalid):
 		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, notes.ErrNotFound):
+		writeError(w, http.StatusNotFound, "note not found")
 	default:
 		h.log.Error("request failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "the change was not made")

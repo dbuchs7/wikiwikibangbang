@@ -7,6 +7,8 @@ package storage
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +22,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/wikiwikibangbang/internal/notes"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
 )
@@ -34,6 +37,10 @@ const AuditFile = "audit.wal"
 // (ADR-0052).
 const SiteFile = "site.wal"
 
+// NotesFile holds the personal notes on passages of items (ADR-0107),
+// sealed with each item's key.
+const NotesFile = "notes.wal"
+
 // DB is an open data directory.
 type DB struct {
 	// Store is the item store. It is not safe for concurrent use: callers
@@ -42,6 +49,9 @@ type DB struct {
 	Accounts *auth.Accounts
 	Audit    *audit.Trail
 	Site     *site.Settings
+	// Notes are personal notes (ADR-0107). They are sealed with the item
+	// keys, so they are changed only within Write.
+	Notes *notes.Notes
 
 	// mu lets reads run side by side and a command alone (ADR-0081).
 	mu       sync.RWMutex
@@ -51,6 +61,7 @@ type DB struct {
 	accounts *wal.Log
 	audit    *wal.Log
 	site     *wal.Log
+	notes    *wal.Log
 	dir      string
 }
 
@@ -180,6 +191,14 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 	if db.Site, err = site.New(ssc.Records, sl.Append); err != nil {
 		return nil, Recovery{}, err
 	}
+	nl, nsc, err := wal.OpenFile(dir, NotesFile)
+	if err != nil {
+		return nil, Recovery{}, err
+	}
+	db.notes = nl
+	if db.Notes, err = notes.New(nsc.Records, nl.Append, notesSealer{db.keys}, newNoteID); err != nil {
+		return nil, Recovery{}, fmt.Errorf("storage: reading %s: %w", NotesFile, err)
+	}
 	// Content is assessed against the installation's data protection
 	// regulations on save (ADR-0058); replay reads the outcome from the log.
 	settings := db.Site
@@ -273,6 +292,9 @@ func (db *DB) close() error {
 	}
 	if db.site != nil {
 		errs = append(errs, db.site.Close())
+	}
+	if db.notes != nil {
+		errs = append(errs, db.notes.Close())
 	}
 	if db.audit != nil {
 		errs = append(errs, db.audit.Close())
@@ -375,5 +397,34 @@ func (j journal) Append(batch []item.Event) error {
 	if len(gone) > 0 || len(deleted) > 0 {
 		j.db.removeAttachments(gone, deleted) // likewise healed on the next start
 	}
+	// Notes go with their item's key (ADR-0107); their records can no
+	// longer be read, and are dropped on the next start too.
+	if j.db.Notes != nil {
+		j.db.Notes.Forget(gone...)
+	}
 	return nil
+}
+
+// notesSealer seals notes with their item's key (ADR-0107). A key it
+// creates is made durable at once; notes are changed within Write, under
+// the lock that guards the keys.
+type notesSealer struct{ kr *keyring }
+
+func (n notesSealer) Seal(id item.ID, pt, aad []byte) ([]byte, error) {
+	ct, err := n.kr.Seal(id, pt, aad)
+	if err != nil {
+		return nil, err
+	}
+	return ct, n.kr.persistPending()
+}
+
+func (n notesSealer) Open(id item.ID, ct, aad []byte) ([]byte, error) { return n.kr.Open(id, ct, aad) }
+
+// newNoteID is a random ID for a note.
+func newNoteID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		panic(err) // crypto/rand does not fail on supported systems
+	}
+	return hex.EncodeToString(b)
 }
