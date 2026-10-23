@@ -1218,6 +1218,7 @@ async function route() {
       case "item": return await itemView(arg, params);
       case "label": return await labelView(arg);
       case "notifications": return await notificationsView();
+      case "my-notes": return await myNotesView();
       case "comments": return await commentsView(arg);
       case "album": return albumView();
       case "search": return await searchView(arg || "");
@@ -1536,6 +1537,24 @@ async function searchView(q) {
   emptyNow(first.total.value);
 }
 
+// myNotesView lists one's personal notes on every item one may still
+// read, newest first, each with its passage and a link to its item
+// (ADR-0113). Nobody else sees them (ADR-0107).
+async function myNotesView() {
+  const show = screen();
+  const { notes } = await get("/api/notes");
+  const list = h("ul", { class: "list my-notes", id: "my-notes" }, [...notes].reverse().map((n) => h("li", { "data-f-item": n.key },
+    h("p", {}, link("#/item/" + encodeURIComponent(n.key), n.key), " ", h("strong", { text: n.title }),
+      h("span", { class: "muted", text: " · " + when(n.updated || n.created) })),
+    n.anchor?.quote ? h("blockquote", { class: "my-note-quote", text: n.anchor.quote }) : null,
+    h("p", { class: "my-note-text", text: n.text }))));
+  show(
+    h("div", { class: "page-head" }, h("h1", { text: t("note.title") })),
+    h("p", { class: "muted", text: t("note.private") }),
+    notes.length ? filtered(list, { id: "mynotes", label: t("note.title") }) : empty(t("note.noneAnywhere"), "my-notes-empty"),
+  );
+}
+
 // --- spaces ------------------------------------------------------------------
 
 // roleText names a space role for people.
@@ -1553,9 +1572,10 @@ const mayEdit = (role) => role === "editor" || role === "space-admin";
 
 async function homeView() {
   const show = screen();
-  const [{ spaces }, { types }, notes, brand, { requests }] = await Promise.all([get("/api/spaces"), get("/api/types"),
+  const [{ spaces }, { types }, notes, brand, { requests }, mine] = await Promise.all([get("/api/spaces"), get("/api/types"),
     get("/api/notifications?limit=1").catch(() => ({ unread: 0 })), get("/branding.json").catch(() => ({})),
-    me.admin ? get("/api/account-requests").catch(() => ({ requests: [] })) : { requests: [] }]);
+    me.admin ? get("/api/account-requests").catch(() => ({ requests: [] })) : { requests: [] },
+    get("/api/notes").catch(() => ({ notes: [] }))]);
   if (me.admin) setRequests(requests.length);
   const anyEditable = spaces.some((s) => mayEdit(s.role));
   // A greeting by the time of day, the reader's own clock.
@@ -1606,6 +1626,8 @@ async function homeView() {
         requests.length ? h("span", { class: "chip", text: t("nav.requestsWaiting", { n: requests.length }) }) : null),
       quick("#/notifications", t("nav.notifications"), notes.unread ? t("home.notesUnread", { n: notes.unread }) : t("home.notesNone"), "home-notes",
         findings ? h("span", { class: "chip", text: t("nav.findingsOpen", { n: findings }) }) : null),
+      // One's personal notes, wherever they were made (ADR-0113).
+      quick("#/my-notes", t("note.title"), mine.notes.length ? t("home.myNotesText", { n: mine.notes.length }) : t("home.myNotesNone"), "home-my-notes"),
       quick("#/album", t("nav.album"), t("home.albumText"), "home-album"),
       quick("#/mcp", t("nav.mcp"), t("home.mcpText"), "home-mcp")),
     h("h2", { text: t("spaces.title") }),
@@ -1870,15 +1892,16 @@ async function spaceView(key) {
   addRows(first);
   const boards = types.filter((ty) => ty.workflow)
     .map((ty) => link(`#/board/${encodeURIComponent(key)}/${encodeURIComponent(ty.name)}`, t("space.board", { type: ty.name })));
-  const tree = pageTree({ space: key, newPage: canEdit ? newHref(key, "") : "", onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
+  const tree = pageTree({ space: key, onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
   show(withTree(tree,
     h("p", {}, link("#/", t("nav.spaces")), " / " + key),
     h("div", { class: "page-head" },
       h("h1", { text: sp.name }),
+      // The view's buttons, and the bell always last (ADR-0112).
       h("p", { class: "actions" },
         create && types.length ? h("button", { class: "primary", id: "space-new-page", text: t("space.newPage"), onclick: toForm }) : null,
-        watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status),
-        csv)),
+        csv,
+        watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status))),
     h("nav", { class: "subnav", "aria-label": t("space.views") }, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance")),
       sp.role === "space-admin" ? link(`#/members/${encodeURIComponent(key)}`, t("members.title")) : null].filter(Boolean)),
     status,
@@ -3075,7 +3098,7 @@ async function itemView(ref, params = new URLSearchParams()) {
   const lastRestriction = history.events.filter((e) => e.kind === "RestrictionSet").pop();
   const guarded = item.restriction?.read?.length && lastRestriction?.actor === "governance";
   // The tree opens down to the page and shows the page's own children.
-  const tree = pageTree({ space: item.space, current: item.id, newPage: canEdit ? newHref(item.space, item.id) : "", open: [...open, item.id], onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
+  const tree = pageTree({ space: item.space, current: item.id, open: [...open, item.id], onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
   // Leaving the editor stores what is not yet saved, then shows the page.
   let session = null;
   const done = h("button", { type: "button", id: "edit-done", class: "primary", text: t("item.done"), onclick: async () => {
@@ -3090,13 +3113,14 @@ async function itemView(ref, params = new URLSearchParams()) {
     }
     try { if (session) await session.finish(); } finally { location.hash = itemHref; }
   } });
+  // The item's buttons, and the bell always last (ADR-0112).
   const headActions = h("p", { class: "actions" },
-    live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null,
     // Editing is offered, and ended, in the bar where the text begins
     // (ADR-0091); an item without a text ends it here.
     editing && !type.body ? done : null,
     canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null,
-    !editing ? exportMenu(item) : null);
+    !editing ? exportMenu(item) : null,
+    live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null);
   let body = null;
   const protecting = h("div", { id: "protect-passage" });
   if (!type.body && canEdit && readsAll && !editing) {

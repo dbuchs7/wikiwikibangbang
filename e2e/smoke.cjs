@@ -121,7 +121,7 @@ function ckanSource() {
     await page.waitForSelector("#welcome h1:has-text('admin')");
     await page.waitForSelector("#welcome img.welcome-art");
     await page.waitForSelector("#welcome #home-version:has-text('Version')");
-    check(await page.locator(".home-tiles a").count() === 4, "four quick accesses");
+    check(await page.locator(".home-tiles a").count() === 5, "five quick accesses, one's notes among them");
 
     step("the footer names the running version");
     await page.waitForSelector("footer.footer:has-text('wikiwikibangbang')");
@@ -515,6 +515,10 @@ function ckanSource() {
     step("creating: New offers a page below the page shown, in its space");
     await page.click(".tree a:has-text('Upgrade')");
     await page.waitForSelector("#item-new-child");
+    // The head's buttons stand left of the bell, which is last; the tree
+    // makes no pages (ADR-0112).
+    check(await page.$eval(".page-head .actions", (p) => p.lastElementChild.id) === "watch" && await page.locator(".tree-box a.tree-new").count() === 0,
+      "the bell is the last of the page's buttons");
     await page.click("#nav-new");
     await page.waitForSelector("#new-item [name=under]:checked");
     await page.fill("#new-item [name=title]", "Created from New");
@@ -708,6 +712,17 @@ function ckanSource() {
     await page.click("#note-save");
     await page.waitForSelector("#note-dialog", { state: "detached" });
     await page.click("#reading-exit");
+    await page.waitForSelector("#notes-list .note-text:has-text('Failover tested on Monday')");
+    // The start page leads to one's notes, wherever they were made, and
+    // each back to its page (ADR-0113).
+    const notedAt = await page.evaluate(() => location.hash);
+    await page.goto(base + "/#/");
+    await page.waitForSelector("#home-my-notes:has-text('1 note')");
+    await page.click("#home-my-notes");
+    await page.waitForSelector("#my-notes li:has-text('Failover tested on Monday') blockquote.my-note-quote:text-is('primary')");
+    check((await page.textContent("main")).includes("Only you see your notes"), "the list says the notes are private");
+    await page.click("#my-notes li a");
+    await page.waitForFunction((h) => location.hash.split("?")[0] === h.split("?")[0], notedAt);
     await page.waitForSelector("#notes-list .note-text:has-text('Failover tested on Monday')");
     await page.click("#notes-list .note-open");
     answer = true;
@@ -1552,6 +1567,9 @@ function ckanSource() {
 
     step("copy and move: a page is copied with its child pages, then moved below another page");
     await page.goto(base + "/#/space/PLAT");
+    await page.waitForSelector("#space-new-page");
+    check(await page.$eval(".page-head .actions", (p) => p.firstElementChild.id === "space-new-page" && p.lastElementChild.id === "watch"),
+      "a space offers a new page first and the bell last");
     await page.click(".tree a:has-text('Runbook')");
     await page.waitForSelector(".tree a.current:has-text('Runbook')");
     await page.click("#item-copy");
