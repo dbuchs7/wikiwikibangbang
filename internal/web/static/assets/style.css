@@ -1455,3 +1455,47 @@ html.reading-mode .reading-exit:hover, html.reading-mode .reading-exit:focus { o
 .live-editors[hidden] { display: none; }
 .live-editor { display: inline-flex; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
 .live-editor + .live-editor { margin-left: -6px; }
+
+/* ---------- Narrow screens (ADR-0116) ---------- */
+/* A key such as PLAT-12 is one word: it does not break at its hyphen. */
+a.key, .card-key, td.key { white-space: nowrap; }
+/* The title being edited takes the head's width, not more. */
+form#title { flex: 1 1 auto; min-width: 0; }
+input.title { width: 100%; min-width: 0; }
+/* The drawing editor fills the screen where the screen is small, so its
+   Cancel and Save stay in sight; 100dvh is the height one sees, not the
+   one behind the browser's bars. */
+dialog.drawing { height: calc(100dvh - 32px); }
+dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
+/* A table in a text keeps readable columns and scrolls sideways, with a
+   shadow at the edge that has more. */
+.pm-table th, .pm-table td { min-width: 7rem; max-width: 22rem; overflow-wrap: anywhere; }
+.pm-table th { overflow-wrap: normal; hyphens: auto; }
+.pm-table, .pm-tasklist .tasklist-box .filtered, .table-scroll {
+  background: linear-gradient(to right, var(--surface) 30%, transparent) left / 24px 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 30%, transparent) right / 24px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, .18), transparent) left / 10px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, .18), transparent) right / 10px 100% no-repeat scroll;
+}
+.pm-table input { min-width: 7rem; }
+@media (max-width: 640px) {
+  dialog.drawing { inset: 0; width: 100vw; height: 100vh; height: 100dvh; max-height: none; margin: 0; border: 0; border-radius: 0; }
+  dialog.note-dialog { width: calc(100vw - 16px); }
+  .item-side table.history td { overflow-wrap: normal; white-space: nowrap; }
+  .item-side table.history td:last-child { white-space: normal; min-width: 8rem; }
+  /* The export menu opens as a sheet at the bottom, where it fits. */
+  .export-list { position: fixed; left: 12px; right: 12px; bottom: 12px; top: auto; min-width: 0; margin: 0; max-height: 70dvh; overflow: auto; }
+  .pm-tasklist { padding: 8px 10px; }
+}
+/* A table wider than the screen scrolls inside its frame instead of
+   widening the page. */
+@media (max-width: 900px) {
+  main table:not(.props) { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  main table:not(.props) th, main table:not(.props) td { overflow-wrap: normal; }
+}
+/* Forms of one line wrap their button under the field where the line is
+   too short. */
+.kanban-tools .inline-form { flex-wrap: wrap; }
+.kanban-tools .inline-form input, .kanban-tools .inline-form select { min-width: 0; flex: 1 1 12rem; }
+.search-page { flex-wrap: wrap; }
+.search-page input { min-width: 0; flex: 1 1 10rem; }

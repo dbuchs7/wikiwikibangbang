@@ -128,3 +128,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0113](0113-ones-notes-from-the-start-page.md) | One's notes from the start page | Accepted | Landed |
 | [0114](0114-tasks-in-a-text.md) | Tasks in a text: made below the page, shown as a link or whole, listed by label | Accepted | Landed |
 | [0115](0115-who-edits-shows-as-faces-and-readers-follow-the-text.md) | Who edits shows as faces, and readers follow the text | Accepted | Landed |
+| [0116](0116-every-view-fits-a-phone.md) | Every view fits a phone | Accepted | Landed |

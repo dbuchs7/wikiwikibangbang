@@ -28,10 +28,13 @@ export function openDrawing(scene = null) {
     const dialog = h("dialog", { class: "drawing", "aria-label": t("draw.title") },
       h("div", { class: "drawing-bar" }, h("strong", { text: t("draw.title") }), status, cancel, save), frame);
     let done = false;
+    // Going back, as a phone's back button does, leaves the drawing too.
+    const leave = () => finish(null);
     const finish = (blob) => {
       if (done) return;
       done = true;
       window.removeEventListener("message", onMessage);
+      window.removeEventListener("hashchange", leave);
       dialog.close();
       dialog.remove();
       resolve(blob);
@@ -54,6 +57,7 @@ export function openDrawing(scene = null) {
       frame.contentWindow.postMessage({ type: "export" }, origin);
     });
     cancel.addEventListener("click", () => finish(null));
+    window.addEventListener("hashchange", leave);
     // Escape belongs to the drawing (it ends a tool); the dialog closes by
     // its buttons only.
     dialog.addEventListener("cancel", (e) => e.preventDefault());
