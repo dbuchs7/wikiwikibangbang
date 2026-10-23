@@ -468,7 +468,7 @@ export default {
   "retention.adminNote": "Older versions of pictures, e.g. of a drawing saved again, stay until a rule removes them. A picture's own rule, set in the album, takes precedence over this default.",
   "retention.keep": "Keep the newest versions (0: no limit by number)",
   "retention.days": "Keep versions younger than so many days (0: no limit by age)",
-  "retention.automatic": "Apply the rules automatically every day",
+  "retention.automatic": "Apply the rules automatically every day at 03:00 (server time)",
   "retention.always": "A version stays when either limit keeps it. The current version and versions a text shows always stay.",
   "retention.saveDefault": "Save",
   "retention.saved": "Saved.",
