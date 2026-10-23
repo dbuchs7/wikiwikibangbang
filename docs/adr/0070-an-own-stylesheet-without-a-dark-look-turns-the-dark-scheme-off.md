@@ -62,4 +62,5 @@ Strongest form: the stylesheet is the only place that knows whether a dark look 
 
 ## Links
 
+- amended by [ADR-0095](0095-language-and-look-in-the-header-and-an-own-start-picture.md) (the look is also chosen with the bulb in the header)
 - amended by [ADR-0085](0085-ready-made-themes-under-the-corporate-design.md) (a theme without a dark look turns the dark scheme off too)

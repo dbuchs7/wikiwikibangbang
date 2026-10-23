@@ -124,6 +124,19 @@ function ckanSource() {
     step("the footer names the running version");
     await page.waitForSelector("footer.footer:has-text('wikiwikibangbang')");
 
+    step("header: the language and the light or dark look switch from every page (ADR-0095)");
+    await page.click("#lang-toggle [data-lang=de]");
+    await page.waitForFunction(() => document.documentElement.lang === "de");
+    check((await page.evaluate(async () => (await (await fetch("/api/me")).json()).language)) === "de", "the language switched in the header is saved with the account");
+    await page.click("#lang-toggle [data-lang=en]");
+    await page.waitForFunction(() => document.documentElement.lang === "en" && document.querySelector("#lang-toggle [data-lang=en]").getAttribute("aria-pressed") === "true");
+    const look = await page.evaluate(() => document.documentElement.dataset.theme);
+    await page.click("#theme-toggle");
+    await page.waitForFunction((was) => document.documentElement.dataset.theme !== was, look);
+    await page.waitForFunction((dark) => (getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#0e1014") === dark, look === "light");
+    await page.click("#theme-toggle");
+    await page.waitForFunction((was) => document.documentElement.dataset.theme === was, look);
+
     step("administration: space, type, user, role");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");
@@ -1136,6 +1149,14 @@ function ckanSource() {
     await page.waitForSelector("header .brand img.brand-logo[src^='/branding/logo']");
     await page.waitForSelector("head link[rel=icon][href^='/branding/logo']", { state: "attached" });
     check(await page.locator("head link[rel=icon]").count() === 1, "the logo is the browser's icon");
+    // An own picture on the start page (ADR-0095).
+    await page.setInputFiles("#design-welcome", { name: "welcome.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
+    await page.waitForSelector(".design-asset img[src^='/branding/welcome']");
+    await page.goto(base + "/#/");
+    await page.waitForSelector("#welcome-art.welcome-own[src^='/branding/welcome']");
+    await page.click("#account-button");
+    await page.click("#account-menu a[href='#/admin']");
     await page.fill("#design [name=name]", "ACME");
     await page.check("#design [name=accent-on]");
     await page.fill("#design [name=accent]", "#d40000");
@@ -1155,6 +1176,7 @@ function ckanSource() {
     await page.fill("#design [name=css]", ".brand { letter-spacing: .5px; }");
     await page.click("#design button[type=submit]");
     await page.waitForSelector("#design-dark:has-text('dark scheme is off')");
+    await page.waitForSelector("#theme-toggle", { state: "hidden" });
     await page.emulateMedia({ colorScheme: "dark" });
     await page.waitForFunction(() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#f5f6f8");
     await page.emulateMedia({ colorScheme: "light" });

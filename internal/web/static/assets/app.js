@@ -10,6 +10,7 @@ import { commentPlugin } from "./anchors.js";
 import { isDrawing } from "./drawing.js";
 import { albumBrowser } from "./album.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
+import { applyTheme, setTheme, isDark } from "./theme.js";
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -754,7 +755,7 @@ function searchSuggestions(form) {
 function renderNav() {
   labelChrome();
   if (!me) {
-    nav.replaceChildren();
+    nav.replaceChildren(lookToggles());
     return;
   }
   const current = location.hash.startsWith("#/search/") ? decodeURIComponent(location.hash.slice(9)) : "";
@@ -790,8 +791,79 @@ function renderNav() {
     search,
     h("button", { id: "nav-new", class: "primary", type: "button", text: t("nav.newButton"), onclick: () => { location.hash = newHref(); } }),
     bell,
+    lookToggles(),
     accountMenu(),
   );
+}
+
+// --- language and look (ADR-0095) -------------------------------------------
+
+// localLanguage is the language chosen in this browser before signing in.
+function localLanguage() {
+  try { return localStorage.getItem("wwbb.language") || ""; } catch { return ""; }
+}
+
+// switchLanguage changes the UI's language: a signed-in user's is saved
+// with the account (ADR-0017), anyone else's in this browser.
+async function switchLanguage(code) {
+  if (me) {
+    await put("/api/me/language", { language: code });
+    me.language = code;
+  } else {
+    try { localStorage.setItem("wwbb.language", code); } catch { /* for this page only */ }
+  }
+  setLanguage(code);
+  route();
+}
+
+// darkOffered is false when the installation turned the dark look off
+// (ADR-0070); the bulb is not shown then.
+let darkOffered = true;
+
+// bulbIcon draws a light bulb, lit with rays or unlit.
+function bulbIcon(lit) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", width: "20", height: "20", "aria-hidden": "true" })) svg.setAttribute(k, v);
+  const paths = [
+    ["M9 18h6M10 21h4", "none"],
+    ["M12 4a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 4z", lit ? "currentColor" : "none"],
+  ];
+  if (lit) paths.push(["M12 1v1.5M4.2 4.2l1 1M19.8 4.2l-1 1M1.5 11H3M21 11h1.5", "none"]);
+  for (const [d, fill] of paths) {
+    const p = document.createElementNS(ns, "path");
+    for (const [k, v] of Object.entries({ d, fill, stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" })) p.setAttribute(k, v);
+    svg.append(p);
+  }
+  return svg;
+}
+
+// lookToggles are the header's switches of the language and of the light
+// or dark look.
+function lookToggles() {
+  const offered = languages.filter((l) => !me?.languages || me.languages.includes(l.code))
+    .sort((a, b) => a.code.localeCompare(b.code));
+  const langs = offered.length > 1 ? h("span", { class: "lang-toggle", id: "lang-toggle", role: "group", "aria-label": t("nav.language") },
+    offered.map((l) => h("button", { type: "button", lang: l.code, "data-lang": l.code, text: l.code.toUpperCase(), title: l.name,
+      "aria-label": l.name, "aria-pressed": String(l.code === language()),
+      onclick: () => l.code !== language() && action(() => switchLanguage(l.code)) }))) : null;
+  const bulb = h("button", { type: "button", class: "icon-btn theme-toggle", id: "theme-toggle", hidden: !darkOffered });
+  const draw = () => {
+    const dark = isDark();
+    const name = dark ? t("nav.lightMode") : t("nav.darkMode");
+    bulb.replaceChildren(bulbIcon(!dark));
+    bulb.title = name;
+    bulb.setAttribute("aria-label", name);
+  };
+  bulb.addEventListener("click", () => {
+    const next = isDark() ? "light" : "dark";
+    // Back to the system's look when the choice is what the system says.
+    setTheme(next === (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") ? "" : next);
+  });
+  document.addEventListener("themechange", draw);
+  onLeave(() => document.removeEventListener("themechange", draw));
+  draw();
+  return h("span", { class: "look-toggles" }, langs, bulb);
 }
 
 // avatar shows a user's profile picture, or their initials when they have
@@ -976,9 +1048,9 @@ async function route() {
 // browser's language is only a suggestion, taken on the first sign-in and
 // saved, so it does not change behind the user's back later.
 async function chooseLanguage() {
-  if (!me) return setLanguage(suggestedLanguage());
+  if (!me) return setLanguage(localLanguage() || suggestedLanguage());
   if (!me.language) {
-    me.language = suggestedLanguage();
+    me.language = localLanguage() || suggestedLanguage();
     await put("/api/me/language", { language: me.language }).catch(() => {});
   }
   setLanguage(me.language);
@@ -1013,8 +1085,12 @@ async function applyBranding(reload = false) {
     if (productLogo) brand.replaceChildren(productLogo.cloneNode(true));
     setFavicon("");
   }
-  // Without a dark scheme (ADR-0070) the product's logo stays the dark one.
+  // Without a dark scheme (ADR-0070) the product's logo stays the dark one,
+  // and there is no look to switch to.
   if (b.dark === false) brand.querySelector("picture source")?.remove();
+  darkOffered = b.dark !== false;
+  document.getElementById("theme-toggle")?.toggleAttribute("hidden", !darkOffered);
+  applyTheme();
   document.title = b.name ? `${b.name} · wikiwikibangbang` : "wikiwikibangbang";
   if (reload) {
     document.getElementById("branding-css").href = "/branding.css?v=" + Date.now();
@@ -1023,6 +1099,7 @@ async function applyBranding(reload = false) {
 }
 
 window.addEventListener("hashchange", route);
+applyTheme();
 applyBranding();
 route();
 
@@ -1280,7 +1357,10 @@ async function homeView() {
         h("p", { class: "actions-row" },
           anyEditable ? link("#/new", t("home.newPage"), "button primary") : null,
           link("#/tasks", t("home.myTasks"), "button"))),
-      h("img", { class: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 480, height: 320 }),
+      // The design's own picture replaces the product's (ADR-0095).
+      brand.assets?.welcome
+        ? h("img", { class: "welcome-art welcome-own", id: "welcome-art", src: "/branding/welcome?v=" + encodeURIComponent(brand.assets.welcome), alt: "" })
+        : h("img", { class: "welcome-art", id: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 480, height: 320 }),
       // The installed version, small, for support questions and releases.
       me.version ? h("span", { class: "welcome-version", id: "home-version", title: me.revision ? t("home.revision", { revision: me.revision }) : "", text: t("home.version", { version: me.version }) }) : ""),
     // Account requests wait on an administrator (ADR-0061): said first,
@@ -4346,6 +4426,7 @@ async function designCard() {
     h("div", { class: "design-assets" },
       asset("logo", t("design.logo"), "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"),
       asset("background", t("design.background"), "image/png,image/jpeg,image/gif,image/webp"),
+      asset("welcome", t("design.welcome"), "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"),
       asset("font", t("design.fontFile"), ".woff2,.woff,.ttf,.otf")),
     form({ id: "design" }, [
       themePicker,
