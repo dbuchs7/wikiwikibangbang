@@ -75,4 +75,5 @@ Strongest form: no dependency at all, full control, no vendored artifact.
 
 ## Links
 
+- amended by [ADR-0096](0096-links-mentions-and-embeds-as-in-a-word-processor.md) (links, mentions and embeds as in a word processor)
 - answers the open questions of [ADR-0009](0009-single-binary-with-embedded-web-ui.md) and [ADR-0031](0031-web-ui-shell.md); keeps [ADR-0014](0014-closed-renderer-for-user-content.md); extends the body model of ADR-0001 and ADR-0020 and the import of ADR-0023; prepares ADR-0010

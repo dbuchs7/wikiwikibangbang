@@ -241,18 +241,54 @@ func (x *Session) scan(before, after int, fn func(Notification) bool) {
 
 // mentioned reports whether e added a comment by someone else that names
 // the principal by @username. The comment is read as it is now, so one
-// deleted or erased since is no longer told.
+// deleted or erased since is no longer told. A text names them when an
+// edit by someone else adds the name to it (ADR-0096).
 func (x *Session) mentioned(e Event) bool {
-	if e.Kind != CommentAdded || x.name == "" || e.Actor == x.who {
+	if (e.Kind != CommentAdded && e.Kind != BodyCommitted) || x.name == "" || e.Actor == x.who {
 		return false
 	}
 	it := x.s.items[e.Item]
 	if it == nil || it.Presence == Purged || !x.s.canRead(x.who, it) {
 		return false
 	}
+	if e.Kind == BodyCommitted {
+		if e.Body == nil || !bodyMentions(*e.Body, x.name) {
+			return false
+		}
+		t := x.s.touching[e.Item]
+		for i := len(t) - 1; i >= 0; i-- {
+			if p := x.s.log[t[i]]; p.Seq < e.Seq && p.Item == e.Item && p.Kind == BodyCommitted && p.Body != nil {
+				return !bodyMentions(*p.Body, x.name)
+			}
+		}
+		return true
+	}
 	for _, c := range it.Comments {
 		if c.ID == e.Comment {
 			return !c.Deleted && Mentions(c.Text, x.name)
+		}
+	}
+	return false
+}
+
+// bodyMentions reports whether a text names username as "@username"
+// outside its protected passages, which not everyone may read (ADR-0088).
+func bodyMentions(d Doc, username string) bool {
+	want := "@" + strings.ToLower(username)
+	for _, b := range d.Blocks {
+		if !strings.Contains(strings.ToLower(b.Text), want) {
+			continue
+		}
+		text := []rune(b.Text)
+		for _, m := range b.Marks {
+			if m.Type == MarkSecret {
+				for i := max(m.Start, 0); i < min(m.End, len(text)); i++ {
+					text[i] = ' '
+				}
+			}
+		}
+		if Mentions(string(text), username) {
+			return true
 		}
 	}
 	return false

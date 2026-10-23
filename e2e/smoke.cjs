@@ -264,11 +264,24 @@ function ckanSource() {
     await page.keyboard.type("Bold");
     await page.keyboard.press("Control+b");
     await page.keyboard.type(" <script>alert('body')</script> see ");
-    await page.fill(".pm-target", "PLAT-1");
-    await page.click(".pm-toolbar button:has-text('Mention')");
-    await page.waitForSelector(".ProseMirror .pm-mention"); // resolving the key is asynchronous
-    await page.fill(".pm-target", "PLAT-1");
-    await page.click(".pm-toolbar button:has-text('Embed')");
+    // Links, "@" and embedding work as in a word processor (ADR-0096).
+    await page.keyboard.type("https://example.com/docs ");
+    await page.waitForSelector(".ProseMirror a[href^='https://example.com/docs']");
+    await page.keyboard.press("Control+k");
+    await page.fill("dialog.pm-dialog [name=text]", "the guide");
+    await page.fill("dialog.pm-dialog [name=address]", "www.example.org");
+    await page.click("dialog.pm-dialog button[type=submit]");
+    await page.waitForSelector(".ProseMirror a[href^='https://www.example.org']:has-text('the guide')");
+    await page.keyboard.press("ArrowLeft");
+    await page.waitForSelector("#pm-link-bubble:not([hidden]) >> text=https://www.example.org");
+    await page.keyboard.press("End");
+    await page.keyboard.type(" @PLAT-1");
+    await page.waitForSelector("#pm-at:not([hidden]) .pm-at-option:has-text('PLAT-1')");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(".ProseMirror .pm-mention");
+    await page.selectOption(".pm-toolbar select[aria-label='Insert…']", "embed");
+    await page.fill("dialog.pm-dialog [name=q]", "PLAT-1");
+    await page.click("dialog.pm-dialog .pm-result[data-key='PLAT-1']");
     await page.waitForSelector(".ProseMirror .pm-embed");
     await page.click("#details h2"); // leaving the editor releases its blocks, which saves them
     await page.waitForSelector(".live[data-pending='0']");
@@ -279,7 +292,8 @@ function ckanSource() {
     check((await page.textContent(".ProseMirror h3")) === "Steps", "heading level 2 renders as h3 under the title");
     check(await page.locator(".pm-bullet").count() === 2, "two bulleted items");
     check((await page.textContent(".ProseMirror strong")) === "Bold", "bold text");
-    check((await page.textContent(".pm-mention")) === "@PLAT-1", "the mention");
+    check((await page.textContent(".pm-mention")).startsWith("@") && (await page.getAttribute(".pm-mention", "href")).startsWith("#/item/"), "the mention");
+    check(await page.locator(".ProseMirror a[href^='https://example.com/docs']").count() === 1, "the typed address stays a link");
     check((await page.textContent(".pm-embed")).includes("PLAT-1"), "the embed");
     check((await editor.textContent()).includes("<script>alert('body')</script>"), "the script shows as text");
 

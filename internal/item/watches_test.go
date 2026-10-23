@@ -162,3 +162,29 @@ func TestAMentionInACommentIsANotification(t *testing.T) {
 		t.Errorf("a deleted comment still tells %+v", got)
 	}
 }
+
+// A name added to a text by someone else's edit is told once; a name in a
+// protected passage is not (ADR-0096).
+func TestAMentionInATextIsANotification(t *testing.T) {
+	s := permFixture(t)
+	anna, ben := s.As("anna"), s.As("ben").Named("ben")
+	page := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Runbook"}))
+	text := func(s string, marks ...Mark) Doc {
+		return Doc{Blocks: []Block{{Kind: Paragraph, Text: s, Marks: marks}}}
+	}
+	noErr(t, anna.CommitBody(page.ID, text("Ask @Ben about it.")))
+	got, _ := ben.Notifications(0, 10)
+	if len(got) != 1 || !got[0].Mentioned || got[0].Kind != BodyCommitted {
+		t.Fatalf("ben is told %+v", got)
+	}
+	noErr(t, anna.CommitBody(page.ID, text("Ask @Ben about it, soon.")))
+	if n := ben.Unread(0, 10); n != 1 {
+		t.Errorf("a name already there is told again: %d", n)
+	}
+	if got := bodyMentions(text("Secret: @ben", Mark{Type: MarkSecret, Start: 8, End: 12}), "ben"); got {
+		t.Error("a name in a protected passage counts")
+	}
+	if !bodyMentions(text("Hi @ben"), "BEN") || bodyMentions(text("Hi @benjamin"), "ben") {
+		t.Error("names are compared as in comments")
+	}
+}

@@ -157,7 +157,7 @@ function watchButton(path, watching, status) {
 // what says what a notification's change was.
 function what(n) {
   if (n.created) return t("notif.child");
-  if (n.mentioned) return t("notif.mentioned");
+  if (n.mentioned) return n.kind === "BodyCommitted" ? t("notif.mentionedText") : t("notif.mentioned");
   switch (n.kind) {
     case "ItemCreated": return t("notif.created");
     case "ItemImported": return t("notif.imported");

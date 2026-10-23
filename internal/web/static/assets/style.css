@@ -186,7 +186,6 @@ table.history td { font-size: 13px; }
 }
 .pm-toolbar button:hover { background: var(--bg); }
 .pm-toolbar select, .pm-toolbar input { padding: 4px 8px; font-size: 12px; }
-.pm-target { flex: 1; min-width: 10rem; }
 .pm-editor .ProseMirror { min-height: 6rem; padding: 12px 16px; outline: none; white-space: pre-wrap; word-wrap: break-word; font-variant-ligatures: none; counter-reset: ordered; }
 .pm-editor .ProseMirror > * { margin: 6px 0; }
 .pm-editor .ProseMirror > :not(.pm-ordered) { counter-reset: ordered; }
@@ -1229,3 +1228,33 @@ main ul#watches li { padding: 4px 0; break-inside: avoid; }
 .state-step { min-height: 28px; padding: 2px 11px; font-size: 13px; }
 .state-step.current { font-size: 13px; border-width: 1px; }
 .state-step small { font-size: 10px; }
+
+/* Writing aids of the editor (ADR-0096): the link dialog, the item search,
+   the bubble on a link and the "@" list. */
+dialog.pm-dialog { width: min(520px, calc(100vw - 32px)); padding: 20px 22px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: inherit; box-shadow: var(--shadow-lg); }
+dialog.pm-dialog::backdrop { background: rgba(20, 22, 26, .45); }
+dialog.pm-dialog h2 { margin: 0 0 14px; font-size: 18px; }
+dialog.pm-dialog .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+dialog.pm-dialog input { width: 100%; }
+dialog.pm-dialog .error:empty { display: none; }
+.pm-dialog-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.pm-dialog-actions .danger { margin-right: auto; }
+.pm-results { list-style: none; margin: 0 0 4px; padding: 0; max-height: 240px; overflow: auto; }
+.pm-results:empty { display: none; }
+.pm-results li.muted { padding: 6px 10px; }
+.pm-result { display: block; width: 100%; min-height: 36px; padding: 6px 10px; margin: 0; border: none; border-radius: 8px;
+  background: transparent; color: inherit; text-align: left; font-weight: 400; box-shadow: none; }
+.pm-result:hover, .pm-result:focus { background: var(--accent-soft); }
+.pm-result .muted { font-size: 12px; }
+.pm-bubble, .pm-at { position: fixed; z-index: 40; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); }
+.pm-bubble { display: flex; align-items: center; gap: 10px; padding: 6px 10px; font-size: 13px; max-width: min(460px, calc(100vw - 16px)); }
+.pm-bubble[hidden], .pm-at[hidden] { display: none; }
+.pm-bubble-href { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pm-bubble button { min-height: 0; padding: 2px 4px; font-size: 13px; }
+.pm-at { list-style: none; margin: 0; padding: 4px; min-width: 16rem; max-width: min(360px, calc(100vw - 16px)); max-height: 320px; overflow: auto; }
+.pm-at-group { padding: 6px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.pm-at-option { display: flex; align-items: baseline; gap: 8px; min-height: 32px; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.pm-at-option .muted { font-size: 12px; }
+.pm-at-option:hover, .pm-at-option[aria-selected=true] { background: var(--accent-soft); }
+.pm-at-none { padding: 6px 10px; }
