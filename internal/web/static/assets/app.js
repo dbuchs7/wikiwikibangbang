@@ -1247,17 +1247,9 @@ async function chooseLanguage() {
 // changes with its content.
 const welcomeArt = document.querySelector("meta[name=wwbb-welcome]")?.content || "/assets/brand/welcome.svg";
 
-// The product's own logo and icons, kept to come back to when a design's
-// logo goes.
+// The product's own logo, kept to come back to when a design's logo goes.
+// The browser's icon stays the product's, whatever the design.
 const productLogo = document.querySelector(".brand picture")?.cloneNode(true);
-const productIcons = [...document.querySelectorAll("link[rel=icon]")].map((l) => l.cloneNode());
-
-// setFavicon shows the design's logo as the browser's icon, or the
-// product's icons without one.
-function setFavicon(href) {
-  document.querySelectorAll("link[rel=icon]").forEach((l) => l.remove());
-  document.head.append(...(href ? [h("link", { rel: "icon", href })] : productIcons.map((l) => l.cloneNode())));
-}
 
 // applyBranding shows the installation's logo and name; the colours, fonts
 // and background come with /branding.css. reload asks for the stylesheet
@@ -1269,10 +1261,8 @@ async function applyBranding(reload = false) {
   if (b.assets?.logo) {
     const logo = "/branding/logo?v=" + encodeURIComponent(b.assets.logo);
     brand.replaceChildren(h("img", { src: logo, alt: b.name || "wikiwikibangbang", class: "brand-logo" }));
-    setFavicon(logo);
   } else {
     if (productLogo) brand.replaceChildren(productLogo.cloneNode(true));
-    setFavicon("");
   }
   // Without a dark scheme (ADR-0070) the product's logo stays the dark one,
   // and there is no look to switch to.
