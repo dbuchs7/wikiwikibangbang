@@ -34,10 +34,13 @@ const (
 	// AssetWelcome is the picture of the start page, in place of the
 	// product's (ADR-0095).
 	AssetWelcome = "welcome"
+	// AssetLogoDark is the logo for the dark look, beside AssetLogo
+	// (ADR-0109).
+	AssetLogoDark = "logo-dark"
 )
 
 // Assets lists the asset names.
-var Assets = []string{AssetLogo, AssetBackground, AssetFont, AssetWelcome}
+var Assets = []string{AssetLogo, AssetLogoDark, AssetBackground, AssetFont, AssetWelcome}
 
 // Fonts are the font choices besides an uploaded font: stacks every
 // system has, so nothing is fetched from elsewhere.

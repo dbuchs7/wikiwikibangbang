@@ -1322,6 +1322,22 @@ function ckanSource() {
     await page.waitForSelector("header .brand img.brand-logo[src^='/branding/logo']");
     check(await page.locator("head link[rel=icon][href^='/branding/logo']").count() === 0, "the design's logo is not the browser's icon");
     check(await page.locator("head link[rel=icon][href^='/favicon.ico']").count() === 1, "the browser's icon stays the product's");
+    // A logo for the dark look comes in by the scheme, and follows the
+    // look chosen with the bulb (ADR-0109).
+    await page.setInputFiles("#design-logo-dark", { name: "logo-dark.png", mimeType: "image/png",
+      buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
+    await page.waitForSelector("header .brand picture source[srcset^='/branding/logo-dark']", { state: "attached" });
+    await page.waitForSelector(".design-asset[data-asset=logo-dark] img.design-preview-dark");
+    const darkLogoMedia = () => page.$eval("header .brand picture source", (s) => s.media);
+    const lookWas = await page.evaluate(() => document.documentElement.dataset.theme);
+    await page.click("#theme-toggle");
+    await page.waitForFunction((was) => document.documentElement.dataset.theme !== was, lookWas);
+    const darkNow = (await page.evaluate(() => document.documentElement.dataset.theme)) === "dark";
+    check((await darkLogoMedia()) === (darkNow ? "all" : "not all"), "the logo for the dark look follows the chosen look");
+    await page.click("#theme-toggle");
+    await page.waitForFunction((was) => document.documentElement.dataset.theme === was, lookWas);
+    await page.click(".design-asset[data-asset=logo-dark] button.danger");
+    await page.waitForSelector("header .brand > img.brand-logo[src^='/branding/logo']");
     // An own picture on the start page (ADR-0095).
     await page.setInputFiles("#design-welcome", { name: "welcome.png", mimeType: "image/png",
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });

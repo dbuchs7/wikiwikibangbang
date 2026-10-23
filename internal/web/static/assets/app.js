@@ -1259,8 +1259,13 @@ async function applyBranding(reload = false) {
   if (!b) return;
   const brand = document.querySelector(".brand");
   if (b.assets?.logo) {
-    const logo = "/branding/logo?v=" + encodeURIComponent(b.assets.logo);
-    brand.replaceChildren(h("img", { src: logo, alt: b.name || "wikiwikibangbang", class: "brand-logo" }));
+    // A logo for the dark look comes in as the product's does, by the
+    // system's scheme, which applyTheme below rewrites for a chosen look
+    // (ADR-0109).
+    const logo = h("img", { src: "/branding/logo?v=" + encodeURIComponent(b.assets.logo), alt: b.name || "wikiwikibangbang", class: "brand-logo" });
+    brand.replaceChildren(b.assets["logo-dark"]
+      ? h("picture", {}, h("source", { srcset: "/branding/logo-dark?v=" + encodeURIComponent(b.assets["logo-dark"]), media: "(prefers-color-scheme: dark)" }), logo)
+      : logo);
   } else {
     if (productLogo) brand.replaceChildren(productLogo.cloneNode(true));
   }
@@ -4713,7 +4718,7 @@ async function designCard() {
     }));
     box.append(
       h("strong", { text: label }),
-      has && name !== "font" ? h("img", { src: `/branding/${name}?v=${encodeURIComponent(has)}`, alt: "", class: "design-preview" }) : "",
+      has && name !== "font" ? h("img", { src: `/branding/${name}?v=${encodeURIComponent(has)}`, alt: "", class: name === "logo-dark" ? "design-preview design-preview-dark" : "design-preview" }) : "",
       h("span", { class: "muted", text: has ? t("design.fileSet") : t("design.fileNone") }),
       h("label", { class: "upload" }, h("span", { text: t("design.choose") }), picker),
       has ? h("button", { type: "button", class: "link danger", text: t("common.delete"), onclick: change(() => del("/api/branding/" + name), true) }) : "",
@@ -4752,6 +4757,7 @@ async function designCard() {
     h("p", { class: "muted", text: t("design.help") }),
     h("div", { class: "design-assets" },
       asset("logo", t("design.logo"), "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"),
+      asset("logo-dark", t("design.logoDark"), "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"),
       asset("background", t("design.background"), "image/png,image/jpeg,image/gif,image/webp"),
       asset("welcome", t("design.welcome"), "image/png,image/jpeg,image/gif,image/webp,image/svg+xml"),
       asset("font", t("design.fontFile"), ".woff2,.woff,.ttf,.otf")),

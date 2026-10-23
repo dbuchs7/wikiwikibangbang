@@ -67,6 +67,21 @@ func TestTheCorporateDesignThroughTheAPI(t *testing.T) {
 		t.Fatalf("a font as start picture: %d", r.Code)
 	}
 	w.admin.expect("DELETE", "/api/branding/welcome", "", http.StatusNoContent)
+	// A logo for the dark look (ADR-0109).
+	if r := w.admin.put("/api/branding/logo-dark", "application/octet-stream", svg); r.Code != http.StatusOK {
+		t.Fatalf("a logo for the dark look: %d %s", r.Code, r.Body)
+	}
+	if b := anon.expect("GET", "/branding.json", "", http.StatusOK); field(b, "assets", "logo-dark") == nil {
+		t.Fatalf("branding.json names no logo for the dark look: %v", b)
+	}
+	if r := anon.do("GET", "/branding/logo-dark", ""); r.Code != http.StatusOK || r.Header().Get("Content-Type") != "image/svg+xml" {
+		t.Fatalf("logo for the dark look %d %v", r.Code, r.Header())
+	}
+	if r := w.bert.put("/api/branding/logo-dark", "application/octet-stream", png); r.Code != http.StatusForbidden {
+		t.Fatalf("bert sets the logo for the dark look: %d", r.Code)
+	}
+	w.admin.expect("DELETE", "/api/branding/logo-dark", "", http.StatusNoContent)
+	anon.expect("GET", "/branding/logo-dark", "", http.StatusNotFound)
 	if audit := w.admin.expect("GET", "/api/audit", "", http.StatusOK); !strings.Contains(strings.Join(eventsOf(audit), ","), "design.change") {
 		t.Fatal("the audit trail has no design change")
 	}
