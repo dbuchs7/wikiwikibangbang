@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	_ "time/tzdata" // TestNextAt reads Europe/Zurich wherever it runs
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
@@ -662,4 +663,42 @@ func TestRestoreAChain(t *testing.T) {
 	if code, _, errOut := runCmd(t, context.Background(), "restore", "-data-dir", filepath.Join(t.TempDir(), "r"), "-from", dir); code != 1 || !strings.Contains(errOut, "missing") {
 		t.Errorf("a chain without its full backup: exit %d %q", code, errOut)
 	}
+}
+
+// TestNextAt: the automatic clean-up of the album runs at a fixed hour of
+// the server's local time, today if it is still to come, else tomorrow,
+// across a change to summer time (ADR-0105).
+func TestNextAt(t *testing.T) {
+	zurich, err := time.LoadLocation("Europe/Zurich")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct{ now, want time.Time }{
+		{time.Date(2026, 10, 23, 1, 30, 0, 0, zurich), time.Date(2026, 10, 23, 3, 0, 0, 0, zurich)},
+		{time.Date(2026, 10, 23, 3, 0, 0, 0, zurich), time.Date(2026, 10, 24, 3, 0, 0, 0, zurich)},
+		{time.Date(2026, 10, 23, 14, 0, 0, 0, zurich), time.Date(2026, 10, 24, 3, 0, 0, 0, zurich)},
+		{time.Date(2026, 12, 31, 23, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 3, 0, 0, 0, time.UTC)},
+		{time.Date(2027, 3, 27, 12, 0, 0, 0, zurich), time.Date(2027, 3, 28, 3, 0, 0, 0, zurich)},
+	}
+	for _, c := range cases {
+		if got := nextAt(c.now, albumCleanHour); !got.Equal(c.want) {
+			t.Errorf("after %v: %v, want %v", c.now, got, c.want)
+		}
+	}
+}
+
+// TestDailyAtSendsAtTheHour: with a clock just before the hour, the tick
+// comes at once; it stops with its context.
+func TestDailyAtSendsAtTheHour(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	at := time.Date(2026, 10, 23, 2, 59, 59, 999_000_000, time.UTC)
+	start := time.Now()
+	ticks := dailyAt(ctx, albumCleanHour, func() time.Time { return at.Add(time.Since(start)) })
+	select {
+	case <-ticks:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no tick at the hour")
+	}
+	cancel()
 }

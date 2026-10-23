@@ -169,9 +169,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 	go expireAudit(ctx, db, log, ticker.C)
-	albumTicker := time.NewTicker(24 * time.Hour)
-	defer albumTicker.Stop()
-	go cleanAlbum(ctx, db, log, albumTicker.C)
+	go cleanAlbum(ctx, db, log, dailyAt(ctx, albumCleanHour, time.Now))
 
 	proxies, err := server.ParseTrustedProxies(os.Getenv("WWBB_TRUSTED_PROXIES"))
 	if err != nil {
@@ -348,9 +346,46 @@ func expireAudit(ctx context.Context, db *storage.DB, log *slog.Logger, tick <-c
 	}
 }
 
-// cleanAlbum removes, once a day while the album's default says
-// automatic, the older versions of pictures their rules do not keep
-// (ADR-0104).
+// albumCleanHour is the hour of the server's local time (TZ, UTC in the
+// container unless set) at which the automatic clean-up of older versions
+// of pictures runs (ADR-0105): a fixed hour, so restarts do not move or
+// skip it.
+const albumCleanHour = 3
+
+// nextAt returns the first time at hour:00 in now's location after now.
+func nextAt(now time.Time, hour int) time.Time {
+	at := time.Date(now.Year(), now.Month(), now.Day(), hour, 0, 0, 0, now.Location())
+	if !at.After(now) {
+		at = time.Date(now.Year(), now.Month(), now.Day()+1, hour, 0, 0, 0, now.Location())
+	}
+	return at
+}
+
+// dailyAt sends the time once a day at hour:00 local time, until ctx ends.
+func dailyAt(ctx context.Context, hour int, now func() time.Time) <-chan time.Time {
+	ch := make(chan time.Time)
+	go func() {
+		for {
+			t := time.NewTimer(nextAt(now(), hour).Sub(now()))
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return
+			case at := <-t.C:
+				select {
+				case ch <- at:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}()
+	return ch
+}
+
+// cleanAlbum removes, once a day at albumCleanHour while the album's
+// default says automatic, the older versions of pictures their rules do
+// not keep (ADR-0104, ADR-0105).
 func cleanAlbum(ctx context.Context, db *storage.DB, log *slog.Logger, tick <-chan time.Time) {
 	for {
 		select {

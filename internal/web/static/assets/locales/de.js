@@ -466,7 +466,7 @@ export default {
   "retention.adminNote": "Ältere Versionen von Bildern, etwa einer erneut gespeicherten Zeichnung, bleiben erhalten, bis eine Regel sie entfernt. Eine eigene Regel eines Bildes, im Album gesetzt, geht dieser Vorgabe vor.",
   "retention.keep": "Neueste Versionen behalten (0: ohne Begrenzung nach Anzahl)",
   "retention.days": "Versionen jünger als so viele Tage behalten (0: ohne Begrenzung nach Alter)",
-  "retention.automatic": "Regeln täglich automatisch anwenden",
+  "retention.automatic": "Regeln täglich um 03:00 Uhr (Serverzeit) automatisch anwenden",
   "retention.always": "Eine Version bleibt, wenn eine der beiden Grenzen sie behält. Die aktuelle Version und Versionen, die ein Text zeigt, bleiben immer.",
   "retention.saveDefault": "Speichern",
   "retention.saved": "Gespeichert.",

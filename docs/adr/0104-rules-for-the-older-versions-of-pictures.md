@@ -105,3 +105,4 @@ Strongest form: nothing is ever removed without a person looking.
 ## Links
 
 - relates to ADR-0103 (versions as a stack), ADR-0055 (sources and versions), ADR-0090 (picture labels, delete), ADR-0073 (backups and their retention), ADR-0058 (data protection holds), ADR-0045 (attachments), ADR-0025 (codec versions)
+- amended by [ADR-0105](0105-the-automatic-clean-up-runs-at-a-fixed-hour.md) (the automatic clean-up runs at 03:00)
