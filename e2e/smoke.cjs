@@ -1798,6 +1798,33 @@ function ckanSource() {
     await page.fill("#body section.pm-tasklist .filter-text", "notes");
     await page.waitForFunction((sel) => [...document.querySelectorAll(sel)].filter((r) => !r.hidden).length === 1, rows);
 
+    step("phones: no view is wider than the screen; the drawing editor fills it and closes again (ADR-0116)");
+    const phoneCtx = await browser.newContext({ viewport: { width: 375, height: 700 }, isMobile: true, hasTouch: true });
+    const phone = await phoneCtx.newPage();
+    phone.on("pageerror", (e) => problems.push("phone page error: " + e.message));
+    await phone.goto(base + "/");
+    await phone.fill("#login [name=username]", "admin");
+    await phone.fill("#login [name=password]", adminPassword);
+    await phone.press("#login [name=password]", "Enter");
+    await phone.waitForSelector("#account-button");
+    for (const view of ["#/", "#/space/PLAT", "#/item/PLAT-2", "#/item/" + plan.key, "#/item/" + plan.key + "?edit", "#/tasks/all", "#/kanbans", "#/governance", "#/governance/PLAT", "#/mcp", "#/admin", "#/search/runbook"]) {
+      await phone.goto(base + "/" + view);
+      await phone.waitForSelector("main h1, main .welcome, #body");
+      await phone.waitForTimeout(400);
+      const wide = await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      check(wide <= 0, `${view} is ${wide}px wider than a phone's screen`);
+    }
+    await phone.goto(base + "/#/item/" + plan.key + "?edit");
+    await phone.waitForSelector(".ProseMirror[contenteditable=true]");
+    await phone.click(".ProseMirror");
+    await phone.selectOption(".pm-toolbar select[aria-label='Insert…']", "drawing");
+    await phone.waitForSelector("dialog.drawing[open]");
+    const cancel = await phone.locator("dialog.drawing button:has-text('Cancel')").boundingBox();
+    check(cancel && cancel.y >= 0 && cancel.y + cancel.height <= 700, "the drawing editor's Cancel is in sight on a phone");
+    await phone.click("dialog.drawing button:has-text('Cancel')");
+    await phone.waitForSelector("dialog.drawing[open]", { state: "detached" });
+    await phoneCtx.close();
+
     step("log out, log in as bert, read the item");
     await page.click("#account-button");
     await page.click("#logout");

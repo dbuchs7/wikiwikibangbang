@@ -444,7 +444,7 @@ async function labelView(label) {
   const csv = csvLink("", "label-csv");
   const fill = (page) => {
     rows.replaceChildren(...page.items.map((it) => h("tr", {},
-      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)), h("td", { text: it.title }), h("td", { text: it.type }))));
+      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key, "key")), h("td", { text: it.title }), h("td", { text: it.type }))));
     table.hidden = !page.items.length;
     none.hidden = page.items.length > 0;
     none.textContent = filter.active() ? t("filter.none") : t("label.noItems");
@@ -585,7 +585,7 @@ function taskTools(item, editing) {
     const order = (a, b) => String(a[by] || "").localeCompare(String(b[by] || ""), undefined, { numeric: true }) * (up ? 1 : -1);
     const body = h("tbody");
     const draw = () => body.replaceChildren(...[...rows].sort(order).map((it) => h("tr", { "data-f-state": it.state || "", "data-f-space": it.space },
-      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)), h("td", { text: it.title }),
+      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key, "key")), h("td", { text: it.title }),
       h("td", {}, it.state ? h("span", { class: "chip", text: it.state }) : ""), h("td", { text: it.space }))));
     const head = h("tr", {}, cols.map(([k, name]) => h("th", { scope: "col", "aria-sort": k === by ? (up ? "ascending" : "descending") : "none" },
       h("button", { type: "button", class: "link sort", "data-sort": k, text: name, onclick: (ev) => {
@@ -1985,7 +1985,7 @@ async function spaceView(key) {
   const addRows = (page) => {
     for (const it of page.items) {
       rows.append(h("tr", {},
-        h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)),
+        h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key, "key")),
         h("td", { text: it.title }),
         h("td", { text: it.type }),
         h("td", { text: it.state || "" }),
@@ -2236,7 +2236,7 @@ async function tasksView(tab, params) {
     const moves = canAct ? ty.workflow.transitions.filter((tr) => tr.from.includes(it.state))
       .map((tr) => h("button", { class: "link", text: tr.name, onclick: () => action(() => post(`/api/items/${it.id}/transitions`, { name: tr.name }), status) })) : [];
     return h("tr", { class: due && due < today ? "overdue" : "", "data-key": it.key },
-      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)),
+      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key, "key")),
       h("td", { text: it.title }),
       h("td", { class: "task-labels" }, (it.labels || []).map((l) => {
         const k = kanbanOf.get(`${it.space}\n${l}`);
