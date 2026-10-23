@@ -322,6 +322,7 @@ export default {
   "autobackup.succeeded": "Succeeded",
   "dp.activeShort": "Active",
   "catalog.problems": "Problems of the run",
+  "design.stillSet": "The file is still set: the server did not remove it. Look for design.change in the audit trail; a reverse proxy may block DELETE requests.",
   "editor.link": "Link",
   "editor.linkNeedsURL": "A link needs an http, https or mailto URL.",
   "editor.ordered": "Numbered item",

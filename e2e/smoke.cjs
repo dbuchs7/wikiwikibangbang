@@ -80,7 +80,9 @@ function ckanSource() {
   const page = await browser.newPage();
   const problems = [];
   page.on("pageerror", (e) => problems.push("page error: " + e.message));
-  page.on("console", (m) => { if (m.type() === "error" && !/status of 401/.test(m.text())) problems.push("console: " + m.text()); });
+  // A step that provokes an error on purpose names it here while it runs.
+  let expectedConsole = null;
+  page.on("console", (m) => { if (m.type() === "error" && !/status of 401/.test(m.text()) && !(expectedConsole && expectedConsole.test(m.text()))) problems.push("console: " + m.text()); });
   // A step that expects a confirmation or prompt sets its answer first:
   // true accepts, a string is typed in; any other dialog is a problem.
   let answer = null;
@@ -1187,6 +1189,18 @@ function ckanSource() {
     await page.setInputFiles("#design-welcome", { name: "welcome.png", mimeType: "image/png",
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
     await page.waitForSelector(".design-asset img[src^='/branding/welcome']");
+    // A removal that does not reach the server, e.g. a proxy refusing
+    // DELETE, says so beside the picture; one answered but not done too.
+    expectedConsole = /status of 403/;
+    await page.route("**/api/branding/welcome", (r) => r.request().method() === "DELETE" ? r.fulfill({ status: 403, contentType: "application/json", body: '{"error":"blocked by a proxy"}' }) : r.continue());
+    await page.click(".design-asset[data-asset=welcome] button.danger");
+    await page.waitForSelector(".design-asset[data-asset=welcome] .design-asset-status:has-text('blocked by a proxy')");
+    await page.unroute("**/api/branding/welcome");
+    await page.route("**/api/branding/welcome", (r) => r.request().method() === "DELETE" ? r.fulfill({ status: 204 }) : r.continue());
+    await page.click(".design-asset[data-asset=welcome] button.danger");
+    await page.waitForSelector(".design-asset[data-asset=welcome] .design-asset-status:has-text('still set')");
+    await page.unroute("**/api/branding/welcome");
+    expectedConsole = null;
     await page.goto(base + "/#/");
     await page.waitForSelector("#welcome-art.welcome-own[src^='/branding/welcome']");
     await page.click("#account-button");
