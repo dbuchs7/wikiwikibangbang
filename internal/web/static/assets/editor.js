@@ -13,7 +13,7 @@ import { h, safeHref } from "./dom.js";
 import { t } from "./i18n.js";
 import { anchorOf } from "./anchors.js";
 import { openDrawing, drawingName } from "./drawing.js";
-import { pickFromAlbum, pictureFile, captionOf } from "./album.js";
+import { pickFromAlbum, pictureFile, captionOf, copiedPicture, clipMark } from "./album.js";
 import { assist } from "./assist.js";
 
 // Every block carries bid, its ID in a live session (ADR-0010); it is not
@@ -599,8 +599,12 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   // Links, "@" and embedding as in a word processor (ADR-0096).
   const aids = assist(schema, isSafeLink);
   const aidKeys = keymap({ "Mod-k": (state, dispatch, v) => { aids.openLink(v); return true; } });
+  // Pictures pasted into the text (ADR-0108): one copied in the album
+  // becomes a copy of its original file, any other image an upload.
+  let onPaste = () => false;
+  const pastePlugin = new Plugin({ props: { handlePaste: (v, ev) => onPaste(ev) } });
   const view = new EditorView(mount, {
-    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...(editable ? [...aids.plugins, aidKeys] : []), ...plugins(), tocPlugin, statePlugin] }),
+    state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...(editable ? [pastePlugin, ...aids.plugins, aidKeys] : []), ...plugins(), tocPlugin, statePlugin] }),
     editable: () => editable,
     attributes: { "aria-label": t("editor.body"), role: "textbox", "aria-multiline": "true" },
     nodeViews: {
@@ -639,17 +643,15 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind === "video") videoPicker.click();
     else if (kind === "drawing") draw();
     else if (kind === "album") fromAlbum();
+    else if (kind === "clip") fromClip();
     else if (kind === "embed") embed();
     else if (kind) insertBlock(schema.nodes[kind].create());
   } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["children", t("editor.children")],
-    files ? ["image", t("editor.image")] : null, files ? ["video", t("editor.video")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null].filter(Boolean)
+    files ? ["image", t("editor.image")] : null, files ? ["video", t("editor.video")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null, files ? ["clip", t("editor.copiedPicture")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
   const picker = h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp", hidden: true, "aria-label": t("editor.image") });
-  picker.addEventListener("change", async () => {
-    const file = picker.files[0];
-    picker.value = "";
-    if (!file) return;
+  const uploadImage = async (file) => {
     status.textContent = "";
     try {
       const a = await files.upload(file);
@@ -658,6 +660,11 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     } catch (err) {
       status.textContent = err.message;
     }
+  };
+  picker.addEventListener("change", () => {
+    const file = picker.files[0];
+    picker.value = "";
+    if (file) uploadImage(file);
   });
   // A video is uploaded as an attachment of the item, then played in the
   // text (ADR-0097); the server reads its format from its bytes.
@@ -689,6 +696,49 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       status.textContent = err.message;
     }
   };
+  // A picture of the album is copied into this item with its source
+  // (ADR-0055), unless it is one of its own files already.
+  const placeAlbum = async (p) => {
+    const a = p.item.id === files.item ? p.attachment
+      : await files.upload(await pictureFile(p), { item: p.item.id, attachment: p.attachment.id });
+    insertBlock(schema.nodes.image.create({ ref: a.id, text: captionOf(p.attachment.name) }));
+  };
+  // A picture copied in the album (ADR-0108), named by the clipboard's
+  // marker; its name and type come from this browser's copy or the item.
+  const pasteAlbum = async (item, attachment) => {
+    status.textContent = "";
+    try {
+      let p = copiedPicture();
+      if (p?.item.id !== item || p?.attachment.id !== attachment) {
+        const { attachments } = await (await fetch(`/api/items/${item}/attachments`, { credentials: "same-origin" })).json();
+        const a = (attachments || []).find((x) => x.id === attachment);
+        if (!a) throw new Error(t("editor.clipGone"));
+        p = { item: { id: item }, attachment: a };
+      }
+      await placeAlbum(p);
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
+  const fromClip = () => {
+    const p = copiedPicture();
+    if (!p) status.textContent = t("editor.noClip");
+    else pasteAlbum(p.item.id, p.attachment.id);
+  };
+  onPaste = (ev) => {
+    if (!files) return false;
+    const m = (ev.clipboardData?.getData("text/html") || "").match(clipMark);
+    if (m) {
+      pasteAlbum(m[1], m[2]);
+      return true;
+    }
+    const file = [...(ev.clipboardData?.files || [])].find((f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type));
+    if (file) {
+      uploadImage(file);
+      return true;
+    }
+    return false;
+  };
   // A picture from the album (ADR-0054) is copied into this item, unless
   // it is one of its own files already.
   const fromAlbum = async () => {
@@ -696,9 +746,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     try {
       const p = await pickFromAlbum();
       if (!p) return;
-      const a = p.item.id === files.item ? p.attachment
-        : await files.upload(await pictureFile(p), { item: p.item.id, attachment: p.attachment.id });
-      insertBlock(schema.nodes.image.create({ ref: a.id, text: captionOf(p.attachment.name) }));
+      await placeAlbum(p);
     } catch (err) {
       status.textContent = err.message;
     }
