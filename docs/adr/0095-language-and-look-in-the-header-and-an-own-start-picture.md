@@ -65,5 +65,6 @@ Strongest form: the usual technique, with no rewriting at run time.
 
 ## Links
 
+- amended by [ADR-0100](0100-a-tidy-top-bar-and-columns-that-fold-away.md) (the language switch as letters)
 - amends [ADR-0017](0017-internationalisation-via-message-catalogue.md) (where the language is chosen), [ADR-0070](0070-an-own-stylesheet-without-a-dark-look-turns-the-dark-scheme-off.md) (how the dark look is chosen) and [ADR-0052](0052-corporate-design-in-a-journal-of-its-own.md) (files of the design)
 - relates to ADR-0065 and ADR-0091 (the UI's rules), ADR-0053 (drawings)

@@ -111,3 +111,6 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0096](0096-links-mentions-and-embeds-as-in-a-word-processor.md) | Links, mentions and embeds as in a word processor | Accepted | Landed |
 | [0097](0097-videos-in-the-text-the-instance-in-the-tab-done-beside-the-text.md) | Videos in the text, the instance's name in the tab, Done beside the text | Accepted | Landed |
 | [0098](0098-every-list-can-be-filtered.md) | Every list can be filtered | Accepted | Landed |
+| [0099](0099-the-layout-is-left-aligned.md) | The layout is left-aligned | Accepted | Landed |
+| [0100](0100-a-tidy-top-bar-and-columns-that-fold-away.md) | A tidy top bar on every width, and columns that fold away | Accepted | Landed |
+| [0101](0101-a-reading-mode.md) | A reading mode | Accepted | Landed |

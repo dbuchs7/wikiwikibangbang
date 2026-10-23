@@ -126,7 +126,7 @@ main { padding: 22px; }
   box-shadow: var(--shadow); padding: 22px; margin: 0 0 18px;
 }
 .card:has(> table) { overflow-x: auto; }
-.narrow { max-width: 24rem; margin: 3rem auto; }
+.narrow { max-width: 24rem; margin: 3rem 0; }
 
 /* ---------- Buttons ---------- */
 button, .button {
@@ -788,7 +788,8 @@ body { font-size: 14.5px; line-height: 1.55; -webkit-font-smoothing: antialiased
 h1 { font-size: 26px; line-height: 1.25; font-weight: 650; letter-spacing: -0.015em; margin: 0 0 6px; }
 h2 { font-size: 16px; line-height: 1.35; font-weight: 600; margin: 0 0 12px; }
 h3 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; }
-main { padding: 28px clamp(16px, 3vw, 40px) 40px; max-width: 1680px; margin: 0 auto; }
+/* The layout starts at the left edge, not in the middle (ADR-0099). */
+main { padding: 28px clamp(16px, 3vw, 40px) 40px; max-width: 1680px; margin: 0; }
 :focus-visible { outline: none; box-shadow: var(--focus); }
 
 /* ---------- The frame of a view ---------- */
@@ -822,7 +823,7 @@ details.card[open] > summary { margin-bottom: 14px; }
 .side-card, .item-side > section { border-radius: var(--radius); padding: var(--space-4) 18px; box-shadow: var(--shadow); }
 .notice { border-radius: var(--radius-sm); border-left-width: 3px; padding: 12px 14px; }
 .notice-card { border-left: 4px solid var(--accent); }
-.narrow { max-width: 26rem; margin: 8vh auto; }
+.narrow { max-width: 26rem; margin: 8vh 0; }
 .narrow.card { padding: 32px; box-shadow: var(--shadow-lg); }
 
 /* ---------- Buttons ---------- */
@@ -945,7 +946,7 @@ ul.notifications li, .comment, li.attachment, .thread { padding: 10px 0; }
 .tree-box { border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px; }
 .tree-row a { padding: 5px 6px; border-radius: 6px; }
 .tree-row a.current { color: var(--accent); }
-.footer { text-align: center; padding: 8px 22px 28px; }
+.footer { text-align: left; padding: 8px clamp(16px, 3vw, 40px) 28px; }
 
 /* ---------- Details ---------- */
 .pm-toolbar button { min-height: 30px; padding: 4px 9px; box-shadow: none; border-radius: 6px; font-weight: 600; }
@@ -1273,3 +1274,81 @@ dialog.pm-dialog .error:empty { display: none; }
 /* A file of the design reports its own failures (ADR-0095). */
 .design-asset-status:empty { display: none; }
 .design-asset-status { flex-basis: 100%; }
+
+/* ---------- The top bar on every width (ADR-0100) ----------
+   One row while everything fits. Below 900 px two fixed rows: the bar's
+   controls on the first, the search with New on the second, instead of
+   wrapping wherever an element happens to end. */
+.top { flex-wrap: nowrap; }
+#nav { flex-wrap: nowrap; min-width: 0; }
+#nav .search { flex: 1 1 26rem; min-width: 8rem; max-width: 34rem; }
+@media (max-width: 900px) {
+  .top { flex-wrap: wrap; row-gap: 0; padding-bottom: 8px; }
+  #nav { display: contents; }
+  #nav .search { order: 10; flex: 1 1 calc(100% - 130px); max-width: none; margin: 0; }
+  #nav-new { order: 11; }
+  #nav > .bell { margin-left: auto; }
+  #nav > .bell ~ .look-toggles { margin-left: 0; }
+  .top > .look-toggles, #nav > .look-toggles:first-child { margin-left: auto; }
+}
+@media (max-width: 480px) {
+  .top { gap: 4px 6px; }
+  #nav-back, #nav-forward { display: none; }
+  .brand img { height: 32px; }
+}
+/* The logo leads home as well, so on a phone the home button gives way. */
+@media (max-width: 420px) {
+  #nav-home { display: none; }
+  .brand img { height: 28px; }
+}
+
+/* The language switch is its letters alone (ADR-0100): no frame, the
+   current language marked by colour and weight. */
+.lang-toggle { border: none; border-radius: 0; overflow: visible; gap: 2px; }
+.lang-toggle button, .lang-toggle button + button { border: none; background: none; padding: 0 4px; min-width: 0; color: var(--muted); }
+.lang-toggle button:hover { background: none; color: var(--text); }
+.lang-toggle button[aria-pressed="true"] { background: none; color: var(--accent); font-weight: 700; }
+
+/* Folding the page tree and an item's side column away (ADR-0100). */
+.tree-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; position: sticky; top: 12px; }
+.tree-col > .tree-box { position: static; }
+.col-toggle { margin: 0; width: 32px; height: 32px; color: var(--muted); border: 1px solid var(--border); background: var(--surface); }
+.col-toggle:hover { color: var(--text); }
+.col-toggle-tree { align-self: flex-end; }
+.col-toggle-side { align-self: flex-start; }
+html.tree-folded .with-tree { grid-template-columns: 32px minmax(0, 1fr); }
+html.tree-folded .tree-col > :not(.col-toggle) { display: none; }
+html.side-folded .item-layout { grid-template-columns: minmax(0, 1fr) 32px; }
+html.side-folded .item-side > :not(.col-toggle) { display: none; }
+/* Where the columns stand one above the other, nothing is folded. */
+@media (max-width: 800px) {
+  .col-toggle-tree { display: none; }
+  html.tree-folded .with-tree { grid-template-columns: minmax(0, 1fr); }
+  html.tree-folded .tree-col > :not(.col-toggle) { display: revert; }
+  .tree-col { position: static; }
+}
+@media (max-width: 1100px) {
+  .col-toggle-side { display: none; }
+  html.side-folded .item-layout { grid-template-columns: minmax(0, 1fr); }
+  html.side-folded .item-side > :not(.col-toggle) { display: revert; }
+}
+@media (max-width: 340px) {
+  .top { padding-left: 8px; padding-right: 8px; gap: 4px 2px; }
+  .lang-toggle button { padding: 0 2px; }
+  .look-toggles { gap: 0; }
+  .account-button { padding: 0; }
+  .brand img { height: 24px; }
+}
+
+/* Reading mode (ADR-0101): the content alone, with a way back. */
+.reading-toggle { margin: 0; color: var(--text); }
+.reading-exit { display: none; }
+html.reading-mode header.top, html.reading-mode .tree-col, html.reading-mode .item-side, html.reading-mode #footer, html.reading-mode .col-toggle { display: none !important; }
+html.reading-mode .with-tree, html.reading-mode .item-layout { grid-template-columns: minmax(0, 1fr) !important; }
+html.reading-mode main { max-width: 1100px; }
+html.reading-mode .reading-exit { display: inline-flex; position: fixed; top: 10px; right: 12px; z-index: 30; min-height: 32px; padding: 4px 12px;
+  font-size: 13px; opacity: .55; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; color: var(--text); box-shadow: var(--shadow); }
+html.reading-mode .reading-exit:hover, html.reading-mode .reading-exit:focus { opacity: 1; }
+@media print { .reading-exit { display: none !important; } }
+/* On a phone the screen is the content already; the button gives way. */
+@media (max-width: 480px) { .reading-toggle { display: none; } }
