@@ -52,6 +52,17 @@ func TestTheCorporateDesignThroughTheAPI(t *testing.T) {
 	}
 	w.admin.expect("DELETE", "/api/branding/logo", "", http.StatusNoContent)
 	anon.expect("GET", "/branding/logo", "", http.StatusNotFound)
+	// The start page's own picture (ADR-0095).
+	if r := w.admin.put("/api/branding/welcome", "application/octet-stream", svg); r.Code != http.StatusOK {
+		t.Fatalf("an own start picture: %d %s", r.Code, r.Body)
+	}
+	if b := anon.expect("GET", "/branding.json", "", http.StatusOK); field(b, "assets", "welcome") == nil {
+		t.Fatalf("branding.json names no start picture: %v", b)
+	}
+	if r := w.admin.put("/api/branding/welcome", "application/octet-stream", []byte("wOF2 not a picture")); r.Code != http.StatusBadRequest {
+		t.Fatalf("a font as start picture: %d", r.Code)
+	}
+	w.admin.expect("DELETE", "/api/branding/welcome", "", http.StatusNoContent)
 	if audit := w.admin.expect("GET", "/api/audit", "", http.StatusOK); !strings.Contains(strings.Join(eventsOf(audit), ","), "design.change") {
 		t.Fatal("the audit trail has no design change")
 	}

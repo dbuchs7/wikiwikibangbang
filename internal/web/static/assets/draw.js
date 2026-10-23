@@ -9,15 +9,16 @@
 // A drawing is a PNG that carries its scene (Excalidraw's exportEmbedScene),
 // so the picture shown in a page is also the source it is edited from.
 import "./draw-boot.js";
+import { isDark } from "./theme.js";
 import { React, createRoot, Excalidraw, exportToBlob, loadFromBlob, MIME_TYPES } from "/vendor/excalidraw.js";
 
 const parent = window.parent;
 const origin = window.location.origin;
 let api = null;
 
-// The dark scheme follows the system unless the installation turned it off
-// (ADR-0070).
-const dark = window.matchMedia("(prefers-color-scheme: dark)").matches &&
+// The dark scheme follows the system or the look chosen in the header
+// (ADR-0095), unless the installation turned it off (ADR-0070).
+const dark = isDark() &&
   await fetch("/branding.json").then((r) => r.json()).then((b) => b.dark !== false).catch(() => true);
 const root = createRoot(document.getElementById("root"));
 

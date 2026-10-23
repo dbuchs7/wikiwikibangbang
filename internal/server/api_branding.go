@@ -156,6 +156,7 @@ var assetTypes = map[string]map[string]bool{
 	site.AssetLogo:       {"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/svg+xml": true},
 	site.AssetBackground: {"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true},
 	site.AssetFont:       {"font/woff2": true, "font/woff": true, "font/ttf": true, "font/otf": true},
+	site.AssetWelcome:    {"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true, "image/svg+xml": true},
 }
 
 // sniff reads a file's format from its bytes; an SVG, which the standard

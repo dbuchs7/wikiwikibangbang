@@ -66,5 +66,6 @@ Strongest form: correct plural and gender rules for every language, extraction t
 
 ## Links
 
+- amended by [ADR-0095](0095-language-and-look-in-the-header-and-an-own-start-picture.md) (the language is also switched in the header)
 - atlas [ADR-0267](https://github.com/pblumer/atlas/blob/main/docs/adr/0267-console-speaks-german-first.md), [ADR-0414](https://github.com/pblumer/atlas/blob/main/docs/adr/0414-a-missing-translation-is-reported-not-refused.md)
 - [AGENTS.md](../../AGENTS.md), "Project language: English"

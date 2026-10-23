@@ -469,6 +469,16 @@ a.kanban-chip { text-decoration: none; border: 1px solid var(--accent); }
 }
 /* The account menu and profile pictures (ADR-0050). */
 .account { position: relative; }
+/* The language and the light or dark look (ADR-0095). */
+.look-toggles { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+#nav > .search ~ .look-toggles { margin-left: 0; }
+.lang-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.lang-toggle button { min-height: 28px; padding: 0 8px; border: none; border-radius: 0; background: transparent; color: var(--muted);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em; }
+.lang-toggle button + button { border-left: 1px solid var(--border); }
+.lang-toggle button:hover { background: var(--bg); color: var(--text); }
+.lang-toggle button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.theme-toggle { margin: 0; color: var(--text); }
 .account-button { display: inline-flex; align-items: center; padding: 2px; border-radius: 50%; background: none; border: 2px solid transparent; }
 .account-button:hover, .account-button[aria-expanded="true"] { background: none; border-color: var(--accent); }
 .avatar { display: inline-flex; align-items: center; justify-content: center; flex: none; overflow: hidden; border-radius: 50%;
@@ -523,6 +533,10 @@ button.watch-bell svg { width: 20px; height: 20px; }
 .item-side .props th { width: 35%; }
 .item-side .props input, .item-side .props select { max-width: 100%; }
 #body.reading .pm-editor .ProseMirror { min-height: 0; }
+/* While editing, the text is an empty sheet in the proportions of A4
+   (1 : 1.414), however little it holds (ADR-0095). */
+#body.editing .pm-editor { container-type: inline-size; }
+#body.editing .pm-editor .ProseMirror { min-height: calc(100cqi * 1.414); }
 #body.editing { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: var(--radius); }
 .item-title { display: inline-flex; align-items: center; gap: 8px; }
 .item-title .lock { color: #a15c00; }
@@ -983,6 +997,8 @@ button.info-btn { min-height: 0; box-shadow: none; margin: 0 0 0 4px; }
 /* The start page: a larger picture, and the installed version in a corner. */
 .welcome { position: relative; overflow: hidden; }
 .welcome-art { width: min(440px, 38vw); }
+/* The design's own picture (ADR-0095): any shape, never taller than the product's. */
+.welcome-art.welcome-own { max-height: 320px; object-fit: contain; border-radius: var(--radius, 12px); }
 .home-stats { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 4px 0 14px; min-height: 1.6em; }
 .home-stat { text-decoration: none; color: var(--muted); }
 .home-stat strong { font-size: 22px; color: var(--text); font-variant-numeric: tabular-nums; }
