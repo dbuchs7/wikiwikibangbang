@@ -300,7 +300,9 @@ function ckanSource() {
     check((await page.textContent(".ProseMirror strong")) === "Bold", "bold text");
     check((await page.textContent(".pm-mention")).startsWith("@") && (await page.getAttribute(".pm-mention", "href")).startsWith("#/item/"), "the mention");
     check(await page.locator(".ProseMirror a[href^='https://example.com/docs']").count() === 1, "the typed address stays a link");
-    check((await page.textContent(".pm-embed")).includes("PLAT-1"), "the embed");
+    check((await page.textContent(".pm-embed .pm-embed-title")).includes("PLAT-1"), "the embed");
+    await page.waitForSelector(".pm-embed .pm-embed-content[data-embedded='PLAT-1'] .pm-embed-meta");
+    check((await page.textContent(".pm-embed .pm-embed-meta")).includes("task"), "the embed shows the item whole, not a link only (ADR-0106)");
     check((await editor.textContent()).includes("<script>alert('body')</script>"), "the script shows as text");
     check(await page.locator(".ProseMirror figure.pm-video video[controls]").count() === 1, "the video stays in the text");
 

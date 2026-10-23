@@ -536,7 +536,31 @@ const filesOf = (item, attachments = []) => {
 function readOnlyBody(item, embeds, edit) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   return createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
-    actions: edit ? [edit] : [] }).element;
+    actions: edit ? [edit] : [], embedContent: embedLoader([item.id]) }).element;
+}
+
+// embedDepth is how many embedded items deep a text shows content; deeper
+// ones show their heading only.
+const embedDepth = 3;
+
+// embedLoader shows an embedded item whole (ADR-0106): its kind, state and
+// fields, then its text, read-only, as far as the reader may read it; the
+// API veils what they may not. chain holds the items around it, so an item
+// never shows itself inside itself.
+function embedLoader(chain) {
+  return async (ref) => {
+    if (chain.includes(ref)) return h("p", { class: "muted pm-embed-note", text: t("embed.cycle") });
+    if (chain.length > embedDepth) return h("p", { class: "muted pm-embed-note", text: t("embed.deep") });
+    const [{ item }, { embeds }] = await Promise.all([get("/api/items/" + ref), get(`/api/items/${ref}/embeds`)]);
+    const resolve = async (r) => (await get("/api/items/" + encodeURIComponent(r))).item;
+    const props = Object.entries(item.properties || {}).filter(([, v]) => v !== null && v !== "" && !(Array.isArray(v) && !v.length));
+    return h("div", { class: "pm-embed-content", "data-embedded": item.key },
+      h("p", { class: "muted pm-embed-meta" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : ""),
+      props.length ? h("dl", { class: "pm-embed-props" }, props.flatMap(([k, v]) => [h("dt", { text: k }),
+        h("dd", { text: (Array.isArray(v) ? v : [v]).map((x) => (names.has(x) ? names.get(x) : String(x))).join(", ") })])) : null,
+      item.body.length ? createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
+        embedContent: embedLoader([...chain, ref]) }).element : null);
+  };
 }
 
 // sizeText shows a number of bytes for people.
@@ -3138,7 +3162,7 @@ function bodySection(item, embeds, editing, threads, attachments, protect, edit)
   if (!editing) {
     const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
       extra: item.presence === "live" ? [threads.plugin] : [], comment: item.presence === "live" ? threads.start : undefined, protect: protect || undefined,
-      actions: edit ? [edit] : [] });
+      actions: edit ? [edit] : [], embedContent: embedLoader([item.id]) });
     const section = h("section", { id: "body", class: "reading" }, view.element);
     // A click on a protected passage shows it in the list of passages.
     const open = (ev) => {
@@ -3156,7 +3180,7 @@ function bodySection(item, embeds, editing, threads, attachments, protect, edit)
     return { element: section, session: null };
   }
   const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item, attachments),
-    extra: [threads.plugin], comment: threads.start, actions: edit ? [edit] : [] });
+    extra: [threads.plugin], comment: threads.start, actions: edit ? [edit] : [], embedContent: embedLoader([item.id]) });
   onLeave(session.close);
   return { element: h("section", { id: "body", class: "editing" }, session.element), session };
 }

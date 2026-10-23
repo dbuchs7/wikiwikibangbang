@@ -198,6 +198,17 @@ table.history td { font-size: 13px; }
 .pm-unsupported { border: 1px dashed var(--danger); border-radius: 6px; }
 .pm-embed { padding: 8px 12px; border: 1px dashed var(--border-strong); border-radius: 6px; background: var(--bg); }
 .pm-embed.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+/* An embedded item shown whole (ADR-0106): its heading, then its content,
+   set off by a line, read-only. */
+.pm-embed-title { font-weight: 600; }
+.pm-embed-body { margin-top: 6px; padding-left: 12px; border-left: 3px solid var(--accent-soft); }
+.pm-embed-body:empty { display: none; }
+.pm-embed-meta, .pm-embed-note { margin: 0 0 4px; font-size: 13px; }
+.pm-embed-props { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 12px; margin: 0 0 6px; font-size: 13px; }
+.pm-embed-props dt { color: var(--muted); }
+.pm-embed-props dd { margin: 0; overflow-wrap: anywhere; }
+.pm-embed-content .pm-wrap, .pm-embed-content .pm-editor, .pm-embed-content .pm-editor .ProseMirror { min-height: 0 !important; padding: 0; border: 0; background: none; box-shadow: none; }
+.pm-embed { cursor: default; }
 .pm-mention { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
 .ProseMirror-hideselection *::selection { background: transparent; }
 

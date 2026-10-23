@@ -118,3 +118,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0103](0103-the-versions-of-a-file-form-one-stack-in-the-album.md) | The versions of a file form one stack in the album | Accepted | Landed |
 | [0104](0104-rules-for-the-older-versions-of-pictures.md) | Rules for the older versions of pictures | Accepted | Landed |
 | [0105](0105-the-automatic-clean-up-runs-at-a-fixed-hour.md) | The automatic clean-up of the album runs at a fixed hour | Accepted | Landed |
+| [0106](0106-an-embedded-item-is-shown-whole.md) | An embedded item is shown whole | Accepted | Landed |
