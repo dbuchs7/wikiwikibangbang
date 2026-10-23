@@ -124,3 +124,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0109](0109-a-design-logo-and-start-picture-for-the-dark-look-and-the-product-icon-in-the-tab.md) | A design logo and start picture for the dark look, and the product's icon in the browser tab | Accepted | Landed |
 | [0110](0110-the-kanbans-page-in-three-columns.md) | The kanbans page in three columns | Accepted | Landed |
 | [0111](0111-protecting-removing-and-copying-respect-the-whole-tree.md) | Protecting, removing and copying respect the whole page tree | Accepted | Landed |
+| [0112](0112-the-bell-is-the-last-of-a-heads-buttons.md) | The bell is the last of a head's buttons, and the tree makes no pages | Accepted | Landed |

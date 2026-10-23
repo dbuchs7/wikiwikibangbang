@@ -369,7 +369,6 @@ export default {
   "tree.empty": "No pages yet.",
   "tree.expand": "Expand {title}",
   "tree.collapse": "Collapse {title}",
-  "tree.newPage": "+ New page",
   "space.allItems": "All items",
   "space.noPages": "This space has no pages yet.",
   "space.homeEmpty": "This page is empty.",

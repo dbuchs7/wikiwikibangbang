@@ -515,6 +515,10 @@ function ckanSource() {
     step("creating: New offers a page below the page shown, in its space");
     await page.click(".tree a:has-text('Upgrade')");
     await page.waitForSelector("#item-new-child");
+    // The head's buttons stand left of the bell, which is last; the tree
+    // makes no pages (ADR-0112).
+    check(await page.$eval(".page-head .actions", (p) => p.lastElementChild.id) === "watch" && await page.locator(".tree-box a.tree-new").count() === 0,
+      "the bell is the last of the page's buttons");
     await page.click("#nav-new");
     await page.waitForSelector("#new-item [name=under]:checked");
     await page.fill("#new-item [name=title]", "Created from New");
@@ -1552,6 +1556,9 @@ function ckanSource() {
 
     step("copy and move: a page is copied with its child pages, then moved below another page");
     await page.goto(base + "/#/space/PLAT");
+    await page.waitForSelector("#space-new-page");
+    check(await page.$eval(".page-head .actions", (p) => p.firstElementChild.id === "space-new-page" && p.lastElementChild.id === "watch"),
+      "a space offers a new page first and the bell last");
     await page.click(".tree a:has-text('Runbook')");
     await page.waitForSelector(".tree a.current:has-text('Runbook')");
     await page.click("#item-copy");
