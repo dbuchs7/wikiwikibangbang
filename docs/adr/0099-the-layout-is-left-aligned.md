@@ -52,3 +52,4 @@ Strongest form: the usual look of web pages.
 
 - amends [ADR-0065](0065-a-uniform-airy-ui-system.md) (the frame of a view)
 - relates to ADR-0091 (rules every view follows)
+- amended by [ADR-0102](0102-owner-and-details-beside-the-text-sign-in-centred.md) (single cards are centred)
