@@ -126,7 +126,7 @@ main { padding: 22px; }
   box-shadow: var(--shadow); padding: 22px; margin: 0 0 18px;
 }
 .card:has(> table) { overflow-x: auto; }
-.narrow { max-width: 24rem; margin: 3rem 0; }
+.narrow { max-width: 24rem; margin: 3rem auto; }
 
 /* ---------- Buttons ---------- */
 button, .button {
@@ -513,16 +513,6 @@ button.watch-bell svg { width: 20px; height: 20px; }
    belongs to it (ADR-0051). */
 .item-layout { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 440px); gap: 20px; align-items: start; }
 .item-main { min-width: 0; }
-/* The owner and details in the main column (ADR-0079): label and value
-   side by side, in as many columns as the width allows. */
-.item-main > #details { margin-bottom: 16px; }
-.item-main > #details > h2 { font-size: 15px; margin: 0 0 8px; }
-#details table.props { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap: 0 28px; width: 100%; margin: 0 0 8px; }
-#details table.props tr { display: grid; grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
-#details table.props th { text-align: left; font-weight: 500; color: var(--muted); padding: 0; overflow-wrap: anywhere; }
-#details table.props td { padding: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
-#details table.props td input, #details table.props td select { width: 100%; }
-#details table.props td:last-child:empty { display: none; }
 .item-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .side-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
 .side-card > h2, .item-side > section > h2 { font-size: 15px; margin: 0 0 8px; }
@@ -549,12 +539,12 @@ button.watch-bell svg { width: 20px; height: 20px; }
 @media (max-width: 1100px) {
   .item-layout { grid-template-columns: minmax(0, 1fr); }
 }
-/* Fields in the side column: the name above, the value and its button
+/* Fields in the side column (ADR-0102): the name above, the value and its button
    beside each other, so nothing reaches past the card. */
 .item-side .props, .item-side .props tbody { display: block; }
 .item-side .props tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .item-side .props th { grid-column: 1 / -1; width: auto; padding: 0; font-weight: 500; color: var(--muted); }
-.item-side .props td { padding: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.item-side .props td { padding: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; overflow-wrap: anywhere; }
 .item-side .props td input, .item-side .props td select { width: 100%; }
 .item-side .props td:last-child button:not(.link) { padding: 6px 10px; font-size: 13px; }
 .item-side .upload { display: flex; flex-direction: column; gap: 4px; }
@@ -823,7 +813,11 @@ details.card[open] > summary { margin-bottom: 14px; }
 .side-card, .item-side > section { border-radius: var(--radius); padding: var(--space-4) 18px; box-shadow: var(--shadow); }
 .notice { border-radius: var(--radius-sm); border-left-width: 3px; padding: 12px 14px; }
 .notice-card { border-left: 4px solid var(--accent); }
-.narrow { max-width: 26rem; margin: 8vh 0; }
+/* The sign-in card and other single cards stand in the middle of the
+   window (ADR-0099): their view holds nothing else, so the column gives
+   up its maximum width for them. */
+.narrow { max-width: 26rem; margin: 8vh auto; }
+main:has(> .narrow) { max-width: none; }
 .narrow.card { padding: 32px; box-shadow: var(--shadow-lg); }
 
 /* ---------- Buttons ---------- */
@@ -1039,6 +1033,8 @@ a.button.login-sso { display: flex; gap: 10px; }
   header.top, #drawer, #footer, .with-tree > :first-child, .crumbs, .page-head .actions, .status, .item-side > :not(#details),
   #details .actions-row, #details button, .pm-menu, .comment-mark-gutter { display: none !important; }
   .with-tree, .with-tree-main, .item-layout { display: block !important; margin: 0 !important; padding: 0 !important; }
+  /* The details lead the printed page, above the text (ADR-0102). */
+  .item-layout { display: flex !important; flex-direction: column-reverse; }
   .side-card, .item-main { border: none !important; box-shadow: none !important; background: none !important; }
   a { color: inherit; text-decoration: underline; }
   table, figure, .pm-image, pre { break-inside: avoid; }
@@ -1179,8 +1175,6 @@ main :is(table, .card, p.empty, ul, ol, .tasks-layout) + :is(h2, h3) { margin-to
 @media (max-width: 640px) {
   .top { padding-top: 8px; }
   .brand img { height: 34px; }
-  #details table.props tr { grid-template-columns: minmax(0, 1fr) auto; }
-  #details table.props th { grid-column: 1 / -1; border: 0; }
   main { padding: 16px; }
   .card { padding: 16px; }
   .admin-sections table tr { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }

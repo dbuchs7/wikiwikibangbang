@@ -91,7 +91,7 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0076](0076-kanban-columns-card-fields-and-free-moves.md) | A kanban keeps its own columns, card fields and card order; moves stay workflow transitions | Accepted | Landed |
 | [0077](0077-connectors-keep-catalogs-in-step-with-their-sources.md) | Connectors keep catalog spaces in step with their sources | Accepted | Landed |
 | [0078](0078-protecting-items-for-people-and-groups.md) | Protecting an item for people and groups from its page | Accepted | Landed |
-| [0079](0079-owner-and-details-lead-the-main-column.md) | Owner and details lead the main column of an item's page | Accepted | Landed |
+| [0079](0079-owner-and-details-lead-the-main-column.md) | Owner and details lead the main column of an item's page | Superseded by ADR-0102 | Superseded |
 | [0080](0080-one-page-per-data-set-written-from-the-source.md) | One catalog page per data set, written from everything the source says | Accepted | Landed |
 | [0081](0081-the-server-stays-fast-with-tens-of-thousands-of-items.md) | The server stays fast with tens of thousands of items | Accepted | Landed |
 | [0082](0082-a-state-no-transition-leaves-is-finished.md) | A state no transition leaves is finished | Accepted | Landed |
@@ -114,3 +114,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0099](0099-the-layout-is-left-aligned.md) | The layout is left-aligned | Accepted | Landed |
 | [0100](0100-a-tidy-top-bar-and-columns-that-fold-away.md) | A tidy top bar on every width, and columns that fold away | Accepted | Landed |
 | [0101](0101-a-reading-mode.md) | A reading mode | Accepted | Landed |
+| [0102](0102-owner-and-details-beside-the-text-sign-in-centred.md) | Owner and details beside the text; the sign-in card centred | Accepted | Landed |

@@ -1,7 +1,7 @@
 # ADR-0079: Owner and details lead the main column of an item's page
 
-- **Status:** Accepted
-- **Implementation:** Landed
+- **Status:** Superseded by ADR-0102
+- **Implementation:** Superseded
 - **Date:** 2026-10-21
 - **Deciders:** Project initiators (the maintainer asked that owner and details sit in the main column instead of at the right, 2026-10-21)
 
@@ -53,3 +53,4 @@ Strongest form: ADR-0051's reasoning holds for prose pages, which are the majori
 
 - amends [ADR-0051](0051-pages-open-for-reading-and-are-edited-in-place.md)
 - relates to ADR-0074 and ADR-0075 (catalog entries)
+- superseded by [ADR-0102](0102-owner-and-details-beside-the-text-sign-in-centred.md) (owner and details beside the text)

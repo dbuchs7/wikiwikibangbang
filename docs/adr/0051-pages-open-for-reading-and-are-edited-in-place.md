@@ -38,3 +38,4 @@ Chosen option: **1**, the way people are used to editing wiki pages. Option 2 is
 ## Links
 
 - amended by [ADR-0079](0079-owner-and-details-lead-the-main-column.md) (owner and details lead the main column)
+- amended by [ADR-0102](0102-owner-and-details-beside-the-text-sign-in-centred.md) (owner and details beside the text again)

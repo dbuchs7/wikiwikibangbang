@@ -3073,11 +3073,12 @@ async function itemView(ref, params = new URLSearchParams()) {
       item.managed ? " · " + t("item.managed") : "") : "",
     status,
     h("div", { class: "item-layout" },
-      // The owner and details lead the main column, above the text, so a
-      // catalog entry reads as one page (ADR-0079).
-      h("div", { class: "item-main" }, details, protecting, body || h("p", { class: "muted", text: t("item.noBody") })),
+      // The text has the main column to itself; the owner and details
+      // lead the column beside it (ADR-0102).
+      h("div", { class: "item-main" }, protecting, body || h("p", { class: "muted", text: t("item.noBody") })),
       h("aside", { class: "item-side", "aria-label": t("item.side") },
         columnToggle("side"),
+        details,
         secretsSection(path, item, status),
         threads.section,
         attachmentsSection(path, attachments, canEdit),
