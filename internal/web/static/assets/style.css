@@ -1270,3 +1270,6 @@ dialog.pm-dialog .error:empty { display: none; }
 .filter-bar .filter-count { margin-left: auto; font-size: 13px; }
 .filter-bar .filter-reset { font-size: 13px; }
 .filter-empty[hidden] { display: none; }
+/* A file of the design reports its own failures (ADR-0095). */
+.design-asset-status:empty { display: none; }
+.design-asset-status { flex-basis: 100%; }

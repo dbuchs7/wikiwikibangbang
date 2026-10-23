@@ -320,6 +320,7 @@ export default {
   "autobackup.succeeded": "Erfolgreich",
   "dp.activeShort": "Aktiv",
   "catalog.problems": "Probleme des Laufs",
+  "design.stillSet": "Die Datei ist noch gesetzt: Der Server hat sie nicht entfernt. Prüfen Sie im Audit-Protokoll den Eintrag design.change; ein Reverse Proxy kann DELETE-Anfragen sperren.",
   "editor.link": "Link",
   "editor.linkNeedsURL": "Ein Link braucht eine http-, https- oder mailto-Adresse.",
   "editor.ordered": "Nummerierter Punkt",

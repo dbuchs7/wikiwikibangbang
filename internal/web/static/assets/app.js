@@ -4573,16 +4573,22 @@ async function designCard() {
   // An asset is uploaded or deleted on its own and only its block is
   // drawn again: the rest of the form keeps what was typed into it.
   const asset = (name, label, accept, has = b.assets?.[name]) => {
-    const box = h("div", { class: "design-asset" });
-    const change = (fn) => async () => {
-      status.replaceChildren();
+    const box = h("div", { class: "design-asset", "data-asset": name });
+    // A failure shows beside the file it is about, not at the top of the
+    // section, where it is easily missed.
+    const own = h("div", { class: "status design-asset-status", role: "status" });
+    const change = (fn, removing) => async () => {
+      own.replaceChildren();
       try {
         await fn();
         await applyBranding(true);
         const now = await get("/branding.json");
+        // The server answers for what it holds: a file still set after
+        // removing it did not go, whatever the answer was on the way.
+        if (removing && now.assets?.[name]) throw new Error(t("design.stillSet"));
         box.replaceWith(asset(name, label, accept, now.assets?.[name]));
       } catch (err) {
-        status.replaceChildren(errorBox(err));
+        own.replaceChildren(errorBox(err));
       }
     };
     const picker = h("input", { type: "file", accept, id: "design-" + name, "aria-label": label });
@@ -4597,7 +4603,8 @@ async function designCard() {
       has && name !== "font" ? h("img", { src: `/branding/${name}?v=${encodeURIComponent(has)}`, alt: "", class: "design-preview" }) : "",
       h("span", { class: "muted", text: has ? t("design.fileSet") : t("design.fileNone") }),
       h("label", { class: "upload" }, h("span", { text: t("design.choose") }), picker),
-      has ? h("button", { type: "button", class: "link danger", text: t("common.delete"), onclick: change(() => del("/api/branding/" + name)) }) : "");
+      has ? h("button", { type: "button", class: "link danger", text: t("common.delete"), onclick: change(() => del("/api/branding/" + name), true) }) : "",
+      own);
     return box;
   };
   // A ready-made theme (ADR-0085), shown with its header, page and accent
