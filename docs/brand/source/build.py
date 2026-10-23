@@ -1,70 +1,37 @@
-"""Build the wikiwikibangbang logo set (black and white) from geometry.
+"""Build the wikiwikibangbang logo set.
 
-Everything is generated: the mark from shapely geometry, the wordmark from
-Inter Display outlines (OFL-1.1), so every SVG is pure paths with no font
-dependency. Output: OUT/svg, OUT/pdf, OUT/png, OUT/favicon.
+Everything is generated: the mark from its traced paths (mark.json, made
+by trace.py from mark-template.png), the wordmark from Inter Display
+outlines (OFL-1.1), so every SVG is pure paths with no font dependency.
+Each artwork comes for light ground ("-black") and dark ground ("-white").
+Output: OUT/svg, OUT/pdf, OUT/png, OUT/favicon.
 """
-import os, shutil, subprocess, sys
+import json, os, shutil, subprocess, sys
 import uharfbuzz as hb
 from fontTools.ttLib import TTFont
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
-from shapely.geometry import box, Polygon, LineString
-from shapely.ops import unary_union
-from shapely import affinity
 
 OUT = sys.argv[1]  # e.g. docs/brand
 FONT_DIR = os.environ.get("INTER_DIR", "/usr/share/fonts/opentype/inter")
 BLACK, WHITE = "#000000", "#FFFFFF"
 
-# ---------------------------------------------------------------- mark (64 grid)
-def rrect(x0, y0, x1, y1, r):
-    return box(x0 + r, y0 + r, x1 - r, y1 - r).buffer(r, quad_segs=16)
+# ---------------------------------------------------------------- mark
+# A question mark above a ticked box, in three colours: for light ground the
+# template's own, for dark ground lighter ones of the same hues.
+MARK = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "mark.json")))
+MX0, MY0, MX1, MY1 = MARK["bbox"]
+MW, MH = MX1 - MX0, MY1 - MY0
+ON_LIGHT = {"question": "#000000", "box": "#0E2A38", "check": "#333333"}
+ON_DARK = {"question": "#FFFFFF", "box": "#8FB8CC", "check": "#D0D0D0"}
 
-def page_bar(x0, y0, x1, y1, fold, gap, flap=True):
-    body = rrect(x0, y0, x1, y1, 3)
-    corner = Polygon([(x1 - fold, y0 - 1), (x1 + 1, y0 - 1), (x1 + 1, y0 + fold)])
-    body = body.difference(corner)
-    if not flap:
-        return body
-    f = Polygon([(x1 - fold, y0), (x1 - fold, y0 + fold), (x1, y0 + fold)])
-    body = body.difference(f.buffer(gap, join_style="mitre"))
-    return unary_union([body, f])
-
-def open_box(x0, y0, s, ring):
-    return rrect(x0, y0, x0 + s, y0 + s, 3.5).difference(
-        rrect(x0 + ring, y0 + ring, x0 + s - ring, y0 + s - ring, max(3.5 - ring, 0.8)))
-
-def checked_box(x0, y0, s, w):
-    k = s / 18
-    tick = LineString([(x0 + 4.2 * k, y0 + 9.4 * k), (x0 + 7.7 * k, y0 + 12.9 * k), (x0 + 13.9 * k, y0 + 5.4 * k)])
-    return rrect(x0, y0, x0 + s, y0 + s, 3.5).difference(tick.buffer(w / 2, cap_style="flat", join_style="mitre"))
-
-def tall_mark(h):
-    """The mark stretched to h units of the 64 grid: the strokes grow, the
-    dots keep their size, for the two-line lockup."""
-    bars = [page_bar(8, 2, 26, h - 26, 7, 1.6), page_bar(38, 2, 56, h - 26, 7, 1.6)]
-    boxes = [open_box(8, h - 20, 18, 3.5), checked_box(38, h - 20, 18, 3.4)]
-    return unary_union(bars + boxes)
-
-def mark(small=False):
-    """The full mark, or the simplified one for 16-32 px."""
-    if small:
-        bars = [page_bar(8, 2, 26, 38, 8, 0, flap=False), page_bar(38, 2, 56, 38, 8, 0, flap=False)]
-        boxes = [open_box(8, 44, 18, 4.5), checked_box(38, 44, 18, 4.6)]
-    else:
-        bars = [page_bar(8, 2, 26, 38, 7, 1.6), page_bar(38, 2, 56, 38, 7, 1.6)]
-        boxes = [open_box(8, 44, 18, 3.5), checked_box(38, 44, 18, 3.4)]
-    return unary_union(bars + boxes)
-
-def geom_path(g, sx=1, sy=1, dx=0, dy=0):
-    polys = getattr(g, "geoms", [g])
-    out = []
-    for p in polys:
-        for ring in [p.exterior, *p.interiors]:
-            pts = [(x * sx + dx, y * sy + dy) for x, y in ring.coords[:-1]]
-            out.append("M" + " L".join(f"{x:.3f},{y:.3f}" for x, y in pts) + "Z")
-    return "".join(out)
+def mark_body(colours, height, x=0, y=0, classes=False):
+    """The mark, height units tall, its top left at (x, y)."""
+    k = height / MH
+    paths = "".join(
+        f'<path{" class=" + chr(34) + part + chr(34) if classes else ""} fill="{colours[part]}" fill-rule="evenodd" d="{MARK[part]}"/>'
+        for part in ("box", "check", "question"))
+    return f'<g transform="translate({x - MX0 * k:.3f} {y - MY0 * k:.3f}) scale({k:.5f})">{paths}</g>'
 
 # ---------------------------------------------------------------- wordmark
 def shape(text, path):
@@ -130,10 +97,6 @@ def word_lines(size, x, baseline, centre=None, words=WORD):
     d = text_path([words[0]], s1, lx, baseline, tracking=tr1)[0] + text_path([words[1]], size, lx, second)[0]
     return d, w, cap1 * 1.04, second
 
-# The monogram: "ww" above "bb", as the name is set; the icon of the app,
-# the favicon included. The exclamation-mark mark stays in the logo.
-INITIALS = [("ww", WORD[0][1]), ("bb", WORD[1][1])]
-
 # ---------------------------------------------------------------- svg writers
 def svg(w, h, body, bg=None, title="wikiwikibangbang"):
     rect = f'<rect width="{w}" height="{h}" fill="{bg}"/>' if bg else ""
@@ -143,12 +106,11 @@ def svg(w, h, body, bg=None, title="wikiwikibangbang"):
 def p(d, fill):
     return f'<path fill="{fill}" fill-rule="evenodd" d="{d}"/>'
 
-def lockups(fg):
-    """Return {name: svg} for every artwork in one colour (fg)."""
+def lockups(fg, colours):
+    """Return {name: svg} for every artwork on one ground: fg is the colour
+    of the wordmark, colours those of the mark."""
     res = {}
-    big, small = mark(), mark(small=True)
-    res["mark"] = svg(64, 64, p(geom_path(big), fg))
-    res["mark-small"] = svg(64, 64, p(geom_path(small), fg))
+    res["mark"] = svg(MW * 64 / MH + 4, 68, mark_body(colours, 64, 2, 2))
 
     size = 100
     xh, cap = metrics("InterDisplay-Medium.otf", size)
@@ -158,60 +120,59 @@ def lockups(fg):
     res["wordmark"] = svg(w + 4, asc + last + desc, f'<g transform="translate(2 {asc:.2f})">{p(d, fg)}</g>')
 
     # horizontal: the mark spans both lines, from the top of the first to
-    # the baseline of the second; its strokes are as thick as before.
-    s = cap * 1.42 / 64
-    mh = asc + last; units = mh / s; gap = cap * 1.42 * 0.32
-    d, w, _, _ = word_lines(size, 64 * s + gap, 0)
-    body = p(geom_path(tall_mark(units), s, s, 0, 0), fg) + f'<g transform="translate(0 {asc:.2f})">{p(d, fg)}</g>'
-    res["horizontal"] = svg(64 * s + gap + w + 2, asc + last + desc, body)
+    # the bottom of the second.
+    mh = asc + last + desc * 0.5
+    mw = MW * mh / MH
+    gap = cap * 0.36
+    d, w, _, _ = word_lines(size, mw + gap, 0)
+    body = mark_body(colours, mh) + f'<g transform="translate(0 {asc:.2f})">{p(d, fg)}</g>'
+    res["horizontal"] = svg(mw + gap + w + 2, asc + last + desc, body)
 
     # stacked: mark above, the lines centred below it
-    mh2 = size * 1.6; s2 = mh2 / 64
+    mh2 = size * 1.8
+    mw2 = MW * mh2 / MH
     _, w, asc, _ = word_lines(size, 0, 0)
-    W = max(w, mh2) + 4
+    W = max(w, mw2) + 4
     ty = mh2 + size * 0.42 + asc
     d, _, _, last = word_lines(size, 0, ty, centre=W / 2)
-    body = p(geom_path(big, s2, s2, (W - mh2) / 2, 0), fg) + p(d, fg)
+    body = mark_body(colours, mh2, (W - mw2) / 2, 0) + p(d, fg)
     res["stacked"] = svg(W, last + desc, body)
     return res
 
-def monogram(fg, bg, safe, radius=0):
-    """Square icon: the initials centred on a square. safe = the share of
-    the square their larger side takes; radius rounds the square's corners
-    (0: full bleed)."""
+def icon(colours, bg, safe, radius=0, classes=False):
+    """Square icon: the mark centred on a square. safe = the share of the
+    square its height takes; radius rounds the square's corners (0: full
+    bleed)."""
     S = 512
-    size = 100
-    d, w, top, last = word_lines(size, 0, 0, words=INITIALS)
-    k = S * safe / max(w, top + last)  # the initials are taller than wide
-    h = (top + last) * k
-    tx, ty = (S - w * k) / 2, (S - h) / 2 + top * k
+    h = S * safe
     rect = f'<rect width="{S}" height="{S}" rx="{radius}" fill="{bg}"/>'
-    body = rect + f'<g transform="translate({tx:.2f} {ty:.2f}) scale({k:.4f})">{p(d, fg)}</g>'
-    return svg(S, S, body)
+    return svg(S, S, rect + mark_body(colours, h, (S - MW * h / MH) / 2, (S - h) / 2, classes))
 
 # ---------------------------------------------------------------- render
 def main():
     if os.path.exists(OUT): shutil.rmtree(OUT)
     for sub in ("svg", "pdf", "png", "favicon"): os.makedirs(os.path.join(OUT, sub))
     files = {}
-    for tone, fg in (("black", BLACK), ("white", WHITE)):
-        for name, s in lockups(fg).items():
+    for tone, fg, colours in (("black", BLACK, ON_LIGHT), ("white", WHITE, ON_DARK)):
+        for name, s in lockups(fg, colours).items():
             files[f"wwbb-{name}-{tone}"] = s
-    # The icons are the monogram on a rounded square; the maskable one is
-    # full bleed, as the platform cuts its own shape, with the initials
-    # inside the 80 % safe circle.
-    files["wwbb-app-icon"] = monogram(WHITE, BLACK, 0.66, radius=112)
-    files["wwbb-app-icon-inverted"] = monogram(BLACK, WHITE, 0.66, radius=112)
-    files["wwbb-maskable"] = monogram(WHITE, BLACK, 0.54)
-    # For 16 to 48 px the initials fill more of the square.
-    files["wwbb-favicon"] = monogram(WHITE, BLACK, 0.84, radius=96)
+    # The icons are the mark on a rounded square, white or, inverted, dark;
+    # the maskable one is full bleed, as the platform cuts its own shape,
+    # with the mark inside the 80 % safe circle.
+    DARK_GROUND = "#16181D"
+    files["wwbb-app-icon"] = icon(ON_LIGHT, WHITE, 0.72, radius=112)
+    files["wwbb-app-icon-inverted"] = icon(ON_DARK, DARK_GROUND, 0.72, radius=112)
+    files["wwbb-maskable"] = icon(ON_LIGHT, WHITE, 0.56)
+    # For 16 to 48 px the mark fills more of the square.
+    files["wwbb-favicon"] = icon(ON_LIGHT, WHITE, 0.88, radius=96)
     for n, s in files.items():
         open(os.path.join(OUT, "svg", n + ".svg"), "w").write(s)
 
-    # favicon.svg follows the tab colour scheme: black square in a light
-    # browser theme, white in a dark one.
-    fav_svg = files["wwbb-favicon"].replace('role="img">', 'role="img"><style>rect{fill:#000}path{fill:#fff}'
-        '@media (prefers-color-scheme:dark){rect{fill:#fff}path{fill:#000}}</style>', 1)
+    # favicon.svg follows the tab colour scheme: the mark on white in a
+    # light browser theme, in its light colours on dark in a dark one.
+    fav_svg = icon(ON_LIGHT, WHITE, 0.88, radius=96, classes=True).replace('role="img">', 'role="img"><style>'
+        f'@media (prefers-color-scheme:dark){{rect{{fill:{DARK_GROUND}}}.question{{fill:{ON_DARK["question"]}}}'
+        f'.box{{fill:{ON_DARK["box"]}}}.check{{fill:{ON_DARK["check"]}}}}}</style>', 1)
     open(os.path.join(OUT, "favicon", "favicon.svg"), "w").write(fav_svg)
 
     from playwright.sync_api import sync_playwright
@@ -239,7 +200,7 @@ def main():
             pg.pdf(path=path, width=f"{W:.2f}px", height=f"{H:.2f}px", print_background=True, page_ranges="1")
 
         for n, s in files.items():
-            if not n.startswith(("wwbb-app", "wwbb-maskable", "wwbb-favicon")) and "small" not in n:
+            if not n.startswith(("wwbb-app", "wwbb-maskable", "wwbb-favicon")):
                 pdf(s, os.path.join(OUT, "pdf", n + ".pdf"))
             if n.startswith(("wwbb-app", "wwbb-maskable", "wwbb-favicon")):
                 for px in (1024, 512, 192):
@@ -266,7 +227,7 @@ def main():
         '    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},\n'
         '    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},\n'
         '    {"src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}\n'
-        '  ],\n  "theme_color": "#000000",\n  "background_color": "#ffffff",\n  "display": "standalone"\n}\n')
+        '  ],\n  "theme_color": "#0E2A38",\n  "background_color": "#ffffff",\n  "display": "standalone"\n}\n')
 
 if __name__ == "__main__":
     main()
