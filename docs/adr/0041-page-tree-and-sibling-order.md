@@ -66,4 +66,5 @@ Chosen option: **1**.
 
 ## Links
 
+- amended by [ADR-0100](0100-a-tidy-top-bar-and-columns-that-fold-away.md) (the page tree folds away)
 - ADR-0001 (items and their parent), ADR-0020 (containment), ADR-0022 (permissions), ADR-0025 (log format), ADR-0015 (paged listings), ADR-0031 (UI shell)

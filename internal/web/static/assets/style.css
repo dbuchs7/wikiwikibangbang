@@ -1274,3 +1274,68 @@ dialog.pm-dialog .error:empty { display: none; }
 /* A file of the design reports its own failures (ADR-0095). */
 .design-asset-status:empty { display: none; }
 .design-asset-status { flex-basis: 100%; }
+
+/* ---------- The top bar on every width (ADR-0100) ----------
+   One row while everything fits. Below 900 px two fixed rows: the bar's
+   controls on the first, the search with New on the second, instead of
+   wrapping wherever an element happens to end. */
+.top { flex-wrap: nowrap; }
+#nav { flex-wrap: nowrap; min-width: 0; }
+#nav .search { flex: 1 1 26rem; min-width: 8rem; max-width: 34rem; }
+@media (max-width: 900px) {
+  .top { flex-wrap: wrap; row-gap: 0; padding-bottom: 8px; }
+  #nav { display: contents; }
+  #nav .search { order: 10; flex: 1 1 calc(100% - 130px); max-width: none; margin: 0; }
+  #nav-new { order: 11; }
+  #nav > .bell { margin-left: auto; }
+  #nav > .bell ~ .look-toggles { margin-left: 0; }
+  .top > .look-toggles, #nav > .look-toggles:first-child { margin-left: auto; }
+}
+@media (max-width: 480px) {
+  .top { gap: 4px 6px; }
+  #nav-back, #nav-forward { display: none; }
+  .brand img { height: 32px; }
+}
+/* The logo leads home as well, so on a phone the home button gives way. */
+@media (max-width: 420px) {
+  #nav-home { display: none; }
+  .brand img { height: 28px; }
+}
+
+/* The language switch is its letters alone (ADR-0100): no frame, the
+   current language marked by colour and weight. */
+.lang-toggle { border: none; border-radius: 0; overflow: visible; gap: 2px; }
+.lang-toggle button, .lang-toggle button + button { border: none; background: none; padding: 0 4px; min-width: 0; color: var(--muted); }
+.lang-toggle button:hover { background: none; color: var(--text); }
+.lang-toggle button[aria-pressed="true"] { background: none; color: var(--accent); font-weight: 700; }
+
+/* Folding the page tree and an item's side column away (ADR-0100). */
+.tree-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; position: sticky; top: 12px; }
+.tree-col > .tree-box { position: static; }
+.col-toggle { margin: 0; width: 32px; height: 32px; color: var(--muted); border: 1px solid var(--border); background: var(--surface); }
+.col-toggle:hover { color: var(--text); }
+.col-toggle-tree { align-self: flex-end; }
+.col-toggle-side { align-self: flex-start; }
+html.tree-folded .with-tree { grid-template-columns: 32px minmax(0, 1fr); }
+html.tree-folded .tree-col > :not(.col-toggle) { display: none; }
+html.side-folded .item-layout { grid-template-columns: minmax(0, 1fr) 32px; }
+html.side-folded .item-side > :not(.col-toggle) { display: none; }
+/* Where the columns stand one above the other, nothing is folded. */
+@media (max-width: 800px) {
+  .col-toggle-tree { display: none; }
+  html.tree-folded .with-tree { grid-template-columns: minmax(0, 1fr); }
+  html.tree-folded .tree-col > :not(.col-toggle) { display: revert; }
+  .tree-col { position: static; }
+}
+@media (max-width: 1100px) {
+  .col-toggle-side { display: none; }
+  html.side-folded .item-layout { grid-template-columns: minmax(0, 1fr); }
+  html.side-folded .item-side > :not(.col-toggle) { display: revert; }
+}
+@media (max-width: 340px) {
+  .top { padding-left: 8px; padding-right: 8px; gap: 4px 2px; }
+  .lang-toggle button { padding: 0 2px; }
+  .look-toggles { gap: 0; }
+  .account-button { padding: 0; }
+  .brand img { height: 24px; }
+}

@@ -594,6 +594,16 @@ function ckanSource() {
     await page.waitForFunction((n) => document.querySelectorAll("table.history tr:not([hidden])").length === n, allHistory);
     check(!page.url().includes("history."), "a reset clears the address");
 
+    step("columns: the page tree and the side column fold away and stay folded (ADR-0100)");
+    await page.click("#fold-side");
+    await page.waitForSelector("html.side-folded #comments", { state: "hidden" });
+    await page.click("#fold-tree");
+    await page.reload();
+    await page.waitForSelector("html.tree-folded.side-folded #fold-side");
+    await page.click("#fold-side");
+    await page.click("#fold-tree");
+    await page.waitForSelector("#comments");
+
     step("labels: a label added to a page lists the page");
     await page.fill("#labels [name=label]", "Disaster Recovery");
     await page.press("#labels [name=label]", "Enter");

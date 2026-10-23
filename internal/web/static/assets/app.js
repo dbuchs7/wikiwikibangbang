@@ -459,7 +459,51 @@ async function labelView(label) {
 
 // withTree lays a space's page tree beside a view's content.
 function withTree(tree, ...content) {
-  return h("div", { class: "with-tree" }, tree, h("div", { class: "with-tree-main" }, ...content));
+  return h("div", { class: "with-tree" }, h("div", { class: "tree-col" }, columnToggle("tree"), tree), h("div", { class: "with-tree-main" }, ...content));
+}
+
+// The page tree and an item's side column fold away to give the content
+// room (ADR-0100); the choice is kept in this browser, for every page.
+const folded = {
+  get(col) { try { return localStorage.getItem("wwbb.fold." + col) === "1"; } catch { return false; } },
+  set(col, on) { try { localStorage.setItem("wwbb.fold." + col, on ? "1" : ""); } catch { /* for this page only */ } },
+  apply() { for (const col of ["tree", "side"]) document.documentElement.classList.toggle(col + "-folded", folded.get(col)); },
+};
+folded.apply();
+
+// columnToggle folds a column away or shows it again: "tree" on the left,
+// "side" on the right.
+function columnToggle(col) {
+  const btn = h("button", { type: "button", class: "icon-btn col-toggle col-toggle-" + col, id: "fold-" + col });
+  const draw = () => {
+    const on = folded.get(col);
+    // The chevron points where the column goes or comes from.
+    const left = (col === "tree") !== on;
+    const name = t(on ? (col === "tree" ? "fold.showTree" : "fold.showSide") : (col === "tree" ? "fold.hideTree" : "fold.hideSide"));
+    btn.title = name;
+    btn.setAttribute("aria-label", name);
+    btn.setAttribute("aria-expanded", String(!on));
+    btn.replaceChildren(chevronIcon(left));
+  };
+  btn.addEventListener("click", () => {
+    folded.set(col, !folded.get(col));
+    folded.apply();
+    document.querySelectorAll(".col-toggle-" + col).forEach((b) => b.dispatchEvent(new Event("redraw")));
+  });
+  btn.addEventListener("redraw", draw);
+  draw();
+  return btn;
+}
+
+// chevronIcon draws an arrow head pointing left or right.
+function chevronIcon(left) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", width: "18", height: "18", "aria-hidden": "true" })) svg.setAttribute(k, v);
+  const p = document.createElementNS(ns, "path");
+  for (const [k, v] of Object.entries({ d: left ? "M15 5l-7 7 7 7" : "M9 5l7 7-7 7", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" })) p.setAttribute(k, v);
+  svg.append(p);
+  return svg;
 }
 
 // childPagesOf lists an item's child pages for a list of child pages in
@@ -2991,6 +3035,7 @@ async function itemView(ref, params = new URLSearchParams()) {
       // catalog entry reads as one page (ADR-0079).
       h("div", { class: "item-main" }, details, protecting, body || h("p", { class: "muted", text: t("item.noBody") })),
       h("aside", { class: "item-side", "aria-label": t("item.side") },
+        columnToggle("side"),
         secretsSection(path, item, status),
         threads.section,
         attachmentsSection(path, attachments, canEdit),
