@@ -55,6 +55,8 @@ export const schema = new Schema({
     table: { group: "block", atom: true, selectable: true, attrs: { ...bid, text: { default: "\t\n\t" } }, toDOM: (n) => ["pre", { class: "pm-table" }, n.attrs.text] },
     toc: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-toc" }] },
     children: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-children" }] },
+    // The tasks that carry a label, computed when shown (ADR-0114).
+    tasklist: { group: "block", atom: true, selectable: true, attrs: { ...bid, label: { default: "" } }, toDOM: (n) => ["div", { class: "pm-tasklist", "data-label": n.attrs.label }] },
     // An image attachment of the item (ADR-0045), with a plain caption.
     // width is percent of the column, 0 for the picture's own size (ADR-0056).
     // align is left or right (the text flows beside it) or center (ADR-0059).
@@ -150,6 +152,7 @@ export function nodeFromBlock(b, embeds = []) {
   const id = b.id ?? null;
   if (b.kind === "table") return schema.nodes.table.create({ bid: id, text: b.text || "" });
   if (b.kind === "toc" || b.kind === "children" || b.kind === "divider") return schema.nodes[b.kind].create({ bid: id });
+  if (b.kind === "tasklist") return schema.nodes.tasklist.create({ bid: id, label: b.text || "" });
   if (b.kind === "image" || b.kind === "video") return schema.nodes[b.kind].create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0, align: b.align || "" });
   if (b.kind === "embed") {
     const v = embeds.find((e) => e.ref === b.ref);
@@ -209,6 +212,7 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
   if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
   if (node.type === schema.nodes.toc || node.type === schema.nodes.children || node.type === schema.nodes.divider) return { kind: node.type.name };
+  if (node.type === schema.nodes.tasklist) return { kind: "tasklist", text: node.attrs.label };
   if (node.type === schema.nodes.image || node.type === schema.nodes.video) {
     const b = { kind: node.type.name, text: node.attrs.text, ref: node.attrs.ref };
     if (node.attrs.width) b.width = node.attrs.width;
@@ -429,6 +433,20 @@ function embedView(node, load) {
   return { dom, ignoreMutation: () => true, stopEvent: (ev) => body.contains(ev.target) };
 }
 
+// taskListView shows the tasks that carry a label, from tasks.list(label),
+// which the view of the item supplies: sortable and filterable (ADR-0114).
+function taskListView(node, tasks) {
+  const dom = h("section", { class: "pm-tasklist", contenteditable: "false", "data-label": node.attrs.label },
+    h("p", { class: "pm-box-title", text: t("editor.taskListOf", { label: node.attrs.label }) }));
+  const body = h("div", { "aria-busy": "true" }, h("p", { class: "muted", text: "…" }));
+  dom.append(body);
+  Promise.resolve(tasks?.list ? tasks.list(node.attrs.label) : null)
+    .then((el) => body.replaceChildren(el || h("p", { class: "muted", text: t("editor.taskListNone") })))
+    .catch(() => body.replaceChildren(h("p", { class: "muted", text: t("embed.failed") })))
+    .finally(() => body.removeAttribute("aria-busy"));
+  return { dom, ignoreMutation: () => true, stopEvent: (ev) => body.contains(ev.target), update: (n) => n.type === node.type && n.attrs.label === node.attrs.label };
+}
+
 // childrenView lists the child pages of the item, from childPages().
 function childrenView(node, childPages) {
   const dom = h("nav", { class: "pm-children", contenteditable: "false", "aria-label": t("editor.children") },
@@ -588,7 +606,7 @@ function imageView(node, view, getPos, files) {
 // a personal note on it (notes.js, ADR-0107).
 // embedContent(ref), if given, returns the content of an embedded item,
 // shown in its block (ADR-0106).
-export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, note, actions = [], embedContent }) {
+export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, note, actions = [], embedContent, tasks }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
   const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
@@ -615,6 +633,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       image: (node, v, getPos) => imageView(node, v, getPos, files),
       video: (node, v, getPos) => imageView(node, v, getPos, files),
       embed: (node) => embedView(node, embedContent),
+      tasklist: (node) => taskListView(node, tasks),
     },
     ...viewProps,
   });
@@ -645,8 +664,10 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind === "album") fromAlbum();
     else if (kind === "clip") fromClip();
     else if (kind === "embed") embed();
+    else if (kind === "newtask") newTask();
+    else if (kind === "tasklist") taskList();
     else if (kind) insertBlock(schema.nodes[kind].create());
-  } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["children", t("editor.children")],
+  } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], tasks?.create ? ["newtask", t("editor.newTask")] : null, tasks?.pickLabel ? ["tasklist", t("editor.taskList")] : null, ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["children", t("editor.children")],
     files ? ["image", t("editor.image")] : null, files ? ["video", t("editor.video")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null, files ? ["clip", t("editor.copiedPicture")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
@@ -758,6 +779,29 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     const it = await aids.pickItem(t("assist.embedItem"));
     if (!it) return view.focus();
     insertBlock(schema.nodes.embed.create({ ref: it.id, label: `${it.key} ${it.title}`, href: "#/item/" + encodeURIComponent(it.key) }));
+  };
+  // A new task, made as a child of this item, goes into the text as a
+  // link or shown whole (ADR-0114).
+  const newTask = async () => {
+    status.textContent = "";
+    try {
+      const made = await tasks.create();
+      if (!made) return view.focus();
+      const { item: it, display } = made;
+      const label = `${it.key} ${it.title}`;
+      insertBlock(display === "full"
+        ? schema.nodes.embed.create({ ref: it.id, label, href: "#/item/" + encodeURIComponent(it.key) })
+        : schema.nodes.paragraph.create(null, schema.nodes.mention.create({ ref: it.id, label })));
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
+  // A list of the tasks that carry a label (ADR-0114).
+  const taskList = async () => {
+    status.textContent = "";
+    const label = await tasks.pickLabel();
+    if (!label) return view.focus();
+    insertBlock(schema.nodes.tasklist.create({ label }));
   };
   // Commenting on a passage works while reading too (ADR-0047).
   const commentButton = comment ? h("button", { type: "button", id: "comment-selection", text: t("editor.comment"), onclick: () => {

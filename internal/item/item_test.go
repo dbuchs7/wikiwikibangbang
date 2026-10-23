@@ -451,3 +451,20 @@ func TestAnItemIsCreatedWithItsBody(t *testing.T) {
 		t.Error("an inline item takes a body")
 	}
 }
+
+// TestATaskListNamesOneLabel: a task list block holds one label as it is
+// stored, and nothing else (ADR-0114).
+func TestATaskListNamesOneLabel(t *testing.T) {
+	noErr(t, CheckBlock(Block{Kind: TaskList, Text: "release-2"}, "self"))
+	for name, b := range map[string]Block{
+		"empty":         {Kind: TaskList},
+		"not as stored": {Kind: TaskList, Text: "Release 2"},
+		"two words":     {Kind: TaskList, Text: "a b"},
+		"a mark":        {Kind: TaskList, Text: "release", Marks: []Mark{{Type: MarkBold, Start: 0, End: 1}}},
+		"a ref":         {Kind: TaskList, Text: "release", Ref: "x"},
+	} {
+		if err := CheckBlock(b, "self"); !errors.Is(err, ErrValidation) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

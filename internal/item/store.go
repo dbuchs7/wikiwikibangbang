@@ -1216,6 +1216,10 @@ func checkBlock(b Block, self ID) error {
 		if b.Text != "" || len(b.Marks) > 0 || len(b.Mentions) > 0 {
 			return invalid("a %s block has no text", b.Kind)
 		}
+	case TaskList:
+		if l, ok := NormalLabel(b.Text); !ok || l != b.Text || len(b.Marks) > 0 || len(b.Mentions) > 0 {
+			return invalid("a task list names one label, as stored (ADR-0044), and nothing else")
+		}
 	case Image, Video:
 		if !ValidAttachmentID(string(b.Ref)) || len(b.Marks) > 0 || len(b.Mentions) > 0 {
 			return invalid("an image or a video names an attachment and has a plain caption")

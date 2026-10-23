@@ -74,6 +74,10 @@ const (
 	// Video plays a video attachment of the item, like an image shows a
 	// picture: Ref names it and Text is its caption (ADR-0097).
 	Video BlockKind = "video"
+	// TaskList lists the tasks that carry a label, in every space the
+	// reader may read; Text is the label (ADR-0114). Like a table of
+	// contents it is computed when shown.
+	TaskList BlockKind = "tasklist"
 )
 
 // VideoTypes are the formats of a video a body plays, as read from the
