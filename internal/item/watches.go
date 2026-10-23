@@ -149,7 +149,16 @@ func (x *Session) WatchingSpace(space string) bool {
 // may read now count, so a notification never shows what a restriction
 // hides.
 func (x *Session) Notifications(before, limit int) (out []Notification, more bool) {
+	return x.NotificationsWhere(before, limit, nil)
+}
+
+// NotificationsWhere is Notifications narrowed by keep, before paging, as a
+// filter of the list asks (ADR-0098); nil keeps every notification.
+func (x *Session) NotificationsWhere(before, limit int, keep func(Notification) bool) (out []Notification, more bool) {
 	x.scan(before, 0, func(n Notification) bool {
+		if keep != nil && !keep(n) {
+			return true
+		}
 		if len(out) == limit {
 			more = true
 			return false

@@ -1261,3 +1261,12 @@ dialog.pm-dialog .error:empty { display: none; }
 .pm-at-option .muted { font-size: 12px; }
 .pm-at-option:hover, .pm-at-option[aria-selected=true] { background: var(--accent-soft); }
 .pm-at-none { padding: 6px 10px; }
+
+/* The filter of a list (ADR-0098): one bar above every list. */
+.filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0 10px; }
+.filter-bar[hidden] { display: none; }
+.filter-bar .filter-text { flex: 0 1 18rem; min-width: 10rem; }
+.filter-bar .filter-choice { flex: 0 1 auto; max-width: 14rem; }
+.filter-bar .filter-count { margin-left: auto; font-size: 13px; }
+.filter-bar .filter-reset { font-size: 13px; }
+.filter-empty[hidden] { display: none; }

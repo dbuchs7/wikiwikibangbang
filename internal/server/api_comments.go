@@ -3,8 +3,10 @@ package server
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
@@ -12,7 +14,7 @@ import (
 // reading its comments; the item model decides who may write.
 func commentRoutes(h itemHandlers) []Route {
 	return []Route{
-		{Method: http.MethodGet, Pattern: "/api/comments", Summary: "Comments on what one watches, one's own and those mentioning one by @username, newest first; only narrows to watched, mine or mentions; paged by offset (ADR-0063)", Handler: http.HandlerFunc(h.commentFeed)},
+		{Method: http.MethodGet, Pattern: "/api/comments", Summary: "Comments on what one watches, one's own and those mentioning one by @username, newest first; only narrows to watched, mine or mentions; filtered by q and space; paged by offset (ADR-0063)", Handler: http.HandlerFunc(h.commentFeed)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/comments", Summary: "The item's comments, oldest first, paged", Handler: http.HandlerFunc(h.listComments)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/comments", Summary: "Comment on the item", Handler: http.HandlerFunc(h.addComment)},
 		{Method: http.MethodPut, Pattern: "/api/items/{ref}/comments/{id}", Summary: "Edit one's own comment", Handler: http.HandlerFunc(h.editComment)},
@@ -201,7 +203,20 @@ func (h itemHandlers) commentFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	p, _ := PrincipalFrom(r.Context())
 	h.read(w, r, func(x *item.Session) (any, error) {
-		list, more := x.CommentFeed(p.Username, only, offset, limit)
+		// The list's filter (ADR-0098): words of the comment, its item or
+		// its author, and a space.
+		text, space := q.Get("q"), q.Get("space")
+		var keep func(item.FeedEntry) bool
+		if strings.TrimSpace(text) != "" || space != "" {
+			keep = func(e item.FeedEntry) bool {
+				if space != "" && e.Space != space {
+					return false
+				}
+				author := h.d.DB.Accounts.Usernames([]auth.UserID{auth.UserID(e.Comment.Author)})[auth.UserID(e.Comment.Author)]
+				return item.HasWords(e.Key+" "+e.Title+" "+e.Comment.Text+" "+author, text)
+			}
+		}
+		list, more := x.CommentFeedWhere(p.Username, only, offset, limit, keep)
 		out := []feedEntryJSON{}
 		for _, e := range list {
 			out = append(out, feedEntryJSON{Item: e.Item, Key: e.Key, Title: e.Title, Space: e.Space, Comment: toCommentJSON(e.Comment), Why: e.Why})

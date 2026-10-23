@@ -11,6 +11,7 @@ import { isDrawing } from "./drawing.js";
 import { albumBrowser } from "./album.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 import { applyTheme, setTheme, isDark } from "./theme.js";
+import { filtered, serverFilter, filterParams } from "./filter.js";
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -188,8 +189,19 @@ async function commentsView(tab = "") {
   const show = screen();
   const kinds = { watched: t("comments.watched"), mine: t("comments.mine"), mentions: t("comments.mentions") };
   const current = kinds[tab] ? tab : "";
+  // The feed is paged, so the server filters it (ADR-0098).
+  const { spaces } = await get("/api/spaces");
+  const filter = serverFilter({ id: "comments", label: t("comments.title"),
+    choices: [{ key: "space", label: t("col.space"), options: spaces.map((s) => [s.key, `${s.name} (${s.key})`]) }],
+    load: async () => {
+      list.replaceChildren();
+      const page = await get(url(0));
+      await add(page);
+      emptyNow(page.comments.length);
+      return page.comments.length + (page.next ? "+" : "");
+    } });
   const url = (offset) => {
-    const q = new URLSearchParams({ limit: 50 });
+    const q = filterParams(new URLSearchParams({ limit: 50 }), filter.state);
     if (current) q.set("only", current);
     if (offset) q.set("offset", offset);
     return "/api/comments?" + q;
@@ -197,6 +209,13 @@ async function commentsView(tab = "") {
   const first = await get(url(0));
   const list = h("ul", { class: "comment-feed", id: "comment-feed" });
   const more = h("div");
+  const none = empty(t("comments.none"), "comment-feed-empty");
+  const noneFiltered = h("p", { class: "empty filter-empty", id: "comments-filter-empty", text: t("filter.none") });
+  const emptyNow = (n) => {
+    list.hidden = n === 0;
+    none.hidden = n > 0 || filter.active();
+    noneFiltered.hidden = n > 0 || !filter.active();
+  };
   const add = async (page) => {
     await learnNames(page.comments.map((e) => e.comment.author));
     for (const e of page.comments) {
@@ -225,18 +244,45 @@ async function commentsView(tab = "") {
     h("p", { class: "muted", text: t("comments.help") }),
     h("nav", { class: "tabs", "aria-label": t("comments.title") },
       tabLink("", t("comments.all")), tabLink("watched", kinds.watched), tabLink("mine", kinds.mine), tabLink("mentions", kinds.mentions)),
-    first.comments.length ? list : empty(t("comments.none"), "comment-feed-empty"),
+    filter.el,
+    list, none, noneFiltered,
     more,
   );
+  emptyNow(first.comments.length);
 }
 
 // notificationsView lists what others changed on what one watches, and
 // marks it seen.
 async function notificationsView() {
   const show = screen();
-  const [first, { watches }] = await Promise.all([get("/api/notifications?limit=50&findings=1"), get("/api/me/watches")]);
+  // The list is paged, so the server filters it (ADR-0098).
+  const filter = serverFilter({ id: "notifications", label: t("notif.title"),
+    choices: [
+      { key: "kind", label: t("filter.kind"), options: [["mentions", t("notif.kindMentions")], ["comments", t("notif.kindComments")], ["changes", t("notif.kindChanges")], ["governance", t("gov.title")]] },
+      { key: "unread", label: t("filter.read"), options: [["1", t("notif.unreadOnly")]] },
+    ],
+    load: async () => {
+      list.replaceChildren();
+      const page = await get(url());
+      await add(page);
+      emptyNow(page.notifications.length);
+      return page.notifications.length + (page.next ? "+" : "");
+    } });
+  const url = (before) => {
+    const q = filterParams(new URLSearchParams({ limit: 50 }), filter.state);
+    if (before) q.set("before", before);
+    return "/api/notifications?" + q;
+  };
+  const [first, { watches }] = await Promise.all([get(url() + "&findings=1"), get("/api/me/watches")]);
   const list = h("ul", { class: "notifications", id: "notifications" });
   const more = h("div");
+  const none = empty(watches.length ? t("notif.none") : t("notif.noWatches"));
+  const noneFiltered = h("p", { class: "empty filter-empty", id: "notifications-filter-empty", text: t("filter.none") });
+  const emptyNow = (n) => {
+    list.hidden = n === 0;
+    none.hidden = n > 0 || filter.active();
+    noneFiltered.hidden = n > 0 || !filter.active();
+  };
   const add = async (page) => {
     await learnNames(page.notifications.map((n) => n.actor));
     for (const n of page.notifications) {
@@ -247,10 +293,11 @@ async function notificationsView() {
         h("span", { class: "muted", text: " · " + when(n.at) })));
     }
     more.replaceChildren();
-    if (page.next) more.append(h("button", { text: t("common.more"), onclick: async () => add(await get(`/api/notifications?limit=50&before=${page.next}`)) }));
+    if (page.next) more.append(h("button", { text: t("common.more"), onclick: async () => add(await get(url(page.next))) }));
   };
   await add(first);
-  if (first.notifications.length && first.notifications[0].seq > first.seen) {
+  emptyNow(first.notifications.length);
+  if (!filter.active() && first.notifications.length && first.notifications[0].seq > first.seen) {
     post("/api/notifications/seen", { seq: first.notifications[0].seq }).then(() => renderNav()).catch(() => {});
   }
   // The governance findings one is responsible for, until they are
@@ -260,23 +307,25 @@ async function notificationsView() {
   const findings = f.items?.length ? h("section", { id: "my-findings" },
     h("h2", {}, t("notif.findings", { n: f.sensitive + f.stale + f.implausible + (f.personal || 0) + (f.reviews || 0) }), " ", link("#/governance", t("notif.findingsAll"))),
     h("p", { class: "muted", text: t("notif.findingsNote") }),
-    h("ul", { class: "notifications" }, f.items.map((x) => h("li", { class: "finding-" + x.kind },
+    filtered(h("ul", { class: "notifications" }, f.items.map((x) => h("li", { class: "finding-" + x.kind, "data-f-kind": x.kind },
       h("span", { class: "chip", text: kindName[x.kind] }), " ",
       link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`),
       h("span", { class: "muted", text: " · " + (x.kind === "stale" ? t("notif.unchangedSince", { date: when(x.since) })
         : x.kind === "review" ? (x.since ? t("gov.lastReviewed", { date: when(x.since) }) : t("gov.neverReviewed")) : x.detail) }),
-      x.release ? h("strong", { class: "finding-release", text: " · " + t("dp.yourRelease") }) : null)))) : null;
+      x.release ? h("strong", { class: "finding-release", text: " · " + t("dp.yourRelease") }) : null))),
+    { id: "my-findings", label: t("notif.findings", { n: f.items.length }), choices: [{ key: "kind", label: t("filter.kind"), name: (k) => kindName[k] || k }] })) : null;
   show(
     h("h1", { text: t("notif.title") }),
     findings,
     findings ? h("h2", { text: t("notif.changes") }) : null,
-    first.notifications.length ? list : empty(watches.length ? t("notif.none") : t("notif.noWatches")),
+    filter.el,
+    list, none, noneFiltered,
     more,
     h("h2", { text: t("watch.title") }),
     watches.length
-      ? h("ul", { class: "list", id: "watches" }, watches.map((w) => h("li", {}, w.item
+      ? filtered(h("ul", { class: "list", id: "watches" }, watches.map((w) => h("li", {}, w.item
         ? link("#/item/" + encodeURIComponent(w.key), `${w.key} ${w.title}`)
-        : [t("watch.space") + " ", link("#/space/" + encodeURIComponent(w.space), w.space)])))
+        : [t("watch.space") + " ", link("#/space/" + encodeURIComponent(w.space), w.space)]))), { id: "watches", label: t("watch.title") })
       : empty(t("watch.none")),
   );
 }
@@ -370,18 +419,41 @@ function labelsLine(path, item, live) {
 // labelView lists the readable items that carry a label.
 async function labelView(label) {
   const show = screen();
-  const page = await get("/api/items?label=" + encodeURIComponent(label));
+  // The items of a label are paged, so the server filters them (ADR-0098).
+  const [{ spaces }, { types }] = await Promise.all([get("/api/spaces"), get("/api/types")]);
+  const filter = serverFilter({ id: "labelled", label: t("label.heading"),
+    choices: [
+      { key: "space", label: t("col.space"), options: spaces.map((s) => [s.key, `${s.name} (${s.key})`]) },
+      { key: "type", label: t("col.type"), options: types.map((ty) => [ty.name, ty.name]) },
+    ],
+    load: async (state) => {
+      const page = await get(url(state));
+      fill(page);
+      return page.total.value;
+    } });
+  const url = (state) => "/api/items?" + filterParams(new URLSearchParams({ label }), state);
+  const rows = h("tbody");
+  const table = h("table", { id: "labelled" }, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type")].map((c) => h("th", { text: c })))), rows);
+  const none = h("p", { class: "muted", id: "labelled-none" });
+  const more = h("p", { class: "muted" });
+  const csv = csvLink("", "label-csv");
+  const fill = (page) => {
+    rows.replaceChildren(...page.items.map((it) => h("tr", {},
+      h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)), h("td", { text: it.title }), h("td", { text: it.type }))));
+    table.hidden = !page.items.length;
+    none.hidden = page.items.length > 0;
+    none.textContent = filter.active() ? t("filter.none") : t("label.noItems");
+    more.textContent = page.next ? t("label.more", { n: page.total.value }) : "";
+    csv.href = "/api/items.csv?" + filterParams(new URLSearchParams({ label }), filter.state);
+  };
+  const first = await get(url(filter.state));
+  fill(first);
   show(
     h("p", {}, link("#/", t("nav.spaces")), " / " + t("label.title")),
     h("div", { class: "page-head" }, h("h1", {}, t("label.heading") + " ", labelChip(label)),
-      page.items.length ? h("p", { class: "actions" }, link(`#/labelboard/${encodeURIComponent(label)}`, t("labelboard.open"), "button secondary", "label-board"),
-        csvLink("/api/items.csv?label=" + encodeURIComponent(label), "label-csv")) : null),
-    page.items.length
-      ? h("table", { id: "labelled" }, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type")].map((c) => h("th", { text: c })))),
-        h("tbody", {}, page.items.map((it) => h("tr", {},
-          h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key)), h("td", { text: it.title }), h("td", { text: it.type })))))
-      : h("p", { class: "muted", text: t("label.noItems") }),
-    page.next ? h("p", { class: "muted", text: t("label.more", { n: page.total.value }) }) : null,
+      h("p", { class: "actions" }, link(`#/labelboard/${encodeURIComponent(label)}`, t("labelboard.open"), "button secondary", "label-board"), csv)),
+    filter.el,
+    table, none, more,
   );
 }
 
@@ -435,7 +507,8 @@ function sizeText(n) {
 // can be uploaded and files deleted.
 function attachmentsSection(path, files, live) {
   const status = h("div", { class: "status" });
-  const row = (a) => h("li", { class: "attachment" },
+  const kindOf = (a) => a.type?.startsWith("image/") ? t("att.kindImage") : a.type?.startsWith("video/") ? t("att.kindVideo") : t("att.kindOther");
+  const row = (a) => h("li", { class: "attachment", "data-f-kind": kindOf(a) },
     h("a", { href: `${path}/attachments/${a.id}`, text: a.name, download: a.inline ? null : a.name, target: a.inline ? "_blank" : null, rel: "noopener" }),
     h("span", { class: "muted", text: ` · ${sizeText(a.size)} · ${person(a.author)} · ${when(a.created)}` }),
     a.origin ? h("span", { class: "att-origin" }, " · ", a.origin.readable
@@ -452,7 +525,8 @@ function attachmentsSection(path, files, live) {
   }
   return h("section", { id: "attachments" },
     h("h2", { text: t("att.title", { n: files.length }) }),
-    files.length ? h("ul", { class: "attachments" }, files.map(row)) : empty(t("att.none")),
+    files.length ? filtered(h("ul", { class: "attachments" }, files.map(row)), { id: "files", label: t("att.title", { n: files.length }),
+      choices: [{ key: "kind", label: t("filter.kind") }] }) : empty(t("att.none")),
     picker ? h("label", { class: "upload" }, h("span", { text: t("att.upload") }), picker) : null,
     status);
 }
@@ -1264,11 +1338,42 @@ async function searchView(q) {
     box.querySelector("input").focus();
     return;
   }
-  const url = (after) => `/api/search?q=${encodeURIComponent(q)}&limit=50${after ? "&after=" + encodeURIComponent(after) : ""}`;
+  // The hits are paged, so the server narrows them (ADR-0098): further
+  // words, a space, a type, a state.
+  const [{ spaces }, { types }] = await Promise.all([get("/api/spaces"), get("/api/types")]);
+  const states = [...new Set(types.flatMap((ty) => ty.workflow?.states || []))].sort();
+  const filter = serverFilter({ id: "hits", label: t("search.title"),
+    choices: [
+      { key: "space", label: t("col.space"), options: spaces.map((s) => [s.key, `${s.name} (${s.key})`]) },
+      { key: "type", label: t("col.type"), options: types.map((ty) => [ty.name, ty.name]) },
+      ...(states.length ? [{ key: "state", label: t("col.state"), options: states.map((s) => [s, s]) }] : []),
+    ],
+    load: async () => {
+      list.replaceChildren();
+      const page = await get(url());
+      addHits(page);
+      total.textContent = t("search.results", { n: page.total.value, q: [q, filter.state.text].filter((x) => x.trim()).join(" ") });
+      emptyNow(page.total.value);
+      return page.total.value;
+    } });
+  const url = (after) => {
+    const p = new URLSearchParams({ q: [q, filter.state.text].filter((x) => x.trim()).join(" "), limit: 50 });
+    for (const [k, v] of Object.entries(filter.state.choices)) if (v) p.set(k, v);
+    if (after) p.set("after", after);
+    return "/api/search?" + p;
+  };
   // Labels that hold what was typed lead to their items (ADR-0092).
   const [first, { labels }] = await Promise.all([get(url()), get("/api/labels?q=" + encodeURIComponent(q)).catch(() => ({ labels: [] }))]);
   const list = h("ol", { class: "list hits" });
   const more = h("div");
+  const none = empty(t("search.none"));
+  const noneFiltered = h("p", { class: "empty filter-empty", id: "hits-filter-empty", text: t("filter.none") });
+  const emptyNow = (n) => {
+    list.hidden = n === 0;
+    none.hidden = n > 0 || filter.active();
+    noneFiltered.hidden = n > 0 || !filter.active();
+  };
+  const total = h("p", { class: "muted", id: "search-total", text: t("search.results", { n: first.total.value, q }) });
   const addHits = (page) => {
     for (const hit of page.hits) {
       const it = hit.item;
@@ -1295,10 +1400,12 @@ async function searchView(q) {
     box,
     labels.length ? h("p", { class: "search-labels", id: "search-labels" }, h("span", { class: "muted", text: t("search.labels") + " " }),
       labels.slice(0, 12).map((l) => link("#/label/" + encodeURIComponent(l.label), `${l.label} (${l.count})`, "chip"))) : null,
-    h("p", { class: "muted", text: t("search.results", { n: first.total.value, q }) }),
-    first.total.value === 0 ? empty(t("search.none")) : list,
+    filter.el,
+    total,
+    list, none, noneFiltered,
     more,
   );
+  emptyNow(first.total.value);
 }
 
 // --- spaces ------------------------------------------------------------------
@@ -1409,18 +1516,19 @@ function spacesOverview(spaces) {
     const href = (s) => "#/space/" + encodeURIComponent(s.key);
     box.replaceChildren(
       h("div", { class: "segmented", role: "group", "aria-label": t("home.layout") }, toggle("tiles", t("home.tiles")), toggle("list", t("home.list"))),
-      layout === "list"
+      filtered(layout === "list"
         ? h("table", { class: "spaces space-list" },
           h("tr", {}, h("th", { text: t("field.name") }), h("th", { text: t("admin.key") }), h("th", { text: t("admin.role") })),
-          spaces.map((s) => h("tr", {},
+          spaces.map((s) => h("tr", { "data-f-role": roleText(s.role) },
             h("td", {}, h("a", { href: href(s), class: "space-link" }, spaceIcon(s, 24), h("span", { text: s.name }))),
             h("td", { class: "muted", text: s.key }),
             h("td", {}, h("span", { class: "badge", text: roleText(s.role) })))))
-        : h("ul", { class: "space-tiles spaces" }, spaces.map((s) => h("li", {},
+        : h("ul", { class: "space-tiles spaces" }, spaces.map((s) => h("li", { "data-f-role": roleText(s.role) },
           h("a", { href: href(s), class: "space-tile" },
             h("span", { class: "space-tile-head" }, h("span", { class: "space-key", text: s.key }), s.icon ? spaceIcon(s, 48) : ""),
             h("strong", { text: s.name }),
-            h("span", { class: "badge", text: roleText(s.role) }))))));
+            h("span", { class: "badge", text: roleText(s.role) }))))),
+      { id: "spaces", label: t("spaces.title"), choices: [{ key: "role", label: t("admin.role") }] }));
   };
   draw(spacesLayout.get());
   return box;
@@ -1558,9 +1666,14 @@ async function newView(params) {
 
 async function spaceView(key) {
   const show = screen();
-  const [{ types }, first, top, { labels }, { watches }, { spaces }] = await Promise.all([
+  // The space's items are paged, so the server filters them (ADR-0098).
+  const itemsURL = (state, after) => {
+    const p = filterParams(new URLSearchParams({ space: key, limit: 100 }), state);
+    if (after) p.set("after", after);
+    return "/api/items?" + p;
+  };
+  const [{ types }, top, { labels }, { watches }, { spaces }] = await Promise.all([
     get("/api/types"),
-    get(`/api/items?space=${encodeURIComponent(key)}&limit=100`),
     get(`/api/spaces/${encodeURIComponent(key)}/tree?limit=1`),
     get(`/api/labels?space=${encodeURIComponent(key)}`),
     get("/api/me/watches"),
@@ -1587,8 +1700,33 @@ async function spaceView(key) {
       item.body.length ? readOnlyBody(item, embeds, edit)
         : [edit ? h("div", { class: "pm-toolbar pm-readbar", role: "toolbar" }, edit) : null, h("p", { class: "muted", text: t("space.homeEmpty") })]);
   }
+  const states = [...new Set(types.flatMap((ty) => ty.workflow?.states || []))].sort();
+  const filter = serverFilter({ id: "items", label: t("space.allItems"),
+    choices: [
+      { key: "type", label: t("col.type"), options: types.map((ty) => [ty.name, ty.name]) },
+      ...(states.length ? [{ key: "state", label: t("col.state"), options: states.map((s) => [s, s]) }] : []),
+      ...(labels.length ? [{ key: "label", label: t("label.title"), options: labels.map((l) => [l.label, l.label]) }] : []),
+    ],
+    load: async (state) => {
+      rows.replaceChildren();
+      const page = await get(itemsURL(state));
+      addRows(page);
+      shownCount(page.total.value);
+      return page.total.value;
+    } });
+  const first = await get(itemsURL(filter.state));
   const rows = h("tbody");
   const more = h("div");
+  const count = h("p", { class: "muted", id: "space-count" });
+  const csv = csvLink("", "space-csv");
+  const noneFiltered = h("p", { class: "empty filter-empty", id: "items-filter-empty", text: t("filter.none") });
+  const table = h("table", {}, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type"), t("col.state")].map((c) => h("th", { text: c })))), rows);
+  const shownCount = (n) => {
+    count.textContent = t("space.items", { n });
+    table.hidden = n === 0 && filter.active();
+    noneFiltered.hidden = n > 0 || !filter.active();
+    csv.href = "/api/items.csv?" + filterParams(new URLSearchParams({ space: key }), filter.state);
+  };
   const addRows = (page) => {
     for (const it of page.items) {
       rows.append(h("tr", {},
@@ -1600,7 +1738,7 @@ async function spaceView(key) {
     }
     more.replaceChildren();
     if (page.next) {
-      more.append(h("button", { text: t("common.more"), onclick: async () => addRows(await get(`/api/items?space=${encodeURIComponent(key)}&limit=100&after=${page.next}`)) }));
+      more.append(h("button", { text: t("common.more"), onclick: async () => addRows(await get(itemsURL(filter.state, page.next))) }));
     }
   };
   addRows(first);
@@ -1614,7 +1752,7 @@ async function spaceView(key) {
       h("p", { class: "actions" },
         create && types.length ? h("button", { class: "primary", id: "space-new-page", text: t("space.newPage"), onclick: toForm }) : null,
         watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status),
-        csvLink("/api/items.csv?space=" + encodeURIComponent(key), "space-csv"))),
+        csv)),
     h("nav", { class: "subnav", "aria-label": t("space.views") }, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance")),
       sp.role === "space-admin" ? link(`#/members/${encodeURIComponent(key)}`, t("members.title")) : null].filter(Boolean)),
     status,
@@ -1622,11 +1760,13 @@ async function spaceView(key) {
     labels.length ? h("section", { id: "space-labels" }, h("h2", { text: t("label.title") }),
       h("div", { class: "labels" }, labels.map((l) => h("span", { class: "label-count" }, labelChip(l.label), " " + l.count)))) : null,
     h("h2", { text: t("space.allItems") }),
-    h("p", { class: "muted", text: t("space.items", { n: first.total.value }) }),
-    h("table", {}, h("thead", {}, h("tr", {}, [t("col.key"), t("col.title"), t("col.type"), t("col.state")].map((c) => h("th", { text: c })))), rows),
+    filter.el,
+    count,
+    table, noneFiltered,
     more,
     create,
   ));
+  shownCount(first.total.value);
 }
 
 // --- board -------------------------------------------------------------------
@@ -1766,7 +1906,7 @@ async function requestsCard() {
   return h("section", { class: "card requests-card", id: "tasks-requests" },
     h("h2", { text: t("requests.waiting", { n: requests.length }) }),
     h("p", { class: "muted", text: t("requests.waitingHelp") }),
-    h("table", {},
+    filtered(h("table", {},
       h("thead", {}, h("tr", {}, [t("field.username"), t("contacts.email"), t("signup.reason"), t("requests.when"), ""].map((c) => h("th", { text: c })))),
       h("tbody", {}, requests.map((rq) => h("tr", { "data-username": rq.username },
         h("td", {}, h("strong", { text: rq.username })), h("td", { text: rq.email }), h("td", { class: "muted", text: rq.reason }),
@@ -1775,6 +1915,7 @@ async function requestsCard() {
           h("button", { type: "button", class: "approve", text: t("requests.approve"), onclick: decide(() => post(`/api/account-requests/${rq.id}/approve`)) }), " · ",
           h("button", { type: "button", class: "link", text: t("requests.reject"),
             onclick: decide(() => confirm(t("requests.rejectConfirm", { name: rq.username })) ? del(`/api/account-requests/${rq.id}`) : false) })))))),
+    { id: "task-requests", label: t("requests.title") }),
     status);
 }
 
@@ -2030,6 +2171,14 @@ async function labelBoardView(label, space) {
 
 // kanbansView lists the kanbans of one's spaces and makes new ones: a
 // name, a type with a workflow; their cards are the items with its label.
+// filteredKanbans filters the kanbans, grouped by space, as one list
+// (ADR-0098); a space none of whose kanbans is shown hides its heading.
+function filteredKanbans(box) {
+  const tiles = () => [...box.querySelectorAll("li[data-f-space]")];
+  return filtered(box, { id: "kanbans", label: t("kanban.title"), rows: tiles, choices: [{ key: "space", label: t("col.space") }],
+    onApply: () => box.querySelectorAll("section").forEach((s) => { s.hidden = ![...s.querySelectorAll("li")].some((li) => !li.hidden); }) });
+}
+
 async function kanbansView() {
   const show = screen();
   const [{ kanbans }, { spaces }, { types }, { labels }] = await Promise.all([get("/api/kanbans"), get("/api/spaces"), get("/api/types"),
@@ -2060,19 +2209,19 @@ async function kanbansView() {
       link("#/tasks/mine", t("tasks.mine"), "tab"), link("#/tasks/unassigned", t("tasks.unassigned"), "tab"), link("#/tasks/all", t("tasks.all"), "tab"),
       link("#/kanbans", t("kanban.tab"), "tab active", "tab-kanbans")),
     h("p", { class: "muted", text: t("kanban.intro") }),
-    kanbans.length ? h("div", { id: "kanbans" }, [...bySpace].map(([sp, list]) => h("section", {},
+    kanbans.length ? filteredKanbans(h("div", { id: "kanbans" }, [...bySpace].map(([sp, list]) => h("section", {},
       h("h2", { text: `${sp} · ${spaces.find((x) => x.key === sp)?.name || ""}` }),
-      h("ul", { class: "space-tiles" }, list.map((k) => h("li", {},
+      h("ul", { class: "space-tiles" }, list.map((k) => h("li", { "data-f-space": k.space },
         h("a", { class: "space-tile", href: `#/kanban/${encodeURIComponent(k.space)}/${k.id}` },
           h("span", { class: "space-tile-head" }, h("strong", { text: k.name }), kanbanIcon(k, 48)),
           h("span", { class: "muted", text: t("kanban.meta", { type: k.type, label: k.label }) }),
-          h("span", { class: "badge", text: t("kanban.cards", { n: k.count }) }))))))))
+          h("span", { class: "badge", text: t("kanban.cards", { n: k.count }) })))))))))
       : empty(t("kanban.none")),
     labels.length ? h("section", { id: "label-boards" },
       h("h2", { text: t("labelboard.listTitle") }),
       h("p", { class: "muted", text: t("labelboard.listIntro") }),
-      h("p", { class: "label-boards" }, labels.map((l) =>
-        link(`#/labelboard/${encodeURIComponent(l.label)}`, `${l.label} (${l.count})`, "chip")))) : null,
+      filtered(h("p", { class: "label-boards" }, labels.map((l) =>
+        link(`#/labelboard/${encodeURIComponent(l.label)}`, `${l.label} (${l.count})`, "chip"))), { id: "labelboards", label: t("labelboard.listTitle") })) : null,
     create,
   );
 }
@@ -2365,7 +2514,7 @@ async function governanceOverview() {
     h("h1", { text: t("gov.title") }),
     h("p", { class: "muted", text: t("gov.intro") }),
     h("section", { id: "governance-overview" }, spaces.length
-      ? h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("col.space") }),
+      ? filtered(h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("col.space") }),
         h("th", {}, t("gov.colSensitive"), " ", infoTip(t("gov.colSensitive"), t("gov.infoSensitive"), t("gov.infoSensitiveNote"))),
         h("th", {}, t("gov.colStale"), " ", infoTip(t("gov.colStale"), t("gov.infoStale", { days: 365 }))),
         h("th", {}, t("gov.colImplausible"), " ", infoTip(t("gov.colImplausible"), t("gov.infoImplausible"))),
@@ -2378,7 +2527,7 @@ async function governanceOverview() {
           h("td", { text: String(reports[i].implausible.length) }),
           h("td", { text: String((reports[i].personal || []).length) }),
           h("td", { text: String((reports[i].reviews || []).length) }),
-        ))))
+        )))), { id: "governance-spaces", label: t("gov.title") })
       : h("p", { class: "muted", text: t("gov.noSpaces") })),
   );
 }
@@ -2404,8 +2553,10 @@ async function governanceView(key) {
     const { item } = await get("/api/items/" + f.item);
     await put(`/api/items/${f.item}/restriction`, { read: [], edit: item.restriction?.edit || [] });
   };
-  const table = (cols, rows) => rows.length
-    ? h("table", {}, h("thead", {}, h("tr", {}, cols.map((c) => h("th", { text: c })))), h("tbody", {}, rows))
+  // Each kind of finding is a list of its own, with its filter (ADR-0098).
+  const table = (id, label, cols, rows) => rows.length
+    ? filtered(h("table", {}, h("thead", {}, h("tr", {}, cols.map((c) => h("th", { text: c })))), h("tbody", {}, rows)),
+      { id, label, choices: [{ key: "responsible", label: t("col.responsible") }] })
     : empty(t("common.nothing"));
   const daysInput = h("input", { type: "number", min: 1, max: 3650, value: days, "aria-label": t("gov.days"), class: "days" });
   show(
@@ -2419,28 +2570,28 @@ async function governanceView(key) {
       status,
       h("h2", {}, t("gov.sensitive", { n: rep.sensitive.length }), " ", infoTip(t("gov.colSensitive"), t("gov.infoSensitive"), t("gov.infoSensitiveNote"))),
       h("p", { class: "muted", text: t("gov.sensitiveNote") }),
-      table([t("col.item"), t("gov.where"), t("gov.what"), t("col.responsible"), t("gov.access")], rep.sensitive.map((f) => h("tr", {},
+      table("gov-sensitive", t("gov.colSensitive"), [t("col.item"), t("gov.where"), t("gov.what"), t("col.responsible"), t("gov.access")], rep.sensitive.map((f) => h("tr", { "data-f-responsible": who(f.responsible) },
         itemCell(f), h("td", { text: f.where }), h("td", {}, h("div", { text: f.kind }), h("code", { text: f.masked })),
         h("td", { text: who(f.responsible) }),
         h("td", {}, f.restricted
           ? [h("span", { text: t("gov.restricted") + " " }), h("button", { class: "link", text: t("gov.lift"), onclick: () => action(() => lift(f), status) })]
           : t("gov.open"))))),
       h("h2", {}, t("gov.stale", { days: rep.staleDays, n: rep.stale.length }), " ", infoTip(t("gov.colStale"), t("gov.infoStale", { days: rep.staleDays }))),
-      table([t("col.item"), t("gov.lastChange"), t("col.responsible")], rep.stale.map((f) => h("tr", {},
+      table("gov-stale", t("gov.colStale"), [t("col.item"), t("gov.lastChange"), t("col.responsible")], rep.stale.map((f) => h("tr", { "data-f-responsible": who(f.responsible) },
         itemCell(f), h("td", { text: when(f.lastChange) }), h("td", { text: who(f.responsible) })))),
       h("h2", {}, t("gov.implausible", { n: rep.implausible.length }), " ", infoTip(t("gov.colImplausible"), t("gov.infoImplausible"))),
-      table([t("col.item"), t("col.problem"), t("col.responsible")], rep.implausible.map((f) => h("tr", {},
+      table("gov-implausible", t("gov.colImplausible"), [t("col.item"), t("col.problem"), t("col.responsible")], rep.implausible.map((f) => h("tr", { "data-f-responsible": who(f.responsible) },
         itemCell(f), h("td", { text: f.problem }), h("td", { text: who(f.responsible) })))),
       // Items whose type asks for a periodic review (ADR-0074); whoever
       // may edit one records the review here.
       h("h2", { id: "reviews" }, t("gov.reviews", { n: reviews.length }), " ", infoTip(t("gov.colReview"), t("gov.infoReview"))),
-      table([t("col.item"), t("gov.lastReview"), t("col.responsible"), ""], reviews.map((f) => h("tr", { "data-key": f.key },
+      table("gov-reviews", t("gov.colReview"), [t("col.item"), t("gov.lastReview"), t("col.responsible"), ""], reviews.map((f) => h("tr", { "data-key": f.key, "data-f-responsible": who(f.responsible) },
         itemCell(f), h("td", { text: f.lastReview ? t("gov.reviewedDue", { last: when(f.lastReview), due: when(f.due) }) : t("gov.neverReviewed") }),
         h("td", { text: who(f.responsible) }),
         h("td", {}, h("button", { type: "button", class: "secondary mark-reviewed", text: t("gov.markReviewed"),
           onclick: () => action(() => post(`/api/items/${f.item}/reviewed`), status) }))))),
       h("h2", { id: "personal-data" }, t("gov.personal", { n: rep.personal.length }), " ", infoTip(t("gov.colPersonal"), t("gov.infoPersonal"))),
-      table([t("col.item"), t("gov.what"), t("dp.status"), t("col.responsible")], rep.personal.map((f) => h("tr", { class: f.held ? "held" : "" },
+      table("gov-personal", t("gov.colPersonal"), [t("col.item"), t("gov.what"), t("dp.status"), t("col.responsible")], rep.personal.map((f) => h("tr", { class: f.held ? "held" : "", "data-f-responsible": who(f.responsible) },
         itemCell(f),
         h("td", {}, f.findings.map((x) => h("div", {}, h("span", { class: "chip", text: x.indicator }), ` ${x.category} (${regName.get(x.regulation) || x.regulation})`))),
         h("td", {}, f.held ? [h("strong", { text: t("dp.statusHeld") }), f.mayRelease ? [" · ", link("#/item/" + encodeURIComponent(f.key), t("dp.toRelease"))] : null] : t("dp.statusRestricted")),
@@ -2475,8 +2626,8 @@ async function linksView(key) {
       status,
       report.finished && !report.running
         ? (report.broken.length
-          ? h("table", { class: "links" }, h("thead", {}, h("tr", {}, [t("links.usedIn"), t("links.link"), t("col.problem"), t("col.responsible")].map((c) => h("th", { text: c })))),
-            h("tbody", {}, report.broken.map((b) => h("tr", {},
+          ? filtered(h("table", { class: "links" }, h("thead", {}, h("tr", {}, [t("links.usedIn"), t("links.link"), t("col.problem"), t("col.responsible")].map((c) => h("th", { text: c })))),
+            h("tbody", {}, report.broken.map((b) => h("tr", { "data-f-responsible": b.responsible ? who(b.responsible) : "" },
               // The item the link is used in, and where in its body.
               h("td", {}, link("#/item/" + encodeURIComponent(b.key), b.title || b.key),
                 h("div", { class: "muted", text: b.field === "origin" ? t("links.origin", { key: b.key })
@@ -2484,7 +2635,7 @@ async function linksView(key) {
               h("td", { class: "href", text: b.href }),
               h("td", { text: b.problem }),
               h("td", { text: b.responsible ? who(b.responsible) : "—" }),
-            ))))
+            )))), { id: "links", label: t("links.link"), choices: [{ key: "responsible", label: t("col.responsible") }] })
           : empty(t("links.none")))
         : null,
     );
@@ -3027,7 +3178,7 @@ function secretsSection(path, item, status) {
   return h("section", { id: "secrets" },
     h("h2", { text: t("secret.title", { n: secrets.length }) }),
     item.readsAllSecrets === false ? h("p", { class: "muted", text: t("secret.cannotEdit") }) : null,
-    h("ul", { class: "list secret-list" }, secrets.map(entry)));
+    filtered(h("ul", { class: "list secret-list" }, secrets.map(entry)), { id: "secrets", label: t("secret.title", { n: secrets.length }) }));
 }
 
 // relationsSection lists an item's relations both ways, with the related
@@ -3039,7 +3190,7 @@ async function relationsSection(path, out, inc, self, canEdit) {
   const known = new Map(await Promise.all(others.map(async (id) => [id, await get("/api/items/" + id).then((x) => x.item).catch(() => null)])));
   const label = (id) => { const it = known.get(id); return it ? `${it.key} ${it.title}` : id.slice(0, 8); };
   const status = h("div", { class: "status" });
-  const row = (r, other, outgoing) => h("li", {},
+  const row = (r, other, outgoing) => h("li", { "data-f-type": r.type },
     h("span", { class: "muted", text: (outgoing ? r.type : t("rel.incoming", { type: r.type })) + (r.derived ? t("rel.fromBody") : "") + " " }),
     link("#/item/" + encodeURIComponent(known.get(other)?.key || other), label(other)),
     canEdit && outgoing && !r.derived ? h("button", { type: "button", class: "link", text: "×", title: t("rel.remove"), "aria-label": t("rel.remove"),
@@ -3057,7 +3208,8 @@ async function relationsSection(path, out, inc, self, canEdit) {
   if (out.length + inc.length === 0 && !add) return null;
   return h("section", { id: "relations" },
     h("h2", { text: t("rel.title") }),
-    out.length + inc.length ? h("ul", { class: "list" }, out.map((r) => row(r, r.to, true)), inc.map((r) => row(r, r.from, false)))
+    out.length + inc.length ? filtered(h("ul", { class: "list" }, out.map((r) => row(r, r.to, true)), inc.map((r) => row(r, r.from, false))),
+      { id: "relations", label: t("rel.title"), choices: [{ key: "type", label: t("rel.type") }] })
       : empty(t("rel.none")),
     add, status);
 }
@@ -3260,7 +3412,7 @@ function commentThreads(path, page, live) {
   const section = h("section", { id: "comments" },
     h("h2", { text: t("comment.title", { n: page.total.value }) }),
     pending,
-    open.length ? h("ul", { class: "threads" }, open.map(thread)) : empty(t("comment.none")),
+    open.length ? filtered(h("ul", { class: "threads" }, open.map(thread)), { id: "threads", label: t("comment.title", { n: open.length }) }) : empty(t("comment.none")),
     done.length ? h("details", { class: "resolved-threads" }, h("summary", { text: t("comment.resolvedThreads", { n: done.length }) }),
       h("ul", { class: "threads" }, done.map(thread))) : null,
     page.next ? h("p", { class: "muted", text: t("comment.truncated", { n: page.comments.length }) }) : null,
@@ -3315,12 +3467,12 @@ function historySection(path, events, live, versions = true) {
   return h("section", {},
     h("h2", { text: t("history.title") }),
     shown,
-    h("table", { class: "history" }, events.slice().reverse().map((e) => h("tr", {},
+    filtered(h("table", { class: "history" }, events.slice().reverse().map((e) => h("tr", { "data-f-kind": e.kind, "data-f-who": person(e.actor), "data-filter-extra": names.get(e.actor) || "" },
       h("td", { text: when(e.at) }),
       h("td", {}, h("span", { class: "who" }, face(e.actor, 20), person(e.actor))),
       h("td", { text: e.kind }),
       h("td", {}, details(e)),
-    ))),
+    ))), { id: "history", label: t("history.title"), choices: [{ key: "kind", label: t("filter.kind") }, { key: "who", label: t("filter.who") }] }),
   );
 }
 
@@ -3357,11 +3509,11 @@ async function accountView() {
     }),
     h("section", { class: "card" },
       h("h2", { text: t("account.tokens") }),
-      h("table", {}, tokens.map((tok) => h("tr", {},
+      filtered(h("table", {}, tokens.map((tok) => h("tr", { "data-f-scope": tok.scope },
         h("td", { text: tok.name }), h("td", { text: tok.scope }), h("td", { text: t("account.expires", { when: when(tok.expires) }) }),
         h("td", {}, h("button", { type: "button", class: "link danger", text: t("account.revoke"),
           onclick: () => confirm(t("account.revokeConfirm")) && action(() => del("/api/tokens/" + tok.id)) })),
-      ))),
+      ))), { id: "tokens", label: t("account.tokens"), choices: [{ key: "scope", label: t("account.scope") }] }),
       form({ id: "new-token" }, [
         field(t("field.name"), h("input", { name: "name", required: true })),
         field(t("account.scope"), h("select", { name: "scope" }, h("option", { value: "read", text: "read" }), h("option", { value: "full", text: "full" }),
@@ -3530,6 +3682,9 @@ async function mcpView() {
     } })));
   const fillApps = (list) => appList.replaceChildren(...(list.length ? list.map(clientRow) : [h("tr", {}, h("td", { colspan: 4, class: "muted", text: t("aiaccess.noApps") }))]));
   if (clients) fillApps(clients.clients);
+  // The apps change as they are added, so the filter applies again then.
+  const appsBox = clients ? filtered(h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("aiaccess.app") }), h("th", { text: t("aiaccess.redirect") }), h("th", { text: t("aiaccess.since") }), h("th", {}))), appList),
+    { id: "aiaccess-apps", label: t("aiaccess.appsTitle") }) : null;
   const redirectField = h("input", { name: "redirect", type: "url", required: true, value: KNOWN[0].redirect, readOnly: true });
   const nameField = h("input", { name: "name", required: true, value: KNOWN[0].name });
   const hint = h("p", { class: "muted", text: t(KNOWN[0].hint) });
@@ -3563,6 +3718,7 @@ async function mcpView() {
           h("p", { class: "muted", text: t("aiaccess.afterwards") }));
         clients.clients.push(res.client);
         fillApps(clients.clients);
+        appsBox?.applyFilter();
       })
       : h("p", { class: "muted" }, t("aiaccess.askAdmin"), " ", h("code", { text: endpoint })),
     result);
@@ -3570,14 +3726,14 @@ async function mcpView() {
   const apps = clients ? h("section", { class: "card", id: "aiaccess-apps" },
     h("h2", { text: t("aiaccess.appsTitle") }),
     h("p", { class: "muted", text: t("aiaccess.appsNote") }),
-    h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("aiaccess.app") }), h("th", { text: t("aiaccess.redirect") }), h("th", { text: t("aiaccess.since") }), h("th", {}))), appList)) : null;
+    appsBox) : null;
 
   // Everybody's own approvals, to see and to withdraw.
   const approvals = h("section", { class: "card", id: "aiaccess-grants" },
     h("h2", { text: t("aiaccess.grantsTitle") }),
     h("p", { class: "muted", text: t("aiaccess.grantsNote") }),
     grants.grants.length
-      ? h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("aiaccess.app") }), h("th", { text: t("aiaccess.access") }), h("th", { text: t("aiaccess.approved") }), h("th", { text: t("aiaccess.lastUsed") }), h("th", {}))),
+      ? filtered(h("table", {}, h("thead", {}, h("tr", {}, h("th", { text: t("aiaccess.app") }), h("th", { text: t("aiaccess.access") }), h("th", { text: t("aiaccess.approved") }), h("th", { text: t("aiaccess.lastUsed") }), h("th", {}))),
         h("tbody", {}, grants.grants.map((g) => h("tr", {},
           h("td", {}, h("strong", { text: g.name || g.client }), g.self ? [" ", h("span", { class: "badge danger", text: t("aiaccess.selfRegistered") })] : null),
           h("td", { text: g.scope === "read" ? t("mcp.scopeRead") : t("mcp.scopeFull") }),
@@ -3586,7 +3742,7 @@ async function mcpView() {
           h("td", {}, h("button", { type: "button", class: "link danger", text: t("aiaccess.withdraw"), onclick: async () => {
             await del("/api/oauth/grants/" + encodeURIComponent(g.client));
             route();
-          } }))))))
+          } })))))), { id: "aiaccess-grants", label: t("aiaccess.grantsTitle") })
       : h("p", { class: "muted", text: t("aiaccess.noGrants") }));
 
   // Local clients: an API token.
@@ -3626,7 +3782,8 @@ async function mcpView() {
     h("section", { class: "card" },
       h("h2", { text: t("mcp.tools", { n: tools.length }) }),
       h("p", { class: "muted", text: t("mcp.toolsNote") }),
-      h("ul", { class: "list tools" }, tools.map((tool) => h("li", {}, h("code", { text: tool.name }), " — ", (tool.description || "").split(". ")[0])))),
+      filtered(h("ul", { class: "list tools" }, tools.map((tool) => h("li", {}, h("code", { text: tool.name }), " — ", (tool.description || "").split(". ")[0]))),
+        { id: "mcp-tools", label: t("mcp.tools", { n: tools.length }) })),
   );
 }
 
@@ -3680,6 +3837,12 @@ async function oauthView(params) {
 
 // --- administration ----------------------------------------------------------
 
+// filteredGroups filters the groups: each row names its group in a
+// heading cell (ADR-0098).
+function filteredGroups(table) {
+  return filtered(table, { id: "admin-groups", label: t("admin.groups"), rows: () => [...table.rows] });
+}
+
 async function adminView() {
   const show = screen();
   const [{ users }, { spaces }, { types }, auditPage, { groups }, { holders }, { requests }, access, sso, delivery, { spaces: trashed }] = await Promise.all([
@@ -3712,18 +3875,18 @@ async function adminView() {
     }
   };
   const spacesSection = section("spaces", t("admin.spaces"),
-    spaces.length ? h("table", {}, spaces.map((sp) => h("tr", {},
+    spaces.length ? filtered(h("table", {}, spaces.map((sp) => h("tr", {},
       h("td", {}, link("#/space/" + encodeURIComponent(sp.key), sp.name)), h("td", { class: "muted", text: sp.key }),
       h("td", {}, link("#/members/" + encodeURIComponent(sp.key), t("admin.members"))),
       h("td", {}, h("button", { type: "button", class: "link danger", "data-trash-space": sp.key, text: t("admin.trashSpace"), onclick: spaceAction(async () => {
         if (!confirm(t("admin.trashSpaceConfirm", { name: sp.name }))) return false;
         await del("/api/spaces/" + encodeURIComponent(sp.key));
-      }) }))))) : empty(t("admin.none")),
+      }) }))))), { id: "admin-spaces", label: t("admin.spaces") }) : empty(t("admin.none")),
     spaceStatus,
     trashed.length ? h("div", { id: "space-trash" },
       h("h3", { text: t("admin.spaceTrash") }),
       h("p", { class: "muted", text: t("admin.spaceTrashNote") }),
-      h("table", {}, trashed.map((sp) => h("tr", {},
+      filtered(h("table", {}, trashed.map((sp) => h("tr", {},
         h("td", { text: sp.name }), h("td", { class: "muted", text: sp.key }),
         h("td", { class: "muted", text: t("admin.spaceItems", { n: sp.items }) }),
         h("td", {}, h("button", { type: "button", class: "link", text: t("admin.restoreSpace"), onclick: spaceAction(() => post("/api/spaces/" + encodeURIComponent(sp.key) + "/restore")) }),
@@ -3731,7 +3894,7 @@ async function adminView() {
             const typed = prompt(t("admin.purgeSpaceConfirm", { name: sp.name, key: sp.key }));
             if (typed === null) return false;
             await post("/api/spaces/" + encodeURIComponent(sp.key) + "/purge", { confirm: typed.trim() });
-          }) })))))) : null,
+          }) }))))), { id: "admin-trash", label: t("admin.spaceTrash") })) : null,
     form({ id: "new-space" }, [
       h("h3", { text: t("admin.newSpace") }),
       field(t("admin.key"), h("input", { name: "key", required: true, pattern: "[A-Z][A-Z0-9]*", title: t("admin.keyHint") })),
@@ -3748,7 +3911,7 @@ async function adminView() {
   ].filter(Boolean).join(" · ");
   const typesSection = section("types", t("admin.types"),
     setupCard(types),
-    types.length ? h("table", { id: "types" }, types.map((ty) => h("tr", {},
+    types.length ? filtered(h("table", { id: "types" }, types.map((ty) => h("tr", { "data-f-kind": ty.workflow ? t("admin.typeWithWorkflow") : t("admin.typeWithoutWorkflow") },
       h("td", {}, h("strong", { text: ty.name }), ` v${ty.version}`), h("td", { class: "muted", text: describe(ty) }),
       h("td", {}, h("button", { type: "button", class: "link", text: t("common.edit"), onclick: () => {
         const { version, ...def } = ty;
@@ -3759,7 +3922,8 @@ async function adminView() {
       // A type no item and no kanban uses can be removed (ADR-0094).
       h("button", { type: "button", class: "link danger", text: t("admin.removeType"), onclick: () =>
         confirm(t("admin.removeTypeConfirm", { name: ty.name })) &&
-        action(async () => { await del(`/api/types/${encodeURIComponent(ty.name)}`); route(); }, status) }))))) : null,
+        action(async () => { await del(`/api/types/${encodeURIComponent(ty.name)}`); route(); }, status) }))))),
+      { id: "admin-types", label: t("admin.types"), choices: [{ key: "kind", label: t("filter.kind") }] }) : null,
     form({ id: "new-type" }, [
       h("h3", { text: t("admin.defineType") }),
       h("p", { class: "muted", text: t("admin.typeHelp") }),
@@ -3806,14 +3970,15 @@ async function adminView() {
     loginSetup,
     h("p", { class: "muted", text: t("requests.help") }),
     h("label", { class: "check" }, openBox, " ", t("requests.open")),
-    requests.length ? h("table", { id: "account-requests" },
+    requests.length ? filtered(h("table", { id: "account-requests" },
       h("tr", {}, h("th", { text: t("field.username") }), h("th", { text: t("contacts.email") }), h("th", { text: t("signup.reason") }), h("th", { text: t("requests.when") }), h("th")),
       requests.map((rq) => h("tr", { "data-username": rq.username },
         h("td", { text: rq.username }), h("td", { text: rq.email }), h("td", { class: "muted", text: rq.reason }), h("td", { class: "muted", text: when(rq.created) }),
         h("td", {},
           h("button", { type: "button", class: "approve", text: t("requests.approve"), onclick: () => action(() => post(`/api/account-requests/${rq.id}/approve`), status) }), " ",
           h("button", { type: "button", class: "link", text: t("requests.reject"),
-            onclick: () => confirm(t("requests.rejectConfirm", { name: rq.username })) && action(() => del(`/api/account-requests/${rq.id}`), status) }))))) :
+            onclick: () => confirm(t("requests.rejectConfirm", { name: rq.username })) && action(() => del(`/api/account-requests/${rq.id}`), status) }))))),
+      { id: "admin-requests", label: t("requests.title") }) :
       empty(t("requests.none"), "no-requests"));
 
   // A reset link to hand over, for someone without a mail address or when
@@ -3834,12 +3999,13 @@ async function adminView() {
     } }));
   const usersSection = section("users", t("admin.users"),
     h("p", { class: "muted", text: t("admin.usersHelp") }),
-    h("table", { id: "users" }, users.map((u) => h("tr", {},
+    filtered(h("table", { id: "users" }, users.map((u) => h("tr", { "data-filter-text": `${u.username} ${u.email || ""}`,
+      "data-f-role": [rolesOf(u.id).includes("admin") ? t("admin.roleAdmin") : "", rolesOf(u.id).includes("erasure") ? t("admin.roleErasure") : ""].filter(Boolean).join("|") },
       h("td", { text: u.username }),
       emailCell(u),
       h("td", {}, sysToggle(u, "admin", t("admin.roleAdmin"))),
       h("td", {}, sysToggle(u, "erasure", t("admin.roleErasure"))),
-      resetCell(u)))),
+      resetCell(u)))), { id: "admin-users", label: t("admin.users"), choices: [{ key: "role", label: t("admin.role") }] }),
     form({ id: "new-user" }, [
       h("h3", { text: t("admin.newUser") }),
       field(t("field.username"), h("input", { name: "username", required: true })),
@@ -3849,12 +4015,12 @@ async function adminView() {
 
   const groupsSection = section("groups", t("admin.groups"),
     h("p", { class: "muted", text: t("admin.groupsHelp") }),
-    groups.length ? h("table", { id: "groups" }, groups.map((g) => h("tr", {},
+    groups.length ? filteredGroups(h("table", { id: "groups" }, groups.map((g) => h("tr", {},
       h("th", { text: "@" + g.name }),
       h("td", {}, g.members.map((m) => h("span", { class: "member" }, person(m),
         h("button", { type: "button", class: "link", text: "×", title: t("admin.removeMember", { name: person(m), group: g.name }),
           "aria-label": t("admin.removeMember", { name: person(m), group: g.name }),
-          onclick: () => action(() => del(`/api/groups/${encodeURIComponent(g.name)}/members/${encodeURIComponent(m)}`), status) }))))))) : h("p", { class: "muted", text: t("admin.noGroups") }),
+          onclick: () => action(() => del(`/api/groups/${encodeURIComponent(g.name)}/members/${encodeURIComponent(m)}`), status) })))))))) : h("p", { class: "muted", text: t("admin.noGroups") }),
     form({ id: "add-member" }, [
       field(t("admin.group"), h("input", { name: "group", required: true, pattern: "[A-Za-z0-9][A-Za-z0-9._\\-]*", list: "group-names" })),
       h("datalist", { id: "group-names" }, groups.map((g) => h("option", { value: g.name }))),
@@ -3900,12 +4066,41 @@ async function adminView() {
     h("p", { text: t("admin.importText") }),
     h("pre", { class: "snippet", text: "wikiwikibangbang import -help" }));
 
-  const auditSection = section("audit", t("admin.audit", { n: 50 }),
-    h("table", { class: "history" }, auditPage.entries.map((e) => h("tr", {},
+  // The trail is paged, so the server filters it (ADR-0098).
+  const auditRows = h("tbody");
+  const auditMore = h("div");
+  const auditNone = h("p", { class: "empty filter-empty", id: "audit-filter-empty", text: t("filter.none"), hidden: true });
+  const auditURL = (state, before) => {
+    const p = filterParams(new URLSearchParams({ limit: 50 }), state);
+    if (before) p.set("before", before);
+    return "/api/audit?" + p;
+  };
+  const addAudit = (page) => {
+    auditRows.append(...page.entries.map((e) => h("tr", {},
       h("td", { text: when(e.at) }), h("td", { text: e.event }), h("td", { text: e.actor ? person(e.actor) : "" }),
       h("td", { text: e.addr || "" }), h("td", { text: e.subject ? person(e.subject) : "" }),
-      h("td", { text: Object.entries(e.detail || {}).map(([k, v]) => `${k}=${v}`).join(" ") }),
-    ))));
+      h("td", { text: Object.entries(e.detail || {}).map(([k, v]) => `${k}=${v}`).join(" ") }))));
+    auditMore.replaceChildren(page.next ? h("button", { type: "button", id: "audit-more", text: t("common.more"),
+      onclick: async () => addAudit(await get(auditURL(auditFilter.state, page.next))) }) : "");
+  };
+  const auditFilter = serverFilter({ id: "audit", label: t("admin.auditTitle"),
+    choices: [
+      { key: "event", label: t("admin.auditEvent"), options: [...new Set(auditPage.entries.map((e) => e.event))].sort().map((e) => [e, e]) },
+      { key: "actor", label: t("filter.who"), options: users.map((u) => [u.id, u.username]) },
+    ],
+    load: async (state) => {
+      auditRows.replaceChildren();
+      const page = await get(auditURL(state));
+      addAudit(page);
+      auditNone.hidden = page.entries.length > 0;
+      return page.entries.length + (page.next ? "+" : "");
+    } });
+  addAudit(auditFilter.active() ? await get(auditURL(auditFilter.state)) : auditPage);
+  const auditSection = section("audit", t("admin.auditTitle"),
+    auditFilter.el,
+    h("table", { class: "history", id: "audit" }, auditRows),
+    auditNone,
+    auditMore);
 
   // The contents stay on the left; the section in view is marked.
   const tocLinks = sections.map(([el, title]) =>
@@ -4017,7 +4212,12 @@ async function regulationsCard() {
     status,
     missing.length ? h("p", { class: "actions-row" }, missing.map((tpl) => h("button", { type: "button", class: "secondary", text: t("dp.adopt", { name: tpl.name.split(" – ")[0] }),
       onclick: () => action(() => put("/api/regulations/" + tpl.id, { ...tpl, active: false }), status) }))) : null,
-    regulations.map((r) => editor(r, false)),
+    regulations.length ? filtered(h("div", { class: "regulations" }, regulations.map((r) => {
+      const el = editor(r, false);
+      el.dataset.filterText = `${r.name} ${r.id}`;
+      el.dataset.fState = r.active ? t("dp.activeShort") : t("dp.inactive");
+      return el;
+    })), { id: "regulations", label: t("dp.adminTitle"), choices: [{ key: "state", label: t("dp.status") }] }) : null,
     h("details", {}, h("summary", { text: t("dp.addOwn") }), editor({ categories: [] }, true)));
 }
 
@@ -4093,7 +4293,7 @@ function connectorsCard(spaces, users) {
       return;
     }
     const last = (c) => c.status.history[0];
-    const rows = data.connectors.map((c) => h("tr", { "data-connector": c.id },
+    const rows = data.connectors.map((c) => h("tr", { "data-connector": c.id, "data-f-state": c.enabled ? t("connector.on") : t("connector.off") },
       h("td", {}, h("strong", { text: c.name }), h("br"), h("span", { class: "muted", text: c.id })),
       h("td", { text: c.kind.toUpperCase() }),
       h("td", { text: c.space || "—" }),
@@ -4108,9 +4308,9 @@ function connectorsCard(spaces, users) {
     const chosen = open === "new" ? fresh() : data.connectors.find((c) => c.id === open);
     card.replaceChildren(
       h("p", { class: "muted", text: t("connector.note") }),
-      data.connectors.length ? h("table", { id: "connector-list" },
+      data.connectors.length ? filtered(h("table", { id: "connector-list" },
         h("thead", {}, h("tr", {}, [t("connector.name"), t("connector.kind"), t("catalog.space"), t("connector.lastRun"), t("connector.schedule"), ""].map((x) => h("th", { text: x })))),
-        h("tbody", {}, rows)) : empty(t("connector.none")),
+        h("tbody", {}, rows)), { id: "connectors", label: t("connector.title"), choices: [{ key: "state", label: t("connector.schedule") }] }) : empty(t("connector.none")),
       h("p", {}, h("button", { type: "button", id: "connector-new", text: t("connector.new", { name: data.templates[0].name }), onclick: () => { open = "new"; load(); } })),
       chosen ? connectorEditor(chosen, data, spaces, users, list, (id) => { open = id; load(); }) : "",
     );
@@ -4166,14 +4366,16 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       runStatus.replaceChildren(errorBox(err));
     }
   } });
-  const result = (r) => h("details", { class: "catalog-run", open: r === st.history[0] },
+  const result = (r) => h("details", { class: "catalog-run", open: r === st.history[0],
+    "data-f-outcome": r.error ? t("connector.failed") : r.dryRun ? t("catalog.dryRun") : t("catalog.run") },
     h("summary", {}, h("strong", { text: r.dryRun ? t("catalog.dryRun") : t("catalog.run") }), " · ", when(r.started), " · ",
       r.error ? h("span", { class: "error", text: r.error })
         : t("catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn, removed: r.removed || 0 })),
     r.formats?.length ? h("p", { class: "muted", text: t("catalog.formatsRead", { list: r.formats.join(", ") }) }) : "",
     r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn"), removed: t("catalog.kind.removed") }[x.kind] }), " ",
       x.key ? link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`) : x.title))) : "",
-    r.problems.length ? h("ul", { class: "catalog-problems" }, r.problems.map((p) => h("li", { class: "muted", text: p }))) : "");
+    r.problems.length ? filtered(h("ul", { class: "catalog-problems" }, r.problems.map((p) => h("li", { class: "muted", text: p }))),
+      { id: "run-problems-" + Date.parse(r.started), label: t("catalog.problems") }) : "");
   editor.replaceChildren(
     h("h3", { text: c.isNew ? t("connector.newTitle") : c.name }),
     h("p", { class: "muted", text: t("catalog.note") }),
@@ -4226,7 +4428,8 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     c.isNew ? "" : h("div", { class: "actions-row" }, run(true, "connector-dry-run", t("catalog.dryRunNow")), run(false, "connector-run-now", t("catalog.runNow")),
       c.space ? link("#/space/" + encodeURIComponent(c.space), t("catalog.openSpace"), "button") : ""),
     runStatus,
-    c.isNew ? "" : st.history.length ? h("div", { id: "connector-history" }, st.history.map(result)) : h("p", { class: "muted", text: t("catalog.noRuns") }),
+    c.isNew ? "" : st.history.length ? filtered(h("div", { id: "connector-history" }, st.history.map(result)),
+      { id: "connector-runs", label: t("connector.lastRun"), choices: [{ key: "outcome", label: t("filter.kind") }] }) : h("p", { class: "muted", text: t("catalog.noRuns") }),
   );
   return editor;
 }
@@ -4305,20 +4508,22 @@ function autoBackupCard() {
       h("div", { class: "actions-row" }, run("full"), run("incremental")),
       runStatus,
       h("h4", { text: t("autobackup.history") }),
-      st.history.length ? h("table", { id: "autobackup-history" },
+      st.history.length ? filtered(h("table", { id: "autobackup-history" },
         h("thead", {}, h("tr", {}, [t("autobackup.when"), t("autobackup.kind"), t("autobackup.file"), t("autobackup.size"), t("autobackup.outcome")].map((x) => h("th", { text: x })))),
-        h("tbody", {}, st.history.map((r) => h("tr", {},
+        h("tbody", {}, st.history.map((r) => h("tr", { "data-f-kind": kindText(r.kind), "data-f-outcome": r.error ? t("autobackup.failed") : t("autobackup.succeeded") },
           h("td", { text: when(r.at) }), h("td", { text: kindText(r.kind) }), h("td", {}, r.file ? h("code", { text: r.file }) : ""),
           h("td", { text: r.size ? sizeText(r.size) : "" }),
-          h("td", { class: r.error ? "error" : "", text: r.error || t("autobackup.ok", { s: Math.max(1, Math.round(r.seconds)) }) })))))
+          h("td", { class: r.error ? "error" : "", text: r.error || t("autobackup.ok", { s: Math.max(1, Math.round(r.seconds)) }) }))))),
+        { id: "backup-runs", label: t("autobackup.history"), choices: [{ key: "kind", label: t("autobackup.kind") }, { key: "outcome", label: t("autobackup.outcome") }] })
         : h("p", { class: "muted", text: t("autobackup.noHistory") }),
       h("h4", { text: t("autobackup.versions") }),
       st.storedError ? h("p", { class: "error", text: t("autobackup.listFailed", { error: st.storedError }) }) : "",
-      st.versions.length ? h("table", { id: "autobackup-versions" },
+      st.versions.length ? filtered(h("table", { id: "autobackup-versions" },
         h("thead", {}, h("tr", {}, [t("autobackup.created"), t("autobackup.latest"), t("autobackup.parts"), ""].map((x) => h("th", { text: x })))),
         h("tbody", {}, st.versions.map((v) => h("tr", {},
           h("td", { text: when(v.created) }), h("td", { text: when(v.latest) }), h("td", { text: String(v.backups.length) }),
-          h("td", { class: v.complete ? "muted" : "error", text: v.complete ? "" : t("autobackup.incomplete") })))))
+          h("td", { class: v.complete ? "muted" : "error", text: v.complete ? "" : t("autobackup.incomplete") }))))),
+        { id: "backup-versions", label: t("autobackup.versions") })
         : h("p", { class: "muted", text: t("autobackup.noVersions") }),
       h("details", {},
         h("summary", { text: t("autobackup.restoreTitle") }),
@@ -4477,7 +4682,7 @@ async function membersView(key) {
     const sel = roleSelect(g.role);
     sel.setAttribute("aria-label", t("admin.role"));
     sel.addEventListener("change", () => action(() => put(base + encodeURIComponent(g.principal), { role: sel.value }), status));
-    return h("tr", {},
+    return h("tr", { "data-f-role": g.role },
       h("td", { text: g.principal.startsWith("@") ? g.principal : person(g.principal) }),
       h("td", {}, sel),
       h("td", {}, h("button", { type: "button", class: "link danger", text: t("members.revoke"),
@@ -4493,7 +4698,8 @@ async function membersView(key) {
     sp.role === "space-admin" ? spaceNameCard(sp, key) : null,
     sp.role === "space-admin" ? spaceIconCard(sp, status) : null,
     h("h2", { text: t("members.roles") }),
-    roles.length ? h("table", { id: "members" }, roles.map(row)) : empty(t("members.none")),
+    roles.length ? filtered(h("table", { id: "members" }, roles.map(row)), { id: "members", label: t("members.roles"),
+      choices: [{ key: "role", label: t("admin.role"), name: roleText }] }) : empty(t("members.none")),
     form({ class: "card", id: "add-role" }, [
       h("h2", { text: t("members.add") }),
       field(t("admin.user"), h("select", { name: "principal" }, users.filter((u) => !known.has(u.id)).map((u) => h("option", { value: u.id, text: u.username })))),

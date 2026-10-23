@@ -233,12 +233,16 @@ func (t *Trail) Failures() int {
 
 // List returns up to limit entries, newest first, older than sequence
 // number before (0: from the newest).
-func (t *Trail) List(before, limit int) []Entry {
+func (t *Trail) List(before, limit int) []Entry { return t.ListWhere(before, limit, nil) }
+
+// ListWhere is List narrowed by keep, before paging, as a filter of the
+// trail asks (ADR-0098); nil keeps every entry.
+func (t *Trail) ListWhere(before, limit int, keep func(Entry) bool) []Entry {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	var out []Entry
 	for i := len(t.recent) - 1; i >= 0 && len(out) < limit; i-- {
-		if before == 0 || t.recent[i].Seq < before {
+		if (before == 0 || t.recent[i].Seq < before) && (keep == nil || keep(t.recent[i])) {
 			out = append(out, t.recent[i])
 		}
 	}
