@@ -9,8 +9,10 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"html"
 	"io/fs"
 	"log/slog"
 	"net"
@@ -136,7 +138,7 @@ func Routes(d Deps) []Route {
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},
-		{Method: http.MethodGet, Pattern: "/{$}", Summary: "Web UI entry point", Access: Public, Handler: index(d.UI)},
+		{Method: http.MethodGet, Pattern: "/{$}", Summary: "Web UI entry point", Access: Public, Handler: index(d)},
 		{Method: http.MethodGet, Pattern: "/assets/", Summary: "Web UI assets", Access: Public, Handler: noListing(files)},
 		{Method: http.MethodGet, Pattern: "/favicon.ico", Summary: "The site icon, where browsers look for it without a link", Access: Public, Handler: files},
 		{Method: http.MethodGet, Pattern: "/vendor/", Summary: "Vendored UI libraries and their licenses (ADR-0032)", Access: Public, Handler: noListing(files)},
@@ -194,9 +196,21 @@ func healthz(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("ok\n"))
 }
 
-func index(ui fs.FS) http.Handler {
+// index sends the UI's page, titled with the installation's name, so the
+// browser's tab names the instance from the start (ADR-0097).
+func index(d Deps) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFileFS(w, r, ui, "index.html")
+		page, err := fs.ReadFile(d.UI, "index.html")
+		if err != nil {
+			http.Error(w, "the UI is missing", http.StatusInternalServerError)
+			return
+		}
+		if name := d.DB.Site.Design().Name; name != "" {
+			page = bytes.Replace(page, []byte("<title>wikiwikibangbang</title>"), []byte("<title>"+html.EscapeString(name)+"</title>"), 1)
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		_, _ = w.Write(page)
 	})
 }
 

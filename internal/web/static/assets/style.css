@@ -619,7 +619,9 @@ dialog.album-dialog::backdrop { background: rgba(20, 22, 26, .45); }
 /* Image sizes (ADR-0056): the frame takes the width, the corner handle
    resizes while editing. */
 .pm-image-frame { position: relative; display: inline-block; max-width: 100%; vertical-align: top; }
-.pm-image-frame img { display: block; margin: 0 auto; }
+.pm-image-frame img, .pm-image-frame video { display: block; margin: 0 auto; }
+/* A video plays in the text (ADR-0097). */
+.pm-image video { max-width: 100%; height: auto; border-radius: 4px; border: 1px solid var(--border); background: #000; }
 .pm-resize { display: none; position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px; border-radius: 3px; background: var(--accent); border: 2px solid var(--surface); cursor: nwse-resize; touch-action: none; }
 .pm-image.pm-sizable:hover .pm-resize, .pm-image.pm-sizable.ProseMirror-selectednode .pm-resize { display: block; }
 .pm-image-size { font-size: 13px; padding: 2px 4px; }
@@ -1217,6 +1219,7 @@ main ul#watches li { padding: 4px 0; break-inside: avoid; }
 /* Editing the text is offered in its reading bar, beside commenting and
    protecting, at the bar's height. */
 .pm-readbar { align-items: center; }
+.pm-toolbar .pm-actions { margin-left: auto; display: inline-flex; gap: 6px; }
 .pm-readbar .button { min-height: 30px; margin: 0; padding: 4px 12px; font-size: 13px; line-height: 20px; align-self: center; }
 /* An item without a text keeps the bar on its own, framed like a text's. */
 #body.no-body .pm-readbar { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }

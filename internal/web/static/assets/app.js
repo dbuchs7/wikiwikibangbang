@@ -1091,7 +1091,8 @@ async function applyBranding(reload = false) {
   darkOffered = b.dark !== false;
   document.getElementById("theme-toggle")?.toggleAttribute("hidden", !darkOffered);
   applyTheme();
-  document.title = b.name ? `${b.name} · wikiwikibangbang` : "wikiwikibangbang";
+  // The browser's tab names the instance (ADR-0097).
+  document.title = b.name || "wikiwikibangbang";
   if (reload) {
     document.getElementById("branding-css").href = "/branding.css?v=" + Date.now();
     document.getElementById("dark-css").href = "/theme-dark.css?v=" + Date.now();
@@ -2783,8 +2784,9 @@ async function itemView(ref, params = new URLSearchParams()) {
   } });
   const headActions = h("p", { class: "actions" },
     live ? watchButton(path, watches.some((w) => w.item === item.id), status) : null,
-    // Editing is offered in the bar where the text begins (ADR-0091).
-    editing ? done : null,
+    // Editing is offered, and ended, in the bar where the text begins
+    // (ADR-0091); an item without a text ends it here.
+    editing && !type.body ? done : null,
     canEdit && !editing ? link(newHref(item.space, item.id), t("item.newChild"), "button", "item-new-child") : null,
     !editing ? exportMenu(item) : null);
   let body = null;
@@ -2800,7 +2802,7 @@ async function itemView(ref, params = new URLSearchParams()) {
     const secretOf = new Map((item.secrets || []).map((sc) => [sc.id, sc]));
     setSecretClass((ref) => (secretOf.get(ref)?.readable ? "secret-readable" : "secret-veiled"));
     const protect = canEdit && readsAll && live && !editing ? (at) => protectPassageForm(protecting, path, item, at, status) : null;
-    const edit = canEdit && readsAll && !editing ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null;
+    const edit = editing ? done : canEdit && readsAll ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null;
     const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit);
     body = b.element;
     session = b.session;
@@ -2915,7 +2917,7 @@ function bodySection(item, embeds, editing, threads, attachments, protect, edit)
     return { element: section, session: null };
   }
   const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item, attachments),
-    extra: [threads.plugin], comment: threads.start });
+    extra: [threads.plugin], comment: threads.start, actions: edit ? [edit] : [] });
   onLeave(session.close);
   return { element: h("section", { id: "body", class: "editing" }, session.element), session };
 }

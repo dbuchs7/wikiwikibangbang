@@ -184,3 +184,53 @@ func TestAttachmentFilesGoWithTheirAttachments(t *testing.T) {
 	}
 	db.Close()
 }
+
+// An attachment is read from any position, as a video player asks for its
+// parts (ADR-0097), and each part still authenticates.
+func TestAttachmentsAreReadFromAnyPosition(t *testing.T) {
+	dir := t.TempDir()
+	db, id := pageIn(t, dir)
+	defer db.Close()
+	content := make([]byte, 3*chunkSize+123)
+	for i := range content {
+		content[i] = byte(i * 7)
+	}
+	a := attach(t, db, id, content, "clip.bin")
+	r, err := db.OpenAttachment(id, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	for _, at := range []int64{0, 1, chunkSize - 1, chunkSize, 2*chunkSize + 5, int64(len(content)) - 1} {
+		if _, err := r.Seek(at, io.SeekStart); err != nil {
+			t.Fatal(err)
+		}
+		got := make([]byte, 200)
+		n, err := io.ReadFull(r, got)
+		want := content[at:min(at+200, int64(len(content)))]
+		if (err != nil && !errors.Is(err, io.ErrUnexpectedEOF)) || !bytes.Equal(got[:n], want) {
+			t.Fatalf("at %d: %d bytes, %v", at, n, err)
+		}
+	}
+	if end, _ := r.Seek(0, io.SeekEnd); end != int64(len(content)) {
+		t.Fatalf("the end is at %d", end)
+	}
+	// A changed byte in the last chunk fails when that part is read.
+	path := attachmentPath(dir, id, a.ID)
+	raw, _ := os.ReadFile(path)
+	raw[len(raw)-40] ^= 1
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r2, err := db.OpenAttachment(id, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r2.Close()
+	if _, err := r2.Seek(int64(len(content))-10, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadAll(r2); err == nil {
+		t.Fatal("a changed part was read")
+	}
+}

@@ -134,5 +134,7 @@ Strongest form: the smallest change.
 
 ## Links
 
+- amended by [ADR-0098](0098-every-list-can-be-filtered.md) (every list can be filtered)
+- amended by [ADR-0097](0097-videos-in-the-text-the-instance-in-the-tab-done-beside-the-text.md) (Done beside the text)
 - amends [ADR-0065](0065-a-uniform-airy-ui-system.md) (the UI system)
 - relates to ADR-0031 (the UI), ADR-0052 and ADR-0085 (corporate design and themes), ADR-0017 (translation)
