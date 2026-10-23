@@ -1243,6 +1243,10 @@ async function chooseLanguage() {
 
 // --- corporate design (ADR-0052) -----------------------------------------------
 
+// The start page's picture, by the address the page gives it, which
+// changes with its content.
+const welcomeArt = document.querySelector("meta[name=wwbb-welcome]")?.content || "/assets/brand/welcome.svg";
+
 // The product's own logo and icons, kept to come back to when a design's
 // logo goes.
 const productLogo = document.querySelector(".brand picture")?.cloneNode(true);
@@ -1579,7 +1583,7 @@ async function homeView() {
       // The design's own picture replaces the product's (ADR-0095).
       brand.assets?.welcome
         ? h("img", { class: "welcome-art welcome-own", id: "welcome-art", src: "/branding/welcome?v=" + encodeURIComponent(brand.assets.welcome), alt: "" })
-        : h("img", { class: "welcome-art", id: "welcome-art", src: "/assets/brand/welcome.svg", alt: "", width: 480, height: 320 }),
+        : h("img", { class: "welcome-art", id: "welcome-art", src: welcomeArt, alt: "", width: 480, height: 320 }),
       // The installed version, small, for support questions and releases.
       me.version ? h("span", { class: "welcome-version", id: "home-version", title: me.revision ? t("home.revision", { revision: me.revision }) : "", text: t("home.version", { version: me.version }) }) : ""),
     // Account requests wait on an administrator (ADR-0061): said first,

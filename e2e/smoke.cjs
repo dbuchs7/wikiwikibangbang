@@ -1377,7 +1377,7 @@ function ckanSource() {
     await page.waitForFunction(() => document.querySelectorAll("#design-contrast li").length === 0);
     await page.click("#admin-design button:has-text('Delete')"); // the product's logo comes back
     await page.waitForSelector("header .brand picture");
-    await page.waitForSelector("head link[rel=icon][href='/favicon.ico']", { state: "attached" });
+    await page.waitForSelector("head link[rel=icon][href^='/favicon.ico']", { state: "attached" });
     // A ready-made theme applies under the design; the comic one has no
     // dark scheme (ADR-0085).
     await page.click("#design-themes label.theme-comic");
