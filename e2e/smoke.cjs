@@ -568,14 +568,29 @@ function ckanSource() {
     });
     await page.reload();
     await page.waitForSelector("#body .pm-task");
-    await page.click("#version ~ table button:has-text('Changes') >> nth=0"); // the newest change
+    await page.click("table.history button:has-text('Changes') >> nth=0"); // the newest change
     await page.waitForSelector("#version .diff-change ins:has-text('replicas')");
     await page.waitForSelector("#version .diff-add:has-text('Check the version')");
-    await page.click("#version ~ table button:has-text('Changes') >> nth=1"); // the one before
+    await page.click("table.history button:has-text('Changes') >> nth=1"); // the one before
     await page.waitForSelector("#version h3");
     await page.click("#version button:has-text('Restore this version')");
     await page.waitForSelector("#body .ProseMirror:has-text('Upgrade the primary first.')");
     check(await page.locator("#body .pm-task").count() === 0, "the restored body is the earlier one");
+
+    step("filters: every list has one (ADR-0098); the history narrows as one types, keeps it in the address, and resets");
+    await page.waitForSelector("#history-filterbar:not([hidden])");
+    const historyRows = () => page.locator("table.history tr:not([hidden])").count();
+    const allHistory = await historyRows();
+    await page.selectOption("#history-filterbar select[data-choice=kind]", "BodyCommitted");
+    await page.waitForSelector("#history-filterbar .filter-count:has-text('of')");
+    const bodies = await historyRows();
+    check(bodies > 0 && bodies < allHistory, `the kind narrows the history: ${bodies} of ${allHistory}`);
+    check(page.url().includes("history.kind=BodyCommitted"), "the filter is kept in the address");
+    await page.fill("#history-filter", "zzzz-nothing");
+    await page.waitForSelector("#history-filter-empty:not([hidden])");
+    await page.click("#history-filterbar .filter-reset");
+    await page.waitForFunction((n) => document.querySelectorAll("table.history tr:not([hidden])").length === n, allHistory);
+    check(!page.url().includes("history."), "a reset clears the address");
 
     step("labels: a label added to a page lists the page");
     await page.fill("#labels [name=label]", "Disaster Recovery");
@@ -1485,6 +1500,15 @@ function ckanSource() {
     answer = "TMP";
     await page.click("#space-trash button:has-text('Delete for good')");
     await page.waitForFunction(() => !document.querySelector("#space-trash") && !document.querySelector("button[data-trash-space=TMP]"));
+
+    step("filters: a paged list is filtered by the server (ADR-0098)");
+    await page.goto(base + "/#/notifications?notifications.kind=mentions");
+    await page.waitForSelector("#notifications-filterbar select[data-choice=kind]");
+    check(await page.inputValue("#notifications-filterbar select[data-choice=kind]") === "mentions", "the filter comes back from the address");
+    const mentionsShown = await page.locator("#notifications li").count();
+    await page.selectOption("#notifications-filterbar select[data-choice=kind]", "");
+    await page.waitForFunction(() => !location.hash.includes("notifications.kind"));
+    await page.waitForFunction((n) => document.querySelectorAll("#notifications li").length >= n, mentionsShown);
 
     step("log out, log in as bert, read the item");
     await page.click("#account-button");

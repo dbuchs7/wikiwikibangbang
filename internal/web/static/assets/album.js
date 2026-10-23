@@ -155,7 +155,10 @@ export function albumBrowser({ pick } = {}) {
       grid.append(...page.pictures.map(card));
       next = page.next;
       more.hidden = !page.next;
-      count.textContent = page.total ? t("album.count", { n: page.total }) : t("album.none");
+      // The album's filters work as every list's do (ADR-0098).
+      const on = filteredNow();
+      count.textContent = page.total ? t("album.count", { n: page.total }) : on ? t("filter.none") : t("album.none");
+      reset.hidden = !on;
     } catch (err) { fail(err); }
   };
 
@@ -168,6 +171,13 @@ export function albumBrowser({ pick } = {}) {
     loadFolders();
     load(false);
   };
+  const filteredNow = () => Boolean(search.value.trim() || kind.value || label.value || (!here() && space.value));
+  const reset = h("button", { type: "button", class: "link filter-reset", id: "album-filter-reset", text: t("filter.reset"), hidden: true, onclick: () => {
+    search.value = kind.value = label.value = "";
+    if (!here()) space.value = "";
+    loadFolders();
+    load(false);
+  } });
   let timer = null;
   search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => load(false), 250); });
   kind.addEventListener("change", () => load(false));
@@ -177,7 +187,7 @@ export function albumBrowser({ pick } = {}) {
   get("/api/spaces").then(({ spaces }) => space.append(...spaces.map((s) => h("option", { value: s.key, text: `${s.key} ${s.name}` })))).catch(() => {});
   loadLabels().catch(() => {});
   open();
-  return h("div", { class: "album" }, h("div", { class: "album-filters" }, search, kind, space, label), options,
+  return h("div", { class: "album" }, h("div", { class: "album-filters filter-bar", role: "search", "aria-label": t("album.title") }, search, kind, space, label, reset), options,
     trail, tools, status, folders, count, grid, more);
 }
 

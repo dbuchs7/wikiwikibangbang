@@ -45,9 +45,9 @@ func itemRoutes(d Deps) []Route {
 		{Method: get, Pattern: "/api/system-roles", Summary: "Who holds the system roles admin and erasure (administrators)", Handler: http.HandlerFunc(h.listSystemRoles)},
 		{Method: del, Pattern: "/api/system-roles/{role}/{principal}", Summary: "Take back a system role; the last administrator keeps it (administrators)", Handler: http.HandlerFunc(h.revokeSystemRole)},
 
-		{Method: get, Pattern: "/api/audit", Summary: "The security audit trail, newest first, paged (administrators)", Handler: http.HandlerFunc(h.listAudit)},
+		{Method: get, Pattern: "/api/audit", Summary: "The security audit trail, newest first, paged; filtered by q, event and actor (administrators)", Handler: http.HandlerFunc(h.listAudit)},
 
-		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged", Handler: http.HandlerFunc(h.findItems)},
+		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged; q narrows to items whose key, title, type, state or labels hold every word", Handler: http.HandlerFunc(h.findItems)},
 		{Method: get, Pattern: "/api/spaces/{space}/tree", Summary: "The readable children of an item (parent) or the top of a space, in sibling order, paged", Handler: http.HandlerFunc(h.tree)},
 		{Method: get, Pattern: "/api/search", Summary: "Full-text search over readable items (q; space, type, state), best first, paged", Handler: http.HandlerFunc(h.searchItems)},
 		{Method: post, Pattern: "/api/items", Summary: "Create an item", Handler: http.HandlerFunc(h.createItem)},
@@ -430,7 +430,32 @@ func (h itemHandlers) listAudit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "administrators only")
 		return
 	}
-	entries := h.d.DB.Audit.List(before, limit)
+	// The trail's filter (ADR-0098): words of the event, who acted, what
+	// it is about and its details; event, an exact event; actor, a user ID.
+	text, event, actor := q.Get("q"), q.Get("event"), q.Get("actor")
+	var keep func(audit.Entry) bool
+	if strings.TrimSpace(text) != "" || event != "" || actor != "" {
+		names := map[auth.UserID]string{}
+		name := func(id string) string {
+			if n, ok := names[auth.UserID(id)]; ok {
+				return n
+			}
+			n := h.d.DB.Accounts.Usernames([]auth.UserID{auth.UserID(id)})[auth.UserID(id)]
+			names[auth.UserID(id)] = n
+			return n
+		}
+		keep = func(e audit.Entry) bool {
+			if (event != "" && e.Event != event) || (actor != "" && e.Actor != actor) {
+				return false
+			}
+			words := []string{e.Event, e.Actor, name(e.Actor), e.Addr, e.Subject}
+			for k, v := range e.Detail {
+				words = append(words, k, v)
+			}
+			return item.HasWords(strings.Join(words, " "), text)
+		}
+	}
+	entries := h.d.DB.Audit.ListWhere(before, limit, keep)
 	res := map[string]any{"entries": nonNilSlice(entries)}
 	if len(entries) == limit {
 		res["next"] = entries[len(entries)-1].Seq
@@ -451,7 +476,7 @@ func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")),
-		IncludeDeleted: q.Get("deleted") == "true", Label: q.Get("label"), WhereText: where}
+		IncludeDeleted: q.Get("deleted") == "true", Label: q.Get("label"), WhereText: where, Text: q.Get("q")}
 	h.read(w, r, func(x *item.Session) (any, error) {
 		page, total, next, err := x.FindPage(query, item.ID(q.Get("after")), limit)
 		if err != nil {

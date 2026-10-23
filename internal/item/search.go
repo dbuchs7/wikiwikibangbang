@@ -128,6 +128,18 @@ func appendFold(buf []byte, text string) []byte {
 
 func fold(text string) string { return string(appendFold(nil, text)) }
 
+// HasWords reports whether text holds every word of query, ignoring case,
+// as the filter of a list compares (ADR-0098). An empty query matches.
+func HasWords(text, query string) bool {
+	folded := fold(text)
+	for _, w := range strings.Fields(fold(query)) {
+		if !strings.Contains(folded, w) {
+			return false
+		}
+	}
+	return true
+}
+
 // wordsOf splits a text into its folded words, as a search does.
 func wordsOf(text string) []string {
 	return strings.FieldsFunc(fold(text), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })

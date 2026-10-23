@@ -963,6 +963,9 @@ type Query struct {
 	// WhereText requires each named property to read as the given text
 	// (FormatValue), as the API's where filter gives it (ADR-0074).
 	WhereText map[string]string
+	// Text requires every word in the item's key, title, type, state or
+	// labels, as the filter of a list asks (ADR-0098).
+	Text string
 }
 
 // Find returns copies of the matching items in creation order.
@@ -985,7 +988,8 @@ func (s *Store) matching(q Query, keep func(*Item) bool) []*Item {
 			(q.State != "" && it.State != q.State) ||
 			(q.Parent != "" && it.Parent != q.Parent) ||
 			(q.Label != "" && !slices.Contains(it.Labels, q.Label)) ||
-			!whereMatches(it, q.WhereText) {
+			!whereMatches(it, q.WhereText) ||
+			(q.Text != "" && !HasWords(it.Key+" "+it.Title+" "+it.Type+" "+it.State+" "+strings.Join(it.Labels, " "), q.Text)) {
 			continue
 		}
 		match := true

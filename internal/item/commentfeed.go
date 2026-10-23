@@ -34,6 +34,12 @@ type FeedEntry struct {
 // set, those of that kind only. Newest first, skipping offset, at most
 // limit; more reports whether further ones follow.
 func (x *Session) CommentFeed(username, only string, offset, limit int) (out []FeedEntry, more bool) {
+	return x.CommentFeedWhere(username, only, offset, limit, nil)
+}
+
+// CommentFeedWhere is CommentFeed narrowed by keep before paging, as a
+// filter of the list asks (ADR-0098); nil keeps every entry.
+func (x *Session) CommentFeedWhere(username, only string, offset, limit int, keep func(FeedEntry) bool) (out []FeedEntry, more bool) {
 	watches := x.s.watches[x.who]
 	var all []FeedEntry
 	for _, it := range x.s.items {
@@ -60,7 +66,11 @@ func (x *Session) CommentFeed(username, only string, offset, limit int) (out []F
 				continue
 			}
 			c.Anchor = x.veilAnchor(it, c.Anchor)
-			all = append(all, FeedEntry{Item: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Comment: c, Why: why})
+			e := FeedEntry{Item: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Comment: c, Why: why}
+			if keep != nil && !keep(e) {
+				continue
+			}
+			all = append(all, e)
 		}
 	}
 	slices.SortFunc(all, func(a, b FeedEntry) int {

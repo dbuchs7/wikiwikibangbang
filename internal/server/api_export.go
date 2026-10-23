@@ -392,7 +392,7 @@ func (h itemHandlers) sendRows(w http.ResponseWriter, r *http.Request, base stri
 
 func (h itemHandlers) exportItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")), Label: q.Get("label")}
+	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")), Label: q.Get("label"), Text: q.Get("q")}
 	h.sendRows(w, r, "items", func(x *item.Session) ([]item.Item, error) { return x.Find(query), nil })
 }
 

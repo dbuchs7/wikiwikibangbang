@@ -2,7 +2,9 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
@@ -18,7 +20,7 @@ func watchRoutes(h itemHandlers) []Route {
 		{Method: put, Pattern: "/api/spaces/{space}/watch", Summary: "Watch every item of a space", Handler: http.HandlerFunc(h.watchSpace(true))},
 		{Method: del, Pattern: "/api/spaces/{space}/watch", Summary: "Stop watching a space", Handler: http.HandlerFunc(h.watchSpace(false))},
 		{Method: get, Pattern: "/api/me/watches", Summary: "What one watches", Handler: http.HandlerFunc(h.listWatches)},
-		{Method: get, Pattern: "/api/notifications", Summary: "What others changed on what one watches and comments mentioning one by @username, newest first, paged (before, limit), with the unread count", Handler: http.HandlerFunc(h.notifications)},
+		{Method: get, Pattern: "/api/notifications", Summary: "What others changed on what one watches and comments mentioning one by @username, newest first, paged (before, limit), with the unread count; filtered by q, unread and kind (mentions, comments, changes, governance)", Handler: http.HandlerFunc(h.notifications)},
 		{Method: post, Pattern: "/api/notifications/seen", Summary: "Mark the notifications up to an event (seq) as seen", Handler: http.HandlerFunc(h.notificationsSeen)},
 	}
 }
@@ -165,10 +167,14 @@ func (h itemHandlers) notifications(w http.ResponseWriter, r *http.Request) {
 		before = n
 	}
 	seen := h.d.DB.Accounts.Seen(auth.UserID(who(r)))
+	keep, ok := h.notificationFilter(w, q, seen)
+	if !ok {
+		return
+	}
 	p, _ := PrincipalFrom(r.Context())
 	h.read(w, r, func(x *item.Session) (any, error) {
 		x = x.Named(p.Username)
-		list, more := x.Notifications(before, limit)
+		list, more := x.NotificationsWhere(before, limit, keep)
 		out := []notificationJSON{}
 		for _, n := range list {
 			out = append(out, notificationJSON{Seq: n.Seq, At: n.At, Actor: n.Actor, Kind: n.Kind, Item: n.Item, Key: n.Key,
@@ -181,6 +187,44 @@ func (h itemHandlers) notifications(w http.ResponseWriter, r *http.Request) {
 		}
 		return res, nil
 	})
+}
+
+// notificationFilter narrows the notifications as the list's filter asks
+// (ADR-0098): q, words of the key, title, space or who acted; unread; and
+// kind, one of mentions, comments, changes or governance.
+func (h itemHandlers) notificationFilter(w http.ResponseWriter, q url.Values, seen int) (func(item.Notification) bool, bool) {
+	text, unread, kind := q.Get("q"), q.Get("unread") != "", q.Get("kind")
+	switch kind {
+	case "", "mentions", "comments", "changes", "governance":
+	default:
+		writeError(w, http.StatusBadRequest, "kind is mentions, comments, changes or governance")
+		return nil, false
+	}
+	if strings.TrimSpace(text) == "" && !unread && kind == "" {
+		return nil, true
+	}
+	names := map[string]string{}
+	actor := func(id string) string {
+		if n, ok := names[id]; ok {
+			return n
+		}
+		n := h.d.DB.Accounts.Usernames([]auth.UserID{auth.UserID(id)})[auth.UserID(id)]
+		names[id] = n
+		return n
+	}
+	return func(n item.Notification) bool {
+		governance := n.Actor == item.GovernanceActor
+		switch {
+		case unread && n.Seq <= seen:
+			return false
+		case kind == "mentions" && !n.Mentioned,
+			kind == "comments" && (n.Mentioned || n.Kind != item.CommentAdded),
+			kind == "governance" && !governance,
+			kind == "changes" && (n.Mentioned || governance || n.Kind == item.CommentAdded):
+			return false
+		}
+		return item.HasWords(n.Key+" "+n.Title+" "+n.Space+" "+actor(n.Actor), text)
+	}, true
 }
 
 func (h itemHandlers) notificationsSeen(w http.ResponseWriter, r *http.Request) {

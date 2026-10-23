@@ -1,7 +1,7 @@
 # ADR-0098: Every list can be filtered
 
 - **Status:** Accepted
-- **Implementation:** Partial
+- **Implementation:** Landed
 - **Date:** 2026-10-23
 - **Deciders:** Project initiators (the maintainer asked that every list in the whole application has a filter, 2026-10-23)
 
@@ -40,7 +40,7 @@ Chosen option: **1**.
 
 Every list of entries has a filter bar directly above it: tables, card lists, tiles and the lists of the administration.
 
-- **Text:** a field "Filter" narrows the list as one types. It matches the words shown in an entry (title, key, name, label, text), ignoring case and accents. Several words must all match, as in search (ADR-0083).
+- **Text:** a field "Filter" narrows the list as one types. It matches the words shown in an entry (title, key, name, label, text), not the labels of its controls. Several words must all match, as in search (ADR-0083). The browser ignores case and accents; the server ignores case (`item.HasWords`).
 - **Choices:** where entries have a small set of values, those are offered as choices beside the text field, each with "All". Examples are type, state, label, space, role, kind of event, read or unread.
 - **Count:** the bar says "{n} of {total} shown" while a filter applies, announced politely to screen readers.
 - **Empty result:** "Nothing matches the filter", with a button to reset it, instead of the list's ordinary empty state.
@@ -52,28 +52,34 @@ Every list of entries has a filter bar directly above it: tables, card lists, ti
 
 - **Lists loaded whole** (e.g. a page's files, the types, the groups) filter in the browser.
 - **Paged lists** (e.g. items, notifications, the audit trail, the album) pass the filter to the API, which filters before paging. Where the API lacks a parameter for a filter, it gets one; it filters only what the caller may read.
-- **One helper** in the UI (`filterBar`) builds the bar for every list, so its look, wording and behaviour are the same. A list provides the text of each entry and its choices.
+- **One helper** in the UI (`filter.js`: `filtered` for lists loaded whole, `serverFilter` for paged ones) builds the bar for every list, so its look, wording and behaviour are the same. A list provides the text of each entry and its choices.
 
 ### Inventory
 
-The state when this was decided; an implementation updates it.
+How each list follows the rule.
 
-| List | Filter today | To do |
+| List | Filter | Where |
 |---|---|---|
-| Tasks (inbox, all, by type) | per column, labels | adopt the common bar |
-| Album | label, kind, text | adopt the common bar |
-| Search results | the search itself | choices: space, type, state |
-| Notifications | none | text, read or unread, kind |
-| Comment feed | tabs | text, space |
-| Space page: pages and boards | none | text |
-| Start page: spaces | none | text |
-| Kanbans list, boards by label | none | text, space |
-| Item: files, relations, history | none | text, kind |
-| Members of a space | none | text, role |
-| Administration: spaces, types, users, groups, roles, requests | none | text, choices per list |
-| Audit trail | none (last 50) | text, event, actor, paged through the API |
-| Connectors and their runs | none | text, state |
-| Governance report | none | text, kind of finding |
+| Tasks (inbox, all, by type) | per column and labels, count, reset, address (ADR-0049) | browser |
+| Album | text, kind, space, label, count, reset (ADR-0090) | server |
+| Search results | further words, space, type, state | server (`/api/search`) |
+| Notifications | text, kind (mentions, comments, changes, governance), unread | server (`/api/notifications`) |
+| Watched items and spaces; one's own findings | text; kind of finding | browser |
+| Comment feed | text, space | server (`/api/comments`) |
+| Start page: spaces | text, role | browser |
+| Space page: all items | text, type, state, label; the CSV follows | server (`/api/items?q=`) |
+| Items of a label | text, space, type | server (`/api/items?q=`) |
+| Kanbans list; boards by label | text, space | browser |
+| Item: files, relations, history, protected passages, open threads | text; kind, type, who | browser |
+| Members of a space | text, role | browser |
+| Link check, governance report and overview | text, responsible | browser |
+| Administration: spaces, trash, types, account requests, users, groups | text; kind, role | browser |
+| Audit trail | text, event, actor, with "More" | server (`/api/audit`) |
+| Connectors, their runs and problems; backup runs and versions | text; state, kind, outcome | browser |
+| Data protection regulations | text, state | browser |
+| Account: access tokens; AI access: apps, approvals, tools | text; scope | browser |
+
+Not lists in this sense: a kanban board's columns (the board is the view of a filtered list), the page tree, forms and their choices.
 
 ### Consequences
 
