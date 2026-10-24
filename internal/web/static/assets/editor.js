@@ -530,11 +530,12 @@ function imageView(node, view, getPos, files) {
     try {
       const res = await fetch(files.url(node.attrs.ref), { credentials: "same-origin" });
       if (!res.ok) throw new Error(res.statusText);
-      const png = await openDrawing(await res.blob());
-      if (!png) return;
       // The new picture is a version of the one edited (ADR-0055), so its
-      // copies elsewhere learn of it.
-      const a = await files.upload(new File([png], drawingName(node.attrs.text), { type: "image/png" }), { item: files.item, attachment: node.attrs.ref });
+      // copies elsewhere learn of it. The dialog stays open until it is
+      // stored, so the block cannot be left before it points at it.
+      const a = await openDrawing(await res.blob(), (png) =>
+        files.upload(new File([png], drawingName(node.attrs.text), { type: "image/png" }), { item: files.item, attachment: node.attrs.ref }));
+      if (!a) return;
       const pos = getPos();
       if (pos === undefined || dom.classList.contains("pm-locked")) throw new Error(t("draw.locked"));
       view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, ref: a.id }));
@@ -720,9 +721,8 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   const draw = async () => {
     status.textContent = "";
     try {
-      const png = await openDrawing();
-      if (!png) return;
-      const a = await files.upload(new File([png], drawingName(""), { type: "image/png" }));
+      const a = await openDrawing(null, (png) => files.upload(new File([png], drawingName(""), { type: "image/png" })));
+      if (!a) return;
       insertBlock(schema.nodes.image.create({ ref: a.id, text: "" }));
     } catch (err) {
       status.textContent = err.message;

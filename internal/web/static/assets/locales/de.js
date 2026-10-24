@@ -451,6 +451,7 @@ export default {
   "draw.insert": "Zeichnung",
   "draw.edit": "Zeichnung bearbeiten",
   "draw.save": "Zeichnung speichern",
+  "draw.saving": "Die Zeichnung wird gespeichert…",
   "draw.cancel": "Abbrechen",
   "draw.empty": "Die Zeichnung ist leer.",
   "draw.locked": "Jemand anderes bearbeitet diesen Block; die Zeichnung wurde als Datei der Seite gespeichert.",

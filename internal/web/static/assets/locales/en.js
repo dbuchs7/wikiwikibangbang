@@ -453,6 +453,7 @@ export default {
   "draw.insert": "Drawing",
   "draw.edit": "Edit drawing",
   "draw.save": "Save drawing",
+  "draw.saving": "Saving the drawing…",
   "draw.cancel": "Cancel",
   "draw.empty": "The drawing is empty.",
   "draw.locked": "Someone else is editing this block; the drawing was saved as a file of the page.",
