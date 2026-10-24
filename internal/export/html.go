@@ -171,6 +171,12 @@ func (h *htmlBuilder) block(bl item.Block, p Page, base int) {
 			}
 		}
 		h.out.WriteString("</ul>")
+	case item.Figures, item.Tables:
+		h.printf(`<ul class="%s">`, bl.Kind)
+		for _, e := range listing(h.d, p.Body, bl.Kind) {
+			h.printf("<li>%s</li>", html.EscapeString(e))
+		}
+		h.out.WriteString("</ul>")
 	case item.Children:
 		h.out.WriteString(`<ul class="children">`)
 		for _, c := range p.Children {

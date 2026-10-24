@@ -195,3 +195,52 @@ func TestTheHTMLEscapesAndKeepsSafeLinksOnly(t *testing.T) {
 		t.Error("an unsafe link was written")
 	}
 }
+
+// TestListsOfFiguresAndTables: a list of figures numbers the pictures of
+// the body with their captions, a list of tables its tables with their
+// header rows, in the export's language; English by default (ADR-0119).
+func TestListsOfFiguresAndTables(t *testing.T) {
+	page := Page{ID: "p", Title: "Report", Body: []item.Block{
+		{Kind: item.Figures}, {Kind: item.Tables},
+		{Kind: item.Image, Ref: "a", Text: "The <plan>"}, {Kind: item.Video, Ref: "v", Text: "not a figure"},
+		{Kind: item.Table, Text: "Item\tPrice\nTea\t3"}, {Kind: item.Image, Ref: "b"}, {Kind: item.Table, Text: "\t\nx\ty"},
+	}, Images: map[item.ID]Image{}}
+	var b bytes.Buffer
+	if err := HTML(&b, Document{Pages: []Page{page}, Figure: "Abbildung", Table: "Tabelle"}, "de"); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`<ul class="figures"><li>Abbildung 1: The &lt;plan&gt;</li><li>Abbildung 2</li></ul>`,
+		`<ul class="tables"><li>Tabelle 1: Item, Price</li><li>Tabelle 2</li></ul>`} {
+		if !strings.Contains(b.String(), want) {
+			t.Errorf("the HTML lacks %q:\n%s", want, b.String())
+		}
+	}
+	var w bytes.Buffer
+	if err := DOCX(&w, Document{Pages: []Page{page}}); err != nil {
+		t.Fatal(err)
+	}
+	doc := documentXML(t, w.Bytes())
+	for _, want := range []string{"Figure 1: The &lt;plan&gt;", "Figure 2", "Table 1: Item, Price", "Table 2"} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("the Word file lacks %q", want)
+		}
+	}
+}
+
+// documentXML is the main part of a Word file.
+func documentXML(t *testing.T, file []byte) string {
+	t.Helper()
+	z, err := zip.NewReader(bytes.NewReader(file), int64(len(file)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range z.File {
+		if f.Name == "word/document.xml" {
+			r, _ := f.Open()
+			data, _ := io.ReadAll(r)
+			return string(data)
+		}
+	}
+	t.Fatal("no word/document.xml")
+	return ""
+}

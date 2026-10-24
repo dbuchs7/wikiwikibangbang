@@ -367,13 +367,13 @@ span.tree-toggle { cursor: default; }
 .pm-table th { background: var(--bg); font-weight: 600; }
 .pm-table input { width: 100%; min-width: 6em; border: 0; padding: 2px; background: transparent; font: inherit; color: inherit; }
 .pm-table-tools button.link { margin-right: 10px; font-size: 12px; }
-.pm-toc, .pm-children { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.pm-toc, .pm-figures, .pm-tables, .pm-children { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
 .pm-box-title { margin: 0 0 4px; font-weight: 600; }
-.pm-toc ul, .pm-children ul { margin: 0; padding-left: 18px; }
-.pm-toc button.link { padding: 0; margin: 0; font-weight: normal; }
+.pm-toc ul, .pm-figures ul, .pm-tables ul, .pm-children ul { margin: 0; padding-left: 18px; }
+.pm-toc button.link, .pm-figures button.link, .pm-tables button.link { padding: 0; margin: 0; font-weight: normal; }
 .pm-toc-2 { margin-left: 14px; }
 .pm-toc-3 { margin-left: 28px; }
-.pm-table.ProseMirror-selectednode, .pm-toc.ProseMirror-selectednode, .pm-children.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.pm-table.ProseMirror-selectednode, .pm-toc.ProseMirror-selectednode, .pm-figures.ProseMirror-selectednode, .pm-tables.ProseMirror-selectednode, .pm-children.ProseMirror-selectednode { outline: 2px solid var(--accent); }
 
 /* Comparing versions of a body (ADR-0043). */
 .diff { font-family: var(--font-mono); font-size: 13px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }

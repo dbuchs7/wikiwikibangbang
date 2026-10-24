@@ -54,6 +54,10 @@ export const schema = new Schema({
     divider: { group: "block", atom: true, selectable: true, attrs: bid, parseDOM: [{ tag: "hr" }], toDOM: () => ["hr", { class: "pm-divider" }] },
     table: { group: "block", atom: true, selectable: true, attrs: { ...bid, text: { default: "\t\n\t" } }, toDOM: (n) => ["pre", { class: "pm-table" }, n.attrs.text] },
     toc: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-toc" }] },
+    // Lists of the body's pictures and tables (ADR-0119), computed like a
+    // table of contents.
+    figures: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-figures" }] },
+    tables: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-tables" }] },
     children: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-children" }] },
     // The tasks that carry a label, computed when shown (ADR-0114).
     tasklist: { group: "block", atom: true, selectable: true, attrs: { ...bid, label: { default: "" } }, toDOM: (n) => ["div", { class: "pm-tasklist", "data-label": n.attrs.label }] },
@@ -151,7 +155,7 @@ export function docFromBlocks(blocks, embeds = []) {
 export function nodeFromBlock(b, embeds = []) {
   const id = b.id ?? null;
   if (b.kind === "table") return schema.nodes.table.create({ bid: id, text: b.text || "" });
-  if (b.kind === "toc" || b.kind === "children" || b.kind === "divider") return schema.nodes[b.kind].create({ bid: id });
+  if (["toc", "figures", "tables", "children", "divider"].includes(b.kind)) return schema.nodes[b.kind].create({ bid: id });
   if (b.kind === "tasklist") return schema.nodes.tasklist.create({ bid: id, label: b.text || "" });
   if (b.kind === "image" || b.kind === "video") return schema.nodes[b.kind].create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0, align: b.align || "" });
   if (b.kind === "embed") {
@@ -211,7 +215,7 @@ export function blocksFromDoc(doc) {
 export function blockFromNode(node) {
   if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
   if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
-  if (node.type === schema.nodes.toc || node.type === schema.nodes.children || node.type === schema.nodes.divider) return { kind: node.type.name };
+  if (["toc", "figures", "tables", "children", "divider"].includes(node.type.name)) return { kind: node.type.name };
   if (node.type === schema.nodes.tasklist) return { kind: "tasklist", text: node.attrs.label };
   if (node.type === schema.nodes.image || node.type === schema.nodes.video) {
     const b = { kind: node.type.name, text: node.attrs.text, ref: node.attrs.ref };
@@ -411,6 +415,36 @@ function tocView(node, view, tocs) {
       ? h("ul", {}, heads.map((x) => h("li", { class: "pm-toc-" + x.level }, h("button", { type: "button", class: "link", text: x.text,
         onclick: () => view.nodeDOM(x.offset)?.scrollIntoView({ block: "start" }) }))))
       : h("p", { class: "muted", text: t("editor.tocEmpty") }));
+  };
+  tocs.add(refresh);
+  refresh();
+  return { dom, ...selectable, update: (n) => n.type === node.type, destroy: () => tocs.delete(refresh) };
+}
+
+// listView lists the body's pictures (figures) or tables (tables),
+// numbered in their order, each with its caption or a table's header row;
+// a click scrolls to one (ADR-0119). It is refreshed like a table of
+// contents.
+function listView(node, view, tocs) {
+  const figures = node.type.name === "figures";
+  const title = figures ? t("editor.figures") : t("editor.tables");
+  const dom = h("nav", { class: figures ? "pm-figures" : "pm-tables", contenteditable: "false", "aria-label": title });
+  const refresh = () => {
+    const entries = [];
+    view.state.doc.forEach((n, offset) => {
+      if (figures && n.type === schema.nodes.image) {
+        const label = t("editor.figure", { n: entries.length + 1 });
+        entries.push({ text: n.attrs.text.trim() ? `${label}: ${n.attrs.text.trim()}` : label, offset });
+      } else if (!figures && n.type === schema.nodes.table) {
+        const label = t("editor.tableN", { n: entries.length + 1 });
+        const head = n.attrs.text.split("\n")[0].split("\t").map((c) => c.trim()).filter(Boolean).join(", ");
+        entries.push({ text: head ? `${label}: ${head}` : label, offset });
+      }
+    });
+    dom.replaceChildren(h("p", { class: "pm-box-title", text: title }), entries.length
+      ? h("ul", {}, entries.map((x) => h("li", {}, h("button", { type: "button", class: "link", text: x.text,
+        onclick: () => view.nodeDOM(x.offset)?.scrollIntoView({ block: "start" }) }))))
+      : h("p", { class: "muted", text: figures ? t("editor.figuresEmpty") : t("editor.tablesEmpty") }));
   };
   tocs.add(refresh);
   refresh();
@@ -641,6 +675,8 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       task: taskView,
       table: tableView,
       toc: (node, v) => tocView(node, v, tocs),
+      figures: (node, v) => listView(node, v, tocs),
+      tables: (node, v) => listView(node, v, tocs),
       children: (node) => childrenView(node, childPages),
       image: (node, v, getPos) => imageView(node, v, getPos, files),
       video: (node, v, getPos) => imageView(node, v, getPos, files),
@@ -679,7 +715,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind === "newtask") newTask();
     else if (kind === "tasklist") taskList();
     else if (kind) insertBlock(schema.nodes[kind].create());
-  } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], tasks?.create ? ["newtask", t("editor.newTask")] : null, tasks?.pickLabel ? ["tasklist", t("editor.taskList")] : null, ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["children", t("editor.children")],
+  } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], tasks?.create ? ["newtask", t("editor.newTask")] : null, tasks?.pickLabel ? ["tasklist", t("editor.taskList")] : null, ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["figures", t("editor.figures")], ["tables", t("editor.tables")], ["children", t("editor.children")],
     files ? ["image", t("editor.image")] : null, files ? ["video", t("editor.video")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null, files ? ["clip", t("editor.copiedPicture")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.

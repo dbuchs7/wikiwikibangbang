@@ -1212,7 +1212,7 @@ func checkBlock(b Block, self ID) error {
 		if err := checkTable(b.Text); err != nil {
 			return err
 		}
-	case TOC, Children, Divider:
+	case TOC, Children, Divider, Figures, Tables:
 		if b.Text != "" || len(b.Marks) > 0 || len(b.Mentions) > 0 {
 			return invalid("a %s block has no text", b.Kind)
 		}

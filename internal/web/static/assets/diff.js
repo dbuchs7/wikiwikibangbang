@@ -16,6 +16,8 @@ export function line(b) {
     case "panel": return `[${b.tone}] ` + text;
     case "table": return text.split("\n").map((r) => "| " + r.split("\t").join(" | ") + " |").join("\n");
     case "toc": return "[" + t("editor.toc") + "]";
+    case "figures": return "[" + t("editor.figures") + "]";
+    case "tables": return "[" + t("editor.tables") + "]";
     case "children": return "[" + t("editor.children") + "]";
     case "divider": return "———";
     case "embed": return "[" + t("editor.embed") + " " + (b.ref || "").slice(0, 8) + "]";

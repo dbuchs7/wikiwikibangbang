@@ -78,6 +78,11 @@ const (
 	// reader may read; Text is the label (ADR-0114). Like a table of
 	// contents it is computed when shown.
 	TaskList BlockKind = "tasklist"
+	// Figures lists the item's pictures and Tables its tables, numbered in
+	// the order of the body, as a table of contents lists its headings
+	// (ADR-0119). They hold nothing: they are computed when shown.
+	Figures BlockKind = "figures"
+	Tables  BlockKind = "tables"
 )
 
 // VideoTypes are the formats of a video a body plays, as read from the

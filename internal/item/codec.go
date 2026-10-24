@@ -77,7 +77,9 @@ import (
 //     to 25 are still read.
 //   - 27: the block kind tasklist, its text a label (ADR-0114). Versions 1
 //     to 26 are still read.
-const CodecVersion = 27
+//   - 28: the block kinds figures and tables (ADR-0119). Versions 1 to 27
+//     are still read.
+const CodecVersion = 28
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

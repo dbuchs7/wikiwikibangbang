@@ -548,7 +548,7 @@ function ckanSource() {
     await page.waitForSelector("#new-item [name=under]:checked");
     await page.goBack();
 
-    step("blocks: a task, a warning panel, a table and a table of contents survive a reload");
+    step("blocks: a task, a warning panel, a table, a table of contents and lists of tables and figures survive a reload (ADR-0119)");
     await page.click(".tree a:has-text('Install')");
     await page.waitForSelector(".tree a.current:has-text('Install')");
     await page.waitForSelector("#body.reading"); // an existing page opens for reading
@@ -572,6 +572,9 @@ function ckanSource() {
     await page.fill("#body .pm-table tr:nth-child(2) td:first-child input", "db1");
     await page.press("#body .pm-table tr:nth-child(2) td:first-child input", "Tab");
     await page.selectOption("#body .pm-toolbar select >> nth=1", "toc");
+    check(await page.locator("#body .pm-toolbar select >> nth=1").locator("option[value=toc]").textContent() === "Table of contents", "the insert menu says Table of contents");
+    await page.selectOption("#body .pm-toolbar select >> nth=1", "tables");
+    await page.selectOption("#body .pm-toolbar select >> nth=1", "figures");
     await page.click("#details h2"); // leave the editor: its blocks are released and saved
     await page.waitForSelector(".live[data-pending='0']");
     await page.reload();
@@ -579,6 +582,8 @@ function ckanSource() {
     await page.waitForSelector("#body .pm-panel[data-tone='warning']:has-text('Writers must be stopped.')");
     check(await page.inputValue("#body .pm-table tr:nth-child(2) td:first-child input") === "db1", "the table cell kept its text");
     await page.waitForSelector("#body .pm-toc button:has-text('Prepare')");
+    await page.waitForSelector("#body .pm-tables button:has-text('Table 1: ')"); // numbered, with its header row
+    await page.waitForSelector("#body .pm-figures:has-text('No pictures yet.')");
     await page.click("#edit-done"); // read: the same blocks, shown, with no stray text
     await page.waitForSelector("#body.reading .pm-table td:has-text('db1')");
     check(!(await page.textContent("#body")).includes("null"), "the page for reading shows no stray text");
