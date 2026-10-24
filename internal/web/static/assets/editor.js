@@ -324,8 +324,10 @@ function markActive(state, type) {
 // --- node views (ADR-0042) -----------------------------------------------------
 
 // A node view's own controls are not editor content: the editor neither
-// handles their events nor reads their changes as edits.
-const own = { stopEvent: () => true, ignoreMutation: () => true };
+// handles their events nor reads their changes as edits. A click elsewhere
+// on the block selects it, like any block, so it can be cut, moved or
+// deleted.
+const selectable = { stopEvent: (ev) => Boolean(ev.target.closest?.("a, button, input, select")), ignoreMutation: () => true };
 
 // taskView draws a task's checkbox; ticking it changes the task.
 function taskView(node, view, getPos) {
@@ -392,7 +394,7 @@ function tableView(node, view, getPos) {
     dom.replaceChildren(...[table, tools].filter(Boolean)); // replaceChildren writes a null out as "null"
   };
   render();
-  return { dom, ...own, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
+  return { dom, ...selectable, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
 }
 
 // tocView lists the body's headings; a click scrolls to one. tocs holds
@@ -412,7 +414,7 @@ function tocView(node, view, tocs) {
   };
   tocs.add(refresh);
   refresh();
-  return { dom, ...own, update: (n) => n.type === node.type, destroy: () => tocs.delete(refresh) };
+  return { dom, ...selectable, update: (n) => n.type === node.type, destroy: () => tocs.delete(refresh) };
 }
 
 // embedView shows an embedded item whole (ADR-0106): a heading that leads
@@ -458,7 +460,7 @@ function childrenView(node, childPages) {
       ? h("ul", {}, kids.map((c) => h("li", {}, h("a", { href: "#/item/" + encodeURIComponent(c.key), text: c.title || c.key }))))
       : h("p", { class: "muted", text: t("editor.childrenNone") }));
   }).catch(() => list.replaceChildren(h("p", { class: "muted", text: t("editor.childrenNone") })));
-  return { dom, ...own, update: (n) => n.type === node.type };
+  return { dom, ...selectable, update: (n) => n.type === node.type };
 }
 
 // imageSizes are the widths offered besides dragging, in percent of the
@@ -585,13 +587,22 @@ function imageView(node, view, getPos, files) {
     const place = h("select", { class: "pm-image-align", "aria-label": t("editor.imageAlign"), onchange: (e) => setImageAlign(e.target.value) },
       [["", t("editor.imageAlignDefault")], ["left", t("editor.imageAlignLeft")], ["center", t("editor.imageAlignCenter")], ["right", t("editor.imageAlignRight")]]
         .map(([v, label]) => h("option", { value: v, text: label, selected: v === node.attrs.align })));
-    caption.replaceChildren(...[input, " ", size, " ", place,
+    const remove = h("button", { type: "button", class: "link pm-image-remove", text: t("editor.imageRemove"), onclick: () => {
+      const pos = getPos();
+      if (pos === undefined || dom.classList.contains("pm-locked")) return;
+      view.dispatch(view.state.tr.delete(pos, pos + node.nodeSize));
+      view.focus(); // the button is gone; the text goes on where the picture was
+    } });
+    caption.replaceChildren(...[input, " ", size, " ", place, " ", remove,
       ...(files?.isDrawing?.(node.attrs.ref) ? [" ", h("button", { type: "button", class: "link pm-redraw", text: t("draw.edit"), onclick: () => redraw(status) })] : []),
       ...(origin?.newer ? [" ", h("button", { type: "button", class: "link pm-take-over", text: t("att.takeOver", { key: origin.item.key }), onclick: () => takeOver(status, origin) })] : []),
       status]);
   };
   render();
-  return { dom, ...own, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
+  // A click on a picture selects its block, so it can be deleted, cut or
+  // moved like text; a video keeps its clicks for its controls.
+  const stopEvent = (ev) => caption.contains(ev.target) || handle.contains(ev.target) || (video && img.contains(ev.target));
+  return { dom, ignoreMutation: () => true, stopEvent, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
 }
 
 // createEditor mounts an editor for blocks and returns its element and a

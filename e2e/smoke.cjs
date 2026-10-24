@@ -795,6 +795,20 @@ function ckanSource() {
     await page.click("dialog.drawing button:has-text('Save drawing')");
     await page.waitForSelector("dialog.drawing", { state: "detached" });
     await page.waitForFunction(() => document.querySelectorAll("#body .pm-image").length === 2);
+    // A click on the drawing selects it, and Delete removes it like text; so
+    // does its Remove button. Undo brings it back.
+    await page.waitForTimeout(600); // changes within 500 ms are undone together
+    await page.click("#body .pm-image:has(.pm-redraw) img");
+    await page.waitForSelector("#body .pm-image.ProseMirror-selectednode:has(.pm-redraw)");
+    await page.keyboard.press("Delete");
+    await page.waitForFunction(() => document.querySelectorAll("#body .pm-image").length === 1);
+    await page.keyboard.press("Control+z");
+    await page.waitForFunction(() => document.querySelectorAll("#body .pm-image").length === 2);
+    await page.waitForTimeout(600);
+    await page.click("#body .pm-image:has(.pm-redraw) .pm-image-remove");
+    await page.waitForFunction(() => document.querySelectorAll("#body .pm-image").length === 1);
+    await page.keyboard.press("Control+z");
+    await page.waitForFunction(() => document.querySelectorAll("#body .pm-image").length === 2);
     await page.click("#body .pm-redraw"); // only the drawing can be edited as a drawing
     await page.waitForSelector("dialog.drawing[open] iframe");
     drawFrame = page.frameLocator("dialog.drawing iframe");

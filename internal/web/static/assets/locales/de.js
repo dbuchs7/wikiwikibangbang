@@ -437,6 +437,7 @@ export default {
   "editor.alignJustify": "Blocksatz (Ctrl+Shift+J)",
   "editor.divider": "Trennlinie",
   "editor.imageAlign": "Platzierung",
+  "editor.imageRemove": "Entfernen",
   "editor.imageAlignDefault": "Platzierung: zentriert",
   "editor.imageAlignLeft": "Links, Text daneben",
   "editor.imageAlignCenter": "Zentriert",
