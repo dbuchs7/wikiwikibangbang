@@ -29,6 +29,7 @@ hr { border: 0; border-top: 1px solid #bfbfbf; margin: 1em 0; }
 .tone-info { background: #e8f0fe; } .tone-note { background: #f3eefc; } .tone-warning { background: #fff6e0; } .tone-tip { background: #e9f6ec; } .tone-error { background: #fdecea; }
 ul.tasks { list-style: none; padding-left: 1em; }
 .toc { list-style: none; padding-left: 0; color: #374151; } .toc .level-2 { padding-left: 1.5em; } .toc .level-3 { padding-left: 3em; }
+.figures, .tables { list-style: none; padding-left: 0; color: #374151; }
 .align-center { text-align: center; } .align-right { text-align: right; } .align-justify { text-align: justify; }
 figure { margin: .8em 0; text-align: center; break-inside: avoid; }
 figure img { max-width: 100%; height: auto; }

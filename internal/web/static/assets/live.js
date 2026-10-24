@@ -287,7 +287,7 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
   function normal(b) {
     const out = { kind: b.kind, text: b.text ?? "" };
     if (b.kind === "embed") return { kind: "embed", ref: b.ref };
-    if (b.kind === "toc" || b.kind === "children" || b.kind === "divider") return { kind: b.kind };
+    if (["toc", "figures", "tables", "children", "divider"].includes(b.kind)) return { kind: b.kind };
     if (b.kind === "image" || b.kind === "video") {
       const img = { kind: b.kind, text: b.text ?? "", ref: b.ref };
       if (b.width) img.width = b.width;

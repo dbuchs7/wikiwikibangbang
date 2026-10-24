@@ -131,3 +131,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0116](0116-every-view-fits-a-phone.md) | Every view fits a phone | Accepted | Landed |
 | [0117](0117-palettes-for-the-drawing-editor.md) | Palettes for the drawing editor from the Excalidraw library collection | Accepted | Landed |
 | [0118](0118-spaces-are-called-rooms.md) | Spaces are called rooms | Accepted | Landed |
+| [0119](0119-lists-of-figures-and-tables.md) | Lists of figures and tables, and the table of contents by its name | Accepted | Landed |

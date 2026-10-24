@@ -3,6 +3,7 @@ package export
 import (
 	"archive/zip"
 	"bytes"
+	"cmp"
 	"fmt"
 	"image"
 	_ "image/gif" // the formats image.DecodeConfig reads for picture sizes
@@ -27,6 +28,40 @@ type Document struct {
 	Restricted string
 	// Contents, when set, heads a list of the pages at the start.
 	Contents string
+	// Figure and Table name an entry of a list of figures or of tables,
+	// "Figure 1: caption" (ADR-0119); English when empty.
+	Figure, Table string
+}
+
+// listing is what a list of figures (kind Figures) or of tables (Tables)
+// shows for a body: each picture or table, numbered in the order of the
+// body, with its caption or a table's header row (ADR-0119).
+func listing(d Document, body []item.Block, kind item.BlockKind) []string {
+	figure, table := cmp.Or(d.Figure, "Figure"), cmp.Or(d.Table, "Table")
+	var out []string
+	for _, b := range body {
+		switch {
+		case kind == item.Figures && b.Kind == item.Image:
+			out = append(out, entry(fmt.Sprintf("%s %d", figure, len(out)+1), b.Text))
+		case kind == item.Tables && b.Kind == item.Table:
+			head, _, _ := strings.Cut(b.Text, "\n")
+			var cells []string
+			for _, c := range strings.Split(head, "\t") {
+				if c = strings.TrimSpace(c); c != "" {
+					cells = append(cells, c)
+				}
+			}
+			out = append(out, entry(fmt.Sprintf("%s %d", table, len(out)+1), strings.Join(cells, ", ")))
+		}
+	}
+	return out
+}
+
+func entry(label, text string) string {
+	if text = strings.TrimSpace(text); text != "" {
+		return label + ": " + text
+	}
+	return label
 }
 
 // Page is an item as exported.
@@ -238,6 +273,12 @@ func (b *docxBuilder) block(bl item.Block, p Page, base, listNum int) string {
 			out += para("Caption", "", run(bl.Text, ""))
 		}
 		return out
+	case item.Figures, item.Tables:
+		var out strings.Builder
+		for _, e := range listing(b.d, p.Body, bl.Kind) {
+			out.WriteString(para("", "", run(e, "")))
+		}
+		return out.String()
 	case item.TOC:
 		var out strings.Builder
 		for _, h := range p.Body {
