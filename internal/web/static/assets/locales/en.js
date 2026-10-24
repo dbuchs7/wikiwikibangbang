@@ -439,6 +439,7 @@ export default {
   "editor.alignJustify": "Justify (Ctrl+Shift+J)",
   "editor.divider": "Divider",
   "editor.imageAlign": "Placement",
+  "editor.imageRemove": "Remove",
   "editor.imageAlignDefault": "Placement: centred",
   "editor.imageAlignLeft": "Left, text beside it",
   "editor.imageAlignCenter": "Centred",
