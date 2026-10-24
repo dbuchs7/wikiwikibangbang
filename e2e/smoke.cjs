@@ -115,7 +115,7 @@ function ckanSource() {
     step("log in");
     await page.fill("#login [name=password]", adminPassword);
     await page.click("#login button[type=submit]");
-    await page.waitForSelector("text=No spaces yet");
+    await page.waitForSelector("text=No rooms yet");
 
     step("start page: a greeting, quick access and the spaces as tiles");
     await page.waitForSelector("#welcome h1:has-text('admin')");
@@ -419,7 +419,7 @@ function ckanSource() {
     await page.click("#app-switcher");
     await page.waitForSelector("#drawer:not([hidden])");
     const modules = (await page.locator("#drawer-apps a").allTextContents()).join(",");
-    check(modules === "Spaces,Create,Tasks,Comments,Album,AI access,Governance,Account,Administration", "the modules of an administrator: " + modules);
+    check(modules === "Rooms,Create,Tasks,Comments,Album,AI access,Governance,Account,Administration", "the modules of an administrator: " + modules);
     await page.keyboard.press("Escape");
     await page.waitForSelector("#drawer", { state: "hidden" });
     await page.click("#app-switcher");
@@ -756,7 +756,7 @@ function ckanSource() {
     await page.waitForSelector("#access.access-restricted .access-bar:has-text('Restricted')");
     await page.waitForSelector("h1.item-title .lock"); // the title carries the closed lock too
     await page.click("#access button:has-text('Lift the restriction')");
-    await page.waitForSelector("#access p:has-text('May edit: everyone with a role in the space')");
+    await page.waitForSelector("#access p:has-text('May edit: everyone with a role in the room')");
     await page.waitForSelector("#access.access-open");
 
     step("files: an upload is listed and downloads; an image goes into the body and shows after a reload");
@@ -899,7 +899,7 @@ function ckanSource() {
     step("album folders: a folder is made, a picture uploaded into it, labelled, found by its label and deleted (ADR-0090)");
     await page.goto(base + "/#/album");
     await page.waitForSelector("#album .album-card img");
-    await page.selectOption("#album select[aria-label=Space]", "PLAT");
+    await page.selectOption("#album select[aria-label=Room]", "PLAT");
     await page.click("#album-new-folder");
     await page.fill("#album-folder-name", "Logos");
     await page.click("#album .album-new-folder button[type=submit]");

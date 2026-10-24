@@ -200,8 +200,8 @@ var texts = map[string]map[string]string{
 	"en": {
 		"digest.subject":     "%s new changes on what you watch",
 		"digest.subject.one": "%s new change on what you watch",
-		"digest.text.one":    "Others made %s change on pages, tasks or spaces you watch since your last look. Open your notifications to see it.",
-		"digest.text":        "Others made %s changes on pages, tasks or spaces you watch since your last look. Open your notifications to see them.",
+		"digest.text.one":    "Others made %s change on pages, tasks or rooms you watch since your last look. Open your notifications to see it.",
+		"digest.text":        "Others made %s changes on pages, tasks or rooms you watch since your last look. Open your notifications to see them.",
 		"request.subject":    "Account request from %s",
 		"request.text":       "%s asked for an account. Approve or reject the request in the administration.",
 		"approved.subject":   "Your account was approved",
@@ -216,8 +216,8 @@ var texts = map[string]map[string]string{
 	"de": {
 		"digest.subject":     "%s neue Änderungen in Abonniertem",
 		"digest.subject.one": "%s neue Änderung in Abonniertem",
-		"digest.text.one":    "Seit Ihrem letzten Besuch gab es %s Änderung an Seiten, Aufgaben oder Bereichen, die Sie abonniert haben. Öffnen Sie Ihre Benachrichtigungen, um sie zu sehen.",
-		"digest.text":        "Seit Ihrem letzten Besuch gab es %s Änderungen an Seiten, Aufgaben oder Bereichen, die Sie abonniert haben. Öffnen Sie Ihre Benachrichtigungen, um sie zu sehen.",
+		"digest.text.one":    "Seit Ihrem letzten Besuch gab es %s Änderung an Seiten, Aufgaben oder Räumen, die Sie abonniert haben. Öffnen Sie Ihre Benachrichtigungen, um sie zu sehen.",
+		"digest.text":        "Seit Ihrem letzten Besuch gab es %s Änderungen an Seiten, Aufgaben oder Räumen, die Sie abonniert haben. Öffnen Sie Ihre Benachrichtigungen, um sie zu sehen.",
 		"request.subject":    "Kontoantrag von %s",
 		"request.text":       "%s hat ein Konto beantragt. Geben Sie den Antrag in der Administration frei oder lehnen Sie ihn ab.",
 		"approved.subject":   "Ihr Konto wurde freigegeben",

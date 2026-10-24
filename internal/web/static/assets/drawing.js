@@ -16,9 +16,11 @@ export function drawingName(caption) {
 }
 
 // openDrawing shows the drawing editor, with scene (a drawing's PNG) to
-// edit it or without to start one. It resolves to the new PNG, or to null
-// when the dialog is closed without saving.
-export function openDrawing(scene = null) {
+// edit it or without to start one. store(png) keeps the new PNG, e.g. as
+// an attachment; the dialog stays open, saving, until it has, and shows
+// what went wrong if it fails. It resolves to what store returns, or to
+// null when the dialog is closed without saving.
+export function openDrawing(scene = null, store = async (png) => png) {
   return new Promise((resolve) => {
     const origin = window.location.origin;
     const frame = h("iframe", { src: "/draw", title: t("draw.title"), class: "drawing-frame" });
@@ -30,23 +32,32 @@ export function openDrawing(scene = null) {
     let done = false;
     // Going back, as a phone's back button does, leaves the drawing too.
     const leave = () => finish(null);
-    const finish = (blob) => {
+    const finish = (result) => {
       if (done) return;
       done = true;
       window.removeEventListener("message", onMessage);
       window.removeEventListener("hashchange", leave);
       dialog.close();
       dialog.remove();
-      resolve(blob);
+      resolve(result);
     };
     const onMessage = (e) => {
       if (e.origin !== origin || e.source !== frame.contentWindow || !e.data) return;
       if (e.data.type === "ready") {
         frame.contentWindow.postMessage({ type: "open", lang: language(), scene }, origin);
         save.disabled = false;
-      } else if (e.data.type === "png") finish(e.data.blob);
-      else if (e.data.type === "error") {
+      } else if (e.data.type === "png") {
+        status.classList.remove("error");
+        status.textContent = t("draw.saving");
+        cancel.disabled = true;
+        store(e.data.blob).then(finish, (err) => {
+          status.classList.add("error");
+          status.textContent = err.message;
+          save.disabled = cancel.disabled = false;
+        });
+      } else if (e.data.type === "error") {
         save.disabled = false;
+        status.classList.add("error");
         status.textContent = e.data.message === "empty" ? t("draw.empty") : e.data.message;
       }
     };
