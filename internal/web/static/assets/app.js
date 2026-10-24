@@ -1013,7 +1013,11 @@ function renderNav() {
     nav.replaceChildren(lookToggles());
     return;
   }
-  const current = location.hash.startsWith("#/search/") ? decodeURIComponent(location.hash.slice(9)) : "";
+  // What someone is typing into the search survives a redraw, e.g. when a
+  // page replaces its address by the item's canonical one.
+  const typing = nav.querySelector("input[name=q]");
+  const keep = typing && document.activeElement === typing ? { value: typing.value, at: typing.selectionStart ?? typing.value.length } : null;
+  const current = keep ? keep.value : location.hash.startsWith("#/search/") ? decodeURIComponent(location.hash.slice(9)) : "";
   const search = h("form", { class: "search", role: "search", onsubmit: (ev) => {
     ev.preventDefault();
     const q = new FormData(ev.target).get("q").trim();
@@ -1049,6 +1053,11 @@ function renderNav() {
     lookToggles(),
     accountMenu(),
   );
+  if (keep) {
+    const input = search.querySelector("input[name=q]");
+    input.focus();
+    input.setSelectionRange(keep.at, keep.at);
+  }
 }
 
 // --- reading mode (ADR-0101) --------------------------------------------------
