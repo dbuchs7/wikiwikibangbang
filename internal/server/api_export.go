@@ -32,8 +32,8 @@ func exportRoutes(h itemHandlers) []Route {
 
 // exportWords are the labels of an export in each UI language.
 var exportWords = map[string]map[string]string{
-	"de": {"key": "Schlüssel", "title": "Titel", "space": "Bereich", "type": "Typ", "state": "Status", "labels": "Labels", "restricted": "(eingeschränkt)", "table": "Tabelle", "contents": "Inhalt"},
-	"en": {"key": "Key", "title": "Title", "space": "Space", "type": "Type", "state": "State", "labels": "Labels", "restricted": "(restricted)", "table": "table", "contents": "Contents"},
+	"de": {"key": "Schlüssel", "title": "Titel", "space": "Raum", "type": "Typ", "state": "Status", "labels": "Labels", "restricted": "(eingeschränkt)", "table": "Tabelle", "contents": "Inhalt"},
+	"en": {"key": "Key", "title": "Title", "space": "Room", "type": "Type", "state": "State", "labels": "Labels", "restricted": "(restricted)", "table": "table", "contents": "Contents"},
 }
 
 func (h itemHandlers) lang(r *http.Request) string {

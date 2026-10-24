@@ -55,7 +55,7 @@ func TestExportsOfPagesAndLists(t *testing.T) {
 
 	// A list and a search as CSV, with every property.
 	rec = w.bert.do("GET", "/api/items.csv?space=PLAT&type=task", "")
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Key,Title,Space,Type,State,Labels,priority,estimate,due") ||
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "Key,Title,Room,Type,State,Labels,priority,estimate,due") ||
 		!strings.Contains(rec.Body.String(), key+",Plan Ä,PLAT,task,open,,high,3,") {
 		t.Fatalf("items.csv: %d %q", rec.Code, rec.Body)
 	}
@@ -68,7 +68,7 @@ func TestExportsOfPagesAndLists(t *testing.T) {
 	}
 	// German readers get German headers and semicolons.
 	w.bert.expect("PUT", "/api/me/language", `{"language":"de"}`, http.StatusNoContent)
-	if rec := w.bert.do("GET", "/api/items.csv?space=PLAT", ""); !strings.Contains(rec.Body.String(), "Schlüssel;Titel;Bereich") {
+	if rec := w.bert.do("GET", "/api/items.csv?space=PLAT", ""); !strings.Contains(rec.Body.String(), "Schlüssel;Titel;Raum") {
 		t.Fatalf("German export: %q", rec.Body)
 	}
 	b := budget.Default()
