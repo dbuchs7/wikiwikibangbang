@@ -799,6 +799,12 @@ function ckanSource() {
     await page.waitForSelector("dialog.drawing[open] iframe");
     drawFrame = page.frameLocator("dialog.drawing iframe");
     await drawFrame.locator("body[data-state=open][data-elements='1']").waitFor(); // the scene came back from the picture
+    // A palette (ADR-0117) fills the library; a shape of it goes onto the canvas.
+    await drawFrame.locator("select.palette:visible").selectOption("bpmn");
+    await drawFrame.locator("body[data-palette=bpmn]").waitFor();
+    check(await drawFrame.locator(".library-unit").count() === 34, "the BPMN palette is in the library");
+    await drawFrame.locator(".library-unit").nth(4).click(); // the start event
+    await drawFrame.locator("body[data-elements='2']").waitFor();
     await page.click("dialog.drawing button:has-text('Cancel')");
     await page.waitForSelector("dialog.drawing", { state: "detached" });
     await page.click("#edit-done");

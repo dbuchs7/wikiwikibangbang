@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"io/fs"
 	"regexp"
 	"strings"
@@ -12,7 +13,9 @@ func TestEmbeddedUIHasEntryPointAndAssets(t *testing.T) {
 		"assets/brand/logo-black.svg", "assets/brand/logo-white.svg", "favicon.ico", "assets/brand/favicon.svg", "assets/brand/apple-touch-icon.png",
 		"vendor/prosemirror.js", "vendor/prosemirror.LICENSE.txt", "draw.html", "assets/draw.js", "assets/draw-boot.js", "assets/draw.css",
 		"vendor/excalidraw.js", "vendor/excalidraw.LICENSE.txt", "vendor/excalidraw-assets/Virgil.woff2",
-		"assets/fonts/comic-neue-400.woff2", "assets/fonts/comic-neue-700.woff2", "assets/fonts/comic-neue.LICENSE.txt"} {
+		"assets/fonts/comic-neue-400.woff2", "assets/fonts/comic-neue-700.woff2", "assets/fonts/comic-neue.LICENSE.txt",
+		"assets/palettes/archimate.json", "assets/palettes/bpmn.json", "assets/palettes/network.json", "assets/palettes/it.json",
+		"assets/palettes/palettes.LICENSE.txt"} {
 		if _, err := fs.Stat(FS(), name); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -57,5 +60,46 @@ func TestNoMarkupFromStrings(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestPalettesAreCredited: every palette of the drawing editor (ADR-0117)
+// is a library of named shapes, and its license file names where it comes
+// from and carries the MIT license it is published under.
+func TestPalettesAreCredited(t *testing.T) {
+	names, err := fs.Glob(FS(), "assets/palettes/*.json")
+	if err != nil || len(names) == 0 {
+		t.Fatalf("no palettes: %v", err)
+	}
+	credits, err := fs.ReadFile(FS(), "assets/palettes/palettes.LICENSE.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(credits), "MIT License") {
+		t.Error("palettes.LICENSE.txt has no MIT license text")
+	}
+	for _, name := range names {
+		base := strings.TrimPrefix(name, "assets/palettes/")
+		if !strings.Contains(string(credits), base+": ") {
+			t.Errorf("palettes.LICENSE.txt does not credit %s", base)
+		}
+		data, err := fs.ReadFile(FS(), name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var lib struct {
+			LibraryItems []struct {
+				Name     string            `json:"name"`
+				Elements []json.RawMessage `json:"elements"`
+			} `json:"libraryItems"`
+		}
+		if err := json.Unmarshal(data, &lib); err != nil || len(lib.LibraryItems) == 0 {
+			t.Errorf("%s: no library items (%v)", base, err)
+		}
+		for i, item := range lib.LibraryItems {
+			if item.Name == "" || len(item.Elements) == 0 {
+				t.Errorf("%s: item %d has no name or no shape", base, i)
+			}
+		}
 	}
 }

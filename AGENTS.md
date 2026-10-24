@@ -140,7 +140,7 @@ internal/connector/ connectors that keep catalog spaces in step with sources suc
 internal/collab/   live editing sessions: block locks, commit on release (ADR-0010)
 internal/server/   HTTP route table with access classes, principal resolution, JSON API, graceful shutdown
 internal/web/      embedded web UI (plain HTML, CSS, ES modules; ADR-0009, ADR-0031)
-internal/web/vendor/  pinned npm packages and build.sh for static/vendor/prosemirror.js (ADR-0032) and excalidraw.js (ADR-0053); only needed to update them
+internal/web/vendor/  pinned npm packages and build.sh for static/vendor/prosemirror.js (ADR-0032) and excalidraw.js (ADR-0053), and palettes.mjs for the drawing palettes (ADR-0117); only needed to update them
 internal/dco/      DCO sign-off rules (humans only), with tests
 internal/item/     prototype of the unified item model (ADR-0001), event-sourced, versioned event codec
 internal/migrate/  prototype of the Jira/Confluence import engine (ADR-0023)

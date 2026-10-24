@@ -1,0 +1,34 @@
+The palettes in this directory are taken from libraries of the Excalidraw
+library collection, github.com/excalidraw/excalidraw-libraries, commit
+297a349eaff859e678f78d4dbc8e68df5fce42e5. Every library there is published under the MIT
+license below.
+
+archimate.json: "Excalidraw Archimate Template" by Timothy Galvin (https://github.com/timothygalvin), 38 items
+bpmn.json: "bpmn" by Aoustin Frederic (https://github.com/fraoustin), 34 items
+network.json: "Computers" by EI d'AU (https://github.com/ei-au), 4 items
+network.json: "Network topology icons" by dwelle (https://github.com/dwelle), 10 items
+network.json: "Common Home Network Basics" by DDay987, 8 items
+network.json: "Network locations" by Jorge Godoy (https://github.com/jgodoy), 5 items
+it.json: "IT icons" by Mateusz Baran (https://github.com/mateuszbaransanok), 28 items
+
+MIT License
+
+Copyright (c) 2020 Excalidraw
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
