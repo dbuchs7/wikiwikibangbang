@@ -63,3 +63,4 @@ Strongest form: no dependency, exactly the policy we want.
 ## Links
 
 - relates to ADR-0024 (offline), ADR-0032 (vendored editor), ADR-0043 (versions), ADR-0045 (attachments)
+- extended by [ADR-0116](0116-every-view-fits-a-phone.md) (phones) and [ADR-0117](0117-palettes-for-the-drawing-editor.md) (palettes)

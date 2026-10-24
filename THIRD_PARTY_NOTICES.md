@@ -45,6 +45,8 @@ The drawing editor (ADR-0053) is a second bundle, `internal/web/static/vendor/ex
 | react-dom | 18.3.1 | MIT |
 | scheduler | 0.23.2 | MIT |
 
+The palettes of the drawing editor (ADR-0117), in `internal/web/static/assets/palettes/`, are libraries of the Excalidraw library collection (github.com/excalidraw/excalidraw-libraries, commit 297a349e), which publishes every library under the MIT license (Copyright (c) 2020 Excalidraw): "Excalidraw Archimate Template" by Timothy Galvin, "bpmn" by Aoustin Frederic, "Computers" by EI d'AU, "Network topology icons" by dwelle, "Common Home Network Basics" by DDay987, "Network locations" by Jorge Godoy and "IT icons" by Mateusz Baran. `palettes.LICENSE.txt` ships next to them with the license text and which palette holds which library; `internal/web/vendor/palettes.mjs` builds them.
+
 The fonts Virgil, Cascadia and Assistant, shipped with Excalidraw in `excalidraw-assets/`, are licensed under the SIL Open Font License 1.1.
 
 The comic theme (ADR-0085) uses the font Comic Neue, Google Fonts release v9 (Copyright 2014 The Comic Neue Project Authors), from the package @fontsource/comic-neue 5.3.0, licensed under the SIL Open Font License 1.1; `internal/web/static/assets/fonts/comic-neue.LICENSE.txt` ships next to it. The sketch theme uses Virgil from the Excalidraw assets above.
