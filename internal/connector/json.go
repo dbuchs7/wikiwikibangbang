@@ -75,11 +75,27 @@ func (jsonReader) Read(ctx context.Context, c site.Connector, env Env) (reading,
 // getJSON fetches and decodes one answer, sending the credential as a
 // bearer token if one is set.
 func getJSON(ctx context.Context, env Env, addr string) (any, error) {
+	data, err := fetch(ctx, env, addr, "application/json", maxAnswer)
+	if err != nil {
+		return nil, err
+	}
+	var v any
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec.UseNumber()
+	if err := dec.Decode(&v); err != nil {
+		return nil, fmt.Errorf("connector: the answer of %s is no JSON: %w", addr, err)
+	}
+	return v, nil
+}
+
+// fetch reads one answer of at most limit bytes, sending the credential
+// as a bearer token if one is set.
+func fetch(ctx context.Context, env Env, addr, accept string, limit int) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, addr, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 	if env.Token != "" {
 		req.Header.Set("Authorization", "Bearer "+env.Token)
 	}
@@ -91,20 +107,14 @@ func getJSON(ctx context.Context, env Env, addr string) (any, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("connector: %s answered %s", addr, resp.Status)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxAnswer+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, int64(limit)+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > maxAnswer {
-		return nil, fmt.Errorf("connector: the answer of %s is larger than %d MB", addr, maxAnswer>>20)
+	if len(data) > limit {
+		return nil, fmt.Errorf("connector: the answer of %s is larger than %d MB", addr, limit>>20)
 	}
-	var v any
-	dec := json.NewDecoder(strings.NewReader(string(data)))
-	dec.UseNumber()
-	if err := dec.Decode(&v); err != nil {
-		return nil, fmt.Errorf("connector: the answer of %s is no JSON: %w", addr, err)
-	}
-	return v, nil
+	return data, nil
 }
 
 // at follows a path of keys and list positions joined by dots; an empty
