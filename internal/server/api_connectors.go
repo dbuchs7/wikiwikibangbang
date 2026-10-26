@@ -75,6 +75,7 @@ func (h authHandlers) connectors(w http.ResponseWriter, r *http.Request) {
 		"type":       connector.PageType,
 		"types":      types,
 		"ckanValues": site.CKANValues,
+		"gitValues":  site.GitValues,
 	})
 }
 
@@ -178,6 +179,9 @@ func (h authHandlers) keepConnector(w http.ResponseWriter, r *http.Request, acto
 	}
 	if a := kept.Atlassian; a != nil {
 		detail["source"], detail["spaces"], detail["projects"], detail["grants"] = a.Site, strings.Join(a.Spaces, " "), strings.Join(a.Projects, " "), strings.Join(a.Grants, " ")
+	}
+	if g := kept.Git; g != nil {
+		detail["source"] = g.URL
 	}
 	h.record(audit.Entry{Event: audit.CatalogSyncChanged, Actor: actor, Addr: clientAddr(r), Subject: kept.Space, Detail: detail})
 	writeJSON(w, status, kept)

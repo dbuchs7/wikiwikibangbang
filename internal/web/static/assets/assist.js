@@ -40,9 +40,14 @@ function linkRange(state, pos, type) {
   return runs.find((r) => r.from <= pos && pos <= r.to) || null;
 }
 
+// markdownFileRE is the address of a Markdown file as a repository's host
+// shows it (ADR-0138).
+const markdownFileRE = /^https?:\/\/[^\s]+\/(blob|raw|src|browse|-\/blob|-\/raw)\/[^\s]*\.(md|markdown)([?#][^\s]*)?$|^https:\/\/raw\.githubusercontent\.com\/[^\s]+\.(md|markdown)$/i;
+
 // assist makes the aids for a schema; isSafe decides which link targets
-// the model keeps (ADR-0014).
-export function assist(schema, isSafe) {
+// the model keeps (ADR-0014). showFile(href), if given, shows a Markdown
+// file a link leads to instead of the link (ADR-0138).
+export function assist(schema, isSafe, { showFile } = {}) {
   const link = schema.marks.link;
 
   // autolink marks the address before pos as a link, as typing a space or
@@ -246,8 +251,13 @@ export function assist(schema, isSafe) {
   const bubblePlugin = new Plugin({
     view(view) {
       const href = h("a", { class: "pm-bubble-href", target: "_blank", rel: "noopener noreferrer" });
+      const file = h("button", { type: "button", class: "link", id: "pm-link-show-file", hidden: true, text: t("assist.showFile"), onmousedown: (ev) => {
+        ev.preventDefault();
+        const r = linkRange(view.state, view.state.selection.from, link);
+        if (r) showFile(r.mark.attrs.href);
+      } });
       const bubble = h("div", { class: "pm-bubble", id: "pm-link-bubble", hidden: true },
-        href,
+        href, file,
         h("button", { type: "button", class: "link", text: t("assist.edit"), onmousedown: (ev) => { ev.preventDefault(); openLink(view); } }),
         h("button", { type: "button", class: "link danger", text: t("assist.remove"), onmousedown: (ev) => {
           ev.preventDefault();
@@ -264,6 +274,7 @@ export function assist(schema, isSafe) {
         }
         href.href = r.mark.attrs.href;
         href.textContent = r.mark.attrs.href.replace(/^mailto:/, "");
+        file.hidden = !showFile || !markdownFileRE.test(r.mark.attrs.href);
         const at = v.coordsAtPos(r.from);
         bubble.hidden = false;
         bubble.style.left = Math.max(8, Math.min(at.left, window.innerWidth - bubble.offsetWidth - 8)) + "px";

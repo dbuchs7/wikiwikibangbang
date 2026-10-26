@@ -23,6 +23,8 @@ type labels struct {
 	withdrawn                                                                         string
 	// entry links an entry of a JSON source to its page there (ADR-0127).
 	entry string
+	// fromGit heads a page written from a Git repository (ADR-0138).
+	fromGit string
 }
 
 var pageLabels = map[string]labels{
@@ -37,6 +39,7 @@ var pageLabels = map[string]labels{
 		frequency: "Update frequency", spatial: "Area", identifier: "Identifier", datasetID: "Data set ID",
 		page: "Data set in the source", landing: "Landing page", relation: "Related", entry: "Entry in the source",
 		withdrawn: "The source no longer publishes this entry. The page stays, with what was added here; it is no longer kept in step.",
+		fromGit:   "This page is written from %s whenever it changes there. Add notes as comments: they stay.",
 	},
 	"de": {
 		generated:  "Diese Seite wird bei jedem Abgleich aus %s geschrieben und vom nächsten ersetzt. Anmerkungen bitte als Kommentar: Kommentare bleiben erhalten.",
@@ -49,6 +52,7 @@ var pageLabels = map[string]labels{
 		frequency: "Aktualisierung", spatial: "Raum", identifier: "Kennung", datasetID: "Datensatz-ID",
 		page: "Datensatz in der Quelle", landing: "Einstiegsseite", relation: "Verwandt", entry: "Eintrag in der Quelle",
 		withdrawn: "Die Quelle publiziert diesen Eintrag nicht mehr. Die Seite bleibt mit allem, was hier ergänzt wurde, wird aber nicht mehr abgeglichen.",
+		fromGit:   "Diese Seite wird bei jeder Änderung aus %s geschrieben. Anmerkungen bitte als Kommentar: Kommentare bleiben erhalten.",
 	},
 }
 

@@ -150,3 +150,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0135](0135-a-json-source-is-read-by-page-numbers-or-offsets.md) | A JSON source is read by page numbers or offsets | Accepted | Landed |
 | [0136](0136-a-query-language-selects-items-by-their-fields.md) | A query language selects items by their fields | Proposed | Partial |
 | [0137](0137-kanban-swimlanes-by-a-task-field-and-relations-on-cards.md) | Kanban swimlanes by a field of the task, and relations on the cards | Accepted | Landed |
+| [0138](0138-markdown-from-git-repositories.md) | Markdown from Git repositories: folders as page trees, files in a text | Proposed | Partial |

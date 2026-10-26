@@ -579,6 +579,12 @@ type reading struct {
 	formats  []string
 	entries  []Entry
 	problems []string
+	// version is the source's version read, e.g. a commit; seen is what
+	// the runner remembers of a run that applied it without a problem, and
+	// same is set when the source is still at what it remembers (Env.Seen),
+	// so nothing was read (ADR-0138).
+	version, seen string
+	same          bool
 }
 
 func (rd *reading) problem(format string, args ...any) {

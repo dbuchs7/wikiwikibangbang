@@ -554,11 +554,94 @@ function embedLoader(chain) {
     const props = Object.entries(item.properties || {}).filter(([, v]) => v !== null && v !== "" && !(Array.isArray(v) && !v.length));
     return h("div", { class: "pm-embed-content", "data-embedded": item.key },
       h("p", { class: "muted pm-embed-meta" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : ""),
+      item.origin?.system === "git:file" ? h("p", { class: "muted pm-embed-meta pm-embed-source" }, ...fileSource(item.origin)) : null,
       props.length ? h("dl", { class: "pm-embed-props" }, props.flatMap(([k, v]) => [h("dt", { text: k }),
         h("dd", { text: (Array.isArray(v) ? v : [v]).map((x) => (names.has(x) ? names.get(x) : String(x))).join(", ") })])) : null,
       item.body.length ? createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
         embedContent: embedLoader([...chain, ref]), tasks: taskTools(item, false) }).element : null);
   };
+}
+
+// formDialog shows a form in a modal; it answers what submit gave, or
+// null when cancelled. ok names the button that submits.
+function formDialog(title, id, fields, submit, ok = t("common.create")) {
+  return new Promise((resolve) => {
+    const status = h("p", { class: "error", role: "alert", hidden: true });
+    let result = null;
+    const f = h("form", { method: "dialog", class: "note-form" }, fields, status,
+      h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", id: id + "-ok", text: ok }),
+        h("button", { type: "button", class: "link", id: id + "-cancel", text: t("common.cancel"), onclick: () => d.close() })));
+    f.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        result = await submit(f);
+        d.close();
+      } catch (err) {
+        status.textContent = err.message;
+        status.hidden = false;
+      }
+    });
+    const name = title.replace(/…$/, "");
+    const d = h("dialog", { class: "note-dialog", id, "aria-label": name }, h("div", { class: "drawing-bar" }, h("strong", { text: name })), f);
+    d.addEventListener("close", () => { d.remove(); resolve(result); });
+    document.body.append(d);
+    d.showModal();
+    f.querySelector("input, select")?.focus();
+  });
+}
+
+// markdownTools make a page below the item from a Markdown file of a
+// repository, which the text then shows whole (ADR-0138): insert(address)
+// asks for the address and the version and answers the page, or null.
+function markdownTools(item) {
+  const insert = (address) => {
+    const url = h("input", { name: "url", type: "url", required: true, value: address || "", maxlength: 1024, id: "markdown-url",
+      placeholder: "https://github.com/owner/repository/blob/main/README.md" });
+    return formDialog(t("editor.markdownFile"), "markdown-dialog", [
+      field(t("markdown.url"), url),
+      h("fieldset", { class: "newtask-display" }, h("legend", { text: t("markdown.version") }),
+        h("label", { class: "check" }, h("input", { type: "radio", name: "version", value: "current", checked: true }), " ", t("markdown.current")),
+        h("label", { class: "check" }, h("input", { type: "radio", name: "version", value: "this" }), " ", t("markdown.this"))),
+      h("p", { class: "muted", text: t("markdown.hint", { title: item.title || item.key }) }),
+    ], async (f) => {
+      const { item: made } = await post(`/api/items/${item.id}/markdown`, { url: url.value.trim(), version: f.querySelector("[name=version]:checked").value });
+      return made;
+    }, t("markdown.insert"));
+  };
+  return { insert };
+}
+
+// fileSource says where a page made from a Markdown file comes from and
+// which version it shows (ADR-0138), in the reader's language.
+function fileSource(origin) {
+  const file = origin.externalId.slice(origin.externalId.indexOf("/") + 1);
+  const repo = origin.instance.replace(/^https?:\/\//, "");
+  const commit = (origin.version || "").slice(0, 8);
+  return [t("gitfile.from"), " ", h("a", { href: origin.url, target: "_blank", rel: "noopener noreferrer", text: `${repo}: ${file}` }), " · ",
+    origin.pinned ? t("gitfile.pinned", { commit }) : t("gitfile.follows", { ref: origin.externalKey, commit })];
+}
+
+// fileOrigin is the notice of a page made from a Markdown file: its
+// source, and for who may edit it, updating it now and pinning or
+// following its version.
+function fileOrigin(item, path, canEdit, status) {
+  const o = item.origin;
+  const buttons = !canEdit ? [] : [
+    h("button", { type: "button", class: "link", id: "gitfile-update", text: t("gitfile.update"), onclick: async () => {
+      try {
+        const r = await post(path + "/markdown/update", {});
+        if (r.changed) route();
+        else status.replaceChildren(h("p", { class: "muted", text: t("gitfile.unchanged") }));
+      } catch (err) {
+        status.replaceChildren(errorBox(err));
+      }
+    } }),
+    o.pinned
+      ? (o.externalKey ? h("button", { type: "button", class: "link", id: "gitfile-follow", text: t("gitfile.follow", { ref: o.externalKey }),
+        onclick: () => action(() => put(path + "/markdown", { version: "current" }), status) }) : null)
+      : h("button", { type: "button", class: "link", id: "gitfile-pin", text: t("gitfile.pin"), onclick: () => action(() => put(path + "/markdown", { version: "this" }), status) }),
+  ].filter(Boolean);
+  return h("p", { class: "notice origin", id: "item-origin" }, ...fileSource(o), ...buttons.flatMap((b) => [" · ", b]));
 }
 
 // taskTools are what a text needs for its tasks (ADR-0114): list(label)
@@ -596,30 +679,7 @@ function taskTools(item, editing) {
     return h("div", { class: "tasklist-box" }, box, found.truncated ? h("p", { class: "muted", text: t("board.truncated", { n: rows.length }) }) : null);
   };
   if (!editing) return { list };
-  // dialog shows a form in a modal; it answers what done() gave, or null.
-  const dialog = (title, id, fields, submit) => new Promise((resolve) => {
-    const status = h("p", { class: "error", role: "alert", hidden: true });
-    let result = null;
-    const f = h("form", { method: "dialog", class: "note-form" }, fields, status,
-      h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", id: id + "-ok", text: t("common.create") }),
-        h("button", { type: "button", class: "link", id: id + "-cancel", text: t("common.cancel"), onclick: () => d.close() })));
-    f.addEventListener("submit", async (ev) => {
-      ev.preventDefault();
-      try {
-        result = await submit(f);
-        d.close();
-      } catch (err) {
-        status.textContent = err.message;
-        status.hidden = false;
-      }
-    });
-    const name = title.replace(/…$/, "");
-    const d = h("dialog", { class: "note-dialog", id, "aria-label": name }, h("div", { class: "drawing-bar" }, h("strong", { text: name })), f);
-    d.addEventListener("close", () => { d.remove(); resolve(result); });
-    document.body.append(d);
-    d.showModal();
-    f.querySelector("input, select")?.focus();
-  });
+  const dialog = formDialog;
   const pickLabel = async () => {
     const { labels } = await get("/api/labels?tasks=1").catch(() => ({ labels: [] }));
     const input = h("input", { name: "label", required: true, list: "tasklist-labels", autocomplete: "off", placeholder: t("editor.taskListPlaceholder") });
@@ -3799,7 +3859,7 @@ async function itemView(ref, params = new URLSearchParams()) {
     h("p", { class: "muted" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : "", t("item.version", { n: item.version })),
     // An item mirrored from another system says where it is kept, the
     // system of record (ADR-0023, ADR-0074).
-    item.origin ? h("p", { class: "notice origin", id: "item-origin" },
+    item.origin?.system === "git:file" ? fileOrigin(item, path, canEdit, status) : item.origin ? h("p", { class: "notice origin", id: "item-origin" },
       t("item.origin", { system: item.origin.system }), " ",
       item.origin.url ? h("a", { href: item.origin.url, target: "_blank", rel: "noopener noreferrer", text: t("item.originOpen") }) : "",
       item.managed ? " · " + t("item.managed") : "") : "",
@@ -3890,7 +3950,7 @@ function bodySection(item, embeds, editing, threads, attachments, protect, edit,
     return { element: section, session: null };
   }
   const session = liveBody({ ref: item.id, embeds, resolve, childPages: childPagesOf(item), files: filesOf(item, attachments),
-    extra: [threads.plugin], comment: threads.start, actions: edit ? [edit] : [], embedContent: embedLoader([item.id]), tasks: taskTools(item, true), onPresence });
+    extra: [threads.plugin], comment: threads.start, actions: edit ? [edit] : [], embedContent: embedLoader([item.id]), tasks: taskTools(item, true), markdown: markdownTools(item), onPresence });
   onLeave(session.close);
   return { element: h("section", { id: "body", class: "editing" }, session.element), session };
 }
@@ -5258,6 +5318,7 @@ function connectorsCard(spaces, users) {
 function connectorEditor(c, data, spaces, users, list, reopen) {
   const k = c.ckan || { formats: [], organizations: [], baseURL: "", portalURL: "", language: "de" };
   const j = c.json;
+  const g = c.git;
   // An Atlassian import names its spaces, types and fields itself
   // (ADR-0128): it has no space, type or steward of its own.
   const a = c.atlassian;
@@ -5298,7 +5359,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     value: Object.entries(j?.values || {}).map(([n, p]) => `${n} = ${p}`).join("\n") });
   const parseValues = (v) => Object.fromEntries(v.split("\n").map((l) => l.split("=")).filter((p) => p.length > 1 && p[0].trim())
     .map(([n, ...p]) => [n.trim(), p.join("=").trim()]));
-  const sourceValues = () => j ? Object.keys(parseValues(valuesInput.value)).sort() : data.ckanValues;
+  const sourceValues = () => j ? Object.keys(parseValues(valuesInput.value)).sort() : g ? data.gitValues : data.ckanValues;
   // The type the entries are written as: page, or another with a text.
   const typeNames = [data.type, ...data.types.map((tp) => tp.name).filter((n) => n !== data.type)];
   const typeSelect = h("select", { name: "type", id: "connector-type" }, typeNames.map((n) => h("option", { value: n === data.type ? "" : n, text: n,
@@ -5417,6 +5478,13 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     field(t("connector.language"), languageSelect(j.language)),
     h("p", { class: "muted", text: t("json.languageHelp") }),
   ];
+  // A folder or file of a Git repository (ADR-0138).
+  const gitSource = () => [
+    field(t("git.url"), h("input", { name: "url", type: "url", required: true, value: g.url, maxlength: 512, placeholder: "https://github.com/owner/repository/tree/main/docs" })),
+    h("p", { class: "muted", text: t("git.urlHelp") }),
+    field(t("connector.language"), languageSelect(g.language)),
+    h("p", { class: "muted", text: t("git.languageHelp") }),
+  ];
   // The source accounts, groups and roles of an Atlassian import, one a
   // line: "accountId username", "source group @local-group", "username=role".
   const lines = (v) => v.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
@@ -5461,7 +5529,9 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     "data-f-outcome": r.error ? t("connector.failed") : r.dryRun ? t("catalog.dryRun") : t("catalog.run") },
     h("summary", {}, h("strong", { text: r.dryRun ? t("catalog.dryRun") : t("catalog.run") }), " · ", when(r.started), " · ",
       r.error ? h("span", { class: "error", text: r.error })
-        : t("catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn, removed: r.removed || 0 })),
+        : r.same ? t("git.same", { commit: r.version.slice(0, 8) })
+          : t(g ? "git.counts" : "catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn, removed: r.removed || 0 })),
+    r.version && !r.same && !r.error ? h("p", { class: "muted", text: t("git.read", { commit: r.version.slice(0, 8) }) }) : "",
     r.formats?.length ? h("p", { class: "muted", text: t("catalog.formatsRead", { list: r.formats.join(", ") }) }) : "",
     r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn"), removed: t("catalog.kind.removed") }[x.kind] }), " ",
       x.key ? link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`) : x.title))) : "",
@@ -5469,7 +5539,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       { id: "run-problems-" + Date.parse(r.started), label: t("catalog.problems") }) : "");
   editor.replaceChildren(
     h("h3", { text: c.isNew ? t("connector.newTitle") : c.name }),
-    h("p", { class: "muted", text: a ? t("atlassian.note") : j ? t("json.note") : t("catalog.note") }),
+    h("p", { class: "muted", text: a ? t("atlassian.note") : j ? t("json.note") : g ? t("git.note") : t("catalog.note") }),
     h("p", { class: "muted", text: t("connector.publicOnly") }),
     form({ id: "connector-settings" }, [
       field(t("connector.id"), h("input", { name: "id", value: c.id, required: true, readonly: !c.isNew, pattern: "[a-z0-9][a-z0-9.\\-]{0,39}", maxlength: 40 })),
@@ -5478,7 +5548,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: c.enabled }), " ", t("catalog.enabled")),
       a ? "" : field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
         spaces.map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === c.space })))),
-      a ? atlassianSource() : j ? jsonSource() : ckanSource(),
+      a ? atlassianSource() : j ? jsonSource() : g ? gitSource() : ckanSource(),
       a ? "" : h("fieldset", { class: "connector-target" }, h("legend", { text: t("connector.target") }),
         field(t("connector.type"), typeSelect),
         h("p", { class: "muted", text: t("connector.targetHelp") }),
@@ -5488,7 +5558,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
         users.map((u) => h("option", { value: u.id, text: u.username, selected: u.id === c.steward })))),
       a ? "" : h("p", { class: "muted", text: t("catalog.stewardHelp") }),
       field(t("catalog.interval"), h("input", { name: "intervalHours", type: "number", min: 1, max: 744, required: true, value: c.intervalHours })),
-      j || a ? "" : h("details", {}, h("summary", { text: t("catalog.source") }),
+      j || a || g ? "" : h("details", {}, h("summary", { text: t("catalog.source") }),
         field(t("catalog.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: k.baseURL })),
         field(t("catalog.portalURL"), h("input", { name: "portalURL", type: "url", required: true, value: k.portalURL }))),
       c.isNew ? "" : h("p", { class: "muted", id: "connector-credential",
@@ -5511,7 +5581,9 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
         id: d.get("id").trim(), name: d.get("name").trim(), kind: c.kind, enabled: d.get("enabled") === "on", space: d.get("space") || "",
         steward: d.get("steward") || "", intervalHours: Number(d.get("intervalHours")), type: a ? "" : d.get("type"), fields: a ? {} : fields,
       };
-      if (a) {
+      if (g) {
+        body.git = { url: d.get("url").trim(), language: d.get("language") };
+      } else if (a) {
         body.atlassian = { site: d.get("site").trim(), spaces: list(d.get("spaces")), projects: list(d.get("projects")), users: pairs(d.get("users")),
           groups: pairs(d.get("groups")), grants: lines(d.get("grants")) };
       } else if (j) {

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/gitrepo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
@@ -30,6 +31,8 @@ func instance(c site.Connector) string {
 		return c.CKAN.BaseURL
 	case c.JSON != nil:
 		return c.JSON.URL
+	case c.Git != nil:
+		return c.Git.URL
 	}
 	return ""
 }
@@ -92,6 +95,14 @@ type Result struct {
 	// Examples are the first changes, to judge a dry run by.
 	Examples []Change `json:"examples"`
 	Error    string   `json:"error,omitempty"`
+	// Version is the source's version the run read, e.g. a commit, and
+	// Same is set when it is the one the last run applied, with the same
+	// settings, so the run read nothing further (ADR-0138).
+	Version string `json:"version,omitempty"`
+	Same    bool   `json:"same,omitempty"`
+	// retry is set when an entry could not be read or written for a
+	// reason that may pass, so the next run reads the source again.
+	retry bool
 }
 
 // examplesShown and problemsShown bound the lists of a result.
@@ -220,18 +231,51 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 
 	words := wordsIn(language(cfg))
 	seen := map[string]bool{}
+	// ids are the pages of the entries by SourceID, for the parents of new
+	// pages and for links between pages (ADR-0138).
+	ids := map[string]item.ID{}
+	for sid, it := range existing {
+		ids[sid] = it.ID
+	}
+	var later []pendingLinks
 	for _, e := range entries {
 		seen[e.SourceID] = true
 		old, had := existing[e.SourceID]
+		e, c, write, err := loadEntry(e, old, had)
+		if err != nil {
+			res.problem("%s: %v", cmp.Or(e.Title, e.SourceID), err)
+			res.retry = res.retry || !errors.Is(err, ErrLeftOut)
+			continue
+		}
 		u, bad := upsertFor(cfg, td, e, old, had)
 		for _, p := range bad {
 			res.problem("%s: %s", e.Title, p)
 		}
-		// The page is the source's: every run writes it anew, and only
-		// when it changed (ADR-0080).
-		body := item.Doc{Blocks: e.Body}
+		if !had && e.Parent != "" {
+			u.Parent = ids[e.Parent]
+		}
 		labels := without(old.Labels, WithdrawnLabel)
-		newBody, newLabels := !sameBody(old.Body, body), !slices.Equal(labels, old.Labels)
+		newLabels := !slices.Equal(labels, old.Labels)
+		// The page is the source's: every run writes it anew, and only
+		// when it changed (ADR-0080); a source read only when it changed
+		// keeps its raw text, and its page is written only then (ADR-0138).
+		body := item.Doc{Blocks: e.Body}
+		if e.Load != nil {
+			u.Origin.Version, u.Origin.Raw = e.Version, c.Raw
+			if !write {
+				u.Origin.Version, u.Origin.Raw = old.Origin.Version, old.Origin.Raw
+				body = old.Body
+			}
+		}
+		var pending *pendingLinks
+		if write && len(c.Links) > 0 {
+			var all bool
+			body.Blocks, all = mentions(body.Blocks, c.Links, ids, old.ID)
+			if !all {
+				pending = &pendingLinks{source: e.SourceID, title: e.Title, blocks: slices.Clone(e.Body), links: c.Links}
+			}
+		}
+		newBody := !sameBody(old.Body, body)
 		kind := "new"
 		if had {
 			if same(old, u) && !newBody && !newLabels {
@@ -242,32 +286,34 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 		}
 		key := old.Key
 		if !dry {
-			var it item.Item
-			err := db.Write(func(s *item.Store) error {
-				var err error
-				if it, _, err = s.Upsert(Actor(cfg), u); err != nil {
-					return err
-				}
-				if newLabels {
-					if err := s.SetLabels(Actor(cfg), it.ID, labels); err != nil {
-						return err
-					}
-				}
-				if !newBody {
-					return nil
-				}
-				return s.CommitBody(Actor(cfg), it.ID, body)
-			})
+			it, err := writeEntry(db, cfg, u, labels, newLabels, body, newBody, c.Pictures)
 			if err != nil {
-				res.problem("%s (%s): %v", e.Title, e.Dataset, err)
+				res.problem("%s (%s): %v", e.Title, cmp.Or(e.Dataset, e.SourceID), err)
+				res.retry = true
 				continue
 			}
-			key = it.Key
+			key, ids[e.SourceID] = it.Key, it.ID
+			if pending != nil {
+				pending.id = it.ID
+				pending.blocks = it.Body.Blocks
+				later = append(later, *pending)
+			}
 			if !had && cfg.Steward != "" {
 				watch(db, cfg, it.ID, &res)
 			}
 		}
 		res.count(kind, key, e.Title)
+	}
+	// A page that links to pages made after it in this run names them now.
+	for _, p := range later {
+		blocks, _ := mentions(p.blocks, p.links, ids, p.id)
+		if sameBody(item.Doc{Blocks: p.blocks}, item.Doc{Blocks: blocks}) {
+			continue
+		}
+		if err := db.Write(func(s *item.Store) error { return s.CommitBody(Actor(cfg), p.id, item.Doc{Blocks: blocks}) }); err != nil {
+			res.problem("%s: %v", p.title, err)
+			res.retry = true
+		}
 	}
 
 	// A page the source no longer publishes is marked, not deleted: its
@@ -329,6 +375,8 @@ func language(cfg site.Connector) string {
 		return cfg.CKAN.Language
 	case cfg.JSON != nil && cfg.JSON.Language != "":
 		return cfg.JSON.Language
+	case cfg.Git != nil && cfg.Git.Language != "":
+		return cfg.Git.Language
 	}
 	return "de"
 }
@@ -467,4 +515,96 @@ func nonEmpty(p item.Props) item.Props {
 		return nil
 	}
 	return p
+}
+
+// loadEntry reads an entry's content when the entry has to be read
+// (ADR-0138): when it is new, withdrawn, or its Blob does not tell that
+// the raw text kept in its origin is still the source's. write reports
+// whether its page is to be written; an entry without Load always is.
+func loadEntry(e Entry, old item.Item, had bool) (Entry, Content, bool, error) {
+	if e.Load == nil {
+		return e, Content{}, true, nil
+	}
+	kept := ""
+	if had && old.Origin != nil {
+		kept = old.Origin.Raw
+	}
+	fresh := !had || slices.Contains(old.Labels, WithdrawnLabel) || kept == ""
+	if !fresh && e.Blob != "" && gitrepo.BlobID([]byte(kept), e.Blob) == e.Blob {
+		e.Title = old.Title
+		return e, Content{}, false, nil
+	}
+	c, err := e.Load()
+	if err != nil {
+		return e, c, false, err
+	}
+	if !fresh && c.Raw == kept {
+		e.Title = old.Title
+		return e, Content{}, false, nil
+	}
+	e.Title, e.Body = c.Title, c.Body
+	return e, c, true, nil
+}
+
+// pendingLinks is a page whose links name pages that did not exist yet
+// when it was written.
+type pendingLinks struct {
+	id     item.ID
+	source string
+	title  string
+	blocks []item.Block
+	links  map[string]string
+}
+
+// mentions turns the links of blocks that lead to other entries' pages
+// into mentions of those pages (D2), and reports whether every such link
+// found its page. A link to the page itself stays a link.
+func mentions(blocks []item.Block, links map[string]string, ids map[string]item.ID, self item.ID) ([]item.Block, bool) {
+	all := true
+	out := make([]item.Block, len(blocks))
+	for i, b := range blocks {
+		b.Marks = slices.Clone(b.Marks)
+		b.Mentions = slices.Clone(b.Mentions)
+		for j, m := range b.Marks {
+			if m.Type != item.MarkLink {
+				continue
+			}
+			target, ok := links[strings.SplitN(m.Href, "#", 2)[0]]
+			if !ok {
+				continue
+			}
+			id := ids[target]
+			switch {
+			case id == "":
+				all = false
+			case id != self:
+				b.Marks[j] = item.Mark{Type: item.MarkMention, Start: m.Start, End: m.End, Ref: id}
+				if !slices.Contains(b.Mentions, id) {
+					b.Mentions = append(b.Mentions, id)
+				}
+			}
+		}
+		out[i] = b
+	}
+	return out, all
+}
+
+// writeEntry writes an entry's page: the import, its labels, and, when
+// it changed, the pictures it shows and its body.
+func writeEntry(db *storage.DB, cfg site.Connector, u item.Upsert, labels []string, newLabels bool, body item.Doc, newBody bool, pictures []Picture) (item.Item, error) {
+	var it item.Item
+	err := db.Write(func(s *item.Store) error {
+		var err error
+		if it, _, err = s.Upsert(Actor(cfg), u); err != nil {
+			return err
+		}
+		if newLabels {
+			return s.SetLabels(Actor(cfg), it.ID, labels)
+		}
+		return nil
+	})
+	if err != nil || !newBody {
+		return it, err
+	}
+	return writeBody(db, pageWriter{actor: Actor(cfg)}, it, body, pictures)
 }

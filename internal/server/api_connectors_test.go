@@ -113,6 +113,18 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	}
 	w.admin.expect("DELETE", "/api/connectors/feed", "", http.StatusNoContent)
 
+	// A Git connector names a folder of a repository (ADR-0138); its
+	// address is checked, and the list names the values it gives.
+	gitConnector := func(url string) string {
+		return `{"id":"docs","name":"Docs","kind":"git","space":"PLAT","intervalHours":1,"git":{"url":"` + url + `"}}`
+	}
+	w.admin.expect("POST", "/api/connectors", gitConnector("https://example.org/docs"), http.StatusBadRequest)
+	w.admin.expect("POST", "/api/connectors", gitConnector("https://github.com/o/r/tree/main/docs"), http.StatusCreated)
+	if listed := w.admin.expect("GET", "/api/connectors", "", http.StatusOK); jsonOf(listed["gitValues"]) != `["commit","path","url"]` || !strings.Contains(jsonOf(listed["kinds"]), `"git"`) {
+		t.Errorf("git values %s, kinds %s", jsonOf(listed["gitValues"]), jsonOf(listed["kinds"]))
+	}
+	w.admin.expect("DELETE", "/api/connectors/docs", "", http.StatusNoContent)
+
 	// An API description offers its lists as JSON sources (ADR-0130).
 	spec := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "openapi: 3.0.0\ninfo: {title: Registry}\npaths:\n  /services:\n    get:\n      responses:\n        200:\n"+

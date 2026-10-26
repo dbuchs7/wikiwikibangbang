@@ -305,3 +305,41 @@ func TestPagingIsChecked(t *testing.T) {
 		t.Errorf("a next link and a page parameter: %v", err)
 	}
 }
+
+func TestGitConnectorsAreChecked(t *testing.T) {
+	s, _ := New(nil, func([]byte) error { return nil })
+	c := ConnectorTemplates()[len(ConnectorTemplates())-1]
+	if c.Kind != KindGit || c.IntervalHours != 1 {
+		t.Fatalf("the Git template runs every hour: %+v", c)
+	}
+	c.ID, c.Git.URL = "docs", " https://github.com/o/r/tree/main/docs "
+	c.Fields = map[string]string{"source": "url"}
+	kept, err := s.SetConnector("admin", c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept.Git.URL != "https://github.com/o/r/tree/main/docs" || !slices.Equal(kept.Values(), GitValues) {
+		t.Fatalf("normalized %+v", kept.Git)
+	}
+	got, _ := s.Connector("docs")
+	got.Git.URL = "x"
+	if again, _ := s.Connector("docs"); again.Git.URL != kept.Git.URL {
+		t.Fatal("a caller changed the settings")
+	}
+	for name, change := range map[string]func(*Connector){
+		"no Git source":     func(c *Connector) { c.Git = nil },
+		"the template's":    func(c *Connector) { c.Git.URL = "https://" },
+		"no repository":     func(c *Connector) { c.Git.URL = "https://example.org/docs" },
+		"a Git language":    func(c *Connector) { c.Git.Language = "rm" },
+		"a JSON value":      func(c *Connector) { c.Fields = map[string]string{"source": "owner"} },
+		"credentials in it": func(c *Connector) { c.Git.URL = "https://u:p@github.com/o/r" },
+	} {
+		bad := c
+		g := *c.Git
+		bad.Git = &g
+		change(&bad)
+		if _, err := s.SetConnector("admin", bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/gitrepo"
 )
 
 // Connector keeps a space in step with an external source (ADR-0077,
@@ -39,6 +41,8 @@ type Connector struct {
 	JSON *JSONSource `json:"json,omitempty"`
 	// Atlassian holds the settings of a connector of the kind atlassian.
 	Atlassian *Atlassian `json:"atlassian,omitempty"`
+	// Git holds the settings of a connector of the kind git.
+	Git *GitSource `json:"git,omitempty"`
 }
 
 // Atlassian is an Atlassian Cloud site whose spaces and projects are
@@ -61,6 +65,15 @@ type Atlassian struct {
 	// Grants give a role in every imported space, as "username=role" or
 	// "@group=role" with role viewer, editor or space-admin.
 	Grants []string `json:"grants,omitempty"`
+}
+
+// GitSource is a folder (or a file) of a Git repository whose Markdown
+// files become a tree of pages (ADR-0138): its address as the host shows
+// it in the browser, at a branch, tag or commit.
+type GitSource struct {
+	URL string `json:"url"`
+	// Language is the one of the page's own words; empty is German.
+	Language string `json:"language,omitempty"`
 }
 
 // JSONSource is any source that answers JSON over http (ADR-0127): the
@@ -164,15 +177,17 @@ type CKAN struct {
 // ConnectorLanguages are the languages a connector writes its pages in.
 var ConnectorLanguages = []string{"de", "fr", "it", "en"}
 
-// The kinds of source a connector reads: CKAN, and any JSON over http.
+// The kinds of source a connector reads: CKAN, any JSON over http, and
+// the Markdown files of a Git repository.
 const (
 	KindCKAN      = "ckan"
 	KindJSON      = "json"
 	KindAtlassian = "atlassian"
+	KindGit       = "git"
 )
 
 // ConnectorKinds are the kinds of source a connector reads.
-var ConnectorKinds = []string{KindCKAN, KindJSON, KindAtlassian}
+var ConnectorKinds = []string{KindCKAN, KindJSON, KindAtlassian, KindGit}
 
 // maxConnectors bounds how many connectors a site keeps.
 const maxConnectors = 20
@@ -198,7 +213,7 @@ func ConnectorTemplates() []Connector {
 	}}, {Name: "OpenAPI", Kind: KindJSON, IntervalHours: 24, JSON: &JSONSource{
 		// A JSON source whose settings an API description gives (ADR-0130).
 		URL: "https://", ID: "id", Title: "title", Values: map[string]string{}, Language: "de", Spec: "https://",
-	}}}
+	}}, {Name: "Git", Kind: KindGit, IntervalHours: 1, Git: &GitSource{URL: "https://", Language: "de"}}}
 }
 
 var connectorIDRE = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,39}$`)
@@ -261,6 +276,11 @@ func (c Connector) Validate() error {
 			return fmt.Errorf("%w: an Atlassian connector writes into the spaces of its import; it has no space, type or fields of its own", ErrInvalid)
 		}
 		err = c.Atlassian.validate()
+	case KindGit:
+		if c.Git == nil {
+			return fmt.Errorf("%w: a Git connector needs its source", ErrInvalid)
+		}
+		err = c.Git.validate()
 	}
 	if err != nil {
 		return err
@@ -278,6 +298,11 @@ func (c Connector) Validate() error {
 // for the mapping to fields (ADR-0127).
 var CKANValues = []string{"dataset", "publisher", "contact", "url", "formats"}
 
+// GitValues are the values a Git source gives of each page: the file's
+// path in the repository, its address there and the commit it was read
+// at (ADR-0138).
+var GitValues = []string{"commit", "path", "url"}
+
 // Values are the names of the values the connector's source gives of
 // each entry, which Fields maps from.
 func (c Connector) Values() []string {
@@ -286,6 +311,22 @@ func (c Connector) Values() []string {
 		return CKANValues
 	case c.Kind == KindJSON && c.JSON != nil:
 		return slices.Sorted(maps.Keys(c.JSON.Values))
+	case c.Kind == KindGit:
+		return GitValues
+	}
+	return nil
+}
+
+func (g GitSource) validate() error {
+	if !httpURL(g.URL) {
+		return fmt.Errorf("%w: %q is not an http or https address", ErrInvalid, g.URL)
+	}
+	if _, err := gitrepo.Parse(g.URL); err != nil {
+		return fmt.Errorf("%w: %q is not the address of a folder or file in a repository of GitHub, GitLab, Bitbucket, Gitea or Forgejo, "+
+			"e.g. https://github.com/owner/repository/tree/main/docs", ErrInvalid, g.URL)
+	}
+	if g.Language != "" && !slices.Contains(ConnectorLanguages, g.Language) {
+		return fmt.Errorf("%w: %q is not a language of the pages (%s)", ErrInvalid, g.Language, strings.Join(ConnectorLanguages, ", "))
 	}
 	return nil
 }
@@ -443,6 +484,11 @@ func (c Connector) Normalize() Connector {
 		}
 		c.JSON = &j
 	}
+	if c.Git != nil {
+		g := *c.Git
+		g.URL = strings.TrimSpace(g.URL)
+		c.Git = &g
+	}
 	clean := func(in []string, f func(string) string) []string {
 		out := []string{}
 		for _, s := range in {
@@ -520,6 +566,10 @@ func (c Connector) clone() Connector {
 		a.Spaces, a.Projects, a.Grants = slices.Clone(a.Spaces), slices.Clone(a.Projects), slices.Clone(a.Grants)
 		a.Users, a.Groups = maps.Clone(a.Users), maps.Clone(a.Groups)
 		c.Atlassian = &a
+	}
+	if c.Git != nil {
+		g := *c.Git
+		c.Git = &g
 	}
 	return c
 }

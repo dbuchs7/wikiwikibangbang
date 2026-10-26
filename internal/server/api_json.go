@@ -4,6 +4,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
@@ -167,6 +168,11 @@ type originJSON struct {
 	ExternalID  string `json:"externalId"`
 	ExternalKey string `json:"externalKey,omitempty"`
 	URL         string `json:"url,omitempty"`
+	// Version is the source's version the item was read at, e.g. a
+	// commit; Pinned is set when a page made from a file shows it at a
+	// fixed commit (ADR-0138).
+	Version string `json:"version,omitempty"`
+	Pinned  bool   `json:"pinned,omitempty"`
 }
 
 type itemJSON struct {
@@ -285,7 +291,10 @@ func toItemJSON(it item.Item) itemJSON {
 		j.Restriction = &restrictionJSON{Read: it.Restriction.Read, Edit: it.Restriction.Edit}
 	}
 	if o := it.Origin; o != nil {
-		j.Origin = &originJSON{System: o.System, Instance: o.Instance, ExternalID: o.ExternalID, ExternalKey: o.ExternalKey, URL: o.URL}
+		j.Origin = &originJSON{System: o.System, Instance: o.Instance, ExternalID: o.ExternalID, ExternalKey: o.ExternalKey, URL: o.URL, Version: o.Version}
+		if o.System == connector.FileSystem {
+			j.Origin.Pinned = connector.Pinned(*o) || o.ExternalKey == ""
+		}
 	}
 	return j
 }

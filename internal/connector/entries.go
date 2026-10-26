@@ -2,6 +2,7 @@ package connector
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -29,6 +30,62 @@ type Entry struct {
 	// Values are what the source gives of the entry by name, for the
 	// connector's mapping to the fields of its type (ADR-0127).
 	Values map[string]string
+
+	// The fields below serve sources whose entries form a tree and whose
+	// content is read only when it changed: a Git repository's Markdown
+	// files (ADR-0138).
+
+	// Parent is the SourceID of the entry whose page holds this one's
+	// page; empty puts it at the top of the space. Only a new page is
+	// placed: people may move a page, and a run leaves it there.
+	Parent string
+	// Version is the source's version the entry was read at, e.g. a
+	// commit; it is kept as the origin's version when the content changed.
+	Version string
+	// Blob identifies the content in the source without reading it, e.g.
+	// a Git blob ID; a page whose kept raw content has this ID is
+	// unchanged. Empty means the content must be read to tell.
+	Blob string
+	// Load reads the entry's content: its title, its page, the raw
+	// content kept in the origin, and its pictures. Apply calls it for a
+	// new entry, or when Blob does not tell that the content is unchanged;
+	// nil means Title and Body are the content.
+	Load func() (Content, error)
+}
+
+// ErrLeftOut is an entry Load leaves out for what it is, e.g. a file too
+// large: reading it again changes nothing until the source changes, so a
+// run that left it out is still remembered as having read the source.
+var ErrLeftOut = errors.New("connector: left out")
+
+// leftOut is an entry left out for what it is (ErrLeftOut), saying why.
+type leftOut struct{ why string }
+
+func (e leftOut) Error() string      { return e.why }
+func (leftOut) Is(target error) bool { return target == ErrLeftOut }
+
+// Content is an entry's content as Load reads it.
+type Content struct {
+	Title string
+	Body  []item.Block
+	// Raw is the source's own text, kept in the origin (sealed, ADR-0026)
+	// to tell a changed source from text people edited here.
+	Raw string
+	// Pictures are files the page shows: each replaces the block at its
+	// index with an image of it once it is attached.
+	Pictures []Picture
+	// Links map the addresses the page links to that are other entries of
+	// the same source to their SourceIDs: such a link becomes a mention of
+	// the entry's page (D2).
+	Links map[string]string
+}
+
+// Picture is a file a page shows, read from the source.
+type Picture struct {
+	Block   int
+	Name    string
+	Caption string
+	Data    []byte
 }
 
 // aliases map formats as publishers write them to the portal's names.

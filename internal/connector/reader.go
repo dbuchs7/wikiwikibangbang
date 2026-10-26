@@ -25,6 +25,11 @@ type Env struct {
 	// to with Token (ADR-0128).
 	Email string
 	HTTP  *http.Client
+	// Seen is what the last run that applied its reading without a
+	// problem remembered of the source (reading.seen), and Force asks for
+	// a full reading anyway, as a run started by a person does.
+	Seen  string
+	Force bool
 	// CKAN makes the client of a CKAN API; tests replace it.
 	CKAN func(base, token string) Client
 }
@@ -34,6 +39,7 @@ var readers = map[string]Reader{
 	site.KindCKAN:      ckanReader{},
 	site.KindJSON:      jsonReader{},
 	site.KindAtlassian: atlassianReader{},
+	site.KindGit:       gitReader{},
 }
 
 // reader returns the reader of a connector's kind.
