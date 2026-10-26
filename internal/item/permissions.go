@@ -381,7 +381,12 @@ func (x *Session) Spaces() []SpaceInfo {
 // when more follow. Only the page is copied, so a listing of a large space
 // costs a filter, not a copy of every item (ADR-0081).
 func (x *Session) FindPage(q Query, after ID, limit int) (page []Item, total int, next ID, err error) {
-	matches := x.s.matching(q, func(it *Item) bool { return x.s.canRead(x.who, it) })
+	return x.page(x.s.matching(q, func(it *Item) bool { return x.s.canRead(x.who, it) }), after, limit)
+}
+
+// page cuts the page after the cursor out of a listing of readable items,
+// veiled as the principal reads them.
+func (x *Session) page(matches []*Item, after ID, limit int) (page []Item, total int, next ID, err error) {
 	start := 0
 	if after != "" {
 		start = slices.IndexFunc(matches, func(it *Item) bool { return it.ID == after }) + 1

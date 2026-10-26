@@ -216,6 +216,17 @@ table.history td { font-size: 13px; }
 .hit-missing { opacity: 0.6; }
 .search-page { display: flex; gap: 8px; max-width: 40rem; margin: 8px 0 12px; }
 .search-page input { flex: 1; }
+.search-to-query { margin: 0 0 12px; font-size: 13px; }
+
+/* The query view (ADR-0136): the query is code, written in a field of its own. */
+.query-form { max-width: 48rem; margin: 8px 0 12px; }
+.query-text { font-family: var(--font-mono); font-size: 14px; }
+.query-form .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 0; }
+.query-help { max-width: 48rem; margin: 0 0 12px; }
+.query-help summary { cursor: pointer; }
+.query-fields { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.query-field { font-family: var(--font-mono); font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: none; cursor: pointer; }
+.query-examples button { font-family: var(--font-mono); font-size: 13px; text-align: left; }
 
 .footer { padding: 8px 22px 22px; font-size: 11px; color: var(--muted); }
 .footer:empty { display: none; }

@@ -29,7 +29,7 @@ func exportRoutes(h itemHandlers) []Route {
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/md", Summary: "The item as Markdown text: title, properties and body, the items it embeds as quotes, pictures linked to their attachments; children=true adds every page below it, as a handbook", Handler: http.HandlerFunc(h.exportMarkdown)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/md.zip", Summary: "The item as Markdown in a ZIP archive with the pictures it shows; children=true adds every page below it, as a handbook", Handler: http.HandlerFunc(h.exportMarkdownArchive)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/tables/{n}", Summary: "The item's n-th table (from 1) as CSV", Handler: http.HandlerFunc(h.exportTable)},
-		{Method: http.MethodGet, Pattern: "/api/items.csv", Summary: "Readable items as CSV, with the filters of /api/items: key, title, space, type, state, labels and every property", Handler: http.HandlerFunc(h.exportItems)},
+		{Method: http.MethodGet, Pattern: "/api/items.csv", Summary: "Readable items as CSV, with the filters of /api/items and its query: key, title, space, type, state, labels and every property", Handler: http.HandlerFunc(h.exportItems)},
 		{Method: http.MethodGet, Pattern: "/api/search.csv", Summary: "A full-text search as CSV (q; space, type, state, label), best first", Handler: http.HandlerFunc(h.exportSearch)},
 	}
 }
@@ -434,7 +434,12 @@ func (h itemHandlers) sendRows(w http.ResponseWriter, r *http.Request, base stri
 func (h itemHandlers) exportItems(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")), Label: q.Get("label"), Text: q.Get("q")}
-	h.sendRows(w, r, "items", func(x *item.Session) ([]item.Item, error) { return x.Find(query), nil })
+	h.sendRows(w, r, "items", func(x *item.Session) ([]item.Item, error) {
+		if q.Has("query") {
+			return x.Select(query, q.Get("query"), h.queryEnv()) // ADR-0136
+		}
+		return x.Find(query), nil
+	})
 }
 
 func (h itemHandlers) exportSearch(w http.ResponseWriter, r *http.Request) {

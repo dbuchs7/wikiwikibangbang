@@ -31,8 +31,9 @@ func (f *feed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer f.mu.Unlock()
 	f.auth = r.Header.Get("Authorization")
 	f.answers++
-	i := 0
-	fmt.Sscanf(r.URL.Query().Get("page"), "%d", &i)
+	n := 0
+	fmt.Sscanf(r.URL.Query().Get("page"), "%d", &n)
+	i := n
 	if f.endless && i >= len(f.pages) {
 		i = len(f.pages) - 1
 	}
@@ -40,7 +41,9 @@ func (f *feed) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	fmt.Fprint(w, strings.ReplaceAll(f.pages[i], "NEXT", "http://"+r.Host+"/entries?page="+fmt.Sprint(i+1)))
+	// NEXT is the next page's address, PAGE the page's number.
+	answer := strings.ReplaceAll(f.pages[i], "NEXT", "http://"+r.Host+"/entries?page="+fmt.Sprint(n+1))
+	fmt.Fprint(w, strings.ReplaceAll(answer, "PAGE", fmt.Sprint(n)))
 }
 
 const (
@@ -214,10 +217,17 @@ func TestJSONSourcesThatDoNotAnswerWell(t *testing.T) {
 	if err != nil || res.New != 1 || len(res.Problems) != 1 || !strings.Contains(res.Problems[0], "not an http") {
 		t.Errorf("a next page elsewhere %+v %v", res, err)
 	}
-	src.pages, src.endless = []string{`{"entries":[{"id":"x","title":"X"}],"next":"NEXT"}`}, true
+	src.pages, src.endless = []string{`{"entries":[{"id":"x-PAGE","title":"X"}],"next":"NEXT"}`}, true
+	src.answers = 0
 	res, err = f.r.Run(ctx, "feed", true, "")
-	if err != nil || res.Entries != 1 || src.answers < maxPages || !strings.Contains(strings.Join(res.Problems, "\n"), "more than") {
-		t.Errorf("an endless list %+v %v", res, err)
+	if err != nil || res.Entries != maxPages || src.answers != maxPages || !strings.Contains(strings.Join(res.Problems, "\n"), "more than") {
+		t.Errorf("an endless list: %d entries, %d answers, %v %v", res.Entries, src.answers, res.Problems, err)
+	}
+	src.pages = []string{`{"entries":[{"id":"x","title":"X"}],"next":"NEXT"}`}
+	src.answers = 0
+	res, err = f.r.Run(ctx, "feed", true, "")
+	if err != nil || res.Entries != 1 || src.answers != 2 || !strings.Contains(strings.Join(res.Problems, "\n"), "only entries already read") {
+		t.Errorf("a list that names the same page again: %d answers %+v %v", src.answers, res, err)
 	}
 	src.endless = false
 	src.pages = []string{`{"entries":[{"id":"` + strings.Repeat("x", 201) + `","title":"X"}]}`}

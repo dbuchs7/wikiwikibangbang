@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -170,16 +171,40 @@ func (d spec) list(base *url.URL, path string, item, op map[string]any) (List, s
 		return List{}, "it needs path parameters"
 	}
 	q := url.Values{}
+	var paging *site.Paging
+	sizeParam, size := "", 0
 	for _, p := range append(slices.Clone(arr(item["parameters"])), arr(op["parameters"])...) {
 		p := d.resolve(p)
 		in, name := str(p["in"]), str(p["name"])
-		def := cmp.Or(str(p["default"]), str(obj(p["schema"])["default"]), str(p["example"]))
+		schema := d.resolve(p["schema"])
+		def := cmp.Or(str(p["default"]), str(schema["default"]), str(p["example"]))
+		role := ""
+		// Only a number pages a list; "from" may as well be a date.
+		if t := cmp.Or(str(schema["type"]), str(p["type"]), "integer"); in == "query" && (t == "integer" || t == "number") {
+			role = pagingRoles[strings.ToLower(name)]
+		}
 		switch {
+		case role == site.PagingPage || role == site.PagingOffset:
+			// The run counts the pages (ADR-0135).
+			// Pages count from their default, else their minimum, else 1.
+			start := 0
+			if first := cmp.Or(def, str(p["minimum"]), str(schema["minimum"])); first != "" {
+				start = number(first)
+			} else if role == site.PagingPage {
+				start = 1
+			}
+			paging = &site.Paging{Kind: role, Param: name, Start: start}
+		case role == "size":
+			sizeParam = name
+			size = cmp.Or(min(number(str(cmp.Or(p["maximum"], schema["maximum"]))), 1000), number(def), 100)
 		case in == "query" && def != "":
 			q.Set(name, def)
 		case p["required"] == true && (in == "query" || in == "path"):
 			return List{}, fmt.Sprintf("its parameter %q must be filled in", name)
 		}
+	}
+	if sizeParam != "" && paging == nil {
+		q.Set(sizeParam, strconv.Itoa(size))
 	}
 	u := *base
 	u.Path = strings.TrimRight(u.Path, "/") + path
@@ -222,7 +247,61 @@ func (d spec) list(base *url.URL, path string, item, op map[string]any) (List, s
 	if wrapper != nil {
 		src.Next = d.nextLink(wrapper, "", 0)
 	}
+	// A next page's address the answer names is followed; else the
+	// page parameter counts the pages (ADR-0135).
+	if paging != nil && src.Next == "" {
+		if sizeParam != "" && sizeParam != paging.Param {
+			paging.SizeParam, paging.Size = sizeParam, size
+		}
+		if wrapper != nil {
+			paging.Total = d.totalCount(wrapper, "", 0)
+		}
+		src.Paging = paging
+	}
 	return List{Source: src}, ""
+}
+
+// pagingRoles are the usual names of the parameters that page a list
+// (ADR-0135): a page number, an offset, or the size of a page.
+var pagingRoles = map[string]string{
+	"page": site.PagingPage, "pagenumber": site.PagingPage, "page_number": site.PagingPage, "pageno": site.PagingPage, "page[number]": site.PagingPage,
+	"offset": site.PagingOffset, "skip": site.PagingOffset, "$skip": site.PagingOffset, "start": site.PagingOffset, "startindex": site.PagingOffset,
+	"start_index": site.PagingOffset, "from": site.PagingOffset, "page[offset]": site.PagingOffset,
+	"limit": "size", "per_page": "size", "perpage": "size", "pagesize": "size", "page_size": "size", "size": "size", "count": "size",
+	"top": "size", "$top": "size", "rows": "size", "max": "size", "maxresults": "size", "max_results": "size", "page[size]": "size", "page[limit]": "size",
+}
+
+// totalNames are the usual names of the number of entries a list holds.
+var totalNames = []string{"total", "totalcount", "total_count", "totalresults", "total_results", "totalelements", "total_elements", "totalitems", "total_items", "count"}
+
+// totalCount finds the number of entries a list holds in the object it
+// is held in: a number named as totalNames, up to three levels deep.
+func (d spec) totalCount(s map[string]any, prefix string, depth int) string {
+	props := obj(s["properties"])
+	names := slices.Sorted(maps.Keys(props))
+	for _, name := range names {
+		p := d.schema(props[name])
+		if p != nil && pathPart.MatchString(name) && slices.Contains(totalNames, strings.ToLower(name)) && (is(p, "integer") || is(p, "number")) {
+			return join(prefix, name)
+		}
+	}
+	for _, name := range names {
+		if p := d.schema(props[name]); p != nil && pathPart.MatchString(name) && is(p, "object") && depth < 3 {
+			if t := d.totalCount(p, join(prefix, name), depth+1); t != "" {
+				return t
+			}
+		}
+	}
+	return ""
+}
+
+// number is a whole number written as text, or 0.
+func number(s string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 // answer is the schema of an operation's JSON answer: of 200, else of
