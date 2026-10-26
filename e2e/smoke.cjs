@@ -2709,9 +2709,14 @@ function gitSource() {
     await page.waitForSelector(".ProseMirror[contenteditable=true]");
     await page.click(".ProseMirror");
     const fileURL = `http://127.0.0.1:${repo.address().port}/o/r/src/branch/main/docs/a.md`;
-    await page.keyboard.type(fileURL + " ");
-    await page.keyboard.press("ArrowLeft");
-    await page.keyboard.press("ArrowLeft");
+    // The link is pasted, which leaves the cursor in it. Typed, it would
+    // need arrow keys pressed at once after the space that makes it a
+    // link, and those now and then do not move the cursor.
+    await page.evaluate((url) => {
+      const data = new DataTransfer();
+      data.setData("text/plain", url);
+      document.querySelector("#body .ProseMirror").dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    }, fileURL);
     // A bubble of an editor left before may still be in the page, hidden.
     await page.click("#pm-link-bubble:not([hidden]) #pm-link-show-file:not([hidden])");
     await page.waitForSelector("#markdown-dialog");
