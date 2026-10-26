@@ -8,6 +8,7 @@
 import { h } from "./dom.js";
 import { get } from "./api.js";
 import { t } from "./i18n.js";
+import { describe as describeModel } from "./bpmndoc.js";
 
 // BPMN ends the name of a model's file.
 export const BPMN = ".bpmn";
@@ -46,12 +47,36 @@ function markOperations(viewer, o) {
   overlays.remove({ type: "pm-ops" });
   for (const el of o.elements) {
     if (!registry.get(el.element) || !(el.passed || el.tokens || el.incidents)) continue;
-    const badge = (cls, n, title) => (n ? h("span", { class: "pm-ops-badge " + cls, title, text: String(n) }) : "");
-    overlays.add(el.element, "pm-ops", { position: { bottom: 12, left: -8 }, html: h("span", { class: "pm-ops-badges" },
-      badge("pm-ops-passed", el.passed, t("bpmn.opsPassed", { n: el.passed })),
-      badge("pm-ops-tokens", el.tokens, t("bpmn.opsTokens", { n: el.tokens })),
-      badge("pm-ops-incidents", el.incidents, t("bpmn.opsIncidents", { n: el.incidents }))) });
+    overlays.add(el.element, "pm-ops", { position: { bottom: 12, left: -8 }, html: badgesOf(el) });
   }
+}
+
+// badgesOf shows the counts of one element: passed, waiting, held.
+function badgesOf(el) {
+  const badge = (cls, n, title) => (n ? h("span", { class: "pm-ops-badge " + cls, title, text: String(n) }) : "");
+  return h("span", { class: "pm-ops-badges" },
+    badge("pm-ops-passed", el.passed, t("bpmn.opsPassed", { n: el.passed })),
+    badge("pm-ops-tokens", el.tokens, t("bpmn.opsTokens", { n: el.tokens })),
+    badge("pm-ops-incidents", el.incidents, t("bpmn.opsIncidents", { n: el.incidents })));
+}
+
+// The views of a diagram (ADR-0143): its diagram alone, the diagram and
+// its description, or the description alone.
+const views = () => [["", t("bpmn.viewDiagram")], ["both", t("bpmn.viewBoth")], ["text", t("bpmn.viewText")]];
+
+// kindLabel names an element's type, e.g. "User task"; a type without a
+// name of its own keeps BPMN's.
+function kindLabel(type) {
+  const key = "bpmn.kind." + type;
+  const label = t(key);
+  return label === key ? type : label;
+}
+
+// pathText says where a decision's way leads: its name and condition, or
+// that it is the default.
+function pathText(w) {
+  const label = [w.name, w.condition ? `(${w.condition})` : ""].filter(Boolean).join(" ") || t("bpmn.docPath");
+  return t(w.isDefault ? "bpmn.docPathDefault" : "bpmn.docPathTo", { label, target: w.target || w.targetId });
 }
 
 // diagramView shows a bpmn or a process block, in reading and in editing.
@@ -63,9 +88,13 @@ export function diagramView(node, view, getPos, files) {
   const ops = h("span", { class: "pm-diagram-ops", role: "status" });
   const tools = h("span", { class: "pm-diagram-tools" });
   const error = h("p", { class: "error pm-diagram-error", role: "status" });
+  // The description of the process (ADR-0143), below the diagram or in
+  // its place.
+  const docs = h("section", { class: "pm-diagram-doc", hidden: true, "aria-label": t("bpmn.doc") });
   const caption = h("figcaption");
-  const dom = h("figure", { class: "pm-diagram", contenteditable: "false" }, h("div", { class: "pm-diagram-head" }, info, ops, tools), canvas, error, caption);
+  const dom = h("figure", { class: "pm-diagram", contenteditable: "false" }, h("div", { class: "pm-diagram-head" }, info, ops, tools), canvas, error, docs, caption);
   const isProcess = () => node.type.name === "process";
+  const mode = () => node.attrs.view || "";
   let viewer = null;
   let drawn = null;
   let xml = "";
@@ -73,9 +102,24 @@ export function diagramView(node, view, getPos, files) {
   let opsOn = false;
   let opsTimer = 0;
   let caught = null;
+  // model is the description read with the last drawing; entries map an
+  // element's ID to its entry; lit is the element shown from its entry;
+  // counts are the last operations, for the entries.
+  let model = null;
+  const entries = new Map();
+  let lit = null;
+  let counts = null;
 
   const source = () => (isProcess() ? `p:${node.attrs.engine}/${node.attrs.process}` : `f:${node.attrs.ref}`);
-  const fit = () => viewer?.get("canvas").zoom("fit-viewport", "auto");
+  // fit shows the whole diagram. A canvas out of sight has no size to fit
+  // to. diagram-js keeps the size it last saw, which is none when the model
+  // was read with the description alone, so it is told to look again.
+  const fit = () => {
+    if (!viewer || !canvas.clientWidth || !canvas.clientHeight) return;
+    const c = viewer.get("canvas");
+    c.resized();
+    c.zoom("fit-viewport", "auto");
+  };
 
   const read = async () => {
     if (isProcess()) {
@@ -101,10 +145,16 @@ export function diagramView(node, view, getPos, files) {
       const got = await read();
       if (drawn !== key) return;
       const Viewer = await loadViewer();
-      viewer ||= new Viewer({ container: canvas });
+      if (!viewer) {
+        viewer = new Viewer({ container: canvas });
+        viewer.on("element.click", (e) => reveal(e.element));
+      }
       await viewer.importXML(got);
       xml = got;
-      fit();
+      lit = null;
+      model = describeModel(viewer.getDefinitions());
+      showDoc();
+      if (mode() !== "text") fit();
       dom.classList.add("pm-diagram-drawn");
       if (opsOn) await showOperations();
     } catch (err) {
@@ -124,6 +174,7 @@ export function diagramView(node, view, getPos, files) {
     try {
       const { operations: o } = await get(processPath(node.attrs.engine, node.attrs.process) + "/operations");
       markOperations(viewer, o);
+      markSteps(counts = o);
       ops.textContent = t("bpmn.opsSummary", { version: o.version, instances: o.instances, finished: o.finished, incidents: o.incidents });
       ops.classList.toggle("error", o.incidents > 0);
     } catch (err) {
@@ -142,7 +193,75 @@ export function diagramView(node, view, getPos, files) {
     clearTimeout(opsTimer);
     if (on) return showOperations();
     viewer?.get("overlays").remove({ type: "pm-ops" });
+    markSteps(counts = null);
     ops.textContent = "";
+  };
+
+  // showDoc lists the processes and their tasks and decisions (ADR-0143).
+  // With the diagram beside it, a title shows its element there, and an
+  // element clicked there shows its entry here.
+  const showDoc = () => {
+    entries.clear();
+    if (!mode() || !model) return docs.replaceChildren();
+    const linked = mode() === "both";
+    const parts = [];
+    for (const p of model) {
+      if (model.length > 1 || p.name || p.documentation) parts.push(h("p", { class: "pm-doc-process" }, h("strong", { text: p.name || p.id })));
+      if (p.documentation) parts.push(h("p", { class: "pm-doc-text", text: p.documentation }));
+      if (!p.steps.length) {
+        parts.push(h("p", { class: "muted", text: t("bpmn.docEmpty") }));
+        continue;
+      }
+      parts.push(h("ol", { class: "pm-doc-steps" }, p.steps.map((s) => {
+        const name = s.name || t("bpmn.docUnnamed");
+        const tally = h("span", { class: "pm-doc-ops" });
+        const li = h("li", { class: "pm-doc-step pm-doc-" + s.kind, "data-element": s.id },
+          h("div", { class: "pm-doc-head" },
+            linked ? h("button", { type: "button", class: "link pm-doc-title", text: name, onclick: () => highlight(s.id, true) }) : h("strong", { class: "pm-doc-title", text: name }),
+            " ", h("span", { class: "pm-doc-kind", text: [kindLabel(s.type), s.lane].filter(Boolean).join(" · ") }), tally),
+          s.documentation ? h("p", { class: "pm-doc-text", text: s.documentation }) : s.kind === "task" ? h("p", { class: "muted pm-doc-text", text: t("bpmn.docNone") }) : "",
+          s.notes.map((n) => h("p", { class: "pm-doc-note", text: t("bpmn.docNote", { note: n }) })),
+          s.paths.length ? h("ul", { class: "pm-doc-paths" }, s.paths.map((w) => h("li", { text: pathText(w) }))) : "");
+        if (s.depth) li.style.marginLeft = `${s.depth * 1.5}em`;
+        entries.set(s.id, { li, tally });
+        return li;
+      })));
+    }
+    docs.replaceChildren(...parts);
+    markSteps(counts);
+  };
+  // markSteps shows the operations' counts at the entries too.
+  const markSteps = (o) => {
+    for (const { tally } of entries.values()) tally.replaceChildren();
+    for (const el of o?.elements || []) {
+      const e = entries.get(el.element);
+      if (e && (el.passed || el.tokens || el.incidents)) e.tally.replaceChildren(badgesOf(el));
+    }
+  };
+  // highlight marks an element in the diagram; from its entry, the diagram
+  // also brings it into sight.
+  const highlight = (id, bring) => {
+    if (!viewer || mode() !== "both") return;
+    const c = viewer.get("canvas");
+    const el = viewer.get("elementRegistry").get(id);
+    if (!el) return;
+    if (lit && viewer.get("elementRegistry").get(lit)) c.removeMarker(lit, "pm-doc-lit");
+    c.addMarker(id, "pm-doc-lit");
+    lit = id;
+    if (!bring) return;
+    c.scrollToElement?.(el);
+    canvas.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  };
+  // reveal shows an element's entry when it is clicked in the diagram.
+  const reveal = (el) => {
+    const target = el?.labelTarget || el;
+    const e = target && entries.get(target.id);
+    if (!e || mode() !== "both") return;
+    highlight(target.id, false);
+    e.li.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    e.li.classList.remove("pm-doc-flash");
+    void e.li.offsetWidth; // restarts the flash
+    e.li.classList.add("pm-doc-flash");
   };
 
   const editable = () => view.editable && !dom.classList.contains("pm-locked");
@@ -166,13 +285,30 @@ export function diagramView(node, view, getPos, files) {
   };
 
   let shown = null;
+  let shownMode = null;
   const render = () => {
-    const key = [source(), node.attrs.text, view.editable, drawn, engine?.operations, opsOn].join("\u0000");
+    const key = [source(), node.attrs.text, view.editable, drawn, engine?.operations, opsOn, mode()].join("\u0000");
     if (shown === key) return;
     shown = key;
     if (!isProcess()) info.textContent = t("bpmn.fileInfo");
+    canvas.hidden = mode() === "text";
+    docs.hidden = !mode();
+    if (shownMode !== mode()) {
+      const was = shownMode;
+      shownMode = mode();
+      if (model) showDoc();
+      // A canvas shown again is laid out first, then fitted.
+      if (was === "text" && viewer) requestAnimationFrame(fit);
+    }
     tools.replaceChildren(
-      h("button", { type: "button", class: "link pm-diagram-fit", text: t("bpmn.fit"), disabled: !drawn, onclick: fit }),
+      view.editable ? h("select", { class: "pm-diagram-view", "aria-label": t("bpmn.view"), onchange: (e) => {
+        try {
+          setAttrs({ view: e.target.value });
+        } catch {
+          render(shown = null);
+        }
+      } }, views().map(([v, label]) => h("option", { value: v, text: label, selected: v === mode() }))) : "",
+      mode() !== "text" ? h("button", { type: "button", class: "link pm-diagram-fit", text: t("bpmn.fit"), disabled: !drawn, onclick: fit }) : "",
       isProcess() ? h("button", { type: "button", class: "link pm-diagram-refresh", text: t("bpmn.refresh"), onclick: () => draw(true) }) : "",
       isProcess() && engine?.operations ? h("label", { class: "check pm-diagram-operations" },
         h("input", { type: "checkbox", checked: opsOn, onchange: (e) => setOperations(e.target.checked) }), " ", t("bpmn.operations")) : "",
@@ -215,7 +351,7 @@ export function diagramView(node, view, getPos, files) {
 
   // The canvas keeps its clicks, drags and wheel for panning and zooming,
   // and the head and caption theirs.
-  const stopEvent = (ev) => canvas.contains(ev.target) || caption.contains(ev.target) || tools.contains(ev.target);
+  const stopEvent = (ev) => canvas.contains(ev.target) || caption.contains(ev.target) || tools.contains(ev.target) || docs.contains(ev.target);
   return {
     dom, stopEvent, ignoreMutation: () => true,
     update: (n) => {

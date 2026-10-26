@@ -1260,6 +1260,9 @@ func checkBlock(b Block, self ID) error {
 	if b.Kind != Process && (b.Engine != "" || b.Process != "") {
 		return invalid("only a process names an engine and a process")
 	}
+	if b.View != "" && ((b.Kind != BPMN && b.Kind != Process) || !slices.Contains(DiagramViews, b.View)) {
+		return invalid("view %q: a BPMN diagram or a process shows %s, or its diagram alone; other blocks have no view", b.View, strings.Join(DiagramViews, ", "))
+	}
 	if b.Checked && b.Kind != TaskItem {
 		return invalid("only a task is checked")
 	}

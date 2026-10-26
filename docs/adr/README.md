@@ -155,3 +155,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0140](0140-a-json-source-is-read-for-what-changed.md) | A JSON source is read for what changed | Accepted | Landed |
 | [0141](0141-a-board-remembers-its-view-in-the-browser.md) | A board remembers its view in the browser | Accepted | Landed |
 | [0142](0142-processes-in-a-drawing.md) | Processes in a drawing, live over its picture where they come from an engine | Proposed | Partial |
+| [0143](0143-a-diagram-describes-its-tasks-and-decisions.md) | A diagram describes its tasks and decisions below it, or in its place | Proposed | Partial |

@@ -166,7 +166,22 @@ type Block struct {
 	// ID (ADR-0129).
 	Engine  string `json:",omitempty"`
 	Process string `json:",omitempty"`
+	// View is what a bpmn or a process block shows: its diagram (empty),
+	// its diagram and its description (ViewBoth), or its description only
+	// (ViewText) (ADR-0143).
+	View string `json:",omitempty"`
 }
+
+// The views of a bpmn or a process block besides its diagram alone
+// (ADR-0143): the description lists the process's tasks and decisions,
+// read from its model.
+const (
+	ViewBoth = "both"
+	ViewText = "text"
+)
+
+// DiagramViews are the views a bpmn or a process block may carry.
+var DiagramViews = []string{ViewBoth, ViewText}
 
 // Doc is a structured document body (ADR-0001: a block document, not HTML
 // or Markdown as storage format).
