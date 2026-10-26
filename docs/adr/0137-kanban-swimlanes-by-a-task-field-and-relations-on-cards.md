@@ -75,7 +75,7 @@ Chosen option: **1**. Codec version 31.
   - Every item in a listing carries two more fields when they are set.
 - **Follow-ups / risks to watch:**
   - Limits per lane.
-  - The board of a type and of a label (ADR-0036, ADR-0087) still have neither the new cards nor lanes.
+  - The board of a type and of a label (ADR-0036, ADR-0087) still have neither the new cards nor lanes; [ADR-0139](0139-the-boards-of-a-type-and-a-label-show-the-cards-of-a-kanban.md) gives them both.
 
 ## Pros and cons of the options
 
