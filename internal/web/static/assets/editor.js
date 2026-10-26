@@ -73,8 +73,10 @@ export const schema = new Schema({
     video: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" }, width: { default: 0 }, align: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-image pm-video" }, ["figcaption", n.attrs.text]] },
     // A BPMN diagram (ADR-0129): a model kept as a file of the item, or the
     // newest version of a process of a process engine; with a plain caption.
-    bpmn: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
-    process: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, process: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
+    // view is what a diagram shows: "" the diagram, "both" the diagram and
+    // its description, "text" the description only (ADR-0143).
+    bpmn: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" }, view: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
+    process: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, process: {}, text: { default: "" }, view: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     // A form as a process engine keeps it, and the newest deployed version
     // of a decision of a process engine (ADR-0144); with a plain caption.
     form: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, form: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
@@ -170,8 +172,8 @@ export function nodeFromBlock(b, embeds = []) {
   if (["toc", "figures", "tables", "children", "divider"].includes(b.kind)) return schema.nodes[b.kind].create({ bid: id });
   if (b.kind === "tasklist") return schema.nodes.tasklist.create({ bid: id, label: b.text || "" });
   if (b.kind === "image" || b.kind === "video") return schema.nodes[b.kind].create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0, align: b.align || "" });
-  if (b.kind === "bpmn") return schema.nodes.bpmn.create({ bid: id, ref: b.ref, text: b.text || "" });
-  if (b.kind === "process") return schema.nodes.process.create({ bid: id, engine: b.engine, process: b.process, text: b.text || "" });
+  if (b.kind === "bpmn") return schema.nodes.bpmn.create({ bid: id, ref: b.ref, text: b.text || "", view: b.view || "" });
+  if (b.kind === "process") return schema.nodes.process.create({ bid: id, engine: b.engine, process: b.process, text: b.text || "", view: b.view || "" });
   if (b.kind === "form") return schema.nodes.form.create({ bid: id, engine: b.engine, form: b.form, text: b.text || "" });
   if (b.kind === "decision") return schema.nodes.decision.create({ bid: id, engine: b.engine, decision: b.decision, text: b.text || "" });
   if (b.kind === "embed") {
@@ -233,8 +235,8 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
   if (["toc", "figures", "tables", "children", "divider"].includes(node.type.name)) return { kind: node.type.name };
   if (node.type === schema.nodes.tasklist) return { kind: "tasklist", text: node.attrs.label };
-  if (node.type === schema.nodes.bpmn) return { kind: "bpmn", text: node.attrs.text, ref: node.attrs.ref };
-  if (node.type === schema.nodes.process) return { kind: "process", text: node.attrs.text, engine: node.attrs.engine, process: node.attrs.process };
+  if (node.type === schema.nodes.bpmn) return { kind: "bpmn", text: node.attrs.text, ref: node.attrs.ref, ...(node.attrs.view ? { view: node.attrs.view } : {}) };
+  if (node.type === schema.nodes.process) return { kind: "process", text: node.attrs.text, engine: node.attrs.engine, process: node.attrs.process, ...(node.attrs.view ? { view: node.attrs.view } : {}) };
   if (node.type === schema.nodes.form) return { kind: "form", text: node.attrs.text, engine: node.attrs.engine, form: node.attrs.form };
   if (node.type === schema.nodes.decision) return { kind: "decision", text: node.attrs.text, engine: node.attrs.engine, decision: node.attrs.decision };
   if (node.type === schema.nodes.image || node.type === schema.nodes.video) {

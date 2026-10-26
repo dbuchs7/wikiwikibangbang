@@ -143,4 +143,6 @@ Strongest form: the engine's own permissions decide per reader, which is the fin
 ## Links
 
 - relates to [ADR-0031](0031-web-ui-shell.md) (the UI and its policy), [ADR-0032](0032-prosemirror-rich-text-editor.md) (vendored bundles), [ADR-0045](0045-attachments-encrypted-files-beside-the-log.md) (attachments), [ADR-0053](0053-drawings-with-excalidraw-on-a-page-of-their-own.md) (drawings), [ADR-0077](0077-connectors-keep-catalogs-in-step-with-their-sources.md) (credentials from the environment), [ADR-0103](0103-the-versions-of-a-file-form-one-stack-in-the-album.md) (versions of a file)
-- extended by [ADR-0142](0142-processes-in-a-drawing.md) (processes in a drawing), [ADR-0144](0144-forms-and-decisions-from-a-process-engine.md) (forms and decisions from an engine)
+- extended by [ADR-0142](0142-processes-in-a-drawing.md) (processes in a drawing)
+- extended by [ADR-0143](0143-a-diagram-describes-its-tasks-and-decisions.md) (the description of tasks and decisions)
+- extended by [ADR-0144](0144-forms-and-decisions-from-a-process-engine.md) (forms and decisions from an engine)

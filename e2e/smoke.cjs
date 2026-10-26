@@ -79,7 +79,7 @@ const processModel = (version) => `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="defs" targetNamespace="http://bpmn.io/schema/bpmn">
   <bpmn:process id="order" name="Order to cash" isExecutable="true">
     <bpmn:startEvent id="start" name="Order received"/>
-    <bpmn:task id="check" name="Check order v${version}"/>
+    <bpmn:task id="check" name="Check order v${version}"><bpmn:documentation>Compare the order with the stock.</bpmn:documentation></bpmn:task>
     <bpmn:endEvent id="end"/>
     <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="check"/>
     <bpmn:sequenceFlow id="f2" sourceRef="check" targetRef="end"/>
@@ -2447,6 +2447,41 @@ function gitSource() {
     await page.click("#edit-done");
     await page.waitForSelector("#body.reading");
 
+    step("BPMN: a diagram lists its tasks with their description below it, or in its place; a title and its element show each other (ADR-0143)");
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .pm-diagram-view");
+    const fileDiagram = page.locator("#body .pm-diagram:has(:text('Check order v1'))");
+    await fileDiagram.locator("select.pm-diagram-view").selectOption("both");
+    await fileDiagram.locator(".pm-doc-step[data-element=check]").waitFor();
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    const described = page.locator("#body .pm-diagram:has(.pm-doc-step[data-element=check])");
+    await described.scrollIntoViewIfNeeded();
+    await described.locator(".pm-doc-step[data-element=check] .pm-doc-text:has-text('Compare the order with the stock.')").waitFor();
+    check(await described.locator(".pm-doc-step[data-element=check] .pm-doc-kind").textContent() === "Task", "a step names its kind");
+    check(await described.locator(".pm-doc-step").count() === 1, "events the model does not describe are left out");
+    check(await described.locator("select.pm-diagram-view").count() === 0, "readers see what the page chose to show");
+    await described.locator(".pm-doc-step[data-element=check] button.pm-doc-title").click();
+    await described.locator(".djs-element.pm-doc-lit[data-element-id=check]").waitFor(); // the title shows its element
+    await described.locator(".djs-element[data-element-id=check]").click();
+    await described.locator(".pm-doc-step[data-element=check].pm-doc-flash").waitFor(); // the element shows its entry
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .pm-diagram-view");
+    await page.locator("#body .pm-diagram:has(.pm-doc-step[data-element=check]) select.pm-diagram-view").selectOption("text");
+    await page.waitForSelector("#body .pm-diagram .pm-diagram-canvas[hidden]", { state: "attached" });
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    const textOnly = page.locator("#body .pm-diagram:has(.pm-diagram-canvas[hidden])");
+    await textOnly.scrollIntoViewIfNeeded();
+    await textOnly.locator(".pm-doc-step[data-element=check] strong.pm-doc-title:has-text('Check order v1')").waitFor(); // the description alone
+    check(await textOnly.locator(".pm-diagram-fit").count() === 0, "nothing to fit without the diagram");
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .pm-diagram-view");
+    await page.locator("#body .pm-diagram:has(.pm-diagram-canvas[hidden]) select.pm-diagram-view").selectOption("");
+    await page.waitForFunction(() => !document.querySelector("#body .pm-diagram-canvas[hidden]"));
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+
     if (process.env.ENGINE_TOKEN) {
       step("BPMN: a process of an engine shows its newest version and, where allowed, its operations as counts only (ADR-0129)");
       await page.goto(base + "/#/admin");
@@ -2774,9 +2809,14 @@ function gitSource() {
     await page.waitForSelector(".ProseMirror[contenteditable=true]");
     await page.click(".ProseMirror");
     const fileURL = `http://127.0.0.1:${repo.address().port}/o/r/src/branch/main/docs/a.md`;
-    await page.keyboard.type(fileURL + " ");
-    await page.keyboard.press("ArrowLeft");
-    await page.keyboard.press("ArrowLeft");
+    // The link is pasted, which leaves the cursor in it. Typed, it would
+    // need arrow keys pressed at once after the space that makes it a
+    // link, and those now and then do not move the cursor.
+    await page.evaluate((url) => {
+      const data = new DataTransfer();
+      data.setData("text/plain", url);
+      document.querySelector("#body .ProseMirror").dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    }, fileURL);
     // A bubble of an editor left before may still be in the page, hidden.
     await page.click("#pm-link-bubble:not([hidden]) #pm-link-show-file:not([hidden])");
     await page.waitForSelector("#markdown-dialog");

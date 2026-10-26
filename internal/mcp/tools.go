@@ -53,7 +53,10 @@ const blockFormat = "A body is a list of blocks, each an object with kind and te
 	"panel (tone info, note, warning, tip or error), table (text holds rows separated by \\n and cells by \\t; the first row " +
 	"is the header), toc, children and divider (no text: a table of contents, a list of child pages, a horizontal rule), embed (ref: an item ID), " +
 	"image (ref: an attachment ID of the item, text the caption, width 10-100 percent of the column or absent for its own size, align left or right to let text flow beside it, or center), " +
-	"bpmn (ref: an attachment ID of the item holding a BPMN 2.0 model, text the caption), process (engine: a process engine's ID, process: a BPMN process ID, text the caption; shows the process's newest version). " +
+	"bpmn (ref: an attachment ID of the item holding a BPMN 2.0 model, text the caption), process (engine: a process engine's ID, process: a BPMN process ID, text the caption; shows the process's newest version), " +
+	"form (engine: a process engine's ID, form: the form's ID there, text the caption; shows the form as the engine keeps it), " +
+	"decision (engine: a process engine's ID, decision: the decision's ID there, text the caption; shows the decision's newest deployed version); " +
+	"a bpmn or process block may have view both (the diagram and below it the description of its tasks and decisions) or text (the description only), or none for the diagram alone. " +
 	"Paragraphs, headings, quotes and panels may have align center, right or justify. " +
 	"Inline formats are marks over the text, counted in Unicode code points: " +
 	"{\"type\": \"bold\"|\"italic\"|\"underline\"|\"strike\"|\"highlight\"|\"code\"|\"link\" (with href)|\"mention\" (with ref, an item ID), \"start\": 0, \"end\": 5}. " +

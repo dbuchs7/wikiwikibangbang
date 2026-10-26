@@ -71,3 +71,33 @@ func TestBPMNDiagramsAndProcesses(t *testing.T) {
 		}
 	}
 }
+
+// TestADiagramShowsItsDescriptionAsChosen: a bpmn or a process block shows
+// its diagram, its diagram and its description, or its description only
+// (ADR-0143); nothing else carries a view, and no other view is kept.
+func TestADiagramShowsItsDescriptionAsChosen(t *testing.T) {
+	s := permFixture(t)
+	anna := s.As("anna")
+	page := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Order to cash"}))
+	_, err := anna.AddAttachment(page.ID, Attachment{ID: fileA, Name: "order.bpmn", Type: "text/xml; charset=utf-8", Size: 3, SHA256: strings.Repeat("ab", 32)})
+	noErr(t, err)
+	noErr(t, anna.CommitBody(page.ID, Doc{Blocks: []Block{
+		{Kind: BPMN, Ref: fileA, View: ViewBoth},
+		{Kind: Process, Engine: "atlas", Process: "order", View: ViewText},
+		{Kind: Process, Engine: "atlas", Process: "order"},
+	}}))
+	got := mustItem(t)(s.Get(page.ID)).Body.Blocks
+	if got[0].View != ViewBoth || got[1].View != ViewText || got[2].View != "" {
+		t.Fatalf("views %q %q %q", got[0].View, got[1].View, got[2].View)
+	}
+	for name, b := range map[string]Block{
+		"unknown view":        {Kind: Process, Engine: "atlas", Process: "p", View: "diagram"},
+		"view in capitals":    {Kind: BPMN, Ref: fileA, View: "Both"},
+		"paragraph with view": {Kind: Paragraph, Text: "x", View: ViewBoth},
+		"picture with view":   {Kind: Image, Ref: fileA, View: ViewText},
+	} {
+		if err := CheckBlock(b, "self"); !errors.Is(err, ErrValidation) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

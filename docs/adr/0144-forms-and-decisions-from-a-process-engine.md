@@ -59,7 +59,7 @@ Chosen option: **1**, with reading as for processes.
 
 - A `form` block names an engine (`Engine`) and a form by its ID there (`Form`); a `decision` block an engine and a decision by its ID there (`Decision`); both with a plain caption. Neither holds a copy.
 - **IDs as the engine gives them:** a form's or a decision's ID is 1 to 255 characters without control characters or surrounding spaces. Spaces, slashes and letters of any script are allowed, since atlas takes them; an ID is one path segment of the routes above, escaped.
-- **Codec version 32** adds the block kinds and the block fields `Form` and `Decision`. Versions 1 to 31 are still read.
+- **Codec version 33** adds the block kinds and the block fields `Form` and `Decision`. Versions 1 to 32 are still read.
 - **Insert → Form from an engine** and **Insert → Decision from an engine** list the engines, then their forms or decisions, filtered as typed.
 
 ### Showing them

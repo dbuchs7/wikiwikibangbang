@@ -41,6 +41,8 @@ func TestFormsAndDecisions(t *testing.T) {
 		"decision with a process":     {Kind: Decision, Engine: "atlas", Decision: "d", Process: "p"},
 		"decision with a tab":         {Kind: Decision, Engine: "atlas", Decision: "a\tb"},
 		"decision with a width":       {Kind: Decision, Engine: "atlas", Decision: "d", Width: 50},
+		"form with a view":            {Kind: Form, Engine: "atlas", Form: "f", View: ViewBoth},
+		"decision with a view":        {Kind: Decision, Engine: "atlas", Decision: "d", View: ViewText},
 		"process with a form":         {Kind: Process, Engine: "atlas", Process: "p", Form: "f"},
 		"process with a decision":     {Kind: Process, Engine: "atlas", Process: "p", Decision: "d"},
 		"paragraph with a form":       {Kind: Paragraph, Text: "x", Form: "f"},

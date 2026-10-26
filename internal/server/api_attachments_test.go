@@ -403,13 +403,17 @@ func TestBPMNDiagramsShowTheirFile(t *testing.T) {
 		t.Fatalf("the model reads as %q", model.Attachment.Type)
 	}
 	body := func(ref item.ID) string {
-		return `{"blocks":[{"kind":"bpmn","ref":"` + string(ref) + `","text":"Order"},{"kind":"process","engine":"atlas","process":"order-to-cash","text":"Live"}]}`
+		return `{"blocks":[{"kind":"bpmn","ref":"` + string(ref) + `","text":"Order","view":"both"},{"kind":"process","engine":"atlas","process":"order-to-cash","text":"Live","view":"text"}]}`
 	}
 	w.bert.expect("PUT", "/api/items/"+key+"/body", body(pic.Attachment.ID), http.StatusBadRequest)
 	got := field(w.bert.expect("PUT", "/api/items/"+key+"/body", body(model.Attachment.ID), http.StatusOK), "item", "body").([]any)
 	if d, p := got[0].(map[string]any), got[1].(map[string]any); d["kind"] != "bpmn" || d["ref"] != string(model.Attachment.ID) ||
-		p["kind"] != "process" || p["engine"] != "atlas" || p["process"] != "order-to-cash" || p["text"] != "Live" {
+		p["kind"] != "process" || p["engine"] != "atlas" || p["process"] != "order-to-cash" || p["text"] != "Live" ||
+		d["view"] != "both" || p["view"] != "text" {
 		t.Fatalf("the body %v", got)
 	}
 	w.bert.expect("PUT", "/api/items/"+key+"/body", `{"blocks":[{"kind":"paragraph","text":"x","engine":"atlas"}]}`, http.StatusBadRequest)
+	// What a diagram shows is one of its views (ADR-0143), and only a diagram has one.
+	w.bert.expect("PUT", "/api/items/"+key+"/body", `{"blocks":[{"kind":"process","engine":"atlas","process":"p","view":"all"}]}`, http.StatusBadRequest)
+	w.bert.expect("PUT", "/api/items/"+key+"/body", `{"blocks":[{"kind":"paragraph","text":"x","view":"both"}]}`, http.StatusBadRequest)
 }
