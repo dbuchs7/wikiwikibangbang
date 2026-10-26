@@ -9,7 +9,7 @@ import (
 // TestFormsAndDecisions: a form block names an engine and a form there, a
 // decision block an engine and a decision there, and neither holds
 // anything else. The IDs are taken as the engine gives them: atlas lists a
-// decision by its name, spaces and umlauts included (ADR-0143).
+// decision by its name, spaces and umlauts included (ADR-0144).
 func TestFormsAndDecisions(t *testing.T) {
 	s := permFixture(t)
 	anna := s.As("anna")

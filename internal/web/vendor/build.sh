@@ -5,7 +5,7 @@
 # bpmn-viewer.js and bpmn-modeler.js with their stylesheets and icon font in
 # bpmn/, the BPMN viewer and modeler (ADR-0129), and form-viewer.js and
 # dmn-viewer.js with their stylesheets in form/ and dmn/, the viewers of
-# forms and decisions (ADR-0143).
+# forms and decisions (ADR-0144).
 # Their license files name the packages each bundle takes code from
 # (bundled.mjs). Run after changing a version in package.json:
 #
@@ -106,7 +106,7 @@ cp "$bpmn/bpmn-font/font/bpmn.woff2" "$bpmn/bpmn-font/font/bpmn.woff" "$out/bpmn
 } > "$out/bpmn.LICENSE.txt"
 rm bpmn-meta.json
 
-# The form viewer and the DMN viewer (ADR-0143): form-viewer.js, form-js's
+# The form viewer and the DMN viewer (ADR-0144): form-viewer.js, form-js's
 # viewer, with its stylesheet in form/, and dmn-viewer.js, dmn-js's
 # navigated viewer, with its stylesheets and icon font in dmn/, copied as
 # published. As for bpmn-js, the watermark code is part of the bundles,

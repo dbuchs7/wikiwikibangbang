@@ -76,7 +76,7 @@ export const schema = new Schema({
     bpmn: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     process: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, process: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     // A form as a process engine keeps it, and the newest deployed version
-    // of a decision of a process engine (ADR-0143); with a plain caption.
+    // of a decision of a process engine (ADR-0144); with a plain caption.
     form: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, form: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     decision: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, decision: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     // Content an importer could not convert (ADR-0023), kept as it came and
@@ -894,7 +894,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     const p = await pickProcess();
     if (p) insertBlock(schema.nodes.process.create({ engine: p.engine, process: p.process, text: p.name || "" }));
   };
-  // A form or a decision of a process engine (ADR-0143) is named, and read
+  // A form or a decision of a process engine (ADR-0144) is named, and read
   // from the engine when shown.
   const pickedFromEngine = async (kind) => {
     status.textContent = "";

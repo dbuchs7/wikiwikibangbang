@@ -45,7 +45,7 @@ func TestNoMarkupFromStrings(t *testing.T) {
 		// without the UI's session data in its DOM (ADR-0053). Both are
 		// third-party code, reviewed when updated, not written here. So is
 		// bpmn-js (ADR-0129), which renders diagrams as SVG it builds itself,
-		// and form-js and dmn-js (ADR-0143), which render forms and decision
+		// and form-js and dmn-js (ADR-0144), which render forms and decision
 		// tables with Preact and Inferno and sanitize the Markdown of a form.
 		if strings.HasPrefix(path, "vendor/") {
 			return nil

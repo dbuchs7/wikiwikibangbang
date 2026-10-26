@@ -34,7 +34,7 @@ type Document struct {
 }
 
 // diagramName names what a bpmn, process, form or decision block shows,
-// for documents that do not draw it (ADR-0129, ADR-0143): "BPMN:" and the
+// for documents that do not draw it (ADR-0129, ADR-0144): "BPMN:" and the
 // file, or the process, form or decision and its engine.
 func diagramName(bl item.Block, files map[item.ID]Image) string {
 	switch bl.Kind {
@@ -291,7 +291,7 @@ func (b *docxBuilder) block(bl item.Block, p Page, base, listNum int) string {
 	case item.BPMN, item.Process, item.Form, item.Decision:
 		// A document does not draw a diagram, a form or a decision; it
 		// names the file, the process, the form or the decision (ADR-0129,
-		// ADR-0143).
+		// ADR-0144).
 		out := para("", "", run("["+diagramName(bl, p.Images)+"]", ""))
 		if strings.TrimSpace(bl.Text) != "" {
 			out += para("Caption", "", run(bl.Text, ""))
