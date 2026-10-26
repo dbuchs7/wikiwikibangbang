@@ -1170,7 +1170,7 @@ export default {
   "connector.remove": "Remove connector",
   "connector.removeConfirm": "Remove the connector “{name}”? Its entries stay in the catalog.",
   "engine.title": "Process engines",
-  "engine.note": "Pages show processes of these engines in their newest version, read from the engine whenever they are shown. Every signed-in person may list and read the processes the engine's account may read, so choose that account accordingly; on atlas, an API token of the scope diagrams reaches exactly these reads. The token is an environment variable of the server and is never stored here.",
+  "engine.note": "Pages show processes of these engines in their newest version, read from the engine whenever they are shown. Every signed-in person may list and read the engine's processes; on atlas that is every deployed process, whatever account the token belongs to. On atlas, an API token of the scope diagrams reaches exactly these reads. The token is an environment variable of the server and is never stored here.",
   "engine.none": "No process engine is set up yet.",
   "engine.new": "Add an engine",
   "engine.newTitle": "New process engine",

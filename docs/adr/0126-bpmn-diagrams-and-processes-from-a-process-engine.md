@@ -63,20 +63,20 @@ Chosen options: **1 and 4.**
 ### Processes from an engine (option 4): the block kind `process`
 
 - **Engines:** an administrator names each engine under *Administration → Process engines*: an ID that never changes, a name, the kind (`atlas`, the only one so far), the base address, and whether its operations may be shown. They are settings of the installation, kept in `site.wal`.
-- **The credential** is the environment variable `WWBB_ENGINE_<ID>_TOKEN` (the ID in capitals, other characters as `_`, as for connectors), sent as a bearer token. It is never written to a journal, logged or returned; the settings page says only whether it is set. On the engine, it belongs to an account that may read the processes meant to be shown; on atlas, a token of the scope `diagrams` reaches the three reads below and nothing else (pblumer/atlas, its ADR for that scope).
+- **The credential** is the environment variable `WWBB_ENGINE_<ID>_TOKEN` (the ID in capitals, other characters as `_`, as for connectors), sent as a bearer token. It is never written to a journal, logged or returned; the settings page says only whether it is set. On atlas, a token of the scope `diagrams` reaches the three reads below and nothing else; that scope is proposed in pblumer/atlas as ADR-draft-diagrams-scope. Until it is there, a `full` token works, with far more reach than needed.
 - **A `process` block** names an engine (`Engine`) and a process by its BPMN process ID (`Process`), with a plain caption. It holds no copy of the model.
 - **Insert → Process from an engine** lists the engines, then their processes (name, ID, newest version).
 - **Reading** a process block asks the server, which reads the engine at that moment:
   - `GET /api/engines` lists the engines by ID, name and whether operations may be shown;
   - `GET /api/engines/{id}/processes` lists the newest version of each process the credential may read;
   - `GET /api/engines/{id}/processes/{process}` answers the newest version's BPMN XML, its version, key, name and when it was deployed, as JSON, so the XML is never a document of this site.
-  - Every signed-in person and token reaches the three reads; who may read which process is decided by the engine's account.
+  - Every signed-in person and token reaches the three reads. Atlas lets every signed-in caller read every deployed definition (its ADR-0447 §5), so the credential's account does not narrow which processes are seen: every process of the engine is visible to every signed-in person of the wiki.
 - **Toward the engine:** fixed paths under the base address (`/api/v1/processes`, `/api/v1/processes/{key}/xml`, `/api/v1/processes/{key}/runtime`), a timeout of 15 seconds, no redirects followed, and at most `EngineResponseBytes` (8 MiB) read from an answer. An engine is usually inside the organisation's network, so private addresses are allowed: the address is set by an administrator, unlike the links a link check calls, which come from content (ADR-0039).
 - **Errors** say which engine failed and how (not configured, no credential, unreachable, refused, no such process), never the credential.
 
 ### Operations
 
-- `GET /api/engines/{id}/processes/{process}/operations` answers, for the newest version, how many instances are running and have finished, and per element how many tokens wait there, how many are held by an incident and how many have passed. Nothing else is passed on: no incident messages, no instance keys, no variables. It answers only when the administrator allowed operations for that engine.
+- `GET /api/engines/{id}/processes/{process}/operations` answers, for the newest version, how many instances are running and have finished, and per element how many tokens wait there, how many are held by an incident and how many have passed. Nothing else is passed on: no incident messages, no instance keys, no variables. It answers only when the administrator allowed operations for that engine. Atlas sends a page of incident details with the counts; the server drops them before answering.
 - **The reader switches the operations view on** at the diagram; it is not stored in the block. Badges then mark the elements: tokens in green, incidents in red, passes in grey. The view refreshes every 30 seconds while it is on and the page is in sight, and says which version it counts.
 - **Codec version 29** adds the block kinds `bpmn` and `process` and the block fields `Engine` and `Process`. Versions 1 to 28 are still read.
 - **Not an MCP tool:** the new routes are not offered as tools in this change; whether agents should read processes through the wiki is a decision of its own (ADR-0012).
@@ -90,7 +90,7 @@ Chosen options: **1 and 4.**
   - No exception to the content security policy; credentials stay on the server.
 - **Negative / trade-offs accepted:**
   - The binary grows by about 1 MB.
-  - Every signed-in person may list and read the processes the engine's account reads. The account, not the page, is the boundary; an administrator chooses it with that in mind.
+  - Every signed-in person may list and read every process the engine lets the credential read; on atlas that is every deployed process. The engine, not the page, is the boundary; an administrator adds an engine with that in mind.
   - Each view of a process block reads the engine twice (the list, then the model); there is no cache.
   - The operations view counts the newest version only; instances still running on an earlier version are not shown.
   - The Word and PDF exports write a diagram's caption and a note in its place, not the diagram.
@@ -100,7 +100,7 @@ Chosen options: **1 and 4.**
   - The watermark condition (open question).
   - A short cache per engine, if many readers make the reads a load.
   - Diagrams in exports, e.g. a picture rendered when the diagram is saved.
-  - Per-person access (option 7), if the account boundary proves too coarse.
+  - Per-person access (option 7), if the engine as the boundary proves too coarse.
 
 ## Pros and cons of the options
 

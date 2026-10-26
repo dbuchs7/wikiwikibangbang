@@ -1168,7 +1168,7 @@ export default {
   "connector.remove": "Konnektor entfernen",
   "connector.removeConfirm": "Konnektor «{name}» entfernen? Seine Einträge bleiben im Katalog.",
   "engine.title": "Prozess-Engines",
-  "engine.note": "Seiten zeigen Prozesse dieser Engines in ihrer neusten Version, gelesen aus der Engine, sobald sie angezeigt werden. Jede angemeldete Person darf die Prozesse auflisten und lesen, die das Konto der Engine lesen darf; wählen Sie dieses Konto entsprechend. Bei atlas erreicht ein API-Token mit dem Scope diagrams genau diese Abfragen. Das Token ist eine Umgebungsvariable des Servers und wird hier nie gespeichert.",
+  "engine.note": "Seiten zeigen Prozesse dieser Engines in ihrer neusten Version, gelesen aus der Engine, sobald sie angezeigt werden. Jede angemeldete Person darf die Prozesse der Engine auflisten und lesen; bei atlas sind das alle deployten Prozesse, gleich welchem Konto das Token gehört. Bei atlas erreicht ein API-Token mit dem Scope diagrams genau diese Abfragen. Das Token ist eine Umgebungsvariable des Servers und wird hier nie gespeichert.",
   "engine.none": "Es ist noch keine Prozess-Engine eingerichtet.",
   "engine.new": "Engine hinzufügen",
   "engine.newTitle": "Neue Prozess-Engine",
