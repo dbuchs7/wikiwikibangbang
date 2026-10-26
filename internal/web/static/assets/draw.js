@@ -32,6 +32,7 @@ const palettes = () => [
   ["bpmn", t("draw.paletteBpmn")],
   ["network", t("draw.paletteNetwork")],
   ["it", t("draw.paletteIt")],
+  ["microsoft", t("draw.paletteMicrosoft")],
 ];
 let library = [];
 

@@ -16,7 +16,7 @@ func TestEmbeddedUIHasEntryPointAndAssets(t *testing.T) {
 		"assets/fonts/comic-neue-400.woff2", "assets/fonts/comic-neue-700.woff2", "assets/fonts/comic-neue.LICENSE.txt",
 		"assets/fonts/noto-sans-400-normal.woff2", "assets/fonts/noto-sans-700-normal.woff2", "assets/fonts/noto-sans-400-italic.woff2",
 		"assets/fonts/noto-sans-700-italic.woff2", "assets/fonts/noto-sans.LICENSE.txt",
-		"assets/palettes/archimate.json", "assets/palettes/bpmn.json", "assets/palettes/network.json", "assets/palettes/it.json",
+		"assets/palettes/archimate.json", "assets/palettes/bpmn.json", "assets/palettes/network.json", "assets/palettes/it.json", "assets/palettes/microsoft.json",
 		"assets/palettes/palettes.LICENSE.txt"} {
 		if _, err := fs.Stat(FS(), name); err != nil {
 			t.Errorf("%s: %v", name, err)
