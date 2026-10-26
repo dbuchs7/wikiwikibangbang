@@ -17,7 +17,9 @@ func TestEmbeddedUIHasEntryPointAndAssets(t *testing.T) {
 		"assets/fonts/noto-sans-400-normal.woff2", "assets/fonts/noto-sans-700-normal.woff2", "assets/fonts/noto-sans-400-italic.woff2",
 		"assets/fonts/noto-sans-700-italic.woff2", "assets/fonts/noto-sans.LICENSE.txt",
 		"assets/palettes/archimate.json", "assets/palettes/bpmn.json", "assets/palettes/network.json", "assets/palettes/it.json", "assets/palettes/microsoft.json",
-		"assets/palettes/palettes.LICENSE.txt"} {
+		"assets/palettes/palettes.LICENSE.txt",
+		"vendor/bpmn-viewer.js", "vendor/bpmn-modeler.js", "vendor/bpmn.LICENSE.txt", "vendor/bpmn/bpmn-js.css", "vendor/bpmn/diagram-js.css",
+		"vendor/bpmn/bpmn-font/css/bpmn.css", "vendor/bpmn/bpmn-font/font/bpmn.woff2"} {
 		if _, err := fs.Stat(FS(), name); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -38,7 +40,8 @@ func TestNoMarkupFromStrings(t *testing.T) {
 		// document, where nothing runs, and keeps only what the editor's
 		// schema allows (ADR-0032). Excalidraw runs on a page of its own,
 		// without the UI's session data in its DOM (ADR-0053). Both are
-		// third-party code, reviewed when updated, not written here.
+		// third-party code, reviewed when updated, not written here. So is
+		// bpmn-js (ADR-0126), which renders diagrams as SVG it builds itself.
 		if strings.HasPrefix(path, "vendor/") {
 			return nil
 		}
