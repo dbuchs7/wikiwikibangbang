@@ -85,7 +85,7 @@ Nothing changes on the server: no new route, no new field, no new codec version.
   - Making a card in a later state is two requests. When the transition is refused, for example for a required field, the card stays in the first state and the error says why.
   - A board of a label across several spaces offers no "+": it cannot know the space.
 - **Follow-ups / risks to watch:**
-  - Remembering a view's colour and lanes in the browser, as the folded columns are.
+  - Remembering a view's colour and lanes in the browser, as the folded columns are; [ADR-0140](0140-a-board-remembers-its-view-in-the-browser.md) does so.
   - A hand-made order of cards on the board of a type remains open (ADR-0036).
 
 ## Pros and cons of the options
@@ -113,5 +113,6 @@ Strongest form: the smallest change that makes the cards readable.
 
 ## Links
 
+- amended by [ADR-0140](0140-a-board-remembers-its-view-in-the-browser.md) (colour and lanes are also remembered in the browser)
 - amends [ADR-0036](0036-a-board-is-a-view-of-a-query.md) (the cards, details and filter of a board of a type; moves by a transition chosen in the details) and [ADR-0087](0087-kanban-pictures-and-boards-by-label.md) (the board of a label)
 - relates to ADR-0076 (adding a missing transition), ADR-0098 (the filter), ADR-0132, ADR-0134 and ADR-0137 (the reworked kanban)

@@ -152,3 +152,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0137](0137-kanban-swimlanes-by-a-task-field-and-relations-on-cards.md) | Kanban swimlanes by a field of the task, and relations on the cards | Accepted | Landed |
 | [0138](0138-markdown-from-git-repositories.md) | Markdown from Git repositories: folders as page trees, files in a text | Proposed | Partial |
 | [0139](0139-the-boards-of-a-type-and-a-label-show-the-cards-of-a-kanban.md) | The boards of a type and of a label show the cards of a kanban | Accepted | Landed |
+| [0140](0140-a-board-remembers-its-view-in-the-browser.md) | A board remembers its view in the browser | Accepted | Landed |
