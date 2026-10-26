@@ -128,3 +128,25 @@ func TestAnOwnStylesheetDecidesTheDarkScheme(t *testing.T) {
 		t.Fatalf("an own dark look keeps the dark scheme: %s", css)
 	}
 }
+
+// TestChoosingTheSwissThemeIsRecorded: a change of theme names the theme
+// before and after in the audit trail, and the Swiss theme, with the look
+// of the Confederation's sites, is marked as an official look (ADR-0120).
+func TestChoosingTheSwissThemeIsRecorded(t *testing.T) {
+	w := newWorld(t)
+	w.admin.expect("PUT", "/api/branding", `{"theme":"swiss"}`, http.StatusOK)
+	w.admin.expect("PUT", "/api/branding", `{"theme":"swiss","name":"Amt"}`, http.StatusOK)
+	w.admin.expect("PUT", "/api/branding", `{"theme":"comic","name":"Amt"}`, http.StatusOK)
+	var themes []map[string]any
+	for _, e := range w.admin.expect("GET", "/api/audit?event=design.change", "", http.StatusOK)["entries"].([]any) {
+		if d, _ := e.(map[string]any)["detail"].(map[string]any); d != nil {
+			themes = append(themes, d)
+		}
+	}
+	// Newest first: comic after swiss, the unchanged theme without a word, swiss after none.
+	if len(themes) != 3 || themes[0]["theme"] != "comic" || themes[0]["themeBefore"] != "swiss" || themes[0]["officialLook"] != nil ||
+		themes[1]["theme"] != nil ||
+		themes[2]["theme"] != "swiss" || themes[2]["themeBefore"] != "none" || themes[2]["officialLook"] != "true" {
+		t.Fatalf("the trail of theme changes: %v", themes)
+	}
+}

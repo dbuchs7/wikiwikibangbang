@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -142,11 +143,22 @@ func (h authHandlers) setBranding(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, err)
 		return
 	}
+	before := h.d.DB.Site.Design().Theme
 	if err := h.d.DB.Site.SetDesign(actor, d); err != nil {
 		h.brandingFailed(w, err)
 		return
 	}
-	h.d.DB.Audit.Record(audit.Entry{Event: audit.DesignChanged, Actor: actor, Addr: clientAddr(r), Detail: map[string]string{"part": "settings"}})
+	detail := map[string]string{"part": "settings"}
+	// A change of theme names both, and a theme with an authority's look
+	// says so, to answer later who gave the installation that look and
+	// when (ADR-0120).
+	if d.Theme != before {
+		detail["theme"], detail["themeBefore"] = cmp.Or(d.Theme, "none"), cmp.Or(before, "none")
+		if site.ThemeOfficial(d.Theme) {
+			detail["officialLook"] = "true"
+		}
+	}
+	h.d.DB.Audit.Record(audit.Entry{Event: audit.DesignChanged, Actor: actor, Addr: clientAddr(r), Detail: detail})
 	h.getBranding(w, r)
 }
 

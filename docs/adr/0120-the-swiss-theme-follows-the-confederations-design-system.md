@@ -56,6 +56,13 @@ The look tells readers that the site belongs to an authority. In the theme choic
 
 The theme is not locked, as the installation cannot know who runs it.
 
+The audit trail records the choice. A change of theme in the corporate design writes `design.change` with:
+
+- the theme before and after (`theme`, `themeBefore`);
+- for the Swiss theme, `officialLook=true`.
+
+So it can be shown later who gave the installation the official look, and when. The entry records the choice, not that the person read the notice: a change through the API sees no dialog.
+
 ### Dark scheme
 
 The design system has none. The theme derives one from the same slate scale (`#131b22` to `#596978`) and a lighter red (`#fc656b`) that keeps contrast. This is the theme's own extension.
