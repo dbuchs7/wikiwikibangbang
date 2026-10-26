@@ -558,49 +558,19 @@ func restore(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "restore: -from is required")
 		return 2
 	}
-	pass := os.Getenv("WWBB_BACKUP_PASSPHRASE")
-	if *passFile != "" {
-		data, err := os.ReadFile(*passFile)
-		if err != nil {
-			fmt.Fprintln(stderr, "restore:", err)
-			return 1
-		}
-		line, _, _ := strings.Cut(string(data), "\n")
-		pass = strings.TrimRight(line, "\r")
+	pass, err := backupPassphrase(*passFile)
+	if err != nil {
+		fmt.Fprintln(stderr, "restore:", err)
+		return 1
 	}
 	if pass == "" {
 		fmt.Fprintln(stderr, "restore: set WWBB_BACKUP_PASSPHRASE or -passphrase-file")
 		return 2
 	}
-	var paths []string
-	var chain []backup.Source
-	if _, isDir := dest.Directory(from[0]); len(from) == 1 && !isDir && dest.Check(from[0]) == nil {
-		// A remote destination of automatic backups (ADR-0073), with its
-		// credentials from the environment as for the server.
-		tg, err := dest.Open(from[0], os.Getenv)
-		var names []string
-		if err == nil {
-			names, err = tg.List(context.Background())
-		}
-		if err == nil {
-			paths, err = pickChain(names, *at, from[0])
-		}
-		if err != nil {
-			fmt.Fprintln(stderr, "restore:", err)
-			return 1
-		}
-		for _, name := range paths {
-			chain = append(chain, func() (io.ReadCloser, error) { return tg.Open(context.Background(), name) })
-		}
-	} else {
-		var err error
-		if paths, err = chainOf(from, *at); err != nil {
-			fmt.Fprintln(stderr, "restore:", err)
-			return 1
-		}
-		for _, p := range paths {
-			chain = append(chain, func() (io.ReadCloser, error) { return os.Open(p) })
-		}
+	chain, paths, err := backupChain(from, *at)
+	if err != nil {
+		fmt.Fprintln(stderr, "restore:", err)
+		return 1
 	}
 	m, err := backup.RestoreChain(chain, pass, *dataDir)
 	if err != nil {
@@ -612,6 +582,55 @@ func restore(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "restored a backup of %s (%s) into %s\n", m.Created.Format(time.RFC3339), m.Build, *dataDir)
 	return 0
+}
+
+// backupPassphrase is the passphrase of backups: the first line of file,
+// or WWBB_BACKUP_PASSPHRASE when no file is named.
+func backupPassphrase(file string) (string, error) {
+	if file == "" {
+		return os.Getenv("WWBB_BACKUP_PASSPHRASE"), nil
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return "", err
+	}
+	line, _, _ := strings.Cut(string(data), "\n")
+	return strings.TrimRight(line, "\r"), nil
+}
+
+// backupChain opens the backups to restore, in order: backup files, or a
+// directory or remote destination of automatic backups with the one at
+// names (default: the newest) and the backups it builds on.
+func backupChain(from []string, at string) ([]backup.Source, []string, error) {
+	var paths []string
+	var chain []backup.Source
+	if _, isDir := dest.Directory(from[0]); len(from) == 1 && !isDir && dest.Check(from[0]) == nil {
+		// A remote destination of automatic backups (ADR-0073), with its
+		// credentials from the environment as for the server.
+		tg, err := dest.Open(from[0], os.Getenv)
+		var names []string
+		if err == nil {
+			names, err = tg.List(context.Background())
+		}
+		if err == nil {
+			paths, err = pickChain(names, at, from[0])
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, name := range paths {
+			chain = append(chain, func() (io.ReadCloser, error) { return tg.Open(context.Background(), name) })
+		}
+		return chain, paths, nil
+	}
+	paths, err := chainOf(from, at)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, p := range paths {
+		chain = append(chain, func() (io.ReadCloser, error) { return os.Open(p) })
+	}
+	return chain, paths, nil
 }
 
 // fileFlags collects repeated -from values.

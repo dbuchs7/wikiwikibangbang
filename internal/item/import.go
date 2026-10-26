@@ -44,6 +44,10 @@ type Upsert struct {
 	// Managed marks the item as under a running one-way sync; sessions may
 	// not change it until Release.
 	Managed string
+	// ID, if set, is the ID of a new item: a restore from a backup brings
+	// an item back with its identity (ADR-0124). The store must not know
+	// it, live, in the trash or as a tombstone, so no ID is used twice (D7).
+	ID ID
 }
 
 var importedKeyRE = regexp.MustCompile(`^([A-Z][A-Z0-9]*)-([1-9][0-9]*)$`)
@@ -134,6 +138,15 @@ func (s *Store) Upsert(actor string, u Upsert) (Item, bool, error) {
 		return Item{}, false, err
 	}
 	e.Item = s.newID()
+	if u.ID != "" {
+		if !ValidItemID(string(u.ID)) {
+			return Item{}, false, invalid("item ID %q", u.ID)
+		}
+		if _, known := s.items[u.ID]; known {
+			return Item{}, false, invalid("item %s exists; its ID is not used again", u.ID)
+		}
+		e.Item = u.ID
+	}
 	if err := s.record(actor, e); err != nil {
 		return Item{}, false, err
 	}

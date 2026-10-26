@@ -194,3 +194,53 @@ func TestUpsertRefusals(t *testing.T) {
 		t.Errorf("release in unknown space: err = %v", err)
 	}
 }
+
+// TestARestoreKeepsTheIdentity covers ADR-0124: a restored item comes back
+// with its ID, which the store must not know in any presence (D7), and
+// its protected passages come back with theirs.
+func TestARestoreKeepsTheIdentity(t *testing.T) {
+	s := setup(t)
+	const id = ID("0123456789abcdef0123456789abcdef")
+	u := Upsert{Origin: Origin{System: "backup", Instance: "b1", ExternalID: string(id)}, ID: id, Space: "PLAT", Type: "page", Title: "Back"}
+	it, changed, err := s.Upsert("restore", u)
+	noErr(t, err)
+	if it.ID != id || !changed {
+		t.Fatalf("restored as %s", it.ID)
+	}
+	u.Origin.ExternalID = "other"
+	if _, _, err := s.Upsert("restore", u); !errors.Is(err, ErrValidation) {
+		t.Fatalf("an ID used again: %v", err)
+	}
+	u.ID = "not an id"
+	if _, _, err := s.Upsert("restore", u); !errors.Is(err, ErrValidation) {
+		t.Fatalf("a bad ID: %v", err)
+	}
+
+	noErr(t, s.CommitBody("anna", id, Doc{Blocks: []Block{{Kind: Paragraph, Text: "Paul Muster"}}}))
+	sec := Secret{ID: "fedcba9876543210fedcba9876543210", By: "anna", Readers: []string{"@hr", "@hr"}}
+	noErr(t, s.RestoreSecrets("restore", id, []Secret{sec}))
+	noErr(t, s.RestoreSecrets("restore", id, nil))
+	if got, _ := s.Get(id); len(got.Secrets) != 1 || got.Secrets[0].ID != sec.ID || got.Secrets[0].By != "anna" || len(got.Secrets[0].Readers) != 1 {
+		t.Fatalf("passages %+v", got.Secrets)
+	}
+	if err := s.RestoreSecrets("restore", id, []Secret{{ID: "a", By: "anna", Readers: []string{"two words"}}}); !errors.Is(err, ErrValidation) {
+		t.Fatalf("a bad reader: %v", err)
+	}
+	if err := s.RestoreSecrets("restore", "missing", []Secret{sec}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a missing item: %v", err)
+	}
+}
+
+func TestSpaceState(t *testing.T) {
+	s := setup(t)
+	noErr(t, s.CreateSpace("root", "OLD", "Old"))
+	noErr(t, s.CreateSpace("root", "BIN", "Bin"))
+	noErr(t, s.TrashSpace("root", "OLD"))
+	noErr(t, s.TrashSpace("root", "BIN"))
+	noErr(t, s.PurgeSpace("root", "BIN"))
+	for key, want := range map[string]string{"PLAT": "live", "OLD": "trashed", "BIN": "purged", "NONE": ""} {
+		if got, known := s.SpaceState(key); got != want || known != (want != "") {
+			t.Errorf("%s: %q %v", key, got, known)
+		}
+	}
+}

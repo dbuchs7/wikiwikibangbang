@@ -136,3 +136,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0121](0121-a-change-feed-own-roles-and-watching-with-read-tokens.md) | A change feed, one's own roles, and watching with read tokens | Proposed | Partial |
 | [0122](0122-the-audit-listing-reaches-the-whole-journal.md) | The audit listing reaches the whole journal | Accepted | Landed |
 | [0123](0123-the-audit-trail-is-a-hash-chain.md) | The audit trail is a hash chain | Accepted | Landed |
+| [0124](0124-restoring-spaces-from-a-backup.md) | Restoring spaces from a backup | Accepted | Landed |

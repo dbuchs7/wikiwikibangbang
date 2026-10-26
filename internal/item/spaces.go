@@ -94,6 +94,19 @@ func (s *Store) PurgeSpace(actor, key string) error {
 	return s.record(actor, Event{Kind: SpacePurged, Space: key, Members: members})
 }
 
+// SpaceState tells whether a space key is known, and whether its space is
+// live, in the trash or deleted for good ("live", "trashed", "purged").
+func (s *Store) SpaceState(key string) (string, bool) {
+	sp, ok := s.spaces[key]
+	switch {
+	case !ok:
+		return "", false
+	case sp.state == "":
+		return "live", true
+	}
+	return sp.state, true
+}
+
 // TrashedSpaces lists the spaces in the trash, ordered by key, with how
 // many items each holds.
 func (s *Store) TrashedSpaces() []TrashedSpace {

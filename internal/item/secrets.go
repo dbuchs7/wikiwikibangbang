@@ -438,6 +438,29 @@ func (x *Session) CopySecrets(from, to ID) error {
 	return x.s.recordBatch(x.who, events...)
 }
 
+// RestoreSecrets gives an item the protected passages it had in a backup,
+// with their IDs, who protected them and their readers, so its restored
+// body keeps them protected (ADR-0124). It is a trusted command: a restore
+// calls it, not a person.
+func (s *Store) RestoreSecrets(actor string, id ID, secrets []Secret) error {
+	if _, err := s.live(id); err != nil {
+		return err
+	}
+	var events []Event
+	for _, sec := range secrets {
+		readers, err := checkReaders(sec.Readers)
+		if err != nil {
+			return err
+		}
+		c := Secret{ID: sec.ID, By: sec.By, Readers: readers}
+		events = append(events, Event{Kind: SecretSet, Item: id, Secret: &c})
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	return s.recordBatch(actor, events...)
+}
+
 // SetSecretReaders changes who reads a passage besides the one who
 // protected it.
 func (x *Session) SetSecretReaders(id, secret ID, readers []string) error {
