@@ -101,6 +101,12 @@ jobs:
         with:
           node-version: '22'
 
+      # ADR-0133: UI modules that run without a browser, such as the
+      # Markdown conversion, have unit tests of their own; Node's test
+      # runner needs no dependency.
+      - name: JavaScript unit tests
+        run: node --test "internal/web/jstest/*.test.mjs"
+
       - name: Install Playwright and Chromium
         working-directory: e2e
         run: |

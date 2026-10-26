@@ -122,7 +122,15 @@ Paste something that looks like a password (`password: Test1234!`), a card numbe
 - Does the governance view show the finding masked, and can an administrator lift the restriction?
 - **Report** every harmless text that was flagged, and every secret that was not.
 
-### 10. Everything else
+### 10. Pasting Markdown (ADR-0133)
+
+Copy Markdown from an assistant, a README or a code editor and paste it into a page with Ctrl+V; paste other Markdown through *Insert… → Paste Markdown…*. The [Markdown guide](../guides/markdown.md) lists what is converted.
+
+- Does Markdown become the formatting you expected — headings, lists, tasks, tables, code, links?
+- Did ordinary text you pasted (a mail, a list, a piece of code) ever turn into formatting you did not want? That is a finding: say what you pasted.
+- Is it clear what happened to pictures and to what the page cannot show?
+
+### 11. Everything else
 
 Search, item history, relations, mentions (toolbar: *Mention*), formatting, the API at `/api/openapi.json`. Anything that surprises you is worth a report.
 
