@@ -89,3 +89,4 @@ Strongest form: nothing to draw or convert.
 
 - amends [ADR-0117](0117-palettes-for-the-drawing-editor.md) (two more sets of shapes)
 - relates to [ADR-0053](0053-drawings-with-excalidraw-on-a-page-of-their-own.md) (the drawing editor)
+- amended by [ADR-0126](0126-excalidraw-0-18.md) (the relationships are single arrows with Excalidraw 0.18's heads)

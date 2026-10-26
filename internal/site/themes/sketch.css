@@ -1,7 +1,7 @@
 /* Sketch: drawn by hand in pencil on paper, with wobbly outlines. Light
    only. Virgil, the hand-drawn font of the drawing editor, ships with the
-   UI (vendor/excalidraw-assets, SIL Open Font License 1.1). */
-@font-face { font-family: "Virgil"; src: url("/vendor/excalidraw-assets/Virgil.woff2") format("woff2"); font-display: swap; }
+   UI (vendor/fonts, SIL Open Font License 1.1). */
+@font-face { font-family: "Virgil"; src: url("/vendor/fonts/Virgil/Virgil-Regular.woff2") format("woff2"); font-display: swap; }
 :root {
   --bg: #fbfaf5; --surface: #fffefa; --surface-2: #fbfaf3; --border: #3a3a3a; --border-strong: #2b2b2b;
   --text: #2b2b2b; --muted: #5f5f5f;
