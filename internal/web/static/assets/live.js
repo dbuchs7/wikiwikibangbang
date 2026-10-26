@@ -51,6 +51,7 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
   const mine = new Set(); // bids we hold
   const known = new Map(); // bid -> JSON of the block as the server has it
   const asked = new Map(); // bid -> "lock" or "release" sent, until the lock event arrives
+  const taken = new Set(); // bids our accepted operations locked, until we release them
   let sending = false;
   let sendTimer = null;
   let releaseTimer = null;
@@ -218,6 +219,8 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
       for (const o of batch) {
         if (o.op === "set" || o.op === "insert") known.set(o.id, o.json);
         if (o.op === "delete") known.delete(o.id);
+        if (o.op === "release" || o.op === "delete") taken.delete(o.id);
+        else taken.add(o.id);
       }
     } catch (err) {
       // The batch was refused as a whole; the snapshot of a fresh
@@ -263,6 +266,7 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     mine.clear();
     known.clear();
     asked.clear();
+    taken.clear();
     const blocks = (e.blocks || []).map((b) => {
       known.set(b.id, JSON.stringify(normal(b.block)));
       setHolder(b.id, b.holder);
@@ -433,6 +437,16 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     if (view) view.dom.blur();
     while (sending) await new Promise((r) => setTimeout(r, 50));
     if (editable) await send();
+    // A block written before its lock event arrived is not in mine, so
+    // send kept it. Left to the closing stream, it would be stored only
+    // when the server notices the close, which may be after the page has
+    // been read again; released here, it is stored before.
+    const held = [...taken].filter((bid) => known.has(bid));
+    if (editable && held.length) {
+      try {
+        await post(`/api/items/${encodeURIComponent(ref)}/live`, { client: me, ops: held.map((id) => ({ op: "release", id })) });
+      } catch { /* the server stores it as the stream closes */ }
+    }
     close();
   }
 

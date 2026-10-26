@@ -2786,6 +2786,24 @@ function gitSource() {
     const erasedText = await page.textContent("#body .ProseMirror");
     check(!erasedText.includes("Paul") && !erasedText.includes("▒") && await page.$("#body .pm-secret") === null, "the erased passage is gone: " + erasedText);
 
+    step("editing: Done stores the text at once, also when the server learns late that the editor was left (ADR-0010)");
+    const quick = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ space: "PLAT", type: "task", title: "Quick edit", properties: { priority: "low" }, body: [{ kind: "paragraph", text: "Typed and left at once." }] }) })).json()).item.key);
+    const quickCtx = await browser.newContext({ storageState: await page.context().storageState() });
+    const quickPage = await quickCtx.newPage();
+    quickPage.on("pageerror", (e) => problems.push("bert's second page error: " + e.message));
+    await quickPage.goto(base + "/#/item/" + quick + "?edit");
+    await quickPage.waitForSelector("#body .ProseMirror[contenteditable=true] p");
+    // The editor's stream stays open while Done closes it, as when the
+    // close reaches the server only after the page has been read again.
+    await quickPage.evaluate(() => { EventSource.prototype.close = () => {}; });
+    await quickPage.click("#body .ProseMirror p");
+    await quickPage.keyboard.press("End");
+    await quickPage.keyboard.type(" Stored.");
+    await quickPage.click("#edit-done");
+    await quickPage.waitForSelector("#body.reading .ProseMirror p:has-text('Stored.')");
+    await quickCtx.close();
+
     check(problems.length === 0, problems.join("; "));
     console.log("ok");
   } catch (err) {
