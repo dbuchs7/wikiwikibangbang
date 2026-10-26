@@ -359,3 +359,31 @@ func TestReferencesToWhatIsSetAsideAreLeftOut(t *testing.T) {
 	}
 	dry{}.Discard("", "")
 }
+
+// TestADiagramComesBackWithItsFile: a BPMN diagram shows the restored copy
+// of its file, and a process block comes back as it was (ADR-0129).
+func TestADiagramComesBackWithItsFile(t *testing.T) {
+	b := newBackup(t)
+	model := item.ID("00112233445566778899aabbccddeeff")
+	b.files[model] = []byte(`<?xml version="1.0"?><definitions/>`)
+	sum := sha256.Sum256(b.files[model])
+	must[item.Attachment](t)(b.s.AddAttachment("anna", b.child.ID, item.Attachment{ID: model, Name: "order.bpmn", Type: "text/xml; charset=utf-8",
+		Size: int64(len(b.files[model])), SHA256: hex.EncodeToString(sum[:])}))
+	noErr(t, b.s.CommitBody("anna", b.child.ID, item.Doc{Blocks: []item.Block{
+		{Kind: item.BPMN, Ref: model, Text: "As drawn"},
+		{Kind: item.Process, Engine: "atlas", Process: "order", Text: "As it runs"},
+	}}))
+	target := item.NewStore()
+	_, err := Run(dry{target}, b.source(), Options{Spaces: []string{"A"}, Actor: "restore"})
+	noErr(t, err)
+	child := get(t, target, b.child.ID)
+	if len(child.Attachments) != 1 || len(child.Body.Blocks) != 2 {
+		t.Fatalf("child %+v", child)
+	}
+	if d := child.Body.Blocks[0]; d.Kind != item.BPMN || d.Ref != child.Attachments[0].ID || d.Ref == model || d.Text != "As drawn" {
+		t.Fatalf("diagram %+v", d)
+	}
+	if p := child.Body.Blocks[1]; p.Kind != item.Process || p.Engine != "atlas" || p.Process != "order" {
+		t.Fatalf("process %+v", p)
+	}
+}

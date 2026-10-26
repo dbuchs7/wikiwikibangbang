@@ -492,8 +492,8 @@ func (w *writer) copyFiles(it item.Item) error {
 	return nil
 }
 
-// body returns the item's body as it can be written here: pictures and
-// videos show the restored files, and a reference to an item that is not
+// body returns the item's body as it can be written here: pictures,
+// videos and BPMN diagrams show the restored files, and a reference to an item that is not
 // here is left out, the text of a mention staying.
 func (w *writer) body(t *item.Store, it item.Item) item.Doc {
 	var out item.Doc
@@ -501,7 +501,7 @@ func (w *writer) body(t *item.Store, it item.Item) item.Doc {
 		b.Mentions = slices.Clone(b.Mentions)
 		b.Marks = slices.Clone(b.Marks)
 		switch b.Kind {
-		case item.Image, item.Video:
+		case item.Image, item.Video, item.BPMN:
 			to, ok := w.files[it.ID][b.Ref]
 			if !ok {
 				w.p.note("%s: a %s of the text is left out: its file did not come back", it.Key, b.Kind)

@@ -54,7 +54,7 @@ func TestEveryVendoredPackageIsNoticed(t *testing.T) {
 		t.Fatal(err)
 	}
 	line := regexp.MustCompile(`^(\S+) (\S+) (.+)$`)
-	for _, bundle := range []string{"prosemirror", "excalidraw"} {
+	for _, bundle := range []string{"prosemirror", "excalidraw", "bpmn"} {
 		data, err := os.ReadFile("../../internal/web/static/vendor/" + bundle + ".LICENSE.txt")
 		if err != nil {
 			t.Fatal(err)
@@ -70,8 +70,17 @@ func TestEveryVendoredPackageIsNoticed(t *testing.T) {
 				continue
 			}
 			n++
-			if pinned := l.Packages["node_modules/"+m[1]].Version; pinned != m[2] {
-				t.Errorf("%s.LICENSE.txt names %s %s, package-lock.json pins %q", bundle, m[1], m[2], pinned)
+			// A version may be installed below another package
+			// (node_modules/a/node_modules/b), when the one at the top differs.
+			pinned := false
+			for path, p := range l.Packages {
+				if (path == "node_modules/"+m[1] || strings.HasSuffix(path, "/node_modules/"+m[1])) && p.Version == m[2] {
+					pinned = true
+					break
+				}
+			}
+			if !pinned {
+				t.Errorf("%s.LICENSE.txt names %s %s, which package-lock.json does not pin", bundle, m[1], m[2])
 			}
 			if row := "| " + m[1] + " | " + m[2] + " | " + m[3] + " |"; !strings.Contains(string(notices), row) {
 				t.Errorf("THIRD_PARTY_NOTICES.md has no row %q", row)

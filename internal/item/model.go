@@ -83,7 +83,19 @@ const (
 	// (ADR-0119). They hold nothing: they are computed when shown.
 	Figures BlockKind = "figures"
 	Tables  BlockKind = "tables"
+	// BPMN shows a BPMN 2.0 model kept as an attachment of the item: Ref
+	// names the file and Text is its caption (ADR-0129).
+	BPMN BlockKind = "bpmn"
+	// Process shows the newest version of a process deployed to a process
+	// engine: Engine names the engine among the installation's, Process is
+	// the process's BPMN ID and Text the caption. The body holds no copy of
+	// the model (ADR-0129).
+	Process BlockKind = "process"
 )
+
+// BPMNTypes are the types a BPMN model's file has, as read from its bytes:
+// XML with its declaration, or text without one (ADR-0129).
+var BPMNTypes = []string{"text/xml; charset=utf-8", "text/plain; charset=utf-8"}
 
 // VideoTypes are the formats of a video a body plays, as read from the
 // file's bytes; browsers play them without a plug-in (ADR-0097).
@@ -149,6 +161,11 @@ type Block struct {
 	// TextAligns) or of an image (one of ImageAligns); empty is the default
 	// (ADR-0059).
 	Align string `json:",omitempty"`
+	// Engine and Process name the process a process block shows: the
+	// engine's ID among the installation's engines and the process's BPMN
+	// ID (ADR-0129).
+	Engine  string `json:",omitempty"`
+	Process string `json:",omitempty"`
 }
 
 // Doc is a structured document body (ADR-0001: a block document, not HTML

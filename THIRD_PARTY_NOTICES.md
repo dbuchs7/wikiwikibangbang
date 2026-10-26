@@ -46,27 +46,37 @@ The drawing editor (ADR-0053, ADR-0126) is a second bundle, `internal/web/static
 | @floating-ui/dom | 1.8.0 | MIT |
 | @floating-ui/react-dom | 2.1.9 | MIT |
 | @floating-ui/utils | 0.2.12 | MIT |
+| @radix-ui/primitive | 1.0.0 | MIT |
 | @radix-ui/primitive | 1.1.1 | MIT |
 | @radix-ui/react-arrow | 1.1.2 | MIT |
 | @radix-ui/react-collection | 1.0.1 | MIT |
+| @radix-ui/react-compose-refs | 1.0.0 | MIT |
 | @radix-ui/react-compose-refs | 1.1.1 | MIT |
+| @radix-ui/react-context | 1.0.0 | MIT |
 | @radix-ui/react-context | 1.1.1 | MIT |
 | @radix-ui/react-direction | 1.0.0 | MIT |
 | @radix-ui/react-dismissable-layer | 1.1.5 | MIT |
 | @radix-ui/react-focus-guards | 1.1.1 | MIT |
 | @radix-ui/react-focus-scope | 1.1.2 | MIT |
+| @radix-ui/react-id | 1.0.0 | MIT |
 | @radix-ui/react-id | 1.1.0 | MIT |
 | @radix-ui/react-popover | 1.1.6 | MIT |
 | @radix-ui/react-popper | 1.2.2 | MIT |
 | @radix-ui/react-portal | 1.1.4 | MIT |
+| @radix-ui/react-presence | 1.0.0 | MIT |
 | @radix-ui/react-presence | 1.1.2 | MIT |
+| @radix-ui/react-primitive | 1.0.1 | MIT |
 | @radix-ui/react-primitive | 2.0.2 | MIT |
 | @radix-ui/react-roving-focus | 1.0.2 | MIT |
+| @radix-ui/react-slot | 1.0.1 | MIT |
 | @radix-ui/react-slot | 1.1.2 | MIT |
 | @radix-ui/react-tabs | 1.0.2 | MIT |
+| @radix-ui/react-use-callback-ref | 1.0.0 | MIT |
 | @radix-ui/react-use-callback-ref | 1.1.0 | MIT |
+| @radix-ui/react-use-controllable-state | 1.0.0 | MIT |
 | @radix-ui/react-use-controllable-state | 1.1.0 | MIT |
 | @radix-ui/react-use-escape-keydown | 1.1.0 | MIT |
+| @radix-ui/react-use-layout-effect | 1.0.0 | MIT |
 | @radix-ui/react-use-layout-effect | 1.1.0 | MIT |
 | @radix-ui/react-use-size | 1.1.0 | MIT |
 | aria-hidden | 1.2.6 | MIT |
@@ -94,6 +104,7 @@ The drawing editor (ADR-0053, ADR-0126) is a second bundle, `internal/web/static
 | png-chunk-text | 1.0.0 | MIT |
 | png-chunks-encode | 1.0.0 | MIT |
 | png-chunks-extract | 1.0.0 | MIT |
+| points-on-curve | 0.2.0 | MIT |
 | points-on-curve | 1.0.1 | MIT |
 | points-on-path | 0.2.1 | MIT |
 | react | 18.3.1 | MIT |
@@ -110,6 +121,31 @@ The drawing editor (ADR-0053, ADR-0126) is a second bundle, `internal/web/static
 | use-sidecar | 1.1.3 | MIT |
 | use-sync-external-store | 1.7.0 | MIT |
 | zustand | 4.5.7 | MIT |
+
+The BPMN viewer and modeler (ADR-0129) are two more bundles, `internal/web/static/vendor/bpmn-viewer.js` and `bpmn-modeler.js`, built from the same directory, with bpmn-js's stylesheets and icon font in `bpmn/`; `bpmn.LICENSE.txt` ships next to them with every license text and notice. bpmn-js is under the bpmn.io license (Copyright (c) 2014-present Camunda Services GmbH): the MIT terms, with the condition that the code displaying the bpmn.io watermark in rendered diagrams is not removed or changed and that the watermark stays fully visible and is not overlapped; the UI keeps it so. htm is under the Apache License 2.0; path-intersection carries a notice for the code it derives from Snap.svg (Copyright 2013 Adobe Systems Incorporated, Apache License 2.0):
+
+| Package | Version | License |
+|---|---|---|
+| @bpmn-io/diagram-js-ui | 0.2.4 | MIT |
+| bpmn-js | 18.31.0 | SEE LICENSE IN LICENSE |
+| bpmn-moddle | 10.3.1 | MIT |
+| clsx | 2.1.1 | MIT |
+| diagram-js | 15.28.1 | MIT |
+| diagram-js-direct-editing | 3.6.0 | MIT |
+| didi | 11.0.1 | MIT |
+| domify | 3.0.0 | MIT |
+| htm | 3.1.1 | Apache-2.0 |
+| ids | 3.0.2 | MIT |
+| inherits-browser | 0.1.0 | ISC |
+| min-dash | 5.1.0 | MIT |
+| min-dom | 5.3.0 | MIT |
+| moddle | 8.2.1 | MIT |
+| moddle-xml | 12.3.1 | MIT |
+| object-refs | 0.4.0 | MIT |
+| path-intersection | 4.2.1 | MIT |
+| preact | 10.29.8 | MIT |
+| saxen | 11.2.0 | MIT |
+| tiny-svg | 4.1.4 | MIT |
 
 The palettes of the drawing editor (ADR-0117), in `internal/web/static/assets/palettes/`, are libraries of the Excalidraw library collection (github.com/excalidraw/excalidraw-libraries, commit 297a349e), which publishes every library under the MIT license (Copyright (c) 2020 Excalidraw): "Excalidraw Archimate Template" by Timothy Galvin, "bpmn" by Aoustin Frederic, "Computers" by EI d'AU, "Network topology icons" by dwelle, "Common Home Network Basics" by DDay987, "Network locations" by Jorge Godoy and "IT icons" by Mateusz Baran. `palettes.LICENSE.txt` ships next to them with the license text and which palette holds which library; `internal/web/vendor/palettes.mjs` builds them. The ArchiMate palette also holds relationships drawn for this project (ADR-0125). The Microsoft palette, `microsoft.json`, is made of the Fluent UI System Icons (github.com/microsoft/fluentui-system-icons, commit 82ecf7cb), which Microsoft publishes under the MIT license (Copyright (c) 2020 Microsoft Corporation), turned into shapes by `internal/web/vendor/fluent.mjs`; it holds no product logos.
 
