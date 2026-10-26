@@ -182,7 +182,7 @@ func (h itemHandlers) copyOne(r *http.Request, space string, t copyTask) (item.I
 		body := item.Doc{Blocks: make([]item.Block, len(src.Body.Blocks))}
 		copy(body.Blocks, src.Body.Blocks)
 		for i, b := range body.Blocks {
-			if b.Kind == item.Image || b.Kind == item.Video {
+			if b.Kind == item.Image || b.Kind == item.Video || b.Kind == item.BPMN {
 				if to, ok := renamed[b.Ref]; ok {
 					body.Blocks[i].Ref = to
 				}

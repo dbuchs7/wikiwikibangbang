@@ -270,8 +270,8 @@ func (s *Store) firstBody(created Event, d Doc) (Event, error) {
 		return Event{}, invalid("type %q has no body", td.Name)
 	}
 	for i, b := range d.Blocks {
-		if b.Kind == Image || b.Kind == Video {
-			return Event{}, wrapf(invalid("an image or a video shows a file of the item; add it after creating the item"), "block %d", i+1)
+		if b.Kind == Image || b.Kind == Video || b.Kind == BPMN {
+			return Event{}, wrapf(invalid("an image, a video or a BPMN diagram shows a file of the item; add it after creating the item"), "block %d", i+1)
 		}
 		if err := checkBlock(b, created.Item); err != nil {
 			return Event{}, wrapf(err, "block %d", i+1)
@@ -599,7 +599,7 @@ func (s *Store) CommitBody(actor string, id ID, d Doc) error {
 		}
 		// An image shows an attachment of this item; one deleted since
 		// may stay if the current body still shows it (ADR-0045).
-		if b.Kind == Image || b.Kind == Video {
+		if b.Kind == Image || b.Kind == Video || b.Kind == BPMN {
 			a, ok := it.attachment(b.Ref)
 			kept := slices.ContainsFunc(it.Body.Blocks, func(o Block) bool { return o.Kind == b.Kind && o.Ref == b.Ref })
 			if !ok || (a.Deleted && !kept) {
@@ -607,6 +607,9 @@ func (s *Store) CommitBody(actor string, id ID, d Doc) error {
 			}
 			if b.Kind == Video && !slices.Contains(VideoTypes, a.Type) {
 				return wrapf(invalid("%s is no video a browser plays (%s)", a.Name, strings.Join(VideoTypes, ", ")), "block %d", i+1)
+			}
+			if b.Kind == BPMN && !slices.Contains(BPMNTypes, a.Type) {
+				return wrapf(invalid("%s is no BPMN model: its bytes do not read as text (%s)", a.Name, a.Type), "block %d", i+1)
 			}
 		}
 	}
@@ -1201,6 +1204,17 @@ func (s *Store) subtree(root ID) []ID {
 // a bad block when it is typed, not only when it is committed.
 func CheckBlock(b Block, self ID) error { return checkBlock(b, self) }
 
+// engineID is the form of a process engine's ID (ADR-0126), that of a
+// connector's (ADR-0077). validProcessID is a BPMN process ID: an XML name
+// without a colon, as BPMN declares it, at most 255 characters.
+var (
+	engineID       = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,39}$`)
+	validProcessID = regexp.MustCompile(`^[\p{L}_][\p{L}\p{N}_.-]{0,254}$`)
+)
+
+// ValidEngineID reports whether id is the form of a process engine's ID.
+func ValidEngineID(id string) bool { return engineID.MatchString(id) }
+
 // checkBlock validates one block of a body (ADR-0001, ADR-0032).
 func checkBlock(b Block, self ID) error {
 	switch b.Kind {
@@ -1224,15 +1238,27 @@ func checkBlock(b Block, self ID) error {
 		if l, ok := NormalLabel(b.Text); !ok || l != b.Text || len(b.Marks) > 0 || len(b.Mentions) > 0 {
 			return invalid("a task list names one label, as stored (ADR-0044), and nothing else")
 		}
-	case Image, Video:
+	case Image, Video, BPMN:
 		if !ValidAttachmentID(string(b.Ref)) || len(b.Marks) > 0 || len(b.Mentions) > 0 {
-			return invalid("an image or a video names an attachment and has a plain caption")
+			return invalid("an image, a video or a BPMN diagram names an attachment and has a plain caption")
+		}
+	case Process:
+		switch {
+		case !ValidEngineID(b.Engine):
+			return invalid("engine %q: a process names an engine by its ID, lower-case letters, digits, dots and hyphens, at most 40", b.Engine)
+		case !validProcessID.MatchString(b.Process):
+			return invalid("process %q: a process is named by its BPMN ID, a letter or _ followed by letters, digits, _, . and -, at most 255", b.Process)
+		case len(b.Marks) > 0 || len(b.Mentions) > 0:
+			return invalid("a process has a plain caption")
 		}
 	default:
 		return invalid("unknown block kind %q", b.Kind)
 	}
-	if b.Kind != Embed && b.Kind != Image && b.Kind != Video && b.Ref != "" {
-		return invalid("only an embed, an image or a video has a reference")
+	if b.Kind != Embed && b.Kind != Image && b.Kind != Video && b.Kind != BPMN && b.Ref != "" {
+		return invalid("only an embed, an image, a video or a BPMN diagram has a reference")
+	}
+	if b.Kind != Process && (b.Engine != "" || b.Process != "") {
+		return invalid("only a process names an engine and a process")
 	}
 	if b.Checked && b.Kind != TaskItem {
 		return invalid("only a task is checked")

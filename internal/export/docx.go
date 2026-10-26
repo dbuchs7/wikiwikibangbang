@@ -33,6 +33,15 @@ type Document struct {
 	Figure, Table string
 }
 
+// diagramName names what a bpmn or a process block shows, for documents
+// that do not draw it (ADR-0126): the file, or the process and its engine.
+func diagramName(bl item.Block, files map[item.ID]Image) string {
+	if bl.Kind == item.Process {
+		return bl.Process + " (" + bl.Engine + ")"
+	}
+	return files[bl.Ref].Name
+}
+
 // listing is what a list of figures (kind Figures) or of tables (Tables)
 // shows for a body: each picture or table, numbered in the order of the
 // body, with its caption or a table's header row (ADR-0119).
@@ -269,6 +278,14 @@ func (b *docxBuilder) block(bl item.Block, p Page, base, listNum int) string {
 	case item.Video:
 		// A document does not play a video; it names it (ADR-0097).
 		out := para("", "", run("[Video: "+p.Images[bl.Ref].Name+"]", ""))
+		if strings.TrimSpace(bl.Text) != "" {
+			out += para("Caption", "", run(bl.Text, ""))
+		}
+		return out
+	case item.BPMN, item.Process:
+		// A document does not draw a diagram; it names the file or the
+		// process (ADR-0126).
+		out := para("", "", run("[BPMN: "+diagramName(bl, p.Images)+"]", ""))
 		if strings.TrimSpace(bl.Text) != "" {
 			out += para("Caption", "", run(bl.Text, ""))
 		}
