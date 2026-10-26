@@ -1,4 +1,4 @@
-# ADR-0140: A board remembers its view in the browser
+# ADR-0141: A board remembers its view in the browser
 
 - **Status:** Accepted
 - **Implementation:** Landed
