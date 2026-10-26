@@ -263,3 +263,45 @@ func TestAtlassianConnectorsAreChecked(t *testing.T) {
 		}
 	}
 }
+
+func TestPagingIsChecked(t *testing.T) {
+	s, _ := New(nil, func([]byte) error { return nil })
+	c := jsonConnector()
+	c.JSON.Next = ""
+	c.JSON.Paging = &Paging{Kind: " offset ", Param: " $skip ", SizeParam: "$top", Size: 100, Total: " meta.total "}
+	kept, err := s.SetConnector("admin", c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := kept.JSON.Paging; p.Kind != PagingOffset || p.Param != "$skip" || p.Total != "meta.total" {
+		t.Fatalf("normalized %+v", p)
+	}
+	got, _ := s.Connector("feed")
+	got.JSON.Paging.Param = "x"
+	if again, _ := s.Connector("feed"); again.JSON.Paging.Param != "$skip" {
+		t.Fatal("a caller changed the settings")
+	}
+	for name, change := range map[string]func(*Paging){
+		"a bad kind":         func(p *Paging) { p.Kind = "cursor" },
+		"no parameter":       func(p *Paging) { p.Param = "" },
+		"a bad parameter":    func(p *Paging) { p.Param = "a b" },
+		"a negative start":   func(p *Paging) { p.Start = -1 },
+		"a huge page":        func(p *Paging) { p.Size = 10001 },
+		"a size without":     func(p *Paging) { p.Size = 0 },
+		"the same parameter": func(p *Paging) { p.SizeParam = p.Param },
+		"a bad total":        func(p *Paging) { p.Total = "a..b" },
+	} {
+		bad := jsonConnector()
+		bad.JSON.Next = ""
+		bad.JSON.Paging = &Paging{Kind: PagingPage, Param: "page", Start: 1, SizeParam: "size", Size: 50}
+		change(bad.JSON.Paging)
+		if _, err := s.SetConnector("admin", bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	both := jsonConnector()
+	both.JSON.Paging = &Paging{Kind: PagingPage, Param: "page"}
+	if _, err := s.SetConnector("admin", both); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a next link and a page parameter: %v", err)
+	}
+}
