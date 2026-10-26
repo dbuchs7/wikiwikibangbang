@@ -342,7 +342,7 @@ table.history td { font-size: 13px; }
 .card-show-all { list-style: none; text-align: center; font-size: 13px; }
 .kanban-columns-edit .column-limit { width: 6.5rem; }
 
-/* Swimlanes (ADR-0135): one grid, the column heads once above the lanes,
+/* Swimlanes (ADR-0137): one grid, the column heads once above the lanes,
    a cell per column in each lane. The template of the columns is set by
    the view, folded columns narrow. */
 #kanban .board.board-lanes { display: grid; gap: 8px 14px; align-items: stretch; }

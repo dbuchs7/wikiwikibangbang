@@ -4,7 +4,7 @@ import "testing"
 
 // TestRelationSummary: a card counts its hand-made relations to items the
 // reader may read, and the unfinished items it waits on: those it depends
-// on and those that block it (ADR-0135). Relations derived from a body and
+// on and those that block it (ADR-0137). Relations derived from a body and
 // items the reader may not read are left out.
 func TestRelationSummary(t *testing.T) {
 	s := setup(t)

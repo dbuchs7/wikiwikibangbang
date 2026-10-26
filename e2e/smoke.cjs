@@ -1565,7 +1565,7 @@ function atlassianSource() {
     await page.click("#kanban-detail:not([hidden]) #kanban-detail-off");
     await page.waitForSelector("#kanban .card-item:has-text('Second card')", { state: "detached" });
 
-    step("kanban swimlanes and relations (ADR-0135): lanes by a field of the task, a move to another lane sets it, a card that waits on another says so");
+    step("kanban swimlanes and relations (ADR-0137): lanes by a field of the task, a move to another lane sets it, a card that waits on another says so");
     await page.click("#kanban-settings-open");
     await page.selectOption("#kanban-lane-field", "priority");
     await page.click("#kanban-settings-save");

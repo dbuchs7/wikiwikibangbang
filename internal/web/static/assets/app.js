@@ -2610,7 +2610,7 @@ async function kanbanView(space, id) {
       }
     }
     // A card that waits on unfinished work it depends on, or that blocks
-    // it, says so first (ADR-0135).
+    // it, says so first (ADR-0137).
     if (it.waitingOn) chips.unshift(h("span", { class: "card-chip late card-waiting", title: t("card.waitingHint", { n: it.waitingOn }) },
       lineIcon("M7 4h10M7 20h10M8 4c0 5 8 6 8 8s-8 3-8 8M16 4c0 5-8 6-8 8"), t("card.waiting", { n: it.waitingOn })));
     const color = colorField ? it.properties[k.colorField] : "";
@@ -2637,7 +2637,7 @@ async function kanbanView(space, id) {
     if (open) return open.focus();
     const input = h("input", { name: "title", required: true, placeholder: t("kanban.newCard"), "aria-label": t("kanban.newCardIn", { column: col.name }) });
     const f = form({ class: "card-new" }, [input, h("button", { type: "submit", class: "primary", text: t("kanban.add") })], async (d) => {
-      // A card made in a lane takes the lane's value (ADR-0135).
+      // A card made in a lane takes the lane's value (ADR-0137).
       const properties = lane ? { [k.laneField]: lane } : {};
       const { item } = await post("/api/items", { space, type: k.type, title: d.get("title").trim(), properties });
       await setLabels(item, [k.label]);
@@ -2696,7 +2696,7 @@ async function kanbanView(space, id) {
   };
   // dropZone makes a column, or a column's cell in a lane, take cards:
   // dropped on a card, before it; elsewhere, last. Into another lane the
-  // card first takes the lane's value, a change of the item (ADR-0135).
+  // card first takes the lane's value, a change of the item (ADR-0137).
   const dropZone = (el, col, lane) => {
     el.addEventListener("dragover", (ev) => { if (!canEdit) return; ev.preventDefault(); el.classList.add("drop"); });
     el.addEventListener("dragleave", () => el.classList.remove("drop"));
@@ -2786,7 +2786,7 @@ async function kanbanView(space, id) {
       type.fields.length ? props : "",
       labelsLine(path, item, editable),
       type.body ? h("section", { class: "kanban-detail-body" }, item.body.length ? readOnlyBody(item, embeds) : h("p", { class: "muted", text: t("kanban.noText") })) : "",
-      // What the card depends on, blocks or relates to (ADR-0135).
+      // What the card depends on, blocks or relates to (ADR-0137).
       await relationsSection("/api/items/" + item.id, out.relations, inc.relations, item.id, editable),
       h("p", { class: "actions-row" }, link("#/item/" + encodeURIComponent(item.key), t("kanban.openItem"), "button"), off));
   };
@@ -2803,7 +2803,7 @@ async function kanbanView(space, id) {
       await setLabels(it, [...it.labels, k.label]);
       route();
     })) : null;
-  // Swimlanes (ADR-0135): rows by the value of a person or choice field of
+  // Swimlanes (ADR-0137): rows by the value of a person or choice field of
   // the task. The column heads stand once above them; each lane has a
   // cell per column. Folded lanes, like folded columns, stay folded for
   // this browser only.
@@ -3000,7 +3000,7 @@ const toneNames = () => ({ blue: t("tone.blue"), green: t("tone.green"), yellow:
 // for all of them (ADR-0134).
 const recentDone = 20;
 
-// cardSigns tell what is behind a card (ADR-0132, ADR-0134, ADR-0135): a
+// cardSigns tell what is behind a card (ADR-0132, ADR-0134, ADR-0137): a
 // text, how far its checklist is, which are the task items of its text,
 // and how many comments, relations and files it has.
 function cardSigns(it) {
@@ -3074,7 +3074,7 @@ function kanbanSettings(k, type, columns, kpath) {
   };
   colorField.addEventListener("change", fillTones);
   fillTones();
-  // Swimlanes by a person or choice field of the task (ADR-0135).
+  // Swimlanes by a person or choice field of the task (ADR-0137).
   const laneChoices = type.fields.filter((f) => f.kind === "user" || f.kind === "enum");
   const laneField = h("select", { id: "kanban-lane-field", "aria-label": t("kanban.lanes") },
     h("option", { value: "", text: t("kanban.lanesNone") }), laneChoices.map((f) => h("option", { value: f.name, text: f.name, selected: f.name === k.laneField })));

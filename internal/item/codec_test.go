@@ -949,7 +949,7 @@ func kanbanLookLog(t *testing.T) []Event {
 
 // kanbanLanesLog lays a kanban's cards out in lanes by a field and then
 // takes the lanes off, so the golden file pins the field LaneField
-// (ADR-0135).
+// (ADR-0137).
 func kanbanLanesLog(t *testing.T) []Event {
 	s := setup(t)
 	noErr(t, s.GrantRole("admin", "PLAT", "anna", Editor))

@@ -524,7 +524,7 @@ func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 			ids[i] = it.ID
 		}
 		// What each item is related to, as far as the caller may read it
-		// (ADR-0135, D10).
+		// (ADR-0137, D10).
 		related := x.RelationSummaries(ids)
 		for i, it := range page {
 			out[i] = toItemJSON(it)

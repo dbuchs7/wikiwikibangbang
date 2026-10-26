@@ -201,7 +201,7 @@ type itemJSON struct {
 	FileCount    int        `json:"fileCount,omitempty"`
 	// RelationCount counts the item's relations made by hand to items the
 	// caller may read, and WaitingOn the unfinished ones it depends on or
-	// is blocked by; set in listings (ADR-0135).
+	// is blocked by; set in listings (ADR-0137).
 	RelationCount int `json:"relationCount,omitempty"`
 	WaitingOn     int `json:"waitingOn,omitempty"`
 }

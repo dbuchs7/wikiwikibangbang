@@ -65,7 +65,7 @@ func TestKanbanLimitsAndColoursAreChecked(t *testing.T) {
 }
 
 // TestKanbanLanes: a kanban may lay its cards out in lanes by a person or
-// an enumeration field of its type (ADR-0135); other fields are refused.
+// an enumeration field of its type (ADR-0137); other fields are refused.
 func TestKanbanLanes(t *testing.T) {
 	_, anna, k, _ := columnsBoard(t)
 	k.LaneField = "assignee"

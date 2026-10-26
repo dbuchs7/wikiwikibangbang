@@ -32,7 +32,7 @@ type Kanban struct {
 	// value without one takes the tone of its place among the values.
 	Colors map[string]string `json:",omitempty"`
 	// LaneField, when set, names a person or enumeration field of the type
-	// whose value lays the cards out in lanes (ADR-0135). Moving a card to
+	// whose value lays the cards out in lanes (ADR-0137). Moving a card to
 	// another lane sets the item's value, so the lanes too are the item's
 	// own information; the kanban only picks the field.
 	LaneField string `json:",omitempty"`
@@ -277,7 +277,7 @@ func checkColors(k *Kanban, td TypeDef) error {
 	return nil
 }
 
-// The relation types a kanban reads as dependencies (ADR-0135): an item
+// The relation types a kanban reads as dependencies (ADR-0137): an item
 // waits on what it depends on and on what blocks it. They are the names
 // the UI suggests; a relation's type is otherwise free.
 const (
@@ -288,7 +288,7 @@ const (
 // RelationSummary counts, for a readable item, its relations made by hand
 // to items the principal may read, both ways, and how many of those items
 // it waits on while they are not finished: those it depends on and those
-// that block it (ADR-0135). Relations derived from a body are left out:
+// that block it (ADR-0137). Relations derived from a body are left out:
 // they say that a text names an item, not that the work is linked.
 func (x *Session) RelationSummary(id ID) (related, waiting int, err error) {
 	if _, err := x.readable(id); err != nil {

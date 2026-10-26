@@ -39,7 +39,7 @@ type kanbanJSON struct {
 	ColorField string            `json:"colorField,omitempty"`
 	Colors     map[string]string `json:"colors,omitempty"`
 	// LaneField names the field whose value lays the cards out in lanes
-	// (ADR-0135).
+	// (ADR-0137).
 	LaneField string `json:"laneField,omitempty"`
 	// Icon names the content of the kanban's picture, empty for none
 	// (ADR-0087).

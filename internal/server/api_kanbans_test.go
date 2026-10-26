@@ -127,7 +127,7 @@ func TestKanbanLimitsColoursAndCardSigns(t *testing.T) {
 
 // TestKanbanLanesAndRelationSigns: a kanban's lane field goes through the
 // API and is kept when a change leaves it out; a listed card counts its
-// relations and the open work it waits on (ADR-0135).
+// relations and the open work it waits on (ADR-0137).
 func TestKanbanLanesAndRelationSigns(t *testing.T) {
 	w := newWorld(t)
 	k := w.bert.expect("POST", "/api/spaces/PLAT/kanbans", `{"name":"Web","type":"task"}`, http.StatusCreated)
