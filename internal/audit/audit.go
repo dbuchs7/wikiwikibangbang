@@ -29,6 +29,10 @@ type Entry struct {
 	// Detail holds further facts, e.g. a role or a username. It never holds
 	// a secret.
 	Detail map[string]string `json:"detail,omitempty"`
+	// Prev links the entry to the one before it: the hash of that entry's
+	// record, or Genesis for the first (ADR-0123). Entries recorded before
+	// the chain began have none.
+	Prev string `json:"prev,omitempty"`
 }
 
 // The audited events.
@@ -87,7 +91,10 @@ const (
 	OAuthClientRemoved = "oauth.client.remove"
 	OAuthApproved      = "oauth.approve"
 	OAuthRevoked       = "oauth.revoke"
-	OAuthFailed        = "oauth.token.failed"
+	// ChainBroken is written at a start that finds the chain broken
+	// (ADR-0123).
+	ChainBroken = "audit.chain.broken"
+	OAuthFailed = "oauth.token.failed"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for
@@ -107,6 +114,8 @@ type Trail struct {
 	// journal; read, if set, reads them (ListAll).
 	trimmed bool
 	read    func(each func([]byte) error) error
+	// head is the link of the newest record, which the next entry carries.
+	head string
 }
 
 // New rebuilds a trail from its journal records. log, if not nil, also
@@ -118,7 +127,7 @@ func New(records [][]byte, journal func([]byte) error, log *slog.Logger, now fun
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	t := &Trail{journal: journal, now: now, log: log}
+	t := &Trail{journal: journal, now: now, log: log, head: Genesis}
 	for i, r := range records {
 		var e Entry
 		if err := json.Unmarshal(r, &e); err != nil {
@@ -129,7 +138,7 @@ func New(records [][]byte, journal func([]byte) error, log *slog.Logger, now fun
 		if (i == 0 && e.Seq < 1) || (i > 0 && e.Seq != t.seq+1) {
 			return nil, fmt.Errorf("audit: record %d has sequence number %d", i+1, e.Seq)
 		}
-		t.seq = e.Seq
+		t.seq, t.head = e.Seq, link(e, r)
 		t.keep(e)
 	}
 	return t, nil
@@ -152,6 +161,7 @@ const Expired = "audit.expired"
 // the kept records start with an Expired entry in their place.
 func Unexpired(records [][]byte, cutoff time.Time) ([][]byte, int, error) {
 	var last Entry
+	var lastRaw []byte
 	for i, r := range records {
 		var e Entry
 		if err := json.Unmarshal(r, &e); err != nil {
@@ -161,19 +171,22 @@ func Unexpired(records [][]byte, cutoff time.Time) ([][]byte, int, error) {
 			if i == 0 {
 				return records, 0, nil
 			}
-			return marked(last, i, cutoff, records[i:])
+			return marked(last, lastRaw, i, cutoff, records[i:])
 		}
-		last = e
+		last, lastRaw = e, r
 	}
 	if len(records) == 0 {
 		return nil, 0, nil
 	}
-	return marked(last, len(records), cutoff, nil)
+	return marked(last, lastRaw, len(records), cutoff, nil)
 }
 
-func marked(last Entry, n int, cutoff time.Time, rest [][]byte) ([][]byte, int, error) {
+// marked makes the marker. It carries the link of the last removed entry,
+// which the next entry names as its Prev, so the chain stays checkable
+// from the marker on (ADR-0123).
+func marked(last Entry, lastRaw []byte, n int, cutoff time.Time, rest [][]byte) ([][]byte, int, error) {
 	m, err := json.Marshal(Entry{Seq: last.Seq, At: last.At, Event: Expired,
-		Detail: map[string]string{"removed": fmt.Sprint(n), "before": cutoff.Format(time.RFC3339)}})
+		Detail: map[string]string{"removed": fmt.Sprint(n), "before": cutoff.Format(time.RFC3339), "hash": link(last, lastRaw)}})
 	if err != nil {
 		return nil, 0, err
 	}
@@ -191,12 +204,13 @@ func (t *Trail) Exclusive(fn func() (kept [][]byte, changed bool, err error)) er
 	if err != nil || !changed {
 		return err
 	}
-	t.recent, t.trimmed = nil, false
+	t.recent, t.trimmed, t.head = nil, false, Genesis
 	for i, r := range kept {
 		var e Entry
 		if err := json.Unmarshal(r, &e); err != nil {
 			return fmt.Errorf("audit: record %d: %w", i+1, err)
 		}
+		t.head = link(e, r)
 		t.keep(e)
 	}
 	return nil
@@ -216,12 +230,16 @@ func (t *Trail) keep(e Entry) {
 func (t *Trail) Record(e Entry) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	e.Seq, e.At = t.seq+1, t.now().UTC()
+	e.Seq, e.At, e.Prev = t.seq+1, t.now().UTC(), t.head
 	data, err := json.Marshal(e)
 	if err == nil {
 		err = t.journal(data)
 	}
 	attrs := []any{"event", e.Event, "actor", e.Actor, "subject", e.Subject, "addr", e.Addr}
+	// The log line carries the entry's own link: where log lines are kept
+	// apart from the data directory, they witness the chain (ADR-0123).
+	head := link(e, data)
+	attrs = append(attrs, "seq", e.Seq, "hash", head)
 	for k, v := range e.Detail {
 		attrs = append(attrs, k, v)
 	}
@@ -230,7 +248,7 @@ func (t *Trail) Record(e Entry) {
 		t.log.Error("audit entry not persisted", append(attrs, "err", err)...)
 		return
 	}
-	t.seq = e.Seq
+	t.seq, t.head = e.Seq, head
 	t.keep(e)
 	t.log.Info("audit", attrs...)
 }

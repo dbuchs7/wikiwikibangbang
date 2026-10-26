@@ -1345,6 +1345,13 @@ function ckanSource() {
       await resetCtx.close();
     }
 
+    step("audit trail: the hash chain is checked over the whole journal and holds (ADR-0123)");
+    await page.click("#account-button");
+    await page.click("#account-menu a[href='#/admin']");
+    await page.click("#audit-verify");
+    await page.waitForSelector("#audit-chain .notice.success");
+    check(/^[0-9a-f]{64}$/.test(await page.textContent("#audit-chain code")), "the newest entry's hash is shown");
+
     step("administration: groups, a group's role in a space, system roles");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");

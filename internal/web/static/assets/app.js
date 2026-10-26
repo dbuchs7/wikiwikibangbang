@@ -4431,7 +4431,26 @@ async function adminView() {
       return page.entries.length + (page.next ? "+" : "");
     } });
   addAudit(auditFilter.active() ? await get(auditURL(auditFilter.state)) : auditPage);
+  // The chain is checked on request: it reads the whole journal (ADR-0123).
+  const auditChain = h("div", { id: "audit-chain" });
+  const brokenBecause = {
+    gap: () => t("admin.auditBroken.gap"), start: () => t("admin.auditBroken.start"),
+    marker: () => t("admin.auditBroken.marker"), "too-young": () => t("admin.auditBroken.too-young"),
+    link: () => t("admin.auditBroken.link"), unlinked: () => t("admin.auditBroken.unlinked"),
+  };
+  const verifyAudit = async () => {
+    const c = await get("/api/audit/verify");
+    const lines = c.broken
+      ? [h("p", { class: "notice warning", text: t("admin.auditChainBroken", { seq: c.broken, reason: (brokenBecause[c.reason] || (() => c.reason))() }) })]
+      : [h("p", { class: "notice success", text: t("admin.auditChainOk", { n: c.entries, seq: c.headSeq || 0 }) }),
+        h("p", { class: "muted" }, t("admin.auditChainHead") + " ", h("code", { text: c.head || "" }))];
+    if (c.unchained) lines.push(h("p", { class: "muted", text: t("admin.auditChainUnchained", { n: c.unchained }) }));
+    auditChain.replaceChildren(...lines);
+  };
   const auditSection = section("audit", t("admin.auditTitle"),
+    h("p", { class: "muted", text: t("admin.auditVerifyHint") }),
+    h("div", { class: "actions" }, h("button", { type: "button", id: "audit-verify", text: t("admin.auditVerify"), onclick: verifyAudit })),
+    auditChain,
     auditFilter.el,
     h("table", { class: "history", id: "audit" }, auditRows),
     auditNone,
