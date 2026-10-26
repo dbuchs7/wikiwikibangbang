@@ -117,10 +117,11 @@ type blockJSON struct {
 	Align    string         `json:"align,omitempty"`
 	Engine   string         `json:"engine,omitempty"`
 	Process  string         `json:"process,omitempty"`
+	View     string         `json:"view,omitempty"`
 }
 
 func toBlockJSON(b item.Block) blockJSON {
-	j := blockJSON{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process}
+	j := blockJSON{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process, View: b.View}
 	for _, m := range b.Marks {
 		j.Marks = append(j.Marks, markJSON{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})
 	}
@@ -145,7 +146,7 @@ func toDoc(blocks []blockJSON, kept func(text string) bool) (item.Doc, error) {
 		default:
 			return d, badInput("block %d: kind must be paragraph, heading, bullet, ordered, quote, code, task, panel, table, toc, figures, tables, children, divider, image, video, bpmn, process, tasklist or embed", i+1)
 		}
-		blk := item.Block{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process}
+		blk := item.Block{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process, View: b.View}
 		for _, m := range b.Marks {
 			blk.Marks = append(blk.Marks, item.Mark{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})
 			if m.Type == item.MarkMention && m.Ref != "" && !slices.Contains(blk.Mentions, m.Ref) {
