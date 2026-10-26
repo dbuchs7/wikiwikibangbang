@@ -76,6 +76,7 @@ Strongest form: the server never calls out, and adapters in any language write t
 
 ## Links
 
+- amended by [ADR-0140](0140-a-json-source-is-read-for-what-changed.md) (a run of what changed withdraws nothing)
 - amended by [ADR-0135](0135-a-json-source-is-read-by-page-numbers-or-offsets.md) (paging by page numbers and offsets)
 - amended by [ADR-0130](0130-an-api-description-fills-a-json-source.md) (a JSON source's settings from an API description)
 - amended by [ADR-0128](0128-the-atlassian-import-as-a-connector.md) (the Atlassian import as a connector: a reader may write itself)
