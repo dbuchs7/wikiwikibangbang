@@ -3,14 +3,17 @@ package connector
 import (
 	"cmp"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
-// Entry is one data set with interfaces, as the source describes it: one
-// page in the catalog (ADR-0080).
+// Entry is one entry of a source, in the form every reader produces
+// (ADR-0127): one item in the connector's space. For a CKAN source it is a
+// data set with interfaces (ADR-0080).
 type Entry struct {
 	// SourceID is the data set's ID, which identifies the entry.
 	SourceID string
@@ -23,6 +26,9 @@ type Entry struct {
 	// Body is the page written from everything the source says of the
 	// data set; every run replaces it.
 	Body []item.Block
+	// Values are what the source gives of the entry by name, for the
+	// connector's mapping to the fields of its type (ADR-0127).
+	Values map[string]string
 }
 
 // aliases map formats as publishers write them to the portal's names.
@@ -83,9 +89,25 @@ func Entries(datasets []Dataset, formats []string, portal, lang, source string) 
 			e.DatasetURL = portal + d.Name
 		}
 		e.Body = page(d, apis, others, e, lang, source)
+		e.Values = ckanValues(e, apis)
 		out = append(out, e)
 	}
 	return out, problems
+}
+
+// ckanValues are a CKAN entry's values by name (site.CKANValues), those
+// it has.
+func ckanValues(e Entry, apis []Resource) map[string]string {
+	var formats []string
+	for _, r := range apis {
+		if f := normalFormat(r.Format); !slices.Contains(formats, f) {
+			formats = append(formats, f)
+		}
+	}
+	slices.Sort(formats)
+	v := map[string]string{"dataset": e.Dataset, "publisher": e.Publisher, "contact": e.Contact, "url": e.DatasetURL, "formats": strings.Join(formats, ", ")}
+	maps.DeleteFunc(v, func(_, s string) bool { return s == "" })
+	return v
 }
 
 // address is where a resource is reached: its address, else its access or

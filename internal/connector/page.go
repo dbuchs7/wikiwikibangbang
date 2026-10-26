@@ -21,6 +21,8 @@ type labels struct {
 	publisher, contact, keywords, themes, temporal, frequency, spatial, identifier    string
 	datasetID, page, landing, relation                                                string
 	withdrawn                                                                         string
+	// entry links an entry of a JSON source to its page there (ADR-0127).
+	entry string
 }
 
 var pageLabels = map[string]labels{
@@ -33,8 +35,8 @@ var pageLabels = map[string]labels{
 		address: "Address", access: "Access", download: "Download", documentation: "Documentation", accessService: "Access service",
 		publisher: "Publisher", contact: "Contact", keywords: "Keywords", themes: "Themes", temporal: "Period covered",
 		frequency: "Update frequency", spatial: "Area", identifier: "Identifier", datasetID: "Data set ID",
-		page: "Data set in the source", landing: "Landing page", relation: "Related",
-		withdrawn: "The source no longer publishes this data set. The page stays, with what was added here; it is no longer kept in step.",
+		page: "Data set in the source", landing: "Landing page", relation: "Related", entry: "Entry in the source",
+		withdrawn: "The source no longer publishes this entry. The page stays, with what was added here; it is no longer kept in step.",
 	},
 	"de": {
 		generated:  "Diese Seite wird bei jedem Abgleich aus %s geschrieben und vom nächsten ersetzt. Anmerkungen bitte als Kommentar: Kommentare bleiben erhalten.",
@@ -45,8 +47,8 @@ var pageLabels = map[string]labels{
 		address: "Adresse", access: "Zugang", download: "Download", documentation: "Dokumentation", accessService: "Zugangsdienst",
 		publisher: "Herausgeber", contact: "Kontakt", keywords: "Stichwörter", themes: "Themen", temporal: "Zeitraum",
 		frequency: "Aktualisierung", spatial: "Raum", identifier: "Kennung", datasetID: "Datensatz-ID",
-		page: "Datensatz in der Quelle", landing: "Einstiegsseite", relation: "Verwandt",
-		withdrawn: "Die Quelle publiziert diesen Datensatz nicht mehr. Die Seite bleibt mit allem, was hier ergänzt wurde, wird aber nicht mehr abgeglichen.",
+		page: "Datensatz in der Quelle", landing: "Einstiegsseite", relation: "Verwandt", entry: "Eintrag in der Quelle",
+		withdrawn: "Die Quelle publiziert diesen Eintrag nicht mehr. Die Seite bleibt mit allem, was hier ergänzt wurde, wird aber nicht mehr abgeglichen.",
 	},
 }
 

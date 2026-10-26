@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"slices"
 	"strconv"
@@ -117,11 +118,15 @@ func TestEntriesReadTheShapesOfThePortal(t *testing.T) {
 	}
 	want := []Entry{
 		{SourceID: "d1", Dataset: "wetterdaten", Title: "Wetterdaten",
-			Publisher: "MeteoSchweiz", Contact: "API-Team <api@meteo.example>", DatasetURL: "https://opendata.swiss/de/dataset/wetterdaten"},
+			Publisher: "MeteoSchweiz", Contact: "API-Team <api@meteo.example>", DatasetURL: "https://opendata.swiss/de/dataset/wetterdaten",
+			Values: map[string]string{"dataset": "wetterdaten", "publisher": "MeteoSchweiz", "contact": "API-Team <api@meteo.example>",
+				"url": "https://opendata.swiss/de/dataset/wetterdaten", "formats": "API"}},
 		{SourceID: "d2", Dataset: "geodaten", Title: "Geodaten",
-			Publisher: "swisstopo FR", DatasetURL: "https://opendata.swiss/de/dataset/geodaten"},
+			Publisher: "swisstopo FR", DatasetURL: "https://opendata.swiss/de/dataset/geodaten",
+			Values: map[string]string{"dataset": "geodaten", "publisher": "swisstopo FR", "url": "https://opendata.swiss/de/dataset/geodaten", "formats": "WFS, WMS"}},
 		{SourceID: "d3", Dataset: "fahrplan", Title: "Fahrplan",
-			Publisher: "SBB", Contact: "open@sbb.example", DatasetURL: "https://opendata.swiss/de/dataset/fahrplan"},
+			Publisher: "SBB", Contact: "open@sbb.example", DatasetURL: "https://opendata.swiss/de/dataset/fahrplan",
+			Values: map[string]string{"dataset": "fahrplan", "publisher": "SBB", "contact": "open@sbb.example", "url": "https://opendata.swiss/de/dataset/fahrplan", "formats": "API"}},
 	}
 	for i := range want {
 		got := entries[i]
@@ -286,8 +291,20 @@ func setup(t *testing.T) *fixture {
 	}
 	f.r = New(db, nil)
 	f.r.now = func() time.Time { return f.clock }
+	f.r.getenv = allowPrivate(os.Getenv)
 	t.Cleanup(f.r.Close)
 	return f
+}
+
+// allowPrivate lets the runner reach the test's sources on the loopback
+// address, which the guard otherwise refuses.
+func allowPrivate(getenv func(string) string) func(string) string {
+	return func(k string) string {
+		if k == AllowPrivateVar {
+			return "on"
+		}
+		return getenv(k)
+	}
 }
 
 func (f *fixture) items(t *testing.T) map[string]item.Item {
@@ -369,7 +386,7 @@ func TestTheCatalogFollowsTheSource(t *testing.T) {
 	res, _ = f.r.Run(ctx, id, false, "")
 	d2 := f.items(t)["d2"]
 	if res.Withdrawn != 1 || !slices.Equal(d2.Labels, []string{"important", WithdrawnLabel}) ||
-		d2.Body.Blocks[0].Kind != item.Panel || !strings.Contains(d2.Body.Blocks[0].Text, "publiziert diesen Datensatz nicht mehr") {
+		d2.Body.Blocks[0].Kind != item.Panel || !strings.Contains(d2.Body.Blocks[0].Text, "publiziert diesen Eintrag nicht mehr") {
 		t.Errorf("geodaten without interfaces %+v %v %+v", res, d2.Labels, d2.Body.Blocks[0])
 	}
 	if res, _ := f.r.Run(ctx, id, false, ""); res.Withdrawn != 0 || res.Unchanged != 2 {
@@ -498,10 +515,10 @@ func TestRunsThatCannotWork(t *testing.T) {
 	if _, err := f.r.Run(ctx, id, false, ""); err == nil || !strings.Contains(err.Error(), "no text") {
 		t.Errorf("a type that does not fit: %v", err)
 	}
-	if err := fits(item.TypeDef{Name: PageType, Body: true, Fields: []item.FieldDef{{Name: "owner", Kind: item.KindUser, Required: true}}}); err == nil {
+	if err := Fits(item.TypeDef{Name: PageType, Body: true, Fields: []item.FieldDef{{Name: "owner", Kind: item.KindUser, Required: true}}}, cfg); err == nil {
 		t.Error("fits a type with a field to fill")
 	}
-	if err := fits(PageTypeDef()); err != nil {
+	if err := Fits(PageTypeDef(), cfg); err != nil {
 		t.Errorf("does not fit its own type: %v", err)
 	}
 	if NewClient("http://127.0.0.1:1", "").HTTP == nil {
@@ -620,12 +637,12 @@ func TestRunsReportWhatTheSourceAnswered(t *testing.T) {
 	cfg := f.cfg
 	cfg.CKAN.BaseURL = srv.URL
 	f.db.Site.SetConnector("admin", cfg)
-	f.r.getenv = func(k string) string {
+	f.r.getenv = allowPrivate(func(k string) string {
 		if k == "WWBB_CONNECTOR_OPENDATA_SWISS_TOKEN" {
 			return "secret-token"
 		}
 		return ""
-	}
+	})
 	res, err := f.r.Run(context.Background(), id, true, "")
 	if err != nil || res.Datasets != 1 || res.Entries != 0 || len(res.Problems) != 1 ||
 		!strings.Contains(res.Problems[0], "Dienst (1)") || !strings.Contains(res.Problems[0], "(no format) (1)") {

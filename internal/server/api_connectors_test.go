@@ -10,6 +10,7 @@ import (
 )
 
 func TestConnectorsThroughTheAPI(t *testing.T) {
+	t.Setenv("WWBB_CONNECTOR_ALLOW_PRIVATE", "on") // the fake source is on the loopback address
 	ckan := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"success":true,"result":{"count":1,"facets":{"res_format":{"API":1,"CSV":4}},"results":[{"id":"d1","name":"wetter","title":{"de":"Wetter"},
 			"organization":{"name":"meteo","title":{"de":"Meteo"}},"resources":[{"id":"r1","format":"API","url":"https://api.example/v1"}]}]}}`)
@@ -96,6 +97,21 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	if !strings.Contains(jsonOf(audit), "catalog.sync.change") || !strings.Contains(jsonOf(audit), `"catalog.sync"`) {
 		t.Fatalf("not audited")
 	}
+
+	// A JSON connector writes items of a type that exists and takes
+	// what it maps (ADR-0127); the list names the types and their fields.
+	jsonConnector := func(typ, fields string) string {
+		return `{"id":"feed","name":"Feed","kind":"json","space":"PLAT","intervalHours":24,"type":"` + typ + `","fields":{` + fields + `},` +
+			`"json":{"url":"https://feed.example/entries","items":"entries","id":"id","title":"title","values":{"owner":"owner"}}}`
+	}
+	w.admin.expect("POST", "/api/connectors", jsonConnector("nope", ""), http.StatusBadRequest)
+	w.admin.expect("POST", "/api/connectors", jsonConnector("", `"owner":"owner"`), http.StatusBadRequest)
+	w.admin.expect("POST", "/api/connectors", jsonConnector("", ""), http.StatusCreated)
+	listed := w.admin.expect("GET", "/api/connectors", "", http.StatusOK)
+	if !strings.Contains(jsonOf(listed["types"]), `{"fields":[],"name":"page"}`) || jsonOf(listed["ckanValues"]) != `["dataset","publisher","contact","url","formats"]` {
+		t.Errorf("types %s, values %s", jsonOf(listed["types"]), jsonOf(listed["ckanValues"]))
+	}
+	w.admin.expect("DELETE", "/api/connectors/feed", "", http.StatusNoContent)
 
 	// A connector without a space does not run; removing one keeps its
 	// entries.

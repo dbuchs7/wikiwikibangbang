@@ -75,5 +75,6 @@ Strongest form: each source gets exactly the settings and page it needs, with no
 ## Links
 
 - amended by [ADR-0093](0093-the-interface-catalog-is-ordinary-pages.md) (the catalog is ordinary pages)
+- amended by [ADR-0127](0127-connectors-read-any-json-source-into-a-type-of-ones-own.md) (further kinds, a type and fields per connector, public addresses only)
 - amends [ADR-0075](0075-mirroring-the-interfaces-of-opendata-swiss.md) (its synchronisation becomes the connector `opendata.swiss`)
 - relates to ADR-0023 (origin), ADR-0062 (webhooks), ADR-0073 (credentials from the environment), ADR-0074 (catalog rules)

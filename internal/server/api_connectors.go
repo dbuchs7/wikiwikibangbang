@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -41,11 +42,37 @@ func (h authHandlers) connectors(w http.ResponseWriter, r *http.Request) {
 	for _, c := range h.d.DB.Site.Connectors() {
 		list = append(list, entry{Connector: c, Status: h.d.Connectors.Status(c.ID)})
 	}
+	// The types an item can be written as, with the fields a connector
+	// can fill (ADR-0127).
+	type field struct {
+		Name     string         `json:"name"`
+		Kind     item.FieldKind `json:"kind"`
+		Required bool           `json:"required"`
+	}
+	type target struct {
+		Name   string  `json:"name"`
+		Fields []field `json:"fields"`
+	}
+	types := []target{}
+	h.d.DB.Read(func(s *item.Store) {
+		for _, td := range s.Types() {
+			if !td.Body {
+				continue
+			}
+			t := target{Name: td.Name, Fields: []field{}}
+			for _, f := range td.Fields {
+				t.Fields = append(t.Fields, field{Name: f.Name, Kind: f.Kind, Required: f.Required})
+			}
+			types = append(types, t)
+		}
+	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"connectors": list,
 		"templates":  site.ConnectorTemplates(),
 		"kinds":      site.ConnectorKinds,
 		"type":       connector.PageType,
+		"types":      types,
+		"ckanValues": site.CKANValues,
 	})
 }
 
@@ -59,6 +86,22 @@ func (h authHandlers) checkConnector(w http.ResponseWriter, c site.Connector) bo
 	}
 	if !exists {
 		writeError(w, http.StatusBadRequest, "the space "+space+" does not exist; create it first")
+		return false
+	}
+	// The type must take what the connector writes; page is defined by
+	// the first run if the site has none (ADR-0127).
+	var err error
+	h.d.DB.Read(func(s *item.Store) {
+		target := connector.TargetType(c)
+		switch td := s.Type(target); {
+		case td.Name != "":
+			err = connector.Fits(td, c)
+		case target != connector.PageType || len(c.Fields) > 0:
+			err = fmt.Errorf("the type %s does not exist", target)
+		}
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return false
 	}
 	if c.Steward != "" {

@@ -62,7 +62,14 @@ func New(db *storage.DB, log *slog.Logger) *Runner {
 		log = slog.New(slog.DiscardHandler)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Runner{db: db, log: log, now: time.Now, getenv: os.Getenv, client: NewClient, ctx: ctx, close: cancel, state: map[string]*state{}}
+	r := &Runner{db: db, log: log, now: time.Now, getenv: os.Getenv, ctx: ctx, close: cancel, state: map[string]*state{}}
+	// A CKAN client reaches its source like every reader (guard.go).
+	r.client = func(base, token string) Client {
+		c := NewClient(base, token)
+		c.HTTP = r.httpClient()
+		return c
+	}
+	return r
 }
 
 // TokenVar is the environment variable that holds a connector's
@@ -171,12 +178,9 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 	start := r.now()
 	res := Result{Connector: c.ID, DryRun: dry, Problems: []string{}, Examples: []Change{}}
 	var rd reading
-	var err error
-	switch c.Kind {
-	case site.KindCKAN:
-		rd, err = readCKAN(ctx, c, r.client(c.CKAN.BaseURL, r.getenv(TokenVar(c.ID))))
-	default:
-		err = fmt.Errorf("connector: %q is not a kind this server reads", c.Kind)
+	rdr, err := reader(c.Kind)
+	if err == nil {
+		rd, err = rdr.Read(ctx, c, r.env(c.ID))
 	}
 	if err == nil && rd.apply {
 		res, err = Apply(r.db, c, rd.entries, dry)
@@ -209,6 +213,11 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 		r.db.Audit.Record(audit.Entry{Event: audit.CatalogSynced, Actor: actor, Subject: c.Space, Detail: detail})
 	}
 	return res, err
+}
+
+// env is what a connector's reader is given (ADR-0127).
+func (r *Runner) env(id string) Env {
+	return Env{Token: r.getenv(TokenVar(id)), HTTP: r.httpClient(), CKAN: r.client}
 }
 
 // Forget drops what the runner remembers of a removed connector.
