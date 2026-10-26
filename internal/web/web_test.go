@@ -19,7 +19,10 @@ func TestEmbeddedUIHasEntryPointAndAssets(t *testing.T) {
 		"assets/palettes/archimate.json", "assets/palettes/bpmn.json", "assets/palettes/network.json", "assets/palettes/it.json", "assets/palettes/microsoft.json",
 		"assets/palettes/palettes.LICENSE.txt",
 		"vendor/bpmn-viewer.js", "vendor/bpmn-modeler.js", "vendor/bpmn.LICENSE.txt", "vendor/bpmn/bpmn-js.css", "vendor/bpmn/diagram-js.css",
-		"vendor/bpmn/bpmn-font/css/bpmn.css", "vendor/bpmn/bpmn-font/font/bpmn.woff2"} {
+		"vendor/bpmn/bpmn-font/css/bpmn.css", "vendor/bpmn/bpmn-font/font/bpmn.woff2",
+		"vendor/form-viewer.js", "vendor/form.LICENSE.txt", "vendor/form/form-js.css",
+		"vendor/dmn-viewer.js", "vendor/dmn.LICENSE.txt", "vendor/dmn/dmn-js-shared.css", "vendor/dmn/dmn-js-decision-table.css",
+		"vendor/dmn/dmn-font/css/dmn.css", "vendor/dmn/dmn-font/font/dmn.woff2"} {
 		if _, err := fs.Stat(FS(), name); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
@@ -41,7 +44,9 @@ func TestNoMarkupFromStrings(t *testing.T) {
 		// schema allows (ADR-0032). Excalidraw runs on a page of its own,
 		// without the UI's session data in its DOM (ADR-0053). Both are
 		// third-party code, reviewed when updated, not written here. So is
-		// bpmn-js (ADR-0129), which renders diagrams as SVG it builds itself.
+		// bpmn-js (ADR-0129), which renders diagrams as SVG it builds itself,
+		// and form-js and dmn-js (ADR-0143), which render forms and decision
+		// tables with Preact and Inferno and sanitize the Markdown of a form.
 		if strings.HasPrefix(path, "vendor/") {
 			return nil
 		}

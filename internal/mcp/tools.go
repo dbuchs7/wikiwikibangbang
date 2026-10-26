@@ -98,10 +98,11 @@ var (
 // the caller's own subscription, which an agent does not take out or end
 // on a person's behalf.
 //
-// The process engines' routes (ADR-0129) are not offered: whether agents
-// read an engine's processes and their operations through this server,
-// with the engine's credential rather than their own, is a decision of
-// its own.
+// The process engines' routes (ADR-0129), their forms and decisions
+// included (ADR-0143), are not offered: whether agents read an engine's
+// processes, forms, decisions and operations through this server, with
+// the engine's credential rather than their own, is a decision of its
+// own.
 var tools = []tool{
 	{Name: "list_spaces", Description: "List the spaces the caller holds a role in.", Method: "GET", Path: "/api/spaces"},
 	{Name: "get_own_roles", Description: "The caller's own roles: the system roles held, and every space role granted to the caller, directly or through a group (via), one entry per grant.",

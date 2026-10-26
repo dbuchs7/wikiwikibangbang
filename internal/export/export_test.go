@@ -251,12 +251,15 @@ func TestDiagramsAreNamedInDocuments(t *testing.T) {
 	page := Page{ID: "p", Title: "Order to cash", Body: []item.Block{
 		{Kind: item.BPMN, Ref: "m", Text: "As <drawn>"},
 		{Kind: item.Process, Engine: "atlas", Process: "order-to-cash", Text: "As it runs"},
+		{Kind: item.Form, Engine: "atlas", Form: "reise-antrag", Text: "Filled <in>"},
+		{Kind: item.Decision, Engine: "atlas", Decision: "Decision 1", Text: "Who needs a visa"},
 	}, Images: map[item.ID]Image{"m": {Name: "order&co.bpmn", Type: "text/xml; charset=utf-8"}}}
 	var h bytes.Buffer
 	if err := HTML(&h, Document{Pages: []Page{page}}, "en"); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "<figcaption>As &lt;drawn&gt;</figcaption>", "[BPMN: order-to-cash (atlas)]", "<figcaption>As it runs</figcaption>"} {
+	for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "<figcaption>As &lt;drawn&gt;</figcaption>", "[BPMN: order-to-cash (atlas)]", "<figcaption>As it runs</figcaption>",
+		"[Form: reise-antrag (atlas)]", "<figcaption>Filled &lt;in&gt;</figcaption>", "[Decision: Decision 1 (atlas)]", "<figcaption>Who needs a visa</figcaption>"} {
 		if !strings.Contains(h.String(), want) {
 			t.Errorf("the HTML lacks %q:\n%s", want, h.String())
 		}
@@ -275,7 +278,7 @@ func TestDiagramsAreNamedInDocuments(t *testing.T) {
 		}
 		r, _ := f.Open()
 		data, _ := io.ReadAll(r)
-		for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "As &lt;drawn&gt;", "[BPMN: order-to-cash (atlas)]", "As it runs"} {
+		for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "As &lt;drawn&gt;", "[BPMN: order-to-cash (atlas)]", "As it runs", "[Form: reise-antrag (atlas)]", "Filled &lt;in&gt;", "[Decision: Decision 1 (atlas)]"} {
 			if !strings.Contains(string(data), want) {
 				t.Errorf("the Word document lacks %q", want)
 			}

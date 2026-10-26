@@ -1,14 +1,16 @@
 {
   "name": "wikiwikibangbang-vendor",
   "private": true,
-  "description": "Builds the vendored editor (ADR-0032), drawing (ADR-0053) and BPMN (ADR-0129) bundles in ../static/vendor. Needed only to update them; go build never runs it.",
+  "description": "Builds the vendored editor (ADR-0032), drawing (ADR-0053), BPMN (ADR-0129), form and DMN (ADR-0143) bundles in ../static/vendor. Needed only to update them; go build never runs it.",
   "license": "AGPL-3.0-only",
   "scripts": {
     "build": "sh build.sh"
   },
   "dependencies": {
+    "@bpmn-io/form-js-viewer": "1.26.1",
     "@excalidraw/excalidraw": "0.18.1",
     "bpmn-js": "18.31.0",
+    "dmn-js": "17.13.0",
     "prosemirror-commands": "1.7.2",
     "prosemirror-history": "1.5.1",
     "prosemirror-inputrules": "1.5.1",

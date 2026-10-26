@@ -15,6 +15,7 @@ import { anchorOf } from "./anchors.js";
 import { openDrawing, drawingName } from "./drawing.js";
 import { diagramView, openModeler, pickProcess, bpmnName, drawingProcesses, processRegion } from "./bpmn.js";
 import { regionsIn } from "./drawprocesses.js";
+import { formView, decisionView, pickFromEngine } from "./engineviews.js";
 import { pickFromAlbum, pictureFile, captionOf, copiedPicture, clipMark } from "./album.js";
 import { assist } from "./assist.js";
 import { markdownToBlocks, pastesAsMarkdown } from "./markdown.js";
@@ -74,6 +75,10 @@ export const schema = new Schema({
     // newest version of a process of a process engine; with a plain caption.
     bpmn: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     process: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, process: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
+    // A form as a process engine keeps it, and the newest deployed version
+    // of a decision of a process engine (ADR-0143); with a plain caption.
+    form: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, form: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
+    decision: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, decision: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     // Content an importer could not convert (ADR-0023), kept as it came and
     // shown as text; it cannot be created in the editor.
     unsupported: { group: "block", content: "text*", marks: "", code: true, atom: true, attrs: bid, toDOM: () => ["pre", { class: "pm-unsupported", title: t("editor.unsupported") }, 0] },
@@ -167,6 +172,8 @@ export function nodeFromBlock(b, embeds = []) {
   if (b.kind === "image" || b.kind === "video") return schema.nodes[b.kind].create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0, align: b.align || "" });
   if (b.kind === "bpmn") return schema.nodes.bpmn.create({ bid: id, ref: b.ref, text: b.text || "" });
   if (b.kind === "process") return schema.nodes.process.create({ bid: id, engine: b.engine, process: b.process, text: b.text || "" });
+  if (b.kind === "form") return schema.nodes.form.create({ bid: id, engine: b.engine, form: b.form, text: b.text || "" });
+  if (b.kind === "decision") return schema.nodes.decision.create({ bid: id, engine: b.engine, decision: b.decision, text: b.text || "" });
   if (b.kind === "embed") {
     const v = embeds.find((e) => e.ref === b.ref);
     return schema.nodes.embed.create({
@@ -228,6 +235,8 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.tasklist) return { kind: "tasklist", text: node.attrs.label };
   if (node.type === schema.nodes.bpmn) return { kind: "bpmn", text: node.attrs.text, ref: node.attrs.ref };
   if (node.type === schema.nodes.process) return { kind: "process", text: node.attrs.text, engine: node.attrs.engine, process: node.attrs.process };
+  if (node.type === schema.nodes.form) return { kind: "form", text: node.attrs.text, engine: node.attrs.engine, form: node.attrs.form };
+  if (node.type === schema.nodes.decision) return { kind: "decision", text: node.attrs.text, engine: node.attrs.engine, decision: node.attrs.decision };
   if (node.type === schema.nodes.image || node.type === schema.nodes.video) {
     const b = { kind: node.type.name, text: node.attrs.text, ref: node.attrs.ref };
     if (node.attrs.width) b.width = node.attrs.width;
@@ -759,6 +768,8 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       video: (node, v, getPos) => imageView(node, v, getPos, files),
       bpmn: (node, v, getPos) => diagramView(node, v, getPos, files),
       process: (node, v, getPos) => diagramView(node, v, getPos, files),
+      form: (node, v, getPos) => formView(node, v, getPos),
+      decision: (node, v, getPos) => decisionView(node, v, getPos),
       embed: (node) => embedView(node, embedContent),
       tasklist: (node) => taskListView(node, tasks),
     },
@@ -791,6 +802,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind === "bpmnnew") newModel();
     else if (kind === "bpmnfile") modelPicker.click();
     else if (kind === "process") pickedProcess();
+    else if (kind === "form" || kind === "decision") pickedFromEngine(kind);
     else if (kind === "album") fromAlbum();
     else if (kind === "clip") fromClip();
     else if (kind === "embed") embed();
@@ -801,7 +813,8 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind) insertBlock(schema.nodes[kind].create());
   } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], ["markdown", t("editor.markdown")], markdown ? ["markdownfile", t("editor.markdownFile")] : null, tasks?.create ? ["newtask", t("editor.newTask")] : null, tasks?.pickLabel ? ["tasklist", t("editor.taskList")] : null, ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["figures", t("editor.figures")], ["tables", t("editor.tables")], ["children", t("editor.children")],
     files ? ["image", t("editor.image")] : null, files ? ["video", t("editor.video")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null, files ? ["clip", t("editor.copiedPicture")] : null,
-    files ? ["bpmnnew", t("bpmn.insertNew")] : null, files ? ["bpmnfile", t("bpmn.insertFile")] : null, ["process", t("bpmn.insertProcess")]].filter(Boolean)
+    files ? ["bpmnnew", t("bpmn.insertNew")] : null, files ? ["bpmnfile", t("bpmn.insertFile")] : null, ["process", t("bpmn.insertProcess")],
+    ["form", t("form.insert")], ["decision", t("decision.insert")]].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
   const picker = h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp", hidden: true, "aria-label": t("editor.image") });
@@ -880,6 +893,13 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     status.textContent = "";
     const p = await pickProcess();
     if (p) insertBlock(schema.nodes.process.create({ engine: p.engine, process: p.process, text: p.name || "" }));
+  };
+  // A form or a decision of a process engine (ADR-0143) is named, and read
+  // from the engine when shown.
+  const pickedFromEngine = async (kind) => {
+    status.textContent = "";
+    const p = await pickFromEngine(kind === "form" ? "forms" : "decisions");
+    if (p) insertBlock(schema.nodes[kind].create({ engine: p.engine, [kind]: p.id, text: p.name || "" }));
   };
   // A picture of the album is copied into this item with its source
   // (ADR-0055), unless it is one of its own files already.

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -1215,6 +1216,18 @@ var (
 // ValidEngineID reports whether id is the form of a process engine's ID.
 func ValidEngineID(id string) bool { return engineID.MatchString(id) }
 
+// validIDAtEngine reports whether id can name a form or a decision of an
+// engine (ADR-0143). An engine names them as it likes: atlas takes any
+// text as a form's ID and lists a decision by its name, such as
+// "Decision 1". So the rule only keeps out what no ID holds: no text, more
+// than 255 characters, control characters and surrounding spaces.
+func validIDAtEngine(id string) bool {
+	if id == "" || utf8.RuneCountInString(id) > 255 || strings.TrimSpace(id) != id || !utf8.ValidString(id) {
+		return false
+	}
+	return !strings.ContainsFunc(id, unicode.IsControl)
+}
+
 // checkBlock validates one block of a body (ADR-0001, ADR-0032).
 func checkBlock(b Block, self ID) error {
 	switch b.Kind {
@@ -1251,14 +1264,28 @@ func checkBlock(b Block, self ID) error {
 		case len(b.Marks) > 0 || len(b.Mentions) > 0:
 			return invalid("a process has a plain caption")
 		}
+	case Form, Decision:
+		switch {
+		case !ValidEngineID(b.Engine):
+			return invalid("engine %q: a %s names an engine by its ID, lower-case letters, digits, dots and hyphens, at most 40", b.Engine, b.Kind)
+		case b.Kind == Form && !validIDAtEngine(b.Form):
+			return invalid("form %q: a form is named by its ID at the engine, 1 to 255 characters without control characters or surrounding spaces", b.Form)
+		case b.Kind == Decision && !validIDAtEngine(b.Decision):
+			return invalid("decision %q: a decision is named by its ID at the engine, 1 to 255 characters without control characters or surrounding spaces", b.Decision)
+		case len(b.Marks) > 0 || len(b.Mentions) > 0:
+			return invalid("a %s has a plain caption", b.Kind)
+		}
 	default:
 		return invalid("unknown block kind %q", b.Kind)
 	}
 	if b.Kind != Embed && b.Kind != Image && b.Kind != Video && b.Kind != BPMN && b.Ref != "" {
 		return invalid("only an embed, an image, a video or a BPMN diagram has a reference")
 	}
-	if b.Kind != Process && (b.Engine != "" || b.Process != "") {
-		return invalid("only a process names an engine and a process")
+	if b.Kind != Process && b.Kind != Form && b.Kind != Decision && b.Engine != "" {
+		return invalid("only a process, a form or a decision names an engine")
+	}
+	if b.Kind != Process && b.Process != "" || b.Kind != Form && b.Form != "" || b.Kind != Decision && b.Decision != "" {
+		return invalid("only a process names a process, only a form a form and only a decision a decision")
 	}
 	if b.Checked && b.Kind != TaskItem {
 		return invalid("only a task is checked")

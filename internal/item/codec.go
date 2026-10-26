@@ -85,7 +85,9 @@ import (
 //     Colors (ADR-0134). Versions 1 to 29 are still read.
 //   - 31: a kanban may carry LaneField (ADR-0137). Versions 1 to 30 are
 //     still read.
-const CodecVersion = 31
+//   - 32: the block kinds form and decision, and the block fields Form and
+//     Decision (ADR-0143). Versions 1 to 31 are still read.
+const CodecVersion = 32
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
