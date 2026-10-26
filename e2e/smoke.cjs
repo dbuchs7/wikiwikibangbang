@@ -1040,6 +1040,201 @@ function ckanSource() {
     await page.waitForSelector("#body.reading");
     check(await page.locator(`#attachments li:has-text('.drawing.png') .att-origin a:has-text('${drawingKey}')`).count() >= 3, "each pasted picture is a copy that names its original");
 
+    step("markdown: Markdown copied as text is pasted with Ctrl+V as formatted, editable blocks between two paragraphs, and kept after a reload (ADR-0126)");
+    const mdItem = await page.evaluate(async () => {
+      const made = (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ space: "PLAT", type: "task", title: "Markdown import", properties: { priority: "low" } }) })).json()).item;
+      await fetch(`/api/items/${made.key}/body`, { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blocks: [{ kind: "paragraph", text: "Before" }, { kind: "paragraph", text: "After" }] }) });
+      return made;
+    });
+    const mdSource = [
+      "# Installationsanleitung", "", "## Voraussetzungen", "", "- Docker installieren", "- Go installieren", "- **Zugriffsrechte** prüfen 😀", "",
+      "### Konfiguration", "", "1. Repository klonen", "2. Konfigurationsdatei anpassen", "3. Anwendung starten", "",
+      "> Hinweis: Die Konfiguration ist erforderlich.", "", "Weitere Informationen findest du in der", "[Dokumentation](https://example.com).", "",
+      "```bash", "docker compose up -d", "```", "", "---", "", "- [x] Backups prüfen", "", "| Name | Status |", "|---|---|", "| Atlas | Aktiv |",
+    ].join("\n");
+    const clip = (text, html) => page.evaluate(([t, hm]) => navigator.clipboard.write([new ClipboardItem({
+      "text/plain": new Blob([t], { type: "text/plain" }), ...(hm ? { "text/html": new Blob([hm], { type: "text/html" }) } : {}) })]), [text, html]);
+    const bodyOrder = () => page.$$eval("#body .ProseMirror > *", (els) => els.map((e) => e.tagName.toLowerCase() + ":" + (e.querySelector("input")?.value ?? e.textContent)));
+    const mdChecks = async (when) => {
+      await page.waitForSelector("#body .ProseMirror h2:has-text('Installationsanleitung')");
+      check((await page.textContent("#body .ProseMirror h3")) === "Voraussetzungen" && (await page.textContent("#body .ProseMirror h4")) === "Konfiguration", "headings 2 and 3 " + when);
+      check(await page.locator("#body .pm-bullet").count() === 3 && await page.locator("#body .pm-ordered").count() === 3, "three bulleted and three numbered items " + when);
+      check((await page.textContent("#body .pm-bullet strong")) === "Zugriffsrechte", "bold text in an item " + when);
+      check((await page.textContent("#body .pm-bullet >> nth=2")) === "Zugriffsrechte prüfen 😀", "Unicode kept " + when);
+      check((await page.textContent("#body .ProseMirror blockquote")).startsWith("Hinweis: Die Konfiguration ist erforderlich."), "the quote " + when);
+      check((await page.textContent("#body .ProseMirror a[href='https://example.com/']")) === "Dokumentation", "the link " + when);
+      check((await page.textContent("#body .ProseMirror pre")) === "docker compose up -d", "the code block " + when);
+      check(await page.locator("#body .ProseMirror hr.pm-divider").count() === 1, "the divider " + when);
+      check(await page.locator("#body .pm-task[data-checked='true']:has-text('Backups prüfen')").count() === 1, "the checked task " + when);
+      check(await page.inputValue("#body .pm-table tr:nth-child(2) td:nth-child(2) input") === "Aktiv", "the table " + when);
+      const order = await bodyOrder();
+      check(order[0] === "p:Before" && order[order.length - 1] === "p:After" && order[1] === "h2:Installationsanleitung", "inserted between the paragraphs, which stay: " + order.join(" | "));
+    };
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: base });
+    await page.goto(base + "/#/item/" + mdItem.key + "?edit");
+    await page.waitForSelector("#body.editing .ProseMirror[contenteditable=true] p:has-text('After')");
+    await page.click("#body .ProseMirror p:has-text('Before')");
+    await page.keyboard.press("End");
+    await clip(mdSource);
+    await page.keyboard.press("Control+V");
+    await mdChecks("as pasted");
+    // The editor's shortcuts work on the pasted text as on any other.
+    await page.click("#body .ProseMirror blockquote");
+    await page.keyboard.press("End");
+    await page.keyboard.press("Control+b");
+    await page.keyboard.type(" Wichtig");
+    await page.keyboard.press("Control+b");
+    await page.waitForSelector("#body .ProseMirror blockquote strong:has-text('Wichtig')");
+    await page.click("#details h2");
+    await page.waitForSelector(".live[data-pending='0']");
+    await page.reload();
+    await mdChecks("after a reload");
+    await page.waitForSelector("#body .ProseMirror blockquote strong:has-text('Wichtig')");
+    const mdStored = await page.evaluate(async (k) => (await (await fetch(`/api/items/${k}`)).json()).item.body, mdItem.key);
+    check(mdStored.map((b) => b.kind).join(",") === "paragraph,heading,heading,bullet,bullet,bullet,heading,ordered,ordered,ordered,quote,paragraph,code,divider,task,table,paragraph",
+      "the body is stored as blocks of the model, not as Markdown: " + mdStored.map((b) => b.kind).join(","));
+    check(mdStored[5].marks.some((m) => m.type === "bold" && m.start === 0 && m.end === 14), "marks count code points");
+
+    step("markdown: Insert → Paste Markdown… puts Markdown the paste would not recognise where the cursor was; plain text and HTML paste as before");
+    await page.click("#body .ProseMirror p:has-text('Before')");
+    await page.keyboard.press("End");
+    // A dash list alone is not taken for Markdown when pasted…
+    await clip("Einkaufsliste:\n- Milch\n- Brot");
+    await page.keyboard.press("Control+V");
+    await page.waitForSelector("#body .ProseMirror p:text-is('- Milch')");
+    check(await page.locator("#body .pm-bullet").count() === 3, "plain text stays text");
+    await page.keyboard.press("Control+z");
+    await page.waitForSelector("#body .ProseMirror p:text-is('- Milch')", { state: "detached" });
+    // …but converted when asked to.
+    await page.selectOption("#body .pm-toolbar select[aria-label='Insert…']", "markdown");
+    await page.waitForSelector("dialog.pm-dialog h2:has-text('Insert Markdown')");
+    await page.fill("dialog.pm-dialog textarea[name=markdown]", "Einkaufsliste:\n- Milch\n- Brot");
+    await page.click("dialog.pm-dialog button[type=submit]:has-text('Insert')");
+    await page.waitForSelector("dialog.pm-dialog", { state: "detached" });
+    const afterDialog = await bodyOrder();
+    check(afterDialog.slice(0, 4).join(" | ") === "p:Before | p:Einkaufsliste: | div:Milch | div:Brot", "the dialog inserts where the cursor was: " + afterDialog.join(" | "));
+    check(await page.evaluate(() => Boolean(document.activeElement?.closest(".ProseMirror"))), "the focus is back in the text");
+    // Cancelling inserts nothing.
+    await page.selectOption("#body .pm-toolbar select[aria-label='Insert…']", "markdown");
+    await page.fill("dialog.pm-dialog textarea[name=markdown]", "# Never");
+    await page.click("dialog.pm-dialog button:has-text('Cancel')");
+    await page.waitForSelector("dialog.pm-dialog", { state: "detached" });
+    check(await page.locator("#body .ProseMirror h2:has-text('Never')").count() === 0, "a cancelled dialog inserts nothing");
+    // Formatted HTML on the clipboard pastes as the source rendered it.
+    await page.click("#body .ProseMirror p:has-text('After')");
+    await page.keyboard.press("End");
+    await clip("**From Markdown**\n\n- a\n- b", "<p>From <em>HTML</em></p>");
+    await page.keyboard.press("Control+V");
+    await page.waitForSelector("#body .ProseMirror em:has-text('HTML')");
+    check(!(await page.textContent("#body .ProseMirror")).includes("From Markdown"), "formatted HTML wins over the plain text");
+    // Ctrl+Shift+V pastes plain text: Markdown stays as written.
+    await clip("## Not a heading\n\n- **literal**");
+    await page.keyboard.press("Control+Shift+V");
+    await page.waitForSelector("#body .ProseMirror p:has-text('## Not a heading')");
+    // A picture pasted from a file still becomes an image of the item (ADR-0108).
+    const imagesBefore = await page.locator("#body .pm-image").count();
+    await page.evaluate(() => {
+      const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+      const data = new DataTransfer();
+      data.items.add(new File([png], "pasted.png", { type: "image/png" }));
+      document.querySelector("#body .ProseMirror").dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    });
+    await page.waitForFunction((n) => document.querySelectorAll("#body .pm-image").length === n + 1, imagesBefore);
+
+    step("markdown: undo takes a pasted document back in one step, redo brings it again");
+    await page.click("#body .ProseMirror p:has-text('Einkaufsliste:')");
+    await page.keyboard.press("End");
+    await page.waitForTimeout(600); // a new step in the history, not part of the typing before
+    const beforeUndo = await bodyOrder();
+    await clip("## Undo me\n\n- **one**\n- two");
+    await page.keyboard.press("Control+V");
+    await page.waitForSelector("#body .ProseMirror h3:has-text('Undo me')");
+    await page.keyboard.press("Control+z");
+    await page.waitForSelector("#body .ProseMirror h3:has-text('Undo me')", { state: "detached" });
+    check((await bodyOrder()).join(" | ") === beforeUndo.join(" | "), "undo restores the text as it was");
+    await page.keyboard.press("Control+y");
+    await page.waitForSelector("#body .ProseMirror h3:has-text('Undo me')");
+    await page.waitForSelector("#body .pm-bullet strong:has-text('one')");
+    await page.click("#details h2");
+    await page.waitForSelector(".live[data-pending='0']");
+
+    step("markdown: script and javascript: links stay harmless text");
+    await page.click("#body .ProseMirror p:has-text('After')");
+    await page.keyboard.press("End");
+    await clip("## Hostile\n\n**Careful:** <script>alert('md')</script>\n\n[Click](javascript:alert(1)) and ![pic](javascript:alert(2)) <img src=x onerror=alert(3)>");
+    await page.keyboard.press("Control+V");
+    await page.waitForSelector("#body .ProseMirror h3:has-text('Hostile')");
+    check((await page.textContent("#body .ProseMirror")).includes("<script>alert('md')</script>"), "the script shows as text");
+    check(await page.locator("#body .ProseMirror a[href^='javascript'], #body .ProseMirror img[src='x']").count() === 0, "no javascript: link, no element from the markup");
+    await page.waitForSelector("#body .pm-toolbar .error:has-text('2 links kept only their text')");
+    await page.click("#details h2");
+    await page.waitForSelector(".live[data-pending='0']");
+    const hostileBody = await page.evaluate(async (k) => JSON.stringify((await (await fetch(`/api/items/${k}`)).json()).item.body), mdItem.key);
+    check(!hostileBody.includes("javascript:") && hostileBody.includes("<script>alert('md')</script>"), "no link target that is not allowed is stored");
+
+    step("markdown: a block someone else holds in a live session is not overwritten by a paste (ADR-0010)");
+    await page.click("#edit-done"); // a fresh body for the session of two
+    await page.waitForSelector("#body.reading");
+    await page.evaluate((k) => fetch(`/api/items/${k}/body`, { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blocks: [{ kind: "paragraph", text: "Free" }, { kind: "paragraph", text: "Held" }] }) }), mdItem.key);
+    const holder = await browser.newPage();
+    holder.on("pageerror", (e) => problems.push("bert's page error: " + e.message));
+    holder.on("dialog", async (d) => { problems.push("bert's dialog: " + d.message()); await d.dismiss(); });
+    await holder.goto(base + "/");
+    await holder.fill("#login [name=username]", "bert");
+    await holder.fill("#login [name=password]", "bert's password");
+    await holder.click("#login button[type=submit]");
+    await holder.waitForSelector("#account-button[aria-label='Account of bert']");
+    await holder.goto(base + "/#/item/" + mdItem.key + "?edit");
+    await page.goto(base + "/#/item/" + mdItem.key + "?edit");
+    await holder.waitForSelector("#body.editing .ProseMirror[contenteditable=true] p:text-is('Held')");
+    await page.waitForSelector("#body.editing .ProseMirror[contenteditable=true] p:text-is('Held')");
+    await holder.click("#body .ProseMirror p:text-is('Held')");
+    await holder.keyboard.press("End");
+    await holder.keyboard.type(" (bert)");
+    await page.waitForSelector(".pm-locked[data-holder='bert'] >> text=Held (bert)");
+    // Text pasted into the held paragraph is refused: it stays bert's.
+    await page.click(".pm-locked[data-holder='bert'] >> text=Held (bert)");
+    await page.keyboard.press("End");
+    await clip("**Not** into *held* text");
+    await page.keyboard.press("Control+V");
+    await page.waitForSelector("#body .pm-toolbar .error:has-text('someone else is editing')");
+    check(!(await page.textContent("#body .ProseMirror")).includes("Not into"), "nothing is pasted into a held block");
+    // Blocks pasted at its end go after it and leave it as it is.
+    await clip("## Beside held\n\n- after it\n- and this");
+    await page.keyboard.press("Control+V");
+    await holder.waitForSelector("#body .ProseMirror h3:has-text('Beside held')");
+    // Pasted into a free paragraph: inserted, and bert sees it at once.
+    await page.click("#body .ProseMirror p:text-is('Free')");
+    await page.keyboard.press("End");
+    await clip("## Shared live\n\n- seen by bert\n- at once");
+    await page.keyboard.press("Control+V");
+    await holder.waitForSelector("#body .ProseMirror h3:has-text('Shared live')");
+    await holder.waitForSelector("#body .pm-bullet:has-text('seen by bert')");
+    check((await holder.textContent("#body .ProseMirror p:has-text('Held')")) === "Held (bert)", "bert's paragraph is as bert left it");
+    await holder.click("#details h2");
+    await page.click("#details h2");
+    await holder.waitForSelector(".live[data-pending='0']");
+    await page.waitForSelector(".live[data-pending='0']");
+    await holder.close();
+    await page.reload();
+    await page.waitForSelector("#body .ProseMirror h3:has-text('Shared live')");
+    const sharedBody = await bodyOrder();
+    check(sharedBody.join(" | ") === "p:Free | h3:Shared live | div:seen by bert | div:at once | p:Held (bert) | h3:Beside held | div:after it | div:and this", "one consistent body for both: " + sharedBody.join(" | "));
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading .ProseMirror h3:has-text('Shared live')");
+    // The server validates what any client sends (ADR-0014, ADR-0032);
+    // the browser reports the refusal on its console.
+    expectedConsole = /status of 400/;
+    const refused = await page.evaluate(async (k) => (await fetch(`/api/items/${k}/body`, { method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ blocks: [{ kind: "paragraph", text: "x", marks: [{ type: "link", start: 0, end: 1, href: "javascript:alert(1)" }] }] }) })).status, mdItem.key);
+    expectedConsole = null;
+    check(refused === 400, "the server refuses a javascript: link whatever the client sends: " + refused);
+    // The page goes to the trash, so the steps after these see what they saw before.
+    await page.evaluate((k) => fetch(`/api/items/${k}/trash`, { method: "POST" }), mdItem.key);
+
     step("links: the link check page says when checking is off");
     await page.click("a.brand");
     await page.click("a:has-text('Platform')");

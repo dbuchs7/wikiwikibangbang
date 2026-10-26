@@ -138,3 +138,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0123](0123-the-audit-trail-is-a-hash-chain.md) | The audit trail is a hash chain | Accepted | Landed |
 | [0124](0124-restoring-spaces-from-a-backup.md) | Restoring spaces from a backup | Accepted | Landed |
 | [0125](0125-archimate-relationships-and-a-microsoft-palette.md) | ArchiMate relationships and a Microsoft palette for the drawing editor | Accepted | Landed |
+| [0126](0126-markdown-is-pasted-into-the-editor-and-converted-in-the-browser.md) | Markdown is pasted into the editor and converted in the browser | Proposed | Partial |

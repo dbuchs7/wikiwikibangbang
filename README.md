@@ -11,6 +11,8 @@ Knowledge and work in one model: wiki pages and issues as typed items of one dat
 
 Trying a release? The [test guide](docs/testing/test-guide.md) says what to look at first and how to report a finding.
 
+Markdown written elsewhere goes into a page as formatted, editable text with Ctrl+V or *Insert… → Paste Markdown…*; the [Markdown guide](docs/guides/markdown.md) says what is converted, what is simplified and why ([ADR-0126](docs/adr/0126-markdown-is-pasted-into-the-editor-and-converted-in-the-browser.md)).
+
 ## Run
 
 The product is one binary for Linux, macOS and Windows on amd64 and arm64, and 32-bit ARM Linux ([ADR-0024](docs/adr/0024-release-targets-and-container-image.md)). Download the archive for your platform from the releases page, unpack it and run:
