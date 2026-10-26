@@ -99,7 +99,7 @@ export default {
   "board.several": "Mehrere Übergänge führen von {from} nach {to}; wählen Sie einen in den Details der Karte.",
   "board.truncated": "Dieses Board zeigt die ersten {n} Einträge.",
   "board.view": "Ansicht des Boards",
-  "board.viewHint": "Farbe und Swimlanes gelten für diese Ansicht und stehen in ihrer Adresse; ein Kanban speichert sie für alle.",
+  "board.viewHint": "Farbe und Swimlanes stehen in der Adresse und bleiben in diesem Browser gespeichert; ein Kanban speichert sie für alle.",
 
   "tasks.none": "Keine offenen Aufgaben.",
   "tasks.title": "Aufgaben",

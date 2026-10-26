@@ -153,4 +153,5 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0138](0138-markdown-from-git-repositories.md) | Markdown from Git repositories: folders as page trees, files in a text | Proposed | Partial |
 | [0139](0139-the-boards-of-a-type-and-a-label-show-the-cards-of-a-kanban.md) | The boards of a type and of a label show the cards of a kanban | Accepted | Landed |
 | [0140](0140-a-json-source-is-read-for-what-changed.md) | A JSON source is read for what changed | Accepted | Landed |
-| [0141](0141-processes-in-a-drawing.md) | Processes in a drawing, live over its picture where they come from an engine | Proposed | Partial |
+| [0141](0141-a-board-remembers-its-view-in-the-browser.md) | A board remembers its view in the browser | Accepted | Landed |
+| [0142](0142-processes-in-a-drawing.md) | Processes in a drawing, live over its picture where they come from an engine | Proposed | Partial |

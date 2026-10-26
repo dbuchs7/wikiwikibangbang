@@ -1,6 +1,6 @@
 /* The drawing page fills the frame it is shown in (ADR-0053). */
 html, body, #root { height: 100%; margin: 0; }
-/* The palette chooser (ADR-0117) and the process chooser (ADR-0141), in
+/* The palette chooser (ADR-0117) and the process chooser (ADR-0142), in
    Excalidraw's own look. */
 .palette, .process {
   font: inherit; font-size: .875rem; height: 2.25rem; padding: 0 .5rem; border-radius: .5rem;

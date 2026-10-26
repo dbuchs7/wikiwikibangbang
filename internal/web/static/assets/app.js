@@ -524,7 +524,7 @@ const filesOf = (item, attachments = []) => {
     },
     isDrawing: (id) => isDrawing(known.get(id)?.name),
     // list is the item's files known here, for choosing one, and knows
-    // whether a file is among them (ADR-0141).
+    // whether a file is among them (ADR-0142).
     list: () => [...known.values()],
     knows: (id) => known.has(id),
     // origin says where a copy came from, and whether its original is
@@ -2222,13 +2222,14 @@ const boardMax = 2000;
 // and colour and lanes are chosen for the view, in its address.
 async function boardView(key, typeName) {
   const show = screen();
+  const at = location.hash.split("?")[0];
   const [{ types }, { spaces }] = await Promise.all([get("/api/types"), get("/api/spaces")]);
   const type = types.find((ty) => ty.name === typeName);
   if (!type || !type.workflow) throw new Error(t("board.noWorkflow", { type: typeName }));
   const found = await readAll(`/api/items?space=${encodeURIComponent(key)}&type=${encodeURIComponent(typeName)}&limit=100`);
   const canEdit = mayEdit(spaces.find((sp) => sp.key === key)?.role);
   const status = h("div", { class: "status" });
-  const view = viewOptions([type]);
+  const view = viewOptions([type], null, `board.${key}/${typeName}`, at);
   const layout = await cardBoard({
     id: "board", status, label: "", mayEdit: () => canEdit, cardFields: viewCardFields,
     sections: [viewSection(type, found.items, status, canEdit ? { space: key } : null, `board.${key}/${typeName}`)],
@@ -2287,25 +2288,44 @@ function viewSection(type, items, status, make, keep, heading) {
 // viewOptions are the colour and the lanes of a board that keeps nothing
 // (ADR-0139): fields of the task chosen for the view and kept in its
 // address, like its filter, so a reload and a shared link show the same.
-// A field is offered by its name, for every type that has it; a colour
-// is the tone of its value's place. lead comes first in the row.
-function viewOptions(types, lead) {
-  const q = new URLSearchParams(location.hash.split("?")[1] || "");
+// One's own choice is also remembered in this browser under keep and
+// applies where the address names none (ADR-0141); a shared link shows
+// what it names without changing what one chose. A field is offered by
+// its name, for every type that has it; a colour is the tone of its
+// value's place. lead comes first in the row; home is the view's route
+// as the address named it when the view began.
+function viewOptions(types, lead, keep, home) {
+  const [at, query = ""] = location.hash.split("?");
+  const q = new URLSearchParams(query);
+  const key = `wwbb.${keep}.view`;
+  let mine = {};
+  try { mine = JSON.parse(localStorage.getItem(key) || "{}") || {}; } catch { mine = {}; }
   const named = (kinds) => [...new Set(types.flatMap((ty) => ty.fields.filter((f) => kinds.includes(f.kind)).map((f) => f.name)))].sort();
   const enums = named(["enum"]), laneFields = named(["user", "enum"]);
-  const colorField = enums.includes(q.get("color")) ? q.get("color") : "";
-  const laneField = laneFields.includes(q.get("lanes")) ? q.get("lanes") : "";
+  const chosen = (name, names) => {
+    const v = q.has(name) ? q.get(name) : mine[name];
+    return names.includes(v) ? v : "";
+  };
+  const colorField = chosen("color", enums), laneField = chosen("lanes", laneFields);
+  // What the browser remembers shows in the address too, so a link
+  // copied from here shows the same, unless one has gone on meanwhile.
+  if (at === home && ((colorField && !q.has("color")) || (laneField && !q.has("lanes")))) {
+    if (colorField) q.set("color", colorField);
+    if (laneField) q.set("lanes", laneField);
+    history.replaceState(null, "", at + "?" + q.toString());
+  }
   const colorValues = [...new Set(types.flatMap((ty) => ty.fields.find((f) => f.name === colorField && f.kind === "enum")?.values || []))];
-  const set = (key) => (ev) => {
-    const [at, query = ""] = location.hash.split("?");
-    const p = new URLSearchParams(query);
-    if (ev.target.value) p.set(key, ev.target.value); else p.delete(key);
-    const rest = p.toString();
-    history.replaceState(null, "", at + (rest ? "?" + rest : ""));
+  const set = (name) => (ev) => {
+    try { localStorage.setItem(key, JSON.stringify({ ...mine, [name]: ev.target.value })); } catch { /* kept in the address only */ }
+    const [now, rest = ""] = location.hash.split("?");
+    const p = new URLSearchParams(rest);
+    if (ev.target.value) p.set(name, ev.target.value); else p.delete(name);
+    const left = p.toString();
+    history.replaceState(null, "", now + (left ? "?" + left : ""));
     route();
   };
-  const pick = (id, key, none, names, chosen) => h("select", { id, onchange: set(key) },
-    h("option", { value: "", text: none }), names.map((n) => h("option", { value: n, text: n, selected: n === chosen })));
+  const pick = (id, name, none, names, value) => h("select", { id, onchange: set(name) },
+    h("option", { value: "", text: none }), names.map((n) => h("option", { value: n, text: n, selected: n === value })));
   const el = lead || enums.length || laneFields.length ? h("div", { class: "board-view", id: "board-view", role: "group", "aria-label": t("board.view"), title: t("board.viewHint") },
     lead || null,
     enums.length ? field(t("kanban.colors"), pick("board-color", "color", t("kanban.colorNone"), enums, colorField)) : null,
@@ -2614,6 +2634,7 @@ function kanbanIcon(k, size) {
 // one space one may edit, a card is made there with the label.
 async function labelBoardView(label, space) {
   const show = screen();
+  const at = location.hash.split("?")[0];
   const [{ types }, { spaces }, { kanbans }] = await Promise.all([get("/api/types"), get("/api/spaces"), get("/api/kanbans")]);
   const found = await readAll(`/api/items?label=${encodeURIComponent(label)}&limit=100${space ? "&space=" + encodeURIComponent(space) : ""}`);
   const flows = types.filter((ty) => ty.workflow && found.items.some((it) => it.type === ty.name));
@@ -2630,7 +2651,7 @@ async function labelBoardView(label, space) {
   const editable = new Set(spaces.filter((sp) => mayEdit(sp.role)).map((sp) => sp.key));
   const home = space || (inSpaces.length === 1 ? inSpaces[0] : "");
   const make = editable.has(home) ? { space: home, label } : null;
-  const view = viewOptions(flows, filter);
+  const view = viewOptions(flows, filter, `labelboard.${label}`, at);
   const layout = flows.length ? await cardBoard({
     id: "labelboard", status, label, mayEdit: (it) => editable.has(it.space), cardFields: viewCardFields,
     sections: flows.map((ty) => viewSection(ty, found.items.filter((it) => it.type === ty.name), status, make,
@@ -4052,7 +4073,7 @@ async function relocateForm(box, item, mode, spaces, status) {
 function bodySection(item, embeds, editing, threads, attachments, protect, edit, notes, onPresence) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!editing) {
-    // The files are known, so a drawing shows its processes live (ADR-0141).
+    // The files are known, so a drawing shows its processes live (ADR-0142).
     const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item, attachments),
       extra: item.presence === "live" ? [threads.plugin, ...(notes ? [notes.plugin] : [])] : [], comment: item.presence === "live" ? threads.start : undefined,
       note: notes ? notes.start : undefined, protect: protect || undefined,

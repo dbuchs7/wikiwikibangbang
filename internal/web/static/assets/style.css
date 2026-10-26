@@ -581,7 +581,7 @@ label.upload { display: inline-flex; align-items: center; gap: 8px; }
 .pm-ops-passed { background: #6b7280; }
 .pm-ops-incidents { background: #c62828; }
 dialog.bpmn-modeler .bpmn-modeler-canvas { flex: 1; position: relative; background: #fff; color: #222; }
-/* Processes in a drawing (ADR-0141): the newest version of a process of
+/* Processes in a drawing (ADR-0142): the newest version of a process of
    an engine lies over its saved picture, inside the picture's border. The
    picture shows through until it is drawn. The region neither pans nor
    zooms: clicks reach the picture, except the bar's and the watermark's. */

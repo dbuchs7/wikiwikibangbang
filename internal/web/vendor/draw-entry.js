@@ -6,5 +6,5 @@ export { default as React } from "react";
 export { createRoot } from "react-dom/client";
 export { Excalidraw, exportToBlob, loadFromBlob, MIME_TYPES } from "@excalidraw/excalidraw";
 // What places a process in a drawing and measures where it lies in the
-// saved picture (ADR-0141).
+// saved picture (ADR-0142).
 export { convertToExcalidrawElements, getCommonBounds, newElementWith, CaptureUpdateAction } from "@excalidraw/excalidraw";

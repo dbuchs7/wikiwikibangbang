@@ -703,8 +703,20 @@ function gitSource() {
     }, [plat2.id, otherLane]);
     await page.waitForSelector(`#board .lane-cell[data-lane=${otherLane}][data-state=done] .card-item:has-text('PLAT-2')`);
     check((await (await page.request.get(base + "/api/items/PLAT-2")).json()).item.properties.priority === otherLane, "the lane set the task's priority");
+    // The browser remembers one's choice: the board reached from the space
+    // shows it again, and names it in its address (ADR-0141).
+    await page.click("a.brand");
+    await page.click("a:has-text('Platform')");
+    await page.click("a:has-text('Board: task')");
+    await page.waitForSelector("#board .board-lanes .lane-cell .card-item.toned");
+    check(page.url().includes("color=priority") && page.url().includes("lanes=priority"), "the remembered view is in the address: " + page.url());
     await page.selectOption("#board-lanes", "");
     await page.waitForSelector("#board .board:not(.board-lanes)");
+    await page.click("a.brand");
+    await page.click("a:has-text('Platform')");
+    await page.click("a:has-text('Board: task')");
+    await page.waitForSelector("#board .board:not(.board-lanes) .card-item.toned");
+    check(!page.url().includes("lanes=") && page.url().includes("color=priority"), "no lanes are remembered once taken off: " + page.url());
 
     step("page tree: child pages, reordered by button and by dragging");
     await page.click("a.brand");
@@ -2420,7 +2432,7 @@ function gitSource() {
       await live.locator(".pm-diagram-ops:has-text('Version 4 · running: 3 · finished: 12 · incidents: 1')").waitFor();
       check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader");
 
-      step("drawing: a model of its own and a process of an engine go into a drawing; the latter shows live over its picture, with its operations (ADR-0141)");
+      step("drawing: a model of its own and a process of an engine go into a drawing; the latter shows live over its picture, with its operations (ADR-0142)");
       await page.click("#edit");
       await page.waitForSelector("#body.editing .ProseMirror");
       await page.locator("#body .ProseMirror").click();

@@ -547,7 +547,7 @@ function imageView(node, view, getPos, files) {
     : h("img", { src: files ? files.url(node.attrs.ref) : "", alt: node.attrs.text, loading: "lazy" });
   const handle = h("span", { class: "pm-resize", title: t("editor.imageResize"), "aria-hidden": "true" });
   // The processes of engines in a drawing are shown live over its picture
-  // (ADR-0141), from the regions the picture lists in its first bytes. A
+  // (ADR-0142), from the regions the picture lists in its first bytes. A
   // picture whose name is not known here, as in an embedded text or one
   // saved by someone else since, is asked too.
   const live = h("span", { class: "pm-live" });
