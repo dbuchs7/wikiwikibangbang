@@ -244,3 +244,26 @@ func TestSpaceState(t *testing.T) {
 		}
 	}
 }
+
+// TestImportSetsStateSince: an import sets the time an item reached its
+// state when it changes the state, not otherwise (ADR-0134).
+func TestImportSetsStateSince(t *testing.T) {
+	s := setup(t)
+	u := Upsert{Origin: jiraRef("10001", "PLAT-70"), Space: "PLAT", Type: "task", Title: "Imported",
+		Properties: Props{"priority": "high"}, State: "in progress", Key: "PLAT-70"}
+	imp, _, err := s.Upsert("import", u)
+	noErr(t, err)
+	first := imp.StateSince
+	u.Title, u.Origin.Version = "Imported again", "2"
+	imp, _, err = s.Upsert("import", u)
+	noErr(t, err)
+	if !imp.StateSince.Equal(first) {
+		t.Fatalf("an import that keeps the state keeps the time: %v, first %v", imp.StateSince, first)
+	}
+	u.State, u.Origin.Version = "done", "3"
+	imp, _, err = s.Upsert("import", u)
+	noErr(t, err)
+	if !imp.StateSince.After(first) {
+		t.Fatalf("an import that changes the state sets the time: %v, first %v", imp.StateSince, first)
+	}
+}

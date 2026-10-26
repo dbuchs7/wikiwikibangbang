@@ -1521,7 +1521,9 @@ function atlassianSource() {
     await page.click("#kanban .board-column[data-state=closed] .column-add");
     await page.fill("#kanban .board-column[data-state=closed] .card-new [name=title]", "Archive old pages");
     await page.press("#kanban .board-column[data-state=closed] .card-new [name=title]", "Enter");
-    await page.waitForSelector("#kanban .board-column[data-state=closed] .board-cards > .card-item:first-child:has-text('Archive old pages')");
+    // A finished column lists its newest card first, under the day it was finished (ADR-0134).
+    await page.waitForSelector("#kanban .board-column[data-state=closed] .card-day:text-is('Today')");
+    check((await page.locator("#kanban .board-column[data-state=closed] .card-item").first().textContent()).includes("Archive old pages"), "the newest finished card comes first");
     // The status in the details: the state as a badge, the way on as a button.
     await page.click(`${renew} .card-title`);
     await page.waitForSelector("#kanban-detail:not([hidden]) #item-status .state-now:text-is('open')");
@@ -1532,6 +1534,36 @@ function atlassianSource() {
       await page.click("#kanban-detail:not([hidden]) #kanban-detail-off");
       await page.waitForSelector(`#kanban .card-item:has-text('${title}')`, { state: "detached" });
     }
+
+    step("kanban filter, limits and colours (ADR-0134): cards coloured by a field of the task, a column over its limit, a filter kept in the address, counts on a card");
+    await page.click("#kanban-settings-open");
+    await page.selectOption("#kanban-color-field", "priority");
+    await page.selectOption("#kanban-tones select[data-value=high]", "red");
+    await page.fill("#kanban-columns li[data-column='state:open'] .column-limit", "1");
+    await page.click("#kanban-settings-save");
+    await page.waitForSelector("#kanban .card-item.toned.tone-red:has-text('Hero image')");
+    await page.waitForSelector("#kanban-legend .legend-chip[data-value=high]");
+    await page.click("#kanban .board-column[data-state=open] .column-add");
+    await page.fill("#kanban .board-column[data-state=open] .card-new [name=title]", "Second card");
+    await page.press("#kanban .board-column[data-state=open] .card-new [name=title]", "Enter");
+    await page.waitForSelector("#kanban .board-column[data-state=open] .column-count.over:text-is('2 / 1')");
+    // The legend filters by its value; the filter stays in the address across a reload.
+    await page.click("#kanban-legend .legend-chip[data-value=high]");
+    await page.waitForSelector("#kanban .card-item:has-text('Second card')", { state: "hidden" });
+    check(page.url().includes("cards.color=high"), "the filter is in the address");
+    await page.reload();
+    await page.waitForSelector("#kanban-legend .legend-chip[data-value=high][aria-pressed=true]");
+    await page.waitForSelector("#kanban .card-item:has-text('Second card')", { state: "hidden" });
+    await page.click("#cards-filterbar .filter-reset");
+    await page.waitForSelector("#kanban .card-item:has-text('Second card')");
+    // A comment shows as a count at the card's foot.
+    const heroKey = (await page.textContent("#kanban .card-item:has-text('Hero image') .card-key")).trim();
+    check((await page.request.post(base + `/api/items/${heroKey}/comments`, { data: { text: "Looks good" } })).status() === 201, "a comment on the card");
+    await page.reload();
+    await page.waitForSelector("#kanban .card-item:has-text('Hero image') .card-comments");
+    await page.click("#kanban .card-item:has-text('Second card') .card-title");
+    await page.click("#kanban-detail:not([hidden]) #kanban-detail-off");
+    await page.waitForSelector("#kanban .card-item:has-text('Second card')", { state: "detached" });
 
     step("kanban picture and boards by label: a kanban shows its logo; every label is a board without making one (ADR-0087)");
     if (!(await page.$("#kanban-settings[open]"))) await page.click("#kanban-settings-open");
@@ -2389,6 +2421,12 @@ function atlassianSource() {
       const wide = await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       check(wide <= 0, `${view} is ${wide}px wider than a phone's screen`);
     }
+    // A kanban's board scrolls within itself, its cards' counts included (ADR-0134).
+    await phone.goto(base + "/#/kanbans");
+    await phone.click("#kanbans .space-tile:has-text('Website relaunch')");
+    await phone.waitForSelector("#kanban .card-item .card-comments");
+    const boardWide = await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(boardWide <= 0, `a kanban's board is ${boardWide}px wider than a phone's screen`);
     await phone.goto(base + "/#/item/" + plan.key + "?edit");
     await phone.waitForSelector(".ProseMirror[contenteditable=true]");
     await phone.click(".ProseMirror");

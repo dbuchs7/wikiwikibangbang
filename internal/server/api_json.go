@@ -193,6 +193,12 @@ type itemJSON struct {
 	// may change the body (ADR-0088); set on answers about one item.
 	Secrets         []secretJSON `json:"secrets,omitempty"`
 	ReadsAllSecrets *bool        `json:"readsAllSecrets,omitempty"`
+	// StateSince is when the item reached its state; CommentCount and
+	// FileCount count its comments and files, so a card tells them
+	// without reading them (ADR-0134).
+	StateSince   *time.Time `json:"stateSince,omitempty"`
+	CommentCount int        `json:"commentCount,omitempty"`
+	FileCount    int        `json:"fileCount,omitempty"`
 }
 
 type secretJSON struct {
@@ -246,6 +252,20 @@ func toItemJSON(it item.Item) itemJSON {
 		Body: []blockJSON{}, Version: it.Version, Presence: it.Presence, Managed: it.Managed, Labels: it.Labels}
 	if j.Labels == nil {
 		j.Labels = []string{}
+	}
+	if !it.StateSince.IsZero() {
+		at := it.StateSince
+		j.StateSince = &at
+	}
+	for _, c := range it.Comments {
+		if !c.Deleted {
+			j.CommentCount++
+		}
+	}
+	for _, a := range it.Attachments {
+		if !a.Deleted {
+			j.FileCount++
+		}
 	}
 	if it.Hold != nil {
 		j.Hold = &holdJSON{Findings: toDPFindings(it.Hold.Findings), Savers: it.Hold.Savers}
