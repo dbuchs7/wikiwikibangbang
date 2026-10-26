@@ -31,6 +31,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
+	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/metrics"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
@@ -97,6 +98,10 @@ type Deps struct {
 	// Connectors keep catalog spaces in step with external sources
 	// (ADR-0077); Routes creates one when it is nil.
 	Connectors *connector.Runner
+	// Engines reads processes from process engines (ADR-0126); Routes
+	// creates one that reads credentials from the process environment
+	// when it is nil.
+	Engines *engine.Reader
 }
 
 // MetricsPath serves the operational metrics. It is the only path a token
@@ -145,6 +150,9 @@ func Routes(d Deps) []Route {
 	if d.Connectors == nil && d.DB != nil {
 		d.Connectors = connector.New(d.DB, d.Log)
 	}
+	if d.Engines == nil {
+		d.Engines = engine.NewReader(nil, nil)
+	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},
@@ -168,6 +176,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, oauthRoutes(d)...)
 	routes = append(routes, autoBackupRoutes(d)...)
 	routes = append(routes, connectorRoutes(d)...)
+	routes = append(routes, engineRoutes(d)...)
 	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
 		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}

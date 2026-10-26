@@ -98,6 +98,9 @@ const (
 	// installation's data (ADR-0124).
 	PartialRestore = "restore.partial"
 	OAuthFailed    = "oauth.token.failed"
+	// EngineChanged records a process engine added, changed or removed
+	// (ADR-0126).
+	EngineChanged = "engine.change"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for
