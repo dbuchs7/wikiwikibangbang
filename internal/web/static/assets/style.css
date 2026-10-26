@@ -979,6 +979,9 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .kanbans-new #new-kanban h2 { margin-top: 0; font-size: 15px; }
 .kanbans-new #new-kanban .form-row { flex-direction: column; }
 .kanbans-new #new-kanban .form-row .field { flex: none; }
+/* A select is as wide as its longest option; a room with a long name
+   must not push the fields past the narrow column. */
+.kanbans-new, .kanbans-new #new-kanban .field, .kanbans-new #new-kanban .field > :is(input, select) { min-width: 0; max-width: 100%; }
 .kanbans-layout:not(:has(.kanbans-labels)) { grid-template-columns: minmax(0, 1fr) clamp(260px, 20vw, 340px); grid-template-areas: "main new"; }
 .kanbans-layout:not(:has(.kanbans-new)) { grid-template-columns: clamp(200px, 15vw, 260px) minmax(0, 1fr); grid-template-areas: "labels main"; }
 .kanbans-layout:not(:has(.kanbans-labels)):not(:has(.kanbans-new)) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "main"; }
