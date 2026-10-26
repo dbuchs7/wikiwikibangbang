@@ -37,7 +37,7 @@ Chosen option: **3.**
 
 - **Positive:** a durable, queryable record of security events, independent of the operator's log setup; no new mechanism (it reuses `internal/wal`).
 - **Negative / trade-offs accepted:** one fsync per audited event, including failed logins. Each failed login already costs a PBKDF2 derivation of about 600 000 iterations, which dominates the fsync, so the trail adds no meaningful denial-of-service lever. Ten years of entries, including client addresses and usernames typed at failed logins, are personal data kept for a long time; the period must be justified in the operator's data-protection documentation (revDSG Art. 6, GDPR Art. 5(1)(e)), and a person's erasure request does not remove their audit entries before the period ends. Entries older than the in-memory window are only in the file; the listing reads them from there (ADR-0122).
-- **Follow-ups / risks to watch:** whether erasing a person should pseudonymise their audit entries early; export to a SIEM; tamper evidence (hash chaining), since an operator with file access can rewrite the file.
+- **Follow-ups / risks to watch:** whether erasing a person should pseudonymise their audit entries early; export to a SIEM; tamper evidence (hash chaining), since an operator with file access can rewrite the file; the trail is now a hash chain (ADR-0123).
 
 ## Pros and cons of the options
 
@@ -64,3 +64,4 @@ Strongest form: one log, one ordering, one backup; audit entries interleave with
 
 - implements the audit part of [ADR-0013](0013-authentication-and-security-boundary.md); extends [ADR-0027](0027-local-accounts-sessions-and-api-tokens.md); relates to ADR-0026 (erasure)
 - amended by [ADR-0122](0122-the-audit-listing-reaches-the-whole-journal.md) (the audit listing reaches the whole journal)
+- amended by [ADR-0123](0123-the-audit-trail-is-a-hash-chain.md) (the audit trail is a hash chain)

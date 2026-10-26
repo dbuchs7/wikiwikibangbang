@@ -130,7 +130,11 @@ func TestAuditEntriesExpireAfterTenYears(t *testing.T) {
 	noErr(t, db.Close())
 	db = openFast(t, dir)
 	defer db.Close()
-	if got := db.Audit.List(0, 10); len(got) != 2 || got[0].Seq != 4 || got[1].Event != audit.Expired {
+	// The expiry ran with a clock ten years ahead, so its marker removed
+	// entries the real clock calls young: the start says the chain is
+	// broken there (ADR-0123).
+	if got := db.Audit.List(0, 10); len(got) != 3 || got[1].Seq != 4 || got[2].Event != audit.Expired ||
+		got[0].Event != audit.ChainBroken || got[0].Detail["reason"] != audit.BrokenTooYoung || got[0].Detail["at"] != "3" {
 		t.Fatalf("after a rewrite and a restart: %+v", got)
 	}
 }

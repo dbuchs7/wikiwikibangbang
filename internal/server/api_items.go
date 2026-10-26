@@ -48,6 +48,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: del, Pattern: "/api/system-roles/{role}/{principal}", Summary: "Take back a system role; the last administrator keeps it (administrators)", Handler: http.HandlerFunc(h.revokeSystemRole)},
 
 		{Method: get, Pattern: "/api/audit", Summary: "The security audit trail, newest first, paged; filtered by q, event and actor (administrators)", Handler: http.HandlerFunc(h.listAudit)},
+		{Method: get, Pattern: "/api/audit/verify", Summary: "Check the audit trail's hash chain over the whole journal: entries, the newest link, and the first entry that breaks it (administrators)", Handler: http.HandlerFunc(h.verifyAudit)},
 
 		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged; q narrows to items whose key, title, type, state or labels hold every word", Handler: http.HandlerFunc(h.findItems)},
 		{Method: get, Pattern: "/api/spaces/{space}/tree", Summary: "The readable children of an item (parent) or the top of a space, in sibling order, paged", Handler: http.HandlerFunc(h.tree)},
@@ -416,6 +417,23 @@ func (h itemHandlers) adminRead(w http.ResponseWriter, r *http.Request, fn func(
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// verifyAudit checks the trail's chain (ADR-0123). It reads the whole
+// journal, so it is asked for, not run with every listing.
+func (h itemHandlers) verifyAudit(w http.ResponseWriter, r *http.Request) {
+	admin := false
+	h.d.DB.Read(func(s *item.Store) { admin = s.HasSystemRole(who(r), item.RoleAdmin) })
+	if !admin {
+		writeError(w, http.StatusForbidden, "administrators only")
+		return
+	}
+	c, err := h.d.DB.Audit.Verify(time.Now())
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, c)
 }
 
 func (h itemHandlers) listAudit(w http.ResponseWriter, r *http.Request) {

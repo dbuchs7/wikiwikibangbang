@@ -213,6 +213,15 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 		return nil, Recovery{}, err
 	}
 	db.Audit.ReadJournal(func(each func([]byte) error) error { return wal.Each(filepath.Join(dir, AuditFile), each) })
+	// A broken chain does not stop the start: it is logged and recorded,
+	// so administrators see it in the trail itself (ADR-0123).
+	switch c, err := audit.Verify(audit.Each(kept), time.Now()); {
+	case err != nil:
+		return nil, Recovery{}, err
+	case c.Broken != 0:
+		db.Audit.Record(audit.Entry{Event: audit.ChainBroken, Actor: SystemActor,
+			Detail: map[string]string{"at": fmt.Sprint(c.Broken), "reason": c.Reason}})
+	}
 	sl, ssc, err := wal.OpenFile(dir, SiteFile)
 	if err != nil {
 		return nil, Recovery{}, err

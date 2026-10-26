@@ -43,3 +43,17 @@ func TestTheAuditTrailRecordsSecurityEvents(t *testing.T) {
 	w.admin.expect("GET", "/api/audit?limit=0", "", http.StatusBadRequest)
 	w.admin.expect("GET", "/api/audit?before=x", "", http.StatusBadRequest)
 }
+
+// TestTheAuditChainIsChecked covers GET /api/audit/verify (ADR-0123).
+func TestTheAuditChainIsChecked(t *testing.T) {
+	w := newWorld(t)
+	w.bert.expect("GET", "/api/audit/verify", "", http.StatusForbidden)
+	c := w.admin.expect("GET", "/api/audit/verify", "", http.StatusOK)
+	if c["broken"] != nil || c["entries"].(float64) < 1 || len(c["head"].(string)) != 64 {
+		t.Fatalf("%v", c)
+	}
+	newest := w.admin.expect("GET", "/api/audit?limit=1", "", http.StatusOK)["entries"].([]any)[0].(map[string]any)
+	if c["headSeq"] != newest["seq"] || len(newest["prev"].(string)) != 64 {
+		t.Fatalf("head %v, newest %v", c["headSeq"], newest)
+	}
+}
