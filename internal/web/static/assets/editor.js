@@ -264,7 +264,7 @@ export function blockFromNode(node) {
   return b;
 }
 
-// --- Markdown (ADR-0132) ----------------------------------------------------------
+// --- Markdown (ADR-0133) ----------------------------------------------------------
 
 // markdownInsertion converts Markdown into blocks of the body (markdown.js)
 // and returns the transaction that puts them at the selection as a paste
@@ -700,7 +700,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   const aidKeys = keymap({ "Mod-k": (state, dispatch, v) => { aids.openLink(v); return true; } });
   // Pictures pasted into the text (ADR-0108): one copied in the album
   // becomes a copy of its original file, any other image an upload.
-  // Markdown becomes formatted text (ADR-0132), unless Ctrl+Shift+V
+  // Markdown becomes formatted text (ADR-0133), unless Ctrl+Shift+V
   // (Cmd+Shift+V) pastes plain text.
   let onPaste = () => false;
   let plain = false;
@@ -893,7 +893,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     if (reason) status.textContent = markdownError(reason);
     return true;
   };
-  // insertMarkdown puts Markdown at the selection (ADR-0132) and tells in
+  // insertMarkdown puts Markdown at the selection (ADR-0133) and tells in
   // the status what was simplified; it returns why nothing was inserted,
   // or null. A transaction refused because someone else holds a block
   // there (live.js, ADR-0010) changes nothing.

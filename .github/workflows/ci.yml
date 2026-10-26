@@ -101,7 +101,7 @@ jobs:
         with:
           node-version: '22'
 
-      # ADR-0132: UI modules that run without a browser, such as the
+      # ADR-0133: UI modules that run without a browser, such as the
       # Markdown conversion, have unit tests of their own; Node's test
       # runner needs no dependency.
       - name: JavaScript unit tests

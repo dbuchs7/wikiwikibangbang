@@ -144,4 +144,5 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0129](0129-bpmn-diagrams-and-processes-from-a-process-engine.md) | BPMN diagrams in the text, and processes from a process engine with their operations | Proposed | Partial |
 | [0130](0130-an-api-description-fills-a-json-source.md) | An API description fills a JSON source | Accepted | Landed |
 | [0131](0131-pages-export-as-markdown-and-agents-read-them-so.md) | Pages export as Markdown, and agents read them so | Proposed | Partial |
-| [0132](0132-markdown-is-pasted-into-the-editor-and-converted-in-the-browser.md) | Markdown is pasted into the editor and converted in the browser | Proposed | Partial |
+| [0132](0132-kanban-cards-columns-and-the-status-at-a-glance.md) | Kanban cards, columns and the status, readable at a glance | Accepted | Landed |
+| [0133](0133-markdown-is-pasted-into-the-editor-and-converted-in-the-browser.md) | Markdown is pasted into the editor and converted in the browser | Proposed | Partial |
