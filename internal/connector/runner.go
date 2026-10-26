@@ -53,6 +53,9 @@ type state struct {
 	running bool
 	lastRun time.Time
 	history []Result
+	// seen is what the last run that applied its reading without a
+	// problem remembered of its source (reading.seen).
+	seen string
 }
 
 // New returns a runner for db; credentials come from the process
@@ -180,12 +183,16 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 	var rd reading
 	rdr, err := reader(c.Kind)
 	if err == nil {
-		rd, err = rdr.Read(ctx, c, r.env(c.ID))
+		env := r.env(c.ID)
+		r.mu.Lock()
+		env.Seen, env.Force = r.of(c.ID).seen, actor != ""
+		r.mu.Unlock()
+		rd, err = rdr.Read(ctx, c, env)
 	}
 	if err == nil && rd.apply {
 		res, err = Apply(r.db, c, rd.entries, dry)
 	}
-	res.Connector, res.Datasets, res.Formats = c.ID, rd.datasets, rd.formats
+	res.Connector, res.Datasets, res.Formats, res.Version, res.Same = c.ID, rd.datasets, rd.formats, rd.version, rd.same
 	res.Problems = append(append([]string{}, rd.problems...), res.Problems...)
 	if len(res.Problems) > problemsShown {
 		res.Problems = res.Problems[:problemsShown]
@@ -199,6 +206,9 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 	st.running = false
 	if !dry {
 		st.lastRun = start
+		if err == nil && !res.retry && rd.seen != "" {
+			st.seen = rd.seen
+		}
 	}
 	st.history = append([]Result{res}, st.history...)
 	if len(st.history) > historyLength {

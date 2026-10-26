@@ -4684,6 +4684,7 @@ function connectorsCard(spaces, users) {
 function connectorEditor(c, data, spaces, users, list, reopen) {
   const k = c.ckan || { formats: [], organizations: [], baseURL: "", portalURL: "", language: "de" };
   const j = c.json;
+  const g = c.git;
   const path = "/api/connectors/" + encodeURIComponent(c.id);
   const st = c.status;
   const runStatus = h("div", { class: "status", id: "connector-run-status" });
@@ -4721,7 +4722,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     value: Object.entries(j?.values || {}).map(([n, p]) => `${n} = ${p}`).join("\n") });
   const parseValues = (v) => Object.fromEntries(v.split("\n").map((l) => l.split("=")).filter((p) => p.length > 1 && p[0].trim())
     .map(([n, ...p]) => [n.trim(), p.join("=").trim()]));
-  const sourceValues = () => j ? Object.keys(parseValues(valuesInput.value)).sort() : data.ckanValues;
+  const sourceValues = () => j ? Object.keys(parseValues(valuesInput.value)).sort() : g ? data.gitValues : data.ckanValues;
   // The type the entries are written as: page, or another with a text.
   const typeNames = [data.type, ...data.types.map((tp) => tp.name).filter((n) => n !== data.type)];
   const typeSelect = h("select", { name: "type", id: "connector-type" }, typeNames.map((n) => h("option", { value: n === data.type ? "" : n, text: n,
@@ -4769,6 +4770,13 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     field(t("connector.language"), languageSelect(j.language)),
     h("p", { class: "muted", text: t("json.languageHelp") }),
   ];
+  // A folder or file of a Git repository (ADR-0128).
+  const gitSource = () => [
+    field(t("git.url"), h("input", { name: "url", type: "url", required: true, value: g.url, maxlength: 512, placeholder: "https://github.com/owner/repository/tree/main/docs" })),
+    h("p", { class: "muted", text: t("git.urlHelp") }),
+    field(t("connector.language"), languageSelect(g.language)),
+    h("p", { class: "muted", text: t("git.languageHelp") }),
+  ];
   const run = (dryRun, id, text) => h("button", { type: "button", class: dryRun ? "secondary" : "primary", id, disabled: st.running || !c.space, text, onclick: async () => {
     runStatus.replaceChildren();
     try {
@@ -4782,7 +4790,9 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     "data-f-outcome": r.error ? t("connector.failed") : r.dryRun ? t("catalog.dryRun") : t("catalog.run") },
     h("summary", {}, h("strong", { text: r.dryRun ? t("catalog.dryRun") : t("catalog.run") }), " · ", when(r.started), " · ",
       r.error ? h("span", { class: "error", text: r.error })
-        : t("catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn, removed: r.removed || 0 })),
+        : r.same ? t("git.same", { commit: r.version.slice(0, 8) })
+          : t(g ? "git.counts" : "catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn, removed: r.removed || 0 })),
+    r.version && !r.same && !r.error ? h("p", { class: "muted", text: t("git.read", { commit: r.version.slice(0, 8) }) }) : "",
     r.formats?.length ? h("p", { class: "muted", text: t("catalog.formatsRead", { list: r.formats.join(", ") }) }) : "",
     r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn"), removed: t("catalog.kind.removed") }[x.kind] }), " ",
       x.key ? link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`) : x.title))) : "",
@@ -4790,7 +4800,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       { id: "run-problems-" + Date.parse(r.started), label: t("catalog.problems") }) : "");
   editor.replaceChildren(
     h("h3", { text: c.isNew ? t("connector.newTitle") : c.name }),
-    h("p", { class: "muted", text: j ? t("json.note") : t("catalog.note") }),
+    h("p", { class: "muted", text: j ? t("json.note") : g ? t("git.note") : t("catalog.note") }),
     h("p", { class: "muted", text: t("connector.publicOnly") }),
     form({ id: "connector-settings" }, [
       field(t("connector.id"), h("input", { name: "id", value: c.id, required: true, readonly: !c.isNew, pattern: "[a-z0-9][a-z0-9.\\-]{0,39}", maxlength: 40 })),
@@ -4799,7 +4809,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: c.enabled }), " ", t("catalog.enabled")),
       field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
         spaces.map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === c.space })))),
-      j ? jsonSource() : ckanSource(),
+      j ? jsonSource() : g ? gitSource() : ckanSource(),
       h("fieldset", { class: "connector-target" }, h("legend", { text: t("connector.target") }),
         field(t("connector.type"), typeSelect),
         h("p", { class: "muted", text: t("connector.targetHelp") }),
@@ -4809,7 +4819,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
         users.map((u) => h("option", { value: u.id, text: u.username, selected: u.id === c.steward })))),
       h("p", { class: "muted", text: t("catalog.stewardHelp") }),
       field(t("catalog.interval"), h("input", { name: "intervalHours", type: "number", min: 1, max: 744, required: true, value: c.intervalHours })),
-      j ? "" : h("details", {}, h("summary", { text: t("catalog.source") }),
+      j || g ? "" : h("details", {}, h("summary", { text: t("catalog.source") }),
         field(t("catalog.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: k.baseURL })),
         field(t("catalog.portalURL"), h("input", { name: "portalURL", type: "url", required: true, value: k.portalURL }))),
       c.isNew ? "" : h("p", { class: "muted", id: "connector-credential",
@@ -4831,7 +4841,9 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
         id: d.get("id").trim(), name: d.get("name").trim(), kind: c.kind, enabled: d.get("enabled") === "on", space: d.get("space"),
         steward: d.get("steward"), intervalHours: Number(d.get("intervalHours")), type: d.get("type"), fields,
       };
-      if (j) {
+      if (g) {
+        body.git = { url: d.get("url").trim(), language: d.get("language") };
+      } else if (j) {
         body.json = { url: d.get("url").trim(), items: d.get("items").trim(), id: d.get("idPath").trim(), title: d.get("titlePath").trim(), link: d.get("link").trim(),
           text: d.get("text").trim(), next: d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language") };
       } else {

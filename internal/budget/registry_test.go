@@ -35,6 +35,12 @@ var classified = map[string]string{
 	"internal/connector.maxAnswer": "the answer of the catalog source a connector reads (ADR-0075, ADR-0077), not a caller's input to this server; " +
 		"it guards the connector against a source that misbehaves",
 	"internal/connector/ckan.go:maxAnswer": "the same bound, where the answer is read",
+	"internal/connector.maxMarkdown": "a Markdown file of a Git repository a page is written from (ADR-0128), not a caller's input to this server; " +
+		"it guards against a file that would make a page of megabytes",
+	"internal/connector.maxGitFiles": "the size of one Git connector's run (ADR-0128), so a repository with a huge folder cannot make it endless; " +
+		"not memory a caller of this server can claim",
+	"internal/connector.maxPictures": "the shape of a page written from a Git repository (ADR-0128): how many pictures it keeps; " +
+		"each picture is bounded by AttachmentBytes",
 	"internal/gitrepo.maxListing": "an answer of the API of a Git host the server reads (ADR-0128), not a caller's input to this server; " +
 		"it guards against a host that misbehaves",
 	"internal/gitrepo/gitrepo.go:maxListing + 1": "the same bound, where the answer is read",

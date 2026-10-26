@@ -85,10 +85,36 @@ function feedSource() {
   return server;
 }
 
+// gitSource answers as a Gitea instance holding one repository, o/r,
+// whose folder docs has an index file and one page (ADR-0128).
+function gitSource() {
+  const commit = "1".repeat(40);
+  const files = { "docs/index.md": "# Handbook\n\nRead [the first page](a.md).", "docs/a.md": "# First page\n\nWritten in the *repository*." };
+  const server = require("http").createServer((req, res) => {
+    const url = new URL(req.url, "http://localhost");
+    const api = "/api/v1/repos/o/r";
+    res.setHeader("Content-Type", "application/json");
+    if (url.pathname === api + "/commits") return res.end(JSON.stringify(url.searchParams.get("sha") === "main" ? [{ sha: commit }] : []));
+    if (url.pathname === api + "/git/trees/" + commit) {
+      return res.end(JSON.stringify({ tree: Object.keys(files).map((path) => ({ path, type: "blob", sha: "" })), total_count: 2 }));
+    }
+    const name = url.pathname.slice((api + "/raw/").length);
+    if (url.pathname.startsWith(api + "/raw/") && files[name]) {
+      res.setHeader("Content-Type", "text/plain");
+      return res.end(files[name]);
+    }
+    res.statusCode = 404;
+    res.end("{}");
+  });
+  server.listen(0, "127.0.0.1");
+  return server;
+}
+
 (async () => {
   const sink = mailSink(process.env.SMTP_SINK_PORT);
   const ckan = ckanSource();
   const feed = feedSource();
+  const repo = gitSource();
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const page = await browser.newPage();
   const problems = [];
@@ -1815,6 +1841,25 @@ function feedSource() {
     check(await page.inputValue("tr[data-field=owner] input") === "Amt für Geoinformation", "the text field is filled from the source");
     check(await page.inputValue("tr[data-field=since] input") === "2024-03-01", "the date field is filled from the source");
     await page.waitForSelector(".item-main :text('Liefert die Adressen des Kantons.')");
+
+    step("connectors: a folder of a Git repository becomes a tree of pages, its index file the folder's text, links between its files mentions (ADR-0128)");
+    await page.goto(base + "/#/admin");
+    await page.click("#connector-new-git");
+    await page.waitForSelector("#connector-settings [name=url]");
+    check(await page.inputValue("#connector-settings [name=intervalHours]") === "1", "a Git connector runs every hour");
+    await page.fill("#connector-settings [name=id]", "handbook");
+    await page.fill("#connector-settings [name=name]", "Handbook");
+    await page.selectOption("#connector-settings [name=space]", "APIS");
+    await page.fill("#connector-settings [name=url]", `http://127.0.0.1:${repo.address().port}/o/r/src/branch/main/docs`);
+    await page.click("#connector-settings button[type=submit]");
+    await page.waitForSelector("#connector-list tr[data-connector='handbook']");
+    await page.click("#connector-run-now");
+    await page.waitForSelector("#connector-history .catalog-run:has-text('Sync'):has-text('2 new') a");
+    await page.waitForSelector("#connector-history .catalog-run:has-text('Commit 11111111 read.')");
+    await page.click("#connector-history .catalog-run a:has-text('Handbook')");
+    await page.waitForSelector(`#item-origin a[href='http://127.0.0.1:${repo.address().port}/o/r/src/branch/main/docs']`);
+    await page.click(".item-main a.pm-mention:has-text('the first page')");
+    await page.waitForSelector(".item-main em:text('repository')");
 
     step("spaces: an administrator deletes a space into the trash, restores it, and deletes it for good");
     await page.goto(base + "/#/admin");

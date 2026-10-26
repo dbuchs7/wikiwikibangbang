@@ -73,6 +73,7 @@ func (h authHandlers) connectors(w http.ResponseWriter, r *http.Request) {
 		"type":       connector.PageType,
 		"types":      types,
 		"ckanValues": site.CKANValues,
+		"gitValues":  site.GitValues,
 	})
 }
 
@@ -164,6 +165,9 @@ func (h authHandlers) keepConnector(w http.ResponseWriter, r *http.Request, acto
 	detail := map[string]string{"connector": kept.ID, "kind": kept.Kind, "enabled": strconv.FormatBool(kept.Enabled), "intervalHours": strconv.Itoa(kept.IntervalHours)}
 	if k := kept.CKAN; k != nil {
 		detail["source"], detail["formats"], detail["organizations"] = k.BaseURL, strings.Join(k.Formats, " "), strings.Join(k.Organizations, " ")
+	}
+	if g := kept.Git; g != nil {
+		detail["source"] = g.URL
 	}
 	h.record(audit.Entry{Event: audit.CatalogSyncChanged, Actor: actor, Addr: clientAddr(r), Subject: kept.Space, Detail: detail})
 	writeJSON(w, status, kept)
