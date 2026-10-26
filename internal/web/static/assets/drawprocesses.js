@@ -2,7 +2,7 @@
 // picture element whose customData names it: a model kept in the drawing
 // itself, or a process of a process engine. The saved PNG shows each as it
 // was drawn; a process of an engine is also listed, with where it lies in
-// the picture, in a text chunk of the PNG, so a page can lay the newest
+// the picture, in a private chunk of the PNG, so a page can lay the newest
 // version of the process and its operations over it while the picture is
 // shown. This module holds what both sides need and nothing that needs a
 // browser: the drawing page writes the chunk, a page reads it.
@@ -14,8 +14,22 @@ export const KEY = "wikiwikibangbang";
 // default, passed explicitly so the regions are measured with it.
 export const PADDING = 10;
 
-// KEYWORD names the PNG text chunk that lists the regions.
+// CHUNK is the PNG chunk that lists the regions: ancillary, private, safe
+// to copy (lower, lower, upper, lower), so a viewer skips it and keeps it.
+// It is no text chunk: Excalidraw reads its scene from the first text
+// chunk of a picture, and a picture must still open in the drawing editor.
+const CHUNK = "wkPr";
+
+// KEYWORD named the text chunk that listed the regions in pictures saved
+// before CHUNK. Those are still read, and lose it when opened for editing.
 const KEYWORD = "wikiwikibangbang.processes";
+
+// MAX_MARGIN bounds the margin around a process's model in its picture, in
+// the model's own units.
+export const MAX_MARGIN = 200;
+
+// MARGIN is the margin a process gets when it is placed.
+export const MARGIN = 40;
 
 // maxRegions bounds how many live processes one picture lists.
 const maxRegions = 50;
@@ -25,22 +39,26 @@ const engineID = /^[a-z0-9][a-z0-9.-]{0,39}$/;
 const processID = /^[\p{L}_][\p{L}\p{N}_.-]{0,254}$/u;
 
 const text = (v, max) => (typeof v === "string" && v.length <= max ? v : null);
+const marginOf = (v) => (Number.isInteger(v) && v >= 0 && v <= MAX_MARGIN ? v : 0);
 
 // processOf returns what a drawing's element shows, checked, or null:
-// {kind: "bpmn", name, xml}, a model kept in the drawing, or
-// {kind: "process", engine, process, name, operations}, a process of an
-// engine, its operations shown at first when operations is set.
+// {kind: "bpmn", name, xml, margin}, a model kept in the drawing, or
+// {kind: "process", engine, process, name, operations, margin}, a process
+// of an engine, its operations shown at first when operations is set.
+// margin is the room around the model in its picture, in the model's
+// units; one that is not a whole number up to MAX_MARGIN is none.
 export function processOf(element) {
   const d = element?.type === "image" ? element.customData?.[KEY] : null;
   if (!d || typeof d !== "object") return null;
   const name = text(d.name ?? "", 200);
   if (name === null) return null;
+  const margin = marginOf(d.margin);
   if (d.kind === "bpmn") {
     const xml = text(d.xml, 8 << 20);
-    return xml ? { kind: "bpmn", name, xml } : null;
+    return xml ? { kind: "bpmn", name, xml, margin } : null;
   }
   if (d.kind === "process" && engineID.test(d.engine ?? "") && processID.test(d.process ?? "")) {
-    return { kind: "process", engine: d.engine, process: d.process, name, operations: d.operations === true };
+    return { kind: "process", engine: d.engine, process: d.process, name, operations: d.operations === true, margin };
   }
   return null;
 }
@@ -71,7 +89,7 @@ export function regionsOf(elements, [minX, , , maxY], { width, height }) {
     if (!p || p.kind !== "process" || el.isDeleted || Math.abs(el.angle || 0) > 1e-6 || (el.scale && (el.scale[0] !== 1 || el.scale[1] !== 1))) continue;
     const r = { x: (el.x - minX + PADDING) / width, y: (el.y - top + PADDING) / height, w: el.width / width, h: el.height / height };
     if (!fits(r)) continue;
-    out.push({ x: round(r.x), y: round(r.y), w: round(r.w), h: round(r.h), engine: p.engine, process: p.process, name: p.name, operations: p.operations });
+    out.push({ x: round(r.x), y: round(r.y), w: round(r.w), h: round(r.h), engine: p.engine, process: p.process, name: p.name, operations: p.operations, margin: p.margin });
   }
   return out.slice(0, maxRegions);
 }
@@ -109,24 +127,26 @@ function chunks(bytes) {
   return out;
 }
 
-const ours = (c) => c.type === "tEXt" && latin1(c.data.subarray(0, KEYWORD.length + 1)) === KEYWORD + "\0";
+const legacy = (c) => c.type === "tEXt" && latin1(c.data.subarray(0, KEYWORD.length + 1)) === KEYWORD + "\0";
+const ours = (c) => c.type === CHUNK || legacy(c);
 
 // withRegions returns the PNG with the regions in its chunk, directly after
 // its header, where a page finds them in the picture's first bytes. A chunk
-// of an earlier save is replaced; no regions remove it.
+// of an earlier save is replaced, one in the earlier text form too; no
+// regions remove it, which is how a picture is opened for editing.
 export function withRegions(png, regions) {
   const all = isPNG(png) ? chunks(png) : [];
   if (all[0]?.type !== "IHDR") throw new Error("not a PNG picture");
   const kept = all.filter((c) => !ours(c));
   const parts = [png.subarray(0, 8), png.subarray(kept[0].start, kept[0].end)];
   if (regions.length) {
-    // ASCII only, which a text chunk carries as written.
-    const json = JSON.stringify({ v: 1, regions }).replace(/[\u007f-￿]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
-    const data = new TextEncoder().encode(KEYWORD + "\0" + json);
+    // ASCII only, so the chunk reads the same in any decoder.
+    const json = JSON.stringify({ v: 1, regions }).replace(/[\u007f-\uffff]/g, (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"));
+    const data = new TextEncoder().encode(json);
     const c = new Uint8Array(12 + data.length);
     const view = new DataView(c.buffer);
     view.setUint32(0, data.length);
-    c.set(new TextEncoder().encode("tEXt"), 4);
+    c.set(new TextEncoder().encode(CHUNK), 4);
     c.set(data, 8);
     view.setUint32(8 + data.length, crc32(c.subarray(4, 8 + data.length)));
     parts.push(c);
@@ -150,7 +170,7 @@ export function regionsIn(bytes) {
   if (!c) return [];
   let data;
   try {
-    data = JSON.parse(latin1(c.data.subarray(KEYWORD.length + 1)));
+    data = JSON.parse(latin1(legacy(c) ? c.data.subarray(KEYWORD.length + 1) : c.data));
   } catch {
     return [];
   }
@@ -159,7 +179,7 @@ export function regionsIn(bytes) {
   for (const r of data.regions.slice(0, maxRegions)) {
     const p = processOf({ type: "image", customData: { [KEY]: { ...r, kind: "process" } } });
     if (!p || ![r.x, r.y, r.w, r.h].every((n) => typeof n === "number") || !fits(r)) continue;
-    out.push({ x: r.x, y: r.y, w: r.w, h: r.h, engine: p.engine, process: p.process, name: p.name, operations: p.operations });
+    out.push({ x: r.x, y: r.y, w: r.w, h: r.h, engine: p.engine, process: p.process, name: p.name, operations: p.operations, margin: p.margin });
   }
   return out;
 }

@@ -3,8 +3,8 @@
 - **Status:** Proposed
 - **Implementation:** Partial
 - **Date:** 2026-10-26
-- **Deciders:** Project initiators (requested 2026-10-26: what a page offers for processes since ADR-0129, offered in a drawing too. A process can be drawn anew as a BPMN model, shown from an existing BPMN file, or taken from an atlas instance, with its moving operations view in the drawing); proposed for the maintainer's acceptance
-- **Open question:** A process in a drawing is pictured by bpmn-js's own SVG export (`saveSVG`), which carries no bpmn.io watermark. Where bpmn-js draws a process live over a drawing, the watermark shows, as ADR-0129 requires. This record assumes that the license's condition binds diagrams rendered by bpmn-js, not pictures exported from it, as bpmn.io's own demo exports SVG without the watermark. No statement by its authors was found. Does the maintainer accept that reading?
+- **Deciders:** Project initiators (requested 2026-10-26: what a page offers for processes since ADR-0129, offered in a drawing too. A process can be drawn anew as a BPMN model, shown from an existing BPMN file, or taken from an atlas instance, with its moving operations view in the drawing. On the same day they asked for the bpmn.io watermark over a drawing to be sized in proportion to the process it marks); proposed for the maintainer's acceptance
+- **Open question:** A process in a drawing is pictured by bpmn-js's own SVG export (`saveSVG`), which carries no bpmn.io watermark. Where bpmn-js draws a process live over a drawing, the watermark shows, as ADR-0129 requires. This record assumes that the license's condition binds diagrams rendered by bpmn-js, not pictures exported from it, as bpmn.io's own demo exports SVG without the watermark. Over a drawing, the watermark is drawn at the process's scale (see the revision below). This record also assumes that the condition, which forbids changing the code that displays the watermark and asks that it stay fully visible and not overlapped, sets no size, so a watermark scaled with the diagram it marks still keeps it. Neither reading has been confirmed by bpmn.io's authors. Does the maintainer accept both, or should bpmn.io be asked?
 - **Question checked:** 2026-10
 
 ## Context and problem statement
@@ -45,18 +45,41 @@ And all of that without changing what a drawing is: a picture that shows whereve
 
 Chosen option: **1**. Only it keeps a drawing one picture that shows everywhere and still shows an engine's process live.
 
+> **Revised 2026-10-26, while Proposed — what use showed in the first days:**
+>
+> - **The chunk.** The regions were first written as a `tEXt` chunk ahead of the scene. Excalidraw reads its scene from the *first* text chunk of a picture (`getTEXtChunk`), so a drawing with an engine's process could no longer be opened for editing: "Image doesn't contain scene". The regions now have a private chunk of their own, `wkPr`.
+> - **Pictures saved before.** They are still read. When opened for editing they lose the old chunk, so their scene is found, and saving writes the new one.
+> - **Margin.** A process is pictured with room around it, and the live view keeps the same room. Without it, the region's *Operations* switch lay over the process.
+> - **The switch.** It is styled as a link of its own measures, so neither the UI's nor a theme's button style can make it larger than a small region.
+>   - At rest it is a faint sign, green while the operations are on.
+>   - Pointed at or focused, it shows fully and names itself.
+> - **The watermark.** bpmn-js draws it 53 × 21 pixels whatever the size of the region, so over a small process it drew the eye from the process. At the project initiators' request it is drawn at the process's scale:
+>   - as large, relative to its own size, as the process is shown relative to its own;
+>   - never larger than its own size, and never smaller than half of it, so it stays legible;
+>   - scaled about the region's corner, so its distance from the corner shrinks with it.
+>
+>   The code that displays it is unchanged, and it stays wholly within the region, uncovered. Fading it was not considered: the condition asks for it fully visible. Whether scaling keeps the condition is part of the open question. A diagram in the text keeps the watermark as bpmn-js draws it.
+
 ### In the drawing editor
 
-- **The Process chooser.** It sits beside the palettes (ADR-0117), top right, or above the bottom bar on a phone, and offers four entries:
+- **The Process chooser.** It sits beside the palettes (ADR-0117), top right, or above the bottom bar on a phone, and offers five entries:
   - *New BPMN model* opens the modeler of ADR-0129;
   - *BPMN file* lists the page's BPMN files and offers one from this device;
   - *Process from an engine* opens the process picker of ADR-0129. It also asks whether the operations show at first, where the engine allows them;
-  - *Edit the selected process* draws a model again in the modeler, or reads an engine's process again in its newest version.
+  - *Edit the selected process* draws a model again in the modeler, or reads an engine's process again in its newest version;
+  - *Settings of the selected process* sets the margin around it and, for an engine's process, whether its operations show at first.
 - **Who does what.** The drawing page asks the UI by message (`process`, with what it wants and, for an edit, what the selected element shows). The UI opens its dialogs over the drawing, draws the model with bpmn-js out of sight, and answers with an SVG picture, its size and what it shows.
-- **The picture.** The SVG is bpmn-js's export on white. The drawing adds it as an image element, at most 640 wide, in the middle of what is in sight, or in place of the element edited, as wide as that was.
+- **The picture.** The SVG is bpmn-js's export on white, with a margin around the model in the model's own units:
+  - none, narrow (20), medium (40) or wide (80);
+  - medium when a process is placed;
+  - its own when it is edited.
+
+  The drawing adds it as an image element, at most 640 wide, in the middle of what is in sight, or in place of the element edited, as wide as that was.
 - **What an element shows** is in `customData.wikiwikibangbang`:
-  - `{kind: "bpmn", name, xml}` is a model kept in the drawing;
-  - `{kind: "process", engine, process, name, operations}` is a process of an engine.
+  - `{kind: "bpmn", name, xml, margin}` is a model kept in the drawing;
+  - `{kind: "process", engine, process, name, operations, margin}` is a process of an engine.
+
+  A margin that is not a whole number from 0 to 200 counts as none.
 
   Both are checked by the rules of the process block (`drawprocesses.js`, `processOf`).
 - **Models are kept in the drawing.** A model drawn anew or taken from a file is kept in the drawing, not as a file of the item. The drawing is its one source. It survives copying into another page, where an attachment ID would not (copies rename attachments, ADR-0067). A file taken into a drawing is a copy of it at that moment.
@@ -64,7 +87,10 @@ Chosen option: **1**. Only it keeps a drawing one picture that shows everywhere 
 ### The saved picture
 
 - **What the picture shows.** The PNG is Excalidraw's export as before: the drawing with each process as it was pictured.
-- **The regions.** If the drawing holds processes of engines, the drawing page also writes a `tEXt` chunk `wikiwikibangbang.processes` directly after the PNG header. It holds `{"v":1,"regions":[…]}`: for each engine process, its place in shares of the picture's width and height, and its engine, process, name and whether the operations show at first. The text is ASCII, at most 50 regions.
+- **The regions.** If the drawing holds processes of engines, the drawing page also writes a chunk `wkPr` directly after the PNG header.
+  - **Kind of chunk.** It is ancillary, private and safe to copy, so viewers skip it and keep it. It is no text chunk: Excalidraw reads its scene from the first text chunk of a picture.
+  - **Content.** It holds `{"v":1,"regions":[…]}`: for each engine process, its place in shares of the picture's width and height, its engine, process and name, whether the operations show at first, and its margin. It is ASCII, at most 50 regions.
+  - **Older pictures.** Pictures saved with a `tEXt` chunk `wikiwikibangbang.processes` are read too. The drawing page removes that chunk before Excalidraw opens the picture.
 - **How a region is measured.** The places are measured as Excalidraw lays out the picture:
   - the scene's bounds by its `getCommonBounds` of the elements it measures (`rootsOf`), and the padding passed explicitly;
   - the picture's size as Excalidraw reports it (`getDimensions`, unchanged).
@@ -82,9 +108,10 @@ Chosen option: **1**. Only it keeps a drawing one picture that shows everywhere 
   Each region is checked: a valid chunk checksum, shares within the picture, and engine and process IDs a process block accepts.
 - **The live view.** Over each region, bpmn-js draws the newest version of the process, read through `GET /api/engines/{id}/processes/{process}` as a process block does.
   - **Until it is drawn,** the picture shows through. If it cannot be drawn, the picture stays and says *As saved*, with the reason on pointing.
+  - **Its layout.** The model is laid out as its picture shows it, centred, with the region's margin around it. The live view therefore covers the picture, and the *Operations* switch sits in the margin.
   - **The operations** are counts only, as in a process block (ADR-0129). They show at first when the drawing says so and the engine allows them, and the reader switches them with the region's *Operations* button. While on, they are read every 30 seconds while the page is in sight.
   - **A newer version.** When the counts belong to a newer version than the one drawn, the newer version is drawn first.
-- **The region does not pan or zoom.** The page scrolls over it, and clicks reach the picture, so while editing a click still selects the drawing. Its button and the bpmn.io watermark take clicks. The watermark stays visible.
+- **The region does not pan or zoom.** The page scrolls over it, and clicks reach the picture, so while editing a click still selects the drawing. Its button and the bpmn.io watermark take clicks. The watermark stays visible, at the process's scale.
 
 ### Consequences
 
@@ -100,7 +127,7 @@ Chosen option: **1**. Only it keeps a drawing one picture that shows everywhere 
   - The picture of an engine's process ages. It shows the version saved; only where the drawing is shown in this UI is it current.
   - The model is stored twice in the PNG's scene, as XML and as an SVG picture, compressed with the scene.
 - **Follow-ups / risks to watch:**
-  - The regions rest on how Excalidraw 0.18 lays out an exported picture (`getCommonBounds`, padding, frame names above frames). An update of Excalidraw re-checks them. The e2e test draws a process live over a saved drawing.
+  - The regions rest on how Excalidraw 0.18 lays out an exported picture (`getCommonBounds`, padding, frame names above frames), and on Excalidraw reading the first text chunk. An update of Excalidraw re-checks them. The e2e test draws a process live over a saved drawing and opens that drawing for editing again.
   - The open question on the watermark, alongside ADR-0129's.
   - Refreshing the pictures of engine processes on every save is left out: saving would then wait for the engines.
 

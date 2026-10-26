@@ -2555,6 +2555,12 @@ function gitSource() {
       await page.waitForTimeout(500);
       check(await procFrame.locator("body[data-elements='3']").count() === 1 && await page.locator("dialog.bpmn-pick, dialog.bpmn-modeler").count() === 0,
         "an engine's process is read again in place, without a dialog");
+      // Its margin and whether its operations show at first are its settings.
+      await procFrame.locator("select.process:visible").selectOption("settings");
+      await page.selectOption("dialog.bpmn-settings[open] select.bpmn-margin", "80");
+      await page.click("dialog.bpmn-settings[open] button:has-text('Apply')");
+      await page.waitForSelector("dialog.bpmn-settings", { state: "detached" });
+      await procFrame.locator("body[data-elements='3']").waitFor();
       await page.click("dialog.drawing button:has-text('Save drawing')");
       await page.waitForSelector("dialog.drawing", { state: "detached" });
       await page.click("#edit-done");
@@ -2569,9 +2575,38 @@ function gitSource() {
       await region.locator(".pm-ops-badge.pm-ops-incidents").waitFor(); // operations at first, as chosen
       check((await region.locator(".pm-ops-badge").allTextContents()).join(" ") === "15 12 3 1", "passed, waiting and held tokens over the drawing");
       check(await region.locator(".bjs-powered-by").isVisible(), "the bpmn.io watermark stays visible over the drawing");
+      // It is drawn at the process's scale, within bounds, and wholly
+      // within the region.
+      const logo = await region.evaluate((el) => {
+        const [r, a] = [el.getBoundingClientRect(), el.querySelector(".bjs-powered-by").getBoundingClientRect()];
+        const scale = Number(getComputedStyle(el.querySelector(".pm-live-canvas")).getPropertyValue("--pm-mark"));
+        return { scale, width: a.width, inside: a.left >= r.left && a.top >= r.top && a.right <= r.right && a.bottom <= r.bottom };
+      });
+      check(logo.scale >= 0.5 && logo.scale <= 1 && Math.abs(logo.width - 53 * logo.scale) < 1, "the watermark is drawn at the process's scale: " + JSON.stringify(logo));
+      check(logo.inside, "the watermark lies wholly within its region");
+      // At rest the switch is a small sign; pointed at, it names itself.
+      await page.mouse.move(0, 0);
+      const pill = await region.locator(".pm-live-ops").boundingBox();
+      check(pill.height <= 20 && pill.width <= 24, "the operations switch stays small over a drawing");
+      check(!(await region.locator(".pm-live-ops-label").isVisible()), "the switch's name shows only when pointed at");
+      check(await region.locator(".pm-live-ops").getAttribute("aria-label") === "Operations", "the switch is named for assistive technology");
+      await region.locator(".pm-live-ops").hover();
+      await region.locator(".pm-live-ops-label").waitFor();
       await region.locator(".pm-live-ops").click();
       await page.waitForFunction(() => !document.querySelector("#body .pm-live-region .pm-ops-badge"));
       check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader of a drawing");
+      // A drawing with processes opens again in the drawing editor, its
+      // scene whole: the regions' chunk does not hide it from Excalidraw.
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .pm-image:has(.pm-live-region) .pm-redraw");
+      await page.click("#body .pm-image:has(.pm-live-region) .pm-redraw");
+      await page.waitForSelector("dialog.drawing[open] iframe");
+      await page.frameLocator("dialog.drawing iframe").locator("body[data-state=open][data-elements='3']").waitFor();
+      check(await page.locator("dialog.drawing .error:has-text('scene')").count() === 0, "the drawing's scene is found");
+      await page.click("dialog.drawing button:has-text('Cancel')");
+      await page.waitForSelector("dialog.drawing", { state: "detached" });
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
 
       step("forms and decisions: a form of an engine is a preview that sends nothing; a decision shows its newest deployed table and its model's graph (ADR-0144)");
       await page.click("#edit");

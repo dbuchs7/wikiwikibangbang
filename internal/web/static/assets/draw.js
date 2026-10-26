@@ -70,6 +70,7 @@ const processChoices = () => [
   ["file", t("draw.processFile")],
   ["process", t("draw.processEngine")],
   ["edit", t("draw.processEdit")],
+  ["settings", t("draw.processSettings")],
 ];
 
 // pending is the element the UI's answer replaces, or "" to add one.
@@ -85,7 +86,7 @@ function selectedProcess() {
 function askProcess(want) {
   let current = null;
   pending = "";
-  if (want === "edit") {
+  if (want === "edit" || want === "settings") {
     const el = selectedProcess();
     if (!el) return parent.postMessage({ type: "error", message: t("draw.processSelect") }, origin);
     pending = el.id;
@@ -144,7 +145,16 @@ async function open({ lang, scene }) {
   setLanguage(lang);
   let initialData = { appState: { viewBackgroundColor: "#ffffff" } };
   if (scene) {
-    const data = await loadFromBlob(scene, null, null);
+    // The processes' regions are written anew on saving. A picture saved
+    // with them in a text chunk ahead of its scene, where Excalidraw looks
+    // for the scene, opens without them (ADR-0142).
+    let picture = scene;
+    try {
+      picture = new Blob([withRegions(new Uint8Array(await scene.arrayBuffer()), [])], { type: MIME_TYPES.png });
+    } catch {
+      // Not a PNG: Excalidraw says what it is.
+    }
+    const data = await loadFromBlob(picture, null, null);
     initialData = { elements: data.elements, files: data.files, appState: { viewBackgroundColor: data.appState.viewBackgroundColor || "#ffffff" } };
   }
   render(lang, initialData);

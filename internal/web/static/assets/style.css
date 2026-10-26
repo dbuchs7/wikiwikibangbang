@@ -609,13 +609,26 @@ dialog.bpmn-modeler .bpmn-modeler-canvas { flex: 1; position: relative; backgrou
 .pm-live-region.pm-live-drawn { background: #fff; color: #222; }
 .pm-live-canvas { position: absolute; inset: 0; display: block; }
 .pm-live-region:not(.pm-live-drawn) .pm-live-canvas { visibility: hidden; }
-.pm-live-canvas .bjs-powered-by { pointer-events: auto; }
+/* Over a drawing the watermark is drawn at the process's scale (ADR-0142),
+   about the region's corner, so its distance from the corner shrinks with
+   it. bpmn-js places it 15px from the corner; its code is unchanged. */
+.pm-live-canvas .bjs-powered-by { pointer-events: auto; transform: scale(var(--pm-mark, 1)); transform-origin: calc(100% + 15px) calc(100% + 15px); }
 /* The bar is small, as a region may be: the switch of the operations and,
    while pointed at or when the process cannot be shown, what it says. */
 .pm-live-bar { position: absolute; left: 3px; top: 3px; right: 3px; display: flex; gap: 4px; align-items: center; font-size: 11px; line-height: 16px; text-align: left; }
 .pm-live-ops, .pm-live-state { pointer-events: auto; }
-.pm-live-ops { font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 999px; border: 1px solid #c9ccd3; background: rgb(255 255 255 / 92%); color: #222; cursor: pointer; }
-.pm-live-ops[aria-pressed="true"] { background: #2e7d32; border-color: #2e7d32; color: #fff; }
+/* Every measure is its own, so neither the UI's nor a theme's button style
+   makes the switch larger than a small region allows. At rest it is a
+   faint sign; pointed at or focused, it shows and names itself. On, the
+   sign is green. */
+.pm-live .pm-live-bar .pm-live-ops { display: inline-flex; align-items: center; gap: 3px; margin: 0; min-height: 0; height: 16px;
+  padding: 0 3px; font: 600 10px/14px system-ui, sans-serif; border-radius: 999px; border: 1px solid rgb(0 0 0 / 12%);
+  background: rgb(255 255 255 / 80%); color: #6b7280; text-decoration: none; box-shadow: none; cursor: pointer; opacity: .55; }
+.pm-live .pm-live-bar .pm-live-ops[aria-pressed="true"] { color: #2e7d32; border-color: rgb(46 125 50 / 35%); opacity: .8; }
+.pm-live .pm-live-bar .pm-live-ops svg { flex: none; }
+.pm-live-ops-label { display: none; }
+.pm-live .pm-live-bar .pm-live-ops:hover, .pm-live .pm-live-bar .pm-live-ops:focus-visible { opacity: 1; }
+.pm-live-ops:hover .pm-live-ops-label, .pm-live-ops:focus-visible .pm-live-ops-label { display: inline; }
 .pm-live-state { display: none; min-width: 0; padding: 0 6px; border-radius: 4px; background: rgb(255 255 255 / 92%); color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pm-live-region:hover .pm-live-state:not(:empty), .pm-live-region:focus-within .pm-live-state:not(:empty), .pm-live-failed .pm-live-state { display: block; }
 .pm-live-state.error { color: #c62828; }
@@ -623,6 +636,8 @@ dialog.bpmn-modeler .bpmn-modeler-canvas { flex: 1; position: relative; backgrou
 .bpmn-snapshot { position: fixed; left: -10000px; top: 0; width: 1200px; height: 900px; }
 dialog.drawing.bpmn-pick { width: min(640px, calc(100vw - 32px)); height: auto; max-height: calc(100vh - 32px); }
 dialog.drawing.bpmn-pick .drawing-bar button { margin-left: auto; }
+dialog.drawing.bpmn-settings .drawing-bar button + button { margin-left: 0; }
+.pm-diagram-view-label { display: inline-flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); }
 .bpmn-pick-body { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
 .bpmn-processes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .bpmn-processes button { text-align: left; }
