@@ -14,6 +14,8 @@ func TestEmbeddedUIHasEntryPointAndAssets(t *testing.T) {
 		"vendor/prosemirror.js", "vendor/prosemirror.LICENSE.txt", "draw.html", "assets/draw.js", "assets/draw-boot.js", "assets/draw.css",
 		"vendor/excalidraw.js", "vendor/excalidraw.LICENSE.txt", "vendor/excalidraw-assets/Virgil.woff2",
 		"assets/fonts/comic-neue-400.woff2", "assets/fonts/comic-neue-700.woff2", "assets/fonts/comic-neue.LICENSE.txt",
+		"assets/fonts/noto-sans-400-normal.woff2", "assets/fonts/noto-sans-700-normal.woff2", "assets/fonts/noto-sans-400-italic.woff2",
+		"assets/fonts/noto-sans-700-italic.woff2", "assets/fonts/noto-sans.LICENSE.txt",
 		"assets/palettes/archimate.json", "assets/palettes/bpmn.json", "assets/palettes/network.json", "assets/palettes/it.json",
 		"assets/palettes/palettes.LICENSE.txt"} {
 		if _, err := fs.Stat(FS(), name); err != nil {

@@ -15,6 +15,11 @@ var themeFiles embed.FS
 // Themes are the IDs of the ready-made themes, in the order offered.
 var Themes = []string{"ocean", "forest", "sunset", "berry", "swiss", "night", "comic", "sketch"}
 
+// ThemeOfficial reports whether a theme carries the look of an authority:
+// the Swiss theme is that of the Confederation's sites, so choosing it is
+// recorded as such (ADR-0120).
+func ThemeOfficial(id string) bool { return id == "swiss" }
+
 // ThemeCSS returns a theme's stylesheet, or "" for none or an unknown one.
 func ThemeCSS(id string) string {
 	if !slices.Contains(Themes, id) {
