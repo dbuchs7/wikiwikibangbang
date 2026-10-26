@@ -1,6 +1,6 @@
 # Exporting pages as Markdown
 
-A page leaves the wiki as Markdown, the format of repositories, of editors such as VS Code and Obsidian, and of AI assistants ([ADR-0129](../adr/0129-pages-export-as-markdown-and-agents-read-them-so.md)). The export holds what the Word and PDF exports hold ([ADR-0071](../adr/0071-exporting-pages-and-lists.md)): only what you may read, protected passages you may not read veiled as `▒▒▒▒▒▒▒▒`.
+A page leaves the wiki as Markdown, the format of repositories, of editors such as VS Code and Obsidian, and of AI assistants ([ADR-0131](../adr/0131-pages-export-as-markdown-and-agents-read-them-so.md)). The export holds what the Word and PDF exports hold ([ADR-0071](../adr/0071-exporting-pages-and-lists.md)): only what you may read, protected passages you may not read veiled as `▒▒▒▒▒▒▒▒`.
 
 ## From a page
 
@@ -31,6 +31,7 @@ On a page with subpages, **Markdown with subpages (handbook, .zip)** holds the p
 | divider | `---` |
 | picture | `![caption](media/01-name.png)`, the caption below in italics |
 | video | its name, `▶ clip.mp4` (in the archive the file is not included) |
+| BPMN diagram or process | its name, `BPMN: order.bpmn` or `BPMN: order (engine)` (in the archive the file is not included) |
 | embedded item | a quote: `↳ KEY Title`, its properties and its text |
 | table of contents, lists of figures and tables, child pages, task lists | the list as it is at the time of the export |
 | bold, italic, struck through, code, link | `**bold**`, `*italic*`, `~~struck~~`, `` `code` ``, `[text](https://…)` |

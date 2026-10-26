@@ -13,7 +13,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
-// Markdown writes the document as Markdown text (ADR-0129), for people
+// Markdown writes the document as Markdown text (ADR-0131), for people
 // and for agents: the title, the facts as a list, then the body. Pictures
 // and videos link to their attachments on this server. Text the reader
 // wrote is escaped, so no Markdown renderer reads it as markup or HTML
@@ -33,7 +33,8 @@ func Markdown(w io.Writer, d Document) error {
 // MarkdownArchive writes the document as a ZIP archive: the Markdown as
 // name, and the pictures it shows in media/, linked by relative paths, so
 // the archive reads anywhere without the server. A video is named, not
-// copied (ADR-0097); a picture without its file keeps its caption.
+// copied (ADR-0097), and so is a BPMN diagram; a picture without its file
+// keeps its caption.
 func MarkdownArchive(w io.Writer, d Document, name string) error {
 	type file struct {
 		path string
@@ -41,9 +42,9 @@ func MarkdownArchive(w io.Writer, d Document, name string) error {
 	}
 	var files []file
 	seen := map[[2]item.ID]string{}
-	m := &mdBuilder{d: d, picture: func(p Page, ref item.ID, video bool) string {
+	m := &mdBuilder{d: d, picture: func(p Page, ref item.ID, named bool) string {
 		img, ok := p.Images[ref]
-		if video || !ok || len(img.Data) == 0 {
+		if named || !ok || len(img.Data) == 0 {
 			return ""
 		}
 		if path, ok := seen[[2]item.ID{p.ID, ref}]; ok {
@@ -106,13 +107,12 @@ func baseName(name string) string {
 
 type mdBuilder struct {
 	d Document
-	// picture names the target of a picture or video, or "" to show its
-	// caption alone.
-	picture func(p Page, ref item.ID, video bool) string
+	// picture names the target of a picture, or of a file that is named
+	// only (a video, a diagram), or "" where there is none.
+	picture func(p Page, ref item.ID, named bool) string
 }
 
-// alertOf is the GitHub alert a panel's tone writes, as the Markdown
-// paste reads it back (ADR-0129).
+// alertOf is the GitHub alert a panel's tone writes.
 var alertOf = map[string]string{"info": "NOTE", "tip": "TIP", "note": "IMPORTANT", "warning": "WARNING", "error": "CAUTION"}
 
 func (m *mdBuilder) document() string {
@@ -252,6 +252,20 @@ func (m *mdBuilder) block(bl item.Block, p Page, base int) []string {
 		var out []string
 		if v, ok := p.Images[bl.Ref]; ok {
 			label := inlineMarkdown("▶ "+baseName(v.Name), nil)
+			if target := m.picture(p, bl.Ref, true); target != "" {
+				label = "[" + label + "](" + target + ")"
+			}
+			out = append(out, label)
+		}
+		return append(out, captionPart()...)
+	case item.BPMN, item.Process:
+		// A diagram is named as in Word and PDF (ADR-0071): its file, linked
+		// where it is reachable, or its process and engine.
+		var out []string
+		if bl.Kind == item.Process {
+			out = append(out, inlineMarkdown("BPMN: "+bl.Process+" ("+bl.Engine+")", nil))
+		} else if f, ok := p.Images[bl.Ref]; ok {
+			label := inlineMarkdown("BPMN: "+baseName(f.Name), nil)
 			if target := m.picture(p, bl.Ref, true); target != "" {
 				label = "[" + label + "](" + target + ")"
 			}

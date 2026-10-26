@@ -29,7 +29,7 @@ func paragraph(t *testing.T, text string, marks ...item.Mark) string {
 }
 
 // TestMarkdownWritesEachBlockKind pins the Markdown of every block kind
-// (ADR-0129): the title, the facts, then the body; list items of one kind
+// (ADR-0131): the title, the facts, then the body; list items of one kind
 // form one list, numbered from 1.
 func TestMarkdownWritesEachBlockKind(t *testing.T) {
 	d := Document{Pages: []Page{{
@@ -57,6 +57,9 @@ func TestMarkdownWritesEachBlockKind(t *testing.T) {
 			{Kind: item.Image, Ref: "pic", Text: "The plan", Width: 50},
 			{Kind: item.Image, Ref: "missing", Text: "gone"},
 			{Kind: item.Video, Ref: "vid", Text: "Demo"},
+			{Kind: item.BPMN, Ref: "flow", Text: "Order flow"},
+			{Kind: item.BPMN, Ref: "lost"},
+			{Kind: item.Process, Engine: "atlas", Process: "order", Text: "Live"},
 			{Kind: item.Figures},
 			{Kind: item.TaskList, Text: "release"},
 			{Kind: item.Unsupported, Text: "<ac:macro name=\"x\"/>"},
@@ -64,7 +67,8 @@ func TestMarkdownWritesEachBlockKind(t *testing.T) {
 			{Kind: item.Heading, Level: 3, Text: "#"},
 			{Kind: item.Heading, Level: 3, Text: `a\#`},
 		},
-		Images:   map[item.ID]Image{"pic": {Name: "plan.png", Type: "image/png"}, "vid": {Name: "demo.mp4", Type: "video/mp4"}},
+		Images: map[item.ID]Image{"pic": {Name: "plan.png", Type: "image/png"}, "vid": {Name: "demo.mp4", Type: "video/mp4"},
+			"flow": {Name: "order.bpmn", Type: "text/xml; charset=utf-8"}},
 		Children: []string{"Child page"},
 		Tasks:    map[string][]string{"release": {"OPS-3 Tag the build (open)"}},
 	}}}
@@ -92,6 +96,10 @@ func TestMarkdownWritesEachBlockKind(t *testing.T) {
 		"*gone*",
 		"[▶ demo.mp4](/api/items/root/attachments/vid)",
 		"*Demo*",
+		"[BPMN: order.bpmn](/api/items/root/attachments/flow)",
+		"*Order flow*",
+		"BPMN: order (atlas)",
+		"*Live*",
 		"- Figure 1: The plan\n- Figure 2: gone",
 		`\# release`,
 		"- OPS-3 Tag the build (open)",
@@ -231,12 +239,14 @@ func TestMarkdownArchiveHoldsThePictures(t *testing.T) {
 			{Kind: item.Image, Ref: "a", Text: "Again"},
 			{Kind: item.Image, Ref: "nodata", Text: "No file"},
 			{Kind: item.Video, Ref: "v", Text: "Clip"},
+			{Kind: item.BPMN, Ref: "m"},
 		},
 		Images: map[item.ID]Image{
 			"a":      {Name: "Übersicht plan.png", Type: "image/png", Data: png},
 			"b":      {Name: "../../etc/passwd", Type: "image/jpeg", Data: []byte("jpeg")},
 			"nodata": {Name: "x.png", Type: "image/png"},
 			"v":      {Name: "clip.mp4", Type: "video/mp4"},
+			"m":      {Name: "flow.bpmn", Type: "text/xml; charset=utf-8"},
 		},
 	}}}
 	var buf bytes.Buffer
@@ -275,6 +285,7 @@ func TestMarkdownArchiveHoldsThePictures(t *testing.T) {
 		"*No file*",
 		"▶ clip.mp4",
 		"*Clip*",
+		"BPMN: flow.bpmn",
 	}, "\n\n") + "\n"
 	if got := string(files["OPS-1 Plan.md"]); got != want {
 		t.Errorf("Markdown in the archive:\n%s\nwant:\n%s", got, want)

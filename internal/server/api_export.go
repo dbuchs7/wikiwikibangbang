@@ -21,7 +21,7 @@ import (
 // document, its tables and lists of items as CSV. A PDF is the browser's:
 // the UI prints a page without its surroundings. A page as Markdown is
 // text for the API and agents, and an archive with its pictures for
-// people (ADR-0129).
+// people (ADR-0131).
 func exportRoutes(h itemHandlers) []Route {
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/docx", Summary: "The item as a Word document: title, properties and body with its pictures and the items it embeds; children=true adds every page below it, as a handbook", Handler: http.HandlerFunc(h.exportDOCX)},
@@ -208,7 +208,7 @@ func (h itemHandlers) exportDocument(r *http.Request, children, withData bool) (
 			}
 			shown := map[item.ID]item.BlockKind{}
 			for _, b := range it.Body.Blocks {
-				if b.Kind == item.Image || b.Kind == item.Video {
+				if b.Kind == item.Image || b.Kind == item.Video || b.Kind == item.BPMN {
 					shown[b.Ref] = b.Kind
 				}
 			}
@@ -216,7 +216,8 @@ func (h itemHandlers) exportDocument(r *http.Request, children, withData bool) (
 				for _, a := range atts {
 					if kind, ok := shown[a.ID]; ok && !a.Deleted {
 						p.Images[a.ID] = export.Image{Name: a.Name, Type: a.Type}
-						// A video is named, not copied into the document (ADR-0097).
+						// A video or a BPMN diagram is named, not copied into
+						// the document (ADR-0097, ADR-0129).
 						if kind == item.Image {
 							files = append(files, file{it.ID, a})
 						}
@@ -312,7 +313,7 @@ func (h itemHandlers) exportHTML(w http.ResponseWriter, r *http.Request) {
 }
 
 // exportMarkdown answers the page, or the handbook, as Markdown text,
-// its pictures linked to the server (ADR-0129).
+// its pictures linked to the server (ADR-0131).
 func (h itemHandlers) exportMarkdown(w http.ResponseWriter, r *http.Request) {
 	doc, it, err := h.exportDocument(r, r.URL.Query().Get("children") == "true", false)
 	if err != nil {
@@ -326,7 +327,7 @@ func (h itemHandlers) exportMarkdown(w http.ResponseWriter, r *http.Request) {
 }
 
 // exportMarkdownArchive answers the page, or the handbook, as Markdown in
-// a ZIP archive that holds its pictures (ADR-0129).
+// a ZIP archive that holds its pictures (ADR-0131).
 func (h itemHandlers) exportMarkdownArchive(w http.ResponseWriter, r *http.Request) {
 	doc, it, err := h.exportDocument(r, r.URL.Query().Get("children") == "true", true)
 	if err != nil {

@@ -1,4 +1,4 @@
-# ADR-0129: Pages export as Markdown, and agents read them so
+# ADR-0131: Pages export as Markdown, and agents read them so
 
 - **Status:** Proposed
 - **Implementation:** Partial
@@ -53,6 +53,7 @@ Chosen option: **1**.
   | divider | `---` |
   | picture | `![caption](target)`, the caption again as an italic line below |
   | video | `▶ name`, a link where the target is reachable |
+  | BPMN diagram, process | `BPMN: file`, a link where the target is reachable; `BPMN: process (engine)` |
   | embedded item | a quote: `↳ key title`, its properties and body; restricted ones as restricted (D10) |
   | table of contents, lists of figures and tables, child pages, task list | the list as computed at export |
   | bold, italic, strike, code, link | `**`, `*`, `~~`, backticks, `[text](address)` for allowed addresses only |

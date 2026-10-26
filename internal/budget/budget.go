@@ -75,30 +75,34 @@ type Budgets struct {
 	// ChangesWaiting bounds the requests of the change feed held waiting
 	// at once; beyond it, a request is answered without waiting.
 	ChangesWaiting int
+	// EngineResponseBytes is the most the server reads of one answer of a
+	// process engine, such as a process's BPMN model (ADR-0129).
+	EngineResponseBytes int64
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
 func Default() Budgets {
 	return Budgets{
-		RequestBody:      64 << 10,
-		PageItems:        500,
-		SearchQueryBytes: 256,
-		SearchQueryTerms: 10,
-		LiveSessions:     1000,
-		LiveClients:      50,
-		LiveBlocks:       5000,
-		LoginTracked:     100_000,
-		AccountRequests:  100,
-		OAuthClients:     200,
-		SSOPending:       10_000,
-		LinkCheckLinks:   500,
-		AttachmentBytes:  25 << 20,
-		AvatarBytes:      256 << 10,
-		BrandingBytes:    2 << 20,
-		ExportRows:       10_000,
-		ChangesPage:      1000,
-		ChangesWait:      30,
-		ChangesWaiting:   1000,
+		RequestBody:         64 << 10,
+		PageItems:           500,
+		SearchQueryBytes:    256,
+		SearchQueryTerms:    10,
+		LiveSessions:        1000,
+		LiveClients:         50,
+		LiveBlocks:          5000,
+		LoginTracked:        100_000,
+		AccountRequests:     100,
+		OAuthClients:        200,
+		SSOPending:          10_000,
+		LinkCheckLinks:      500,
+		AttachmentBytes:     25 << 20,
+		AvatarBytes:         256 << 10,
+		BrandingBytes:       2 << 20,
+		ExportRows:          10_000,
+		ChangesPage:         1000,
+		ChangesWait:         30,
+		ChangesWaiting:      1000,
+		EngineResponseBytes: 8 << 20,
 	}
 }
 

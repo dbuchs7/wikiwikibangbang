@@ -172,7 +172,7 @@ func TestExportListsTheTasksOfALabel(t *testing.T) {
 }
 
 // TestMarkdownExport: a page as Markdown text, for the API and for agents,
-// and as a ZIP archive with its pictures, for people (ADR-0129); read
+// and as a ZIP archive with its pictures, for people (ADR-0131); read
 // through the reader's session like every export (D10).
 func TestMarkdownExport(t *testing.T) {
 	w := newWorld(t)

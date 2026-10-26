@@ -136,6 +136,9 @@ type event struct {
 	AlbumRetention *AlbumRetention `json:"albumRetention,omitempty"`
 	Type           string          `json:"type,omitempty"`
 	Data           []byte          `json:"data,omitempty"`
+	// Engine is set by EngineSet; EngineRemoved names it in Asset
+	// (ADR-0129).
+	Engine *Engine `json:"engine,omitempty"`
 }
 
 const (
@@ -156,6 +159,9 @@ const (
 	connectorRemoved = "ConnectorRemoved"
 
 	albumRetentionSet = "AlbumRetentionSet"
+
+	engineSet     = "EngineSet"
+	engineRemoved = "EngineRemoved"
 )
 
 // Settings is safe for concurrent use.
@@ -174,11 +180,13 @@ type Settings struct {
 	connectors  map[string]Connector
 	// albumRetention is the album's default rule (ADR-0104).
 	albumRetention AlbumRetention
+	// engines are the process engines by ID (ADR-0129).
+	engines map[string]Engine
 }
 
 // New rebuilds the settings from records and journals later changes.
 func New(records [][]byte, j Journal) (*Settings, error) {
-	s := &Settings{journal: j, now: time.Now, assets: map[string]Asset{}, regulations: map[string]Regulation{}, connectors: map[string]Connector{}}
+	s := &Settings{journal: j, now: time.Now, assets: map[string]Asset{}, regulations: map[string]Regulation{}, connectors: map[string]Connector{}, engines: map[string]Engine{}}
 	for i, r := range records {
 		var e event
 		if err := json.Unmarshal(r, &e); err != nil {
@@ -243,6 +251,13 @@ func (s *Settings) apply(e event) error {
 			return errors.New("an album retention event without a rule")
 		}
 		s.albumRetention = *e.AlbumRetention
+	case engineSet:
+		if e.Engine == nil {
+			return errors.New("an engine event without an engine")
+		}
+		s.engines[e.Engine.ID] = *e.Engine
+	case engineRemoved:
+		delete(s.engines, e.Asset)
 	default:
 		return fmt.Errorf("unknown event %q", e.Kind)
 	}
