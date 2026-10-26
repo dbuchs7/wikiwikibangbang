@@ -120,9 +120,32 @@ func TestAnAnswerBeyondTheBudgetIsRefused(t *testing.T) {
 	b.EngineResponseBytes = 100
 	budget.Set(b)
 	t.Cleanup(func() { budget.Set(budget.Default()) })
-	r := NewReader(func(string) string { return "secret" }, nil)
+	r := NewReader(func(k string) string {
+		if k == AllowPrivateVar {
+			return "on" // the fake engine is on the loopback address
+		}
+		return "secret"
+	}, nil)
 	_, err := r.Processes(context.Background(), site.Engine{ID: "a", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"})
 	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "larger than 100 bytes") {
 		t.Fatalf("a large answer: %v", err)
+	}
+}
+
+// TestEnginesAreKeptToPublicAddresses: as connectors (ADR-0127), a reader
+// reaches only addresses on the public internet unless the operator sets
+// WWBB_ENGINE_ALLOW_PRIVATE=on, which an engine in the organisation's own
+// network needs (ADR-0128).
+func TestEnginesAreKeptToPublicAddresses(t *testing.T) {
+	srv, _ := fakeAtlas(t)
+	e := site.Engine{ID: "atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}
+	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	_, err := NewReader(func(k string) string { return env[k] }, nil).Processes(context.Background(), e)
+	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), AllowPrivateVar+"=on") || strings.Contains(err.Error(), "connector") {
+		t.Fatalf("an engine on the loopback address: %v", err)
+	}
+	env[AllowPrivateVar] = "on"
+	if _, err := NewReader(func(k string) string { return env[k] }, nil).Processes(context.Background(), e); err != nil {
+		t.Fatalf("with private addresses allowed: %v", err)
 	}
 }

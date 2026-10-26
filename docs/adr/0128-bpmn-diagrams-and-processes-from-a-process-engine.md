@@ -71,7 +71,7 @@ Chosen options: **1 and 4.**
   - `GET /api/engines/{id}/processes` lists the newest version of each process the credential may read;
   - `GET /api/engines/{id}/processes/{process}` answers the newest version's BPMN XML, its version, key, name and when it was deployed, as JSON, so the XML is never a document of this site.
   - Every signed-in person and token reaches the three reads. Atlas lets every signed-in caller read every deployed definition (its ADR-0447 §5), so the credential's account does not narrow which processes are seen: every process of the engine is visible to every signed-in person of the wiki.
-- **Toward the engine:** fixed paths under the base address (`/api/v1/processes`, `/api/v1/processes/{key}/xml`, `/api/v1/processes/{key}/runtime`), a timeout of 15 seconds, no redirects followed, and at most `EngineResponseBytes` (8 MiB) read from an answer. An engine is usually inside the organisation's network, so private addresses are allowed: the address is set by an administrator, unlike the links a link check calls, which come from content (ADR-0039).
+- **Toward the engine:** fixed paths under the base address (`/api/v1/processes`, `/api/v1/processes/{key}/xml`, `/api/v1/processes/{key}/runtime`), a timeout of 15 seconds, no redirects followed, and at most `EngineResponseBytes` (8 MiB) read from an answer. As for connectors (ADR-0127), every request is checked before it is sent, redirects excluded as they are not followed: an engine must be on the public internet unless the operator sets `WWBB_ENGINE_ALLOW_PRIVATE=on`, which an engine in the organisation's own network needs. It is the operator's decision, not a setting of the UI.
 - **Errors** say which engine failed and how (not configured, no credential, unreachable, refused, no such process), never the credential.
 
 ### Operations
@@ -95,6 +95,7 @@ Chosen options: **1 and 4.**
   - The operations view counts the newest version only; instances still running on an earlier version are not shown.
   - The Word and PDF exports write a diagram's caption and a note in its place, not the diagram.
   - Changes made in the wiki are not deployed to the engine; the wiki shows, the engine runs.
+  - An engine in the organisation's own network, the usual case, needs the operator to set `WWBB_ENGINE_ALLOW_PRIVATE=on` beside its token.
   - Each saved change of a stored diagram adds a file, as for drawings.
 - **Follow-ups / risks to watch:**
   - The watermark condition (open question).

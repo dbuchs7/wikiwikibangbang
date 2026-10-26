@@ -4677,6 +4677,7 @@ function engineEditor(e, kinds, taken, reopen) {
       field(t("engine.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: e.baseURL, placeholder: "https://atlas.example.org" })),
       h("label", { class: "check" }, h("input", { type: "checkbox", name: "operations", checked: e.operations }), " ", t("engine.allowOperations")),
       h("p", { class: "muted", text: t("engine.operationsHelp") }),
+      h("p", { class: "muted", text: t("engine.publicOnly") }),
       e.isNew ? h("p", { class: "muted", text: t("engine.credentialHelpNew") })
         : h("p", { class: e.credential ? "muted" : "error", id: "engine-credential",
           text: e.credential ? t("engine.credentialIs", { name: e.credentialVar }) : t("engine.credentialMissing", { name: e.credentialVar }) }),

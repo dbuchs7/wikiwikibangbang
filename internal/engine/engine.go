@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 )
 
@@ -40,6 +41,12 @@ var (
 
 // Timeout bounds one read of an engine.
 const Timeout = 15 * time.Second
+
+// AllowPrivateVar, set to "on", lets readers reach engines in the server's
+// own network. As for connectors (ADR-0127), it is the operator's decision,
+// so it comes from the environment; without it an engine must be on the
+// public internet.
+const AllowPrivateVar = "WWBB_ENGINE_ALLOW_PRIVATE"
 
 // TokenVar names the environment variable that holds an engine's
 // credential, e.g. WWBB_ENGINE_ATLAS_PROD_TOKEN: the ID in capitals, other
@@ -63,24 +70,26 @@ type Reader struct {
 }
 
 // NewReader returns a reader that takes credentials from getenv
-// (os.Getenv when nil) and calls the engines with client (one with the
-// Timeout that follows no redirect when nil).
+// (os.Getenv when nil) and calls the engines with client. Without one, it
+// makes one with the Timeout, through the environment's proxy, kept to
+// public addresses unless AllowPrivateVar allows others.
 func NewReader(getenv func(string) string, client *http.Client) *Reader {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
 	if client == nil {
-		client = &http.Client{
-			Timeout: Timeout,
-			Transport: &http.Transport{
-				Proxy:                 http.ProxyFromEnvironment,
-				DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
-				TLSHandshakeTimeout:   10 * time.Second,
-				ResponseHeaderTimeout: Timeout,
-				MaxIdleConnsPerHost:   4,
-				IdleConnTimeout:       90 * time.Second,
-			},
+		var transport http.RoundTripper = &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: Timeout,
+			MaxIdleConnsPerHost:   4,
+			IdleConnTimeout:       90 * time.Second,
 		}
+		if getenv(AllowPrivateVar) != "on" {
+			transport = connector.PublicOnly(transport)
+		}
+		client = &http.Client{Timeout: Timeout, Transport: transport}
 	}
 	// An engine's API does not redirect; following one would send the
 	// credential where the administrator did not point it.
@@ -247,6 +256,9 @@ func (r *Reader) get(ctx context.Context, e site.Engine, path string, read func(
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json, application/xml")
 	res, err := r.http.Do(req)
+	if errors.Is(err, connector.ErrPrivateAddress) {
+		return fmt.Errorf("%w: %s is not on the public internet; set %s=on to allow engines in the server's own network", ErrUnavailable, u.Host, AllowPrivateVar)
+	}
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}

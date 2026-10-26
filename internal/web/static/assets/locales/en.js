@@ -1218,6 +1218,7 @@ export default {
   "engine.remove": "Remove engine",
   "engine.removeConfirm": "Remove the engine “{name}”? Pages that show its processes keep their blocks, which then say that the engine is not set up.",
   "engine.taken": "An engine {id} exists already.",
+  "engine.publicOnly": "An engine is reached only on the public internet; an engine in the server's own network needs the operator to set WWBB_ENGINE_ALLOW_PRIVATE=on.",
   "catalog.note": "Each data set of the source with resources in an interface format becomes a page, linked to the data set in the system of record and written anew by every run. Notes belong in comments, which stay. Pages of data sets no longer published carry the label “withdrawn”; they are not deleted. Entries of the former type “interface” are removed, and the type with them once nothing uses it.",
   "catalog.enabled": "Sync automatically",
   "catalog.space": "Room of the catalog",

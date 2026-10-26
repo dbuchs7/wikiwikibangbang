@@ -1216,6 +1216,7 @@ export default {
   "engine.remove": "Engine entfernen",
   "engine.removeConfirm": "Engine «{name}» entfernen? Seiten, die ihre Prozesse zeigen, behalten ihre Blöcke; diese melden dann, dass die Engine nicht eingerichtet ist.",
   "engine.taken": "Eine Engine {id} gibt es bereits.",
+  "engine.publicOnly": "Eine Engine wird nur im öffentlichen Internet erreicht; für eine Engine im eigenen Netz des Servers muss der Betrieb WWBB_ENGINE_ALLOW_PRIVATE=on setzen.",
   "catalog.note": "Jeder Datensatz der Quelle mit Ressourcen im Format einer Schnittstelle wird eine Seite, verlinkt mit dem Datensatz im führenden System und bei jedem Lauf neu geschrieben. Notizen gehören in Kommentare, die bleiben. Seiten nicht mehr publizierter Datensätze tragen das Label «withdrawn»; sie werden nicht gelöscht. Einträge des früheren Typs «interface» werden entfernt, und mit ihnen der Typ, sobald nichts ihn mehr verwendet.",
   "catalog.enabled": "Automatisch abgleichen",
   "catalog.space": "Raum des Katalogs",

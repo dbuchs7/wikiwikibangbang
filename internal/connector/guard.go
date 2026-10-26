@@ -57,6 +57,16 @@ func (g guard) RoundTrip(req *http.Request) (*http.Response, error) {
 	return g.next.RoundTrip(req)
 }
 
+// PublicOnly keeps next to public addresses as a connector's requests are
+// kept: a refusal is ErrPrivateAddress. Process engines are kept so too
+// (ADR-0128).
+func PublicOnly(next http.RoundTripper) http.RoundTripper {
+	lookup := func(ctx context.Context, host string) ([]netip.Addr, error) {
+		return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	}
+	return guard{next: next, lookup: lookup, proxy: viaProxy}
+}
+
 // httpClient is the client a connector reaches its source with: through
 // the environment's proxy, with timeouts, and kept to public addresses
 // unless AllowPrivateVar allows others.
@@ -68,10 +78,7 @@ func (r *Runner) httpClient() *http.Client {
 		IdleConnTimeout:     30 * time.Second,
 	}
 	if r.getenv(AllowPrivateVar) != "on" {
-		lookup := func(ctx context.Context, host string) ([]netip.Addr, error) {
-			return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
-		}
-		transport = guard{next: transport, lookup: lookup, proxy: viaProxy}
+		transport = PublicOnly(transport)
 	}
 	return &http.Client{Timeout: 2 * time.Minute, Transport: transport}
 }

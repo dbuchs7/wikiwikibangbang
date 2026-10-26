@@ -77,7 +77,7 @@ Run and package the binary:
 go run ./cmd/wikiwikibangbang serve -addr :8080      # http://localhost:8080, data in ./data
 go run ./cmd/wikiwikibangbang check -data-dir data   # verify a data directory, read-only
 cd e2e && npm ci && BASE_URL=http://127.0.0.1:8080 ADMIN_PASSWORD=… node smoke.cjs   # UI in Chromium, against a fresh server
-                                                     # ENGINE_TOKEN=x, with WWBB_ENGINE_ATLAS_TOKEN=x on the server, adds the process engine steps
+                                                     # ENGINE_TOKEN=x, with WWBB_ENGINE_ATLAS_TOKEN=x and WWBB_ENGINE_ALLOW_PRIVATE=on on the server, adds the process engine steps
 WWBB_TOKEN=… go run ./cmd/wikiwikibangbang mcp -url http://localhost:8080   # MCP tools on stdin/stdout for a local agent
 go run ./cmd/wikiwikibangbang version
 GOOS=windows GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/wikiwikibangbang   # any release platform
