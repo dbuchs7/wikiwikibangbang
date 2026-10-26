@@ -35,6 +35,11 @@ var classified = map[string]string{
 	"internal/connector.maxAnswer": "the answer of the catalog source a connector reads (ADR-0075, ADR-0077), not a caller's input to this server; " +
 		"it guards the connector against a source that misbehaves",
 	"internal/connector/ckan.go:maxAnswer": "the same bound, where the answer is read",
+	"internal/gitrepo.maxListing": "an answer of the API of a Git host the server reads (ADR-0128), not a caller's input to this server; " +
+		"it guards against a host that misbehaves",
+	"internal/gitrepo/gitrepo.go:maxListing + 1": "the same bound, where the answer is read",
+	"internal/gitrepo.maxListPages": "how many pages of a Git host's listing are followed (ADR-0128), not a caller's input to this server; " +
+		"it guards against a host that names a next page for ever",
 	"internal/connector.maxPages": "how many pages of a JSON source's list a connector follows (ADR-0127), not a caller's input to this server; " +
 		"it guards the connector against a source that names a next page for ever",
 	"internal/connector.maxCell":  "the shape of a generated catalog page (ADR-0080): how long one value of the source may be on it, like the length of a title",

@@ -137,6 +137,8 @@ internal/metrics/  Prometheus metrics on a registry of its own, labelled by rout
 internal/backup/   encrypted backups, full and incremental, and restore of a data directory or a chain (ADR-0016, ADR-0034, ADR-0073); backup/dest stores them at a destination: a directory, WebDAV, S3, FTPS or SFTP
 internal/autobackup/ takes backups on the schedule set under Administration and keeps the newest versions (ADR-0073)
 internal/connector/ connectors that keep catalog spaces in step with sources such as opendata.swiss or any JSON source, on schedules (ADR-0075, ADR-0077, ADR-0127)
+internal/markdown/  converts Markdown into the block document: goldmark parses, its own walker makes every block and mark (ADR-0128)
+internal/gitrepo/   reads files and folders of Git repositories through the public APIs of GitHub, GitLab, Bitbucket, Gitea and Forgejo (ADR-0128)
 internal/collab/   live editing sessions: block locks, commit on release (ADR-0010)
 internal/server/   HTTP route table with access classes, principal resolution, JSON API, graceful shutdown
 internal/web/      embedded web UI (plain HTML, CSS, ES modules; ADR-0009, ADR-0031)
@@ -197,7 +199,7 @@ The DCO is a statement by a natural person that they have the right to submit th
 - Pull requests are merged by **squash** only, after the checks have finished. Once enforcement is on, a pull request without a human sign-off is not merged.
 - Agents act on GitHub under the maintainer's account, so GitHub cannot tell an agent's edit from the maintainer's. The check enforces the *form* of the rule; that only a human writes the line is enforced by this guide.
 
-Before adding a dependency, check that its license is compatible with AGPL-3.0, name the license in the pull request, and add the module with its version, license and any NOTICE to `THIRD_PARTY_NOTICES.md` (a test in `internal/repoconfig` checks the list against `go.mod`). Current dependencies: go-oidc, go-jose (Apache-2.0) and x/oauth2 (BSD-3-Clause), for OIDC only (ADR-0030); x/crypto (BSD-3-Clause), for its SSH client, used by backups to SFTP only (ADR-0073). Never copy code from sources whose license is incompatible or unknown.
+Before adding a dependency, check that its license is compatible with AGPL-3.0, name the license in the pull request, and add the module with its version, license and any NOTICE to `THIRD_PARTY_NOTICES.md` (a test in `internal/repoconfig` checks the list against `go.mod`). Current dependencies: go-oidc, go-jose (Apache-2.0) and x/oauth2 (BSD-3-Clause), for OIDC only (ADR-0030); x/crypto (BSD-3-Clause), for its SSH client, used by backups to SFTP only (ADR-0073). goldmark (MIT), as the Markdown parser only, never its renderer (ADR-0128). Never copy code from sources whose license is incompatible or unknown.
 
 ## Pointers
 
