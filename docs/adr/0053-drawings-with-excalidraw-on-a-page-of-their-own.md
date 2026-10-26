@@ -63,5 +63,5 @@ Strongest form: no dependency, exactly the policy we want.
 ## Links
 
 - relates to ADR-0024 (offline), ADR-0032 (vendored editor), ADR-0043 (versions), ADR-0045 (attachments)
-- extended by [ADR-0116](0116-every-view-fits-a-phone.md) (phones) and [ADR-0117](0117-palettes-for-the-drawing-editor.md) (palettes)
+- extended by [ADR-0116](0116-every-view-fits-a-phone.md) (phones), [ADR-0117](0117-palettes-for-the-drawing-editor.md) (palettes) and [ADR-0142](0142-processes-in-a-drawing.md) (processes in a drawing)
 - amended by [ADR-0126](0126-excalidraw-0-18.md) (Excalidraw 0.18 and its bundle)

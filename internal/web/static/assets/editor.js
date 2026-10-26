@@ -13,7 +13,8 @@ import { h, safeHref } from "./dom.js";
 import { t } from "./i18n.js";
 import { anchorOf } from "./anchors.js";
 import { openDrawing, drawingName } from "./drawing.js";
-import { diagramView, openModeler, pickProcess, bpmnName } from "./bpmn.js";
+import { diagramView, openModeler, pickProcess, bpmnName, drawingProcesses, processRegion } from "./bpmn.js";
+import { regionsIn } from "./drawprocesses.js";
 import { pickFromAlbum, pictureFile, captionOf, copiedPicture, clipMark } from "./album.js";
 import { assist } from "./assist.js";
 import { markdownToBlocks, pastesAsMarkdown } from "./markdown.js";
@@ -545,7 +546,33 @@ function imageView(node, view, getPos, files) {
     ? h("video", { src: files ? files.url(node.attrs.ref) : "", controls: true, preload: "metadata", playsinline: true, title: node.attrs.text })
     : h("img", { src: files ? files.url(node.attrs.ref) : "", alt: node.attrs.text, loading: "lazy" });
   const handle = h("span", { class: "pm-resize", title: t("editor.imageResize"), "aria-hidden": "true" });
-  const frame = h("span", { class: "pm-image-frame" }, img, handle);
+  // The processes of engines in a drawing are shown live over its picture
+  // (ADR-0142), from the regions the picture lists in its first bytes. A
+  // picture whose name is not known here, as in an embedded text or one
+  // saved by someone else since, is asked too.
+  const live = h("span", { class: "pm-live" });
+  const frame = h("span", { class: "pm-image-frame" }, img, live, handle);
+  let liveRef = null;
+  let regions = [];
+  const showLive = async () => {
+    const ref = !video && files && (files.isDrawing?.(node.attrs.ref) || !files.knows?.(node.attrs.ref)) ? node.attrs.ref : null;
+    if (ref === liveRef) return;
+    liveRef = ref;
+    regions.forEach((r) => r.destroy());
+    regions = [];
+    live.replaceChildren();
+    if (!ref) return;
+    try {
+      const res = await fetch(files.url(ref), { credentials: "same-origin", headers: { Range: "bytes=0-65535" } });
+      if (!res.ok) return;
+      const found = regionsIn(new Uint8Array(await res.arrayBuffer()));
+      if (liveRef !== ref) return;
+      regions = found.map(processRegion);
+      live.replaceChildren(...regions.map((r) => r.dom));
+    } catch {
+      // The picture shows the processes as they were saved.
+    }
+  };
   const caption = h("figcaption");
   const dom = h("figure", { class: video ? "pm-image pm-video" : "pm-image", contenteditable: "false" }, frame, caption);
   let shown = null;
@@ -603,7 +630,7 @@ function imageView(node, view, getPos, files) {
       // copies elsewhere learn of it. The dialog stays open until it is
       // stored, so the block cannot be left before it points at it.
       const a = await openDrawing(await res.blob(), (png) =>
-        files.upload(new File([png], drawingName(node.attrs.text), { type: "image/png" }), { item: files.item, attachment: node.attrs.ref }));
+        files.upload(new File([png], drawingName(node.attrs.text), { type: "image/png" }), { item: files.item, attachment: node.attrs.ref }), drawingProcesses(files));
       if (!a) return;
       const pos = getPos();
       if (pos === undefined || dom.classList.contains("pm-locked")) throw new Error(t("draw.locked"));
@@ -638,6 +665,7 @@ function imageView(node, view, getPos, files) {
     if (video) img.title = node.attrs.text;
     else img.alt = node.attrs.text;
     showWidth(node.attrs.width);
+    showLive();
     dom.classList.toggle("pm-sizable", view.editable);
     for (const a of ["left", "center", "right"]) dom.classList.toggle("pm-image-" + a, node.attrs.align === a);
     if (!view.editable) return caption.replaceChildren(node.attrs.text);
@@ -671,8 +699,12 @@ function imageView(node, view, getPos, files) {
   render();
   // A click on a picture selects its block, so it can be deleted, cut or
   // moved like text; a video keeps its clicks for its controls.
-  const stopEvent = (ev) => caption.contains(ev.target) || handle.contains(ev.target) || (video && img.contains(ev.target));
-  return { dom, ignoreMutation: () => true, stopEvent, update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; } };
+  const stopEvent = (ev) => caption.contains(ev.target) || handle.contains(ev.target) || live.contains(ev.target) || (video && img.contains(ev.target));
+  return {
+    dom, ignoreMutation: () => true, stopEvent,
+    update: (n) => { if (n.type !== node.type) return false; node = n; render(); return true; },
+    destroy: () => regions.forEach((r) => r.destroy()),
+  };
 }
 
 // createEditor mounts an editor for blocks and returns its element and a
@@ -810,7 +842,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   const draw = async () => {
     status.textContent = "";
     try {
-      const a = await openDrawing(null, (png) => files.upload(new File([png], drawingName(""), { type: "image/png" })));
+      const a = await openDrawing(null, (png) => files.upload(new File([png], drawingName(""), { type: "image/png" })), drawingProcesses(files));
       if (!a) return;
       insertBlock(schema.nodes.image.create({ ref: a.id, text: "" }));
     } catch (err) {

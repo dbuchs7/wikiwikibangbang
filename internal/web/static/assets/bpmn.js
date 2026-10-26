@@ -37,6 +37,23 @@ const processPath = (engine, process) => `/api/engines/${enc(engine)}/processes/
 // on and the page is in sight.
 const operationsEvery = 30_000;
 
+// markOperations marks the elements of a drawn process with the counts of
+// its operations o: how many tokens passed, wait there and are held there
+// by an incident (ADR-0129), as atlas does.
+function markOperations(viewer, o) {
+  const overlays = viewer.get("overlays");
+  const registry = viewer.get("elementRegistry");
+  overlays.remove({ type: "pm-ops" });
+  for (const el of o.elements) {
+    if (!registry.get(el.element) || !(el.passed || el.tokens || el.incidents)) continue;
+    const badge = (cls, n, title) => (n ? h("span", { class: "pm-ops-badge " + cls, title, text: String(n) }) : "");
+    overlays.add(el.element, "pm-ops", { position: { bottom: 12, left: -8 }, html: h("span", { class: "pm-ops-badges" },
+      badge("pm-ops-passed", el.passed, t("bpmn.opsPassed", { n: el.passed })),
+      badge("pm-ops-tokens", el.tokens, t("bpmn.opsTokens", { n: el.tokens })),
+      badge("pm-ops-incidents", el.incidents, t("bpmn.opsIncidents", { n: el.incidents }))) });
+  }
+}
+
 // diagramView shows a bpmn or a process block, in reading and in editing.
 // files serves the item's files (bpmn); an editor also changes the caption,
 // removes the block, and draws a stored model anew in the modeler.
@@ -106,17 +123,7 @@ export function diagramView(node, view, getPos, files) {
     if (!opsOn || !viewer) return;
     try {
       const { operations: o } = await get(processPath(node.attrs.engine, node.attrs.process) + "/operations");
-      const overlays = viewer.get("overlays");
-      const registry = viewer.get("elementRegistry");
-      overlays.remove({ type: "pm-ops" });
-      for (const el of o.elements) {
-        if (!registry.get(el.element) || !(el.passed || el.tokens || el.incidents)) continue;
-        const badge = (cls, n, title) => (n ? h("span", { class: "pm-ops-badge " + cls, title, text: String(n) }) : "");
-        overlays.add(el.element, "pm-ops", { position: { bottom: 12, left: -8 }, html: h("span", { class: "pm-ops-badges" },
-          badge("pm-ops-passed", el.passed, t("bpmn.opsPassed", { n: el.passed })),
-          badge("pm-ops-tokens", el.tokens, t("bpmn.opsTokens", { n: el.tokens })),
-          badge("pm-ops-incidents", el.incidents, t("bpmn.opsIncidents", { n: el.incidents }))) });
-      }
+      markOperations(viewer, o);
       ops.textContent = t("bpmn.opsSummary", { version: o.version, instances: o.instances, finished: o.finished, incidents: o.incidents });
       ops.classList.toggle("error", o.incidents > 0);
     } catch (err) {
@@ -292,19 +299,26 @@ export function openModeler(xml = "", store = async (out) => out) {
 }
 
 // pickProcess lets the reader choose a process of a process engine; it
-// resolves to {engine, process, name} or to null when closed.
-export function pickProcess() {
+// resolves to {engine, process, name} or to null when closed. With
+// operations set, as for a drawing (ADR-0142), it also asks whether the
+// operations are shown at first, where the engine allows them, and adds
+// operations to what it resolves to.
+export function pickProcess({ operations = false } = {}) {
   return new Promise((resolve) => {
     const status = h("p", { class: "muted", role: "status", text: t("bpmn.loading") });
     const engines = h("select", { "aria-label": t("bpmn.engine"), class: "bpmn-engine" });
     const search = h("input", { type: "search", placeholder: t("bpmn.filter"), "aria-label": t("bpmn.filter") });
     const list = h("ul", { class: "bpmn-processes" });
     const close = h("button", { type: "button", text: t("common.cancel") });
+    const opsBox = h("input", { type: "checkbox", class: "bpmn-pick-operations", checked: true });
+    const opsField = h("label", { class: "check", hidden: true }, opsBox, " ", t("draw.processOperations"));
     const dialog = h("dialog", { class: "drawing bpmn-pick", "aria-label": t("bpmn.pickTitle") },
       h("div", { class: "drawing-bar" }, h("strong", { text: t("bpmn.pickTitle") }), close),
-      h("div", { class: "bpmn-pick-body" }, h("label", { class: "field" }, t("bpmn.engine"), engines), search, status, list));
+      h("div", { class: "bpmn-pick-body" }, h("label", { class: "field" }, t("bpmn.engine"), engines), opsField, search, status, list));
     let done = false;
     let shown = [];
+    let all = [];
+    const allowed = () => all.some((e) => e.id === engines.value && e.operations);
     const finish = (result) => {
       if (done) return;
       done = true;
@@ -315,12 +329,14 @@ export function pickProcess() {
     const filter = () => {
       const q = search.value.trim().toLowerCase();
       list.replaceChildren(...shown.filter((p) => !q || `${p.name} ${p.process}`.toLowerCase().includes(q)).map((p) => h("li", {},
-        h("button", { type: "button", class: "link", onclick: () => finish({ engine: engines.value, process: p.process, name: p.name }) },
+        h("button", { type: "button", class: "link", onclick: () => finish({ engine: engines.value, process: p.process, name: p.name,
+          ...(operations ? { operations: allowed() && opsBox.checked } : {}) }) },
           h("strong", { text: p.name || p.process }), " ", h("span", { class: "muted", text: t("bpmn.processLine", { process: p.process, version: p.version }) })))));
     };
     const load = async () => {
       shown = [];
       list.replaceChildren();
+      opsField.hidden = !operations || !allowed();
       status.textContent = t("bpmn.loading");
       try {
         shown = (await get(`/api/engines/${enc(engines.value)}/processes`)).processes;
@@ -338,7 +354,7 @@ export function pickProcess() {
     dialog.showModal();
     (async () => {
       try {
-        const { engines: all } = await get("/api/engines");
+        ({ engines: all } = await get("/api/engines"));
         if (!all.length) {
           status.textContent = t("bpmn.noEngines");
           engines.disabled = search.disabled = true;
@@ -351,4 +367,198 @@ export function pickProcess() {
       }
     })();
   });
+}
+
+// snapshot draws a model as a picture for a drawing (ADR-0142): an SVG as
+// a data URL, with its width and height, on white, as diagrams are shown.
+// bpmn-js lays the model out in a box out of sight. The SVG is changed as
+// text: parsed into a document, its style attributes would break the UI's
+// content security policy.
+async function snapshot(xml) {
+  const Viewer = await loadViewer();
+  const box = h("div", { class: "bpmn-snapshot", "aria-hidden": "true" });
+  document.body.append(box);
+  const viewer = new Viewer({ container: box });
+  try {
+    await viewer.importXML(xml);
+    const { svg } = await viewer.saveSVG();
+    const root = /<svg\b[^>]*>/.exec(svg);
+    const [x, y, width, height] = (/\sviewBox="([^"]*)"/.exec(root?.[0] || "")?.[1] || "").split(/[\s,]+/).map(Number);
+    if (root[0].endsWith("/>") || ![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) throw new Error(t("bpmn.notShown", { error: "SVG" }));
+    const at = root.index + root[0].length;
+    const white = `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#ffffff"/>`;
+    const data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(new Blob([svg.slice(0, at) + white + svg.slice(at)], { type: "image/svg+xml" }));
+    });
+    return { svg: data, width, height };
+  } finally {
+    viewer.destroy();
+    box.remove();
+  }
+}
+
+// pickModel lets the editor choose a BPMN model for a drawing: one of the
+// item's files, or one from this device. It resolves to {name, xml} or to
+// null when closed.
+export function pickModel(files) {
+  return new Promise((resolve) => {
+    const status = h("p", { class: "error", role: "status" });
+    const close = h("button", { type: "button", text: t("common.cancel") });
+    const device = h("input", { type: "file", accept: ".bpmn,.xml,application/xml,text/xml", "aria-label": t("draw.processDevice") });
+    const models = (files?.list?.() || []).filter((a) => /^text\/(xml|plain)/.test(a.type || "") && /\.(bpmn|xml)$/i.test(a.name || ""));
+    const list = h("ul", { class: "bpmn-processes" });
+    const dialog = h("dialog", { class: "drawing bpmn-pick", "aria-label": t("draw.processFile") },
+      h("div", { class: "drawing-bar" }, h("strong", { text: t("draw.processFile") }), close),
+      h("div", { class: "bpmn-pick-body" },
+        h("p", { class: "muted", text: models.length ? t("draw.processFiles") : t("draw.processNoFiles") }), list,
+        h("label", { class: "field" }, t("draw.processDevice"), device), status));
+    let done = false;
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      dialog.close();
+      dialog.remove();
+      resolve(result);
+    };
+    const take = async (name, read) => {
+      status.textContent = "";
+      try {
+        finish({ name: name.replace(/\.[^.]*$/, ""), xml: await read() });
+      } catch (err) {
+        status.textContent = err.message;
+      }
+    };
+    list.replaceChildren(...models.map((a) => h("li", {}, h("button", { type: "button", class: "link", text: a.name, onclick: () => take(a.name, async () => {
+      const res = await fetch(files.url(a.id), { credentials: "same-origin" });
+      if (!res.ok) throw new Error(res.statusText);
+      return res.text();
+    }) }))));
+    device.addEventListener("change", () => device.files[0] && take(device.files[0].name, () => device.files[0].text()));
+    close.addEventListener("click", () => finish(null));
+    dialog.addEventListener("close", () => finish(null));
+    document.body.append(dialog);
+    dialog.showModal();
+  });
+}
+
+// processPicture is the picture of a process's newest version.
+async function processPicture(engine, process, operations) {
+  const { diagram } = await get(processPath(engine, process));
+  return { ...(await snapshot(diagram.xml)), data: { kind: "process", engine, process, name: diagram.name || process, operations } };
+}
+
+// drawingProcesses answers the drawing page's asks for a process (ADR-0142)
+// with a picture and what it shows, or null when the editor gave up: a
+// model drawn anew in the modeler, one chosen from the item's files or
+// this device, or a process of an engine. Edited, a model is drawn again
+// in the modeler and a process of an engine is read again in its newest
+// version. A model is kept in the drawing, not as a file of the item: the
+// drawing is its one source, wherever it is copied to.
+export function drawingProcesses(files) {
+  return async (want, current) => {
+    if (want === "new" || (want === "edit" && current?.kind === "bpmn")) {
+      const xml = await openModeler(current?.xml || "");
+      return xml ? { ...(await snapshot(xml)), data: { kind: "bpmn", name: current?.name || "", xml } } : null;
+    }
+    if (want === "file") {
+      const m = await pickModel(files);
+      return m ? { ...(await snapshot(m.xml)), data: { kind: "bpmn", name: m.name, xml: m.xml } } : null;
+    }
+    if (want === "process") {
+      const p = await pickProcess({ operations: true });
+      return p ? processPicture(p.engine, p.process, p.operations) : null;
+    }
+    if (want === "edit" && current?.kind === "process") return processPicture(current.engine, current.process, current.operations);
+    return null;
+  };
+}
+
+// processRegion shows the newest version of a process of an engine over
+// its picture in a drawing (ADR-0142), and its operations while they are
+// on: at first when the drawing says so and the engine allows them, then
+// as the reader switches them. The picture shows through until the
+// process is drawn, and stays when it cannot be: it is what was saved.
+// The region does not pan or zoom; the page scrolls over it.
+export function processRegion(r) {
+  const canvas = h("span", { class: "pm-live-canvas" });
+  const toggle = h("button", { type: "button", class: "pm-live-ops", hidden: true, "aria-pressed": "false", text: t("bpmn.operations") });
+  const state = h("span", { class: "pm-live-state", role: "status" });
+  const dom = h("span", { class: "pm-live-region", title: r.name }, canvas, h("span", { class: "pm-live-bar" }, toggle, state));
+  for (const [k, v] of [["left", r.x], ["top", r.y], ["width", r.w], ["height", r.h]]) dom.style[k] = `${v * 100}%`;
+  let viewer = null;
+  let version = 0;
+  let opsOn = false;
+  let timer = 0;
+  let gone = false;
+
+  const draw = async () => {
+    const { engine, diagram } = await get(processPath(r.engine, r.process));
+    const Viewer = await loadViewer();
+    if (gone) return engine;
+    viewer ||= new Viewer({ container: canvas, zoomScroll: { enabled: false } });
+    await viewer.importXML(diagram.xml);
+    version = diagram.version;
+    viewer.get("canvas").zoom("fit-viewport", "auto");
+    dom.classList.add("pm-live-drawn");
+    dom.title = t("bpmn.processInfo", { name: diagram.name || diagram.process, version, engine: engine.name });
+    toggle.hidden = !engine.operations;
+    return engine;
+  };
+  const showOperations = async () => {
+    clearTimeout(timer);
+    if (!opsOn || gone) return;
+    try {
+      const { operations: o } = await get(processPath(r.engine, r.process) + "/operations");
+      // A newer version deployed since is drawn before it is counted on.
+      if (o.version !== version) await draw();
+      if (!opsOn || gone) return;
+      markOperations(viewer, o);
+      state.textContent = t("bpmn.opsSummary", { version: o.version, instances: o.instances, finished: o.finished, incidents: o.incidents });
+      state.classList.toggle("error", o.incidents > 0);
+    } catch (err) {
+      state.textContent = err.message;
+      state.classList.add("error");
+    }
+    const tick = () => {
+      if (!opsOn || gone || !dom.isConnected) return;
+      if (document.visibilityState !== "visible") timer = setTimeout(tick, operationsEvery);
+      else showOperations();
+    };
+    timer = setTimeout(tick, operationsEvery);
+  };
+  const setOperations = (on) => {
+    opsOn = on;
+    toggle.setAttribute("aria-pressed", String(on));
+    clearTimeout(timer);
+    if (on) return showOperations();
+    viewer?.get("overlays").remove({ type: "pm-ops" });
+    state.textContent = "";
+    state.classList.remove("error");
+  };
+  toggle.addEventListener("click", () => setOperations(!opsOn));
+
+  const sight = new IntersectionObserver((entries) => {
+    if (!entries.some((e) => e.isIntersecting)) return;
+    sight.disconnect();
+    draw().then((engine) => setOperations(r.operations && engine.operations), (err) => {
+      if (gone) return;
+      dom.classList.remove("pm-live-drawn");
+      dom.classList.add("pm-live-failed");
+      state.textContent = t("draw.processAsSaved");
+      state.title = err.message;
+    });
+  });
+  sight.observe(dom);
+  return {
+    dom,
+    destroy: () => {
+      gone = true;
+      sight.disconnect();
+      clearTimeout(timer);
+      viewer?.destroy();
+    },
+  };
 }
