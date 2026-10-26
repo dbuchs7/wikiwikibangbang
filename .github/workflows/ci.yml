@@ -101,6 +101,12 @@ jobs:
         with:
           node-version: '22'
 
+      # ADR-0133: UI modules that run without a browser, such as the
+      # Markdown conversion, have unit tests of their own; Node's test
+      # runner needs no dependency.
+      - name: JavaScript unit tests
+        run: node --test "internal/web/jstest/*.test.mjs"
+
       - name: Install Playwright and Chromium
         working-directory: e2e
         run: |
@@ -117,7 +123,7 @@ jobs:
           # (ADR-0127), the Atlassian one with the account of the smoke
           # test's fake site (ADR-0128), and the process engine is the smoke
           # test's own (ADR-0129); editors may have the server read Markdown
-          # files of repositories (ADR-0133).
+          # files of repositories (ADR-0135).
           mkdir -p "$RUNNER_TEMP/autobackup"
           WWBB_ADMIN_PASSWORD=e2e-admin-password WWBB_PUBLIC_URL=http://127.0.0.1:8080 \
             WWBB_SMTP_HOST=127.0.0.1 WWBB_SMTP_PORT=2525 WWBB_SMTP_SECURITY=none WWBB_SMTP_FROM=wiki@example.org \

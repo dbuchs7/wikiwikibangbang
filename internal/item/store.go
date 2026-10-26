@@ -813,7 +813,7 @@ func (s *Store) apply(e Event) {
 			it.Properties = Props{}
 		}
 		if td := s.types[e.TypeName][e.TypeVersion-1]; td.Workflow != nil {
-			it.State = td.Workflow.Initial
+			it.State, it.StateSince = td.Workflow.Initial, e.At
 		}
 		s.items[it.ID] = it
 		s.assignKey(it)
@@ -839,7 +839,7 @@ func (s *Store) apply(e Event) {
 		touch(it.ID)
 	case Transitioned:
 		it := s.items[e.Item]
-		it.State = e.To
+		it.State, it.StateSince = e.To, e.At
 		it.Version++
 		touch(it.ID)
 	case ItemMoved:

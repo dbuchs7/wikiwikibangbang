@@ -262,7 +262,7 @@ table.history td { font-size: 13px; }
    many cards it holds, a new card and folding it away (ADR-0132). */
 #kanban .board { align-items: stretch; }
 #kanban .board-column { flex: 1 1 250px; min-width: 220px; max-width: 400px; min-height: 320px; padding: 10px;
-  display: flex; flex-direction: column; }
+  display: flex; flex-direction: column; position: relative; }
 #kanban .board-cards { flex: 1; }
 .column-head { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; min-height: 28px; }
 .column-head h2 { display: block; margin: 0; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -303,12 +303,47 @@ table.history td { font-size: 13px; }
 .card-chip.late { border-color: color-mix(in srgb, var(--danger) 30%, transparent); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
 .card-chip.near { border-color: color-mix(in srgb, var(--warning) 30%, transparent); background: var(--warning-soft); color: var(--warning); font-weight: 600; }
 .card-foot { display: flex; align-items: center; gap: 10px; min-height: 24px; font-size: 12px; color: var(--muted); }
-.card-sign { display: inline-flex; align-items: center; gap: 3px; }
+/* Positioned, so the text only screen readers hear stays inside the
+   board's scrolling instead of widening the page. */
+.card-sign { position: relative; display: inline-flex; align-items: center; gap: 3px; }
 .card-sign svg { width: 14px; height: 14px; }
 .card-sign.complete { color: var(--success); }
 .card-people { display: inline-flex; margin-left: auto; }
 .card-person + .card-person { margin-left: -6px; }
 .card-person .avatar { box-shadow: 0 0 0 2px var(--surface); }
+
+/* Package B of the kanban (ADR-0134). Tones colour a card by a value of
+   its own; mixed into the surface they suit light and dark alike. */
+.tone-blue { --tone: #2f6fde; }
+.tone-green { --tone: #1f9d55; }
+.tone-yellow { --tone: #d4a106; }
+.tone-orange { --tone: #e8710a; }
+.tone-red { --tone: #d93636; }
+.tone-purple { --tone: #8a4fd8; }
+.tone-teal { --tone: #0f9b9b; }
+.tone-gray { --tone: #7a8394; }
+#kanban .card-item.kanban-card.toned { background: color-mix(in srgb, var(--tone) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--tone) 45%, var(--border)); }
+.tone-swatch { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 3px; background: var(--tone, var(--muted)); }
+.kanban-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 13px; }
+.kanban-legend .legend-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; margin: 0; padding: 2px 10px; font-weight: 500; font-size: 13px;
+  border-color: color-mix(in srgb, var(--tone) 45%, var(--border)); background: color-mix(in srgb, var(--tone) 10%, var(--surface)); }
+/* A column's count against its limit: full in the warning tone, over in
+   the danger tone. */
+.kanban-legend .legend-chip[aria-pressed=true] { box-shadow: 0 0 0 2px var(--tone); font-weight: 700; }
+.column-count.full { background: var(--warning-soft); color: var(--warning); }
+.column-count.over { background: var(--danger-soft); color: var(--danger); }
+/* Finished cards by the day they were finished; the older ones wait until
+   asked for, unless a filter looks for them. */
+.card-day { list-style: none; margin: 6px 2px 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.card-day:first-child { margin-top: 0; }
+#kanban .board:not(.filtering) .board-column:not(.expanded) .card-more, #kanban .board.filtering .card-show-all,
+#kanban .board-column.expanded .card-show-all { display: none; }
+.card-show-all { list-style: none; text-align: center; font-size: 13px; }
+.kanban-columns-edit .column-limit { width: 6.5rem; }
+.kanban-tones { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.kanban-tone { display: flex; align-items: center; gap: 8px; }
+.kanban-tone span:nth-child(2) { min-width: 8rem; }
 
 /* The settings of a kanban, behind one button (ADR-0132). */
 .kanban-settings-open { display: inline-flex; align-items: center; gap: 6px; }

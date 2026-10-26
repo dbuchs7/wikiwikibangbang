@@ -1,4 +1,4 @@
-# ADR-0133: Markdown from Git repositories: folders as page trees, files in a text
+# ADR-0135: Markdown from Git repositories: folders as page trees, files in a text
 
 - **Status:** Proposed
 - **Implementation:** Partial
@@ -38,17 +38,18 @@ Chosen option: **1**, because the content is the wiki's own — searchable, chec
 ### The conversion
 
 - **Parser.** [goldmark](https://github.com/yuin/goldmark) (MIT, pure Go, no further dependencies) parses CommonMark with the GitHub extensions for tables, strike-through, task lists and bare addresses. Only its parser and its syntax tree are used; its HTML renderer is never called. Our own code (`internal/markdown`) walks the tree and creates every block and mark itself, so ADR-0014's closed renderer stays the only renderer. ADR-0014 rejected a Markdown library as the renderer of stored content; here Markdown is an import format, which ADR-0014 has converted on the server.
-- **Blocks.** Paragraphs, headings (levels 4 to 6 become 3, the model's deepest), bullet and numbered items, task items, quotes, code blocks, tables, dividers and pictures map to their block kinds. A quote that opens with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` becomes a panel of the tone note, tip, info, warning or error.
+- **Blocks.** Paragraphs, headings (levels 4 to 6 become 3, the model's deepest), bullet and numbered items, task items, quotes, code blocks, tables, dividers and pictures map to their block kinds. A quote that opens with `[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]` becomes a panel of the tone info, tip, note, warning or error.
 - **Marks.** Emphasis, strong emphasis, strike-through, code and links become the marks italic, bold, strike, code and link. Only `http`, `https` and `mailto` targets stay links (ADR-0014).
 - **What the model cannot hold:**
-  - nested lists become flat items;
-  - a table's cells are plain text;
+  - nested lists become flat items; inside a quote or a panel, an item keeps its marker as text;
+  - a table's cells are plain text, and a link in one keeps its address in parentheses;
   - a code block loses its language;
   - footnotes and formulas stay as their text.
 - **HTML in the Markdown** never becomes markup. Comments, scripts and styles are dropped, `<br>` is a line break, `<img>` a picture. Of other tags only the text between them stays.
 - **Title.** The `title` of a front matter, else a leading heading of level 1, which then leaves the text, else the file's name without its extension. The front matter itself is not shown.
 - **Links.** A relative link is resolved against the file's place in the repository, at the version read. Within a mirrored folder, it becomes a mention of the page written from the target file (D2); otherwise a link to the file at the host.
 - **Pictures.** A picture is read and kept as an attachment of the page (ADR-0045), within the attachment budget. Only PNG, JPEG, GIF and WebP are kept, as these are what a page shows inline. An SVG can carry script, so it becomes a link with its alternative text, as does a picture that cannot be read. A picture already attached with the same content is not stored again.
+- **One mapping, two converters.** ADR-0133 converts pasted Markdown in the browser (`assets/markdown.js`). A mirrored file is read and converted by the server, every hour and without a browser, and the server has no JavaScript runtime (ADR-0009), so this record needs a converter in Go. Both map Markdown onto the blocks in the same way; a difference between them is a bug. Where they differ on purpose, the source differs: a file of a repository has its pictures and its links in the repository, which the server reads, so pictures are attached and links between mirrored files become mentions; and raw HTML, common in READMEs, keeps its text and pictures instead of showing as text.
 - **Size.** A Markdown file of more than 2 MB is left out and reported. A page keeps at most 50 pictures, read up to `WWBB_BUDGET_MARKDOWN_PICTURE_BYTES` together (50 MB by default, ADR-0015); the pictures beyond stay links.
 
 ### The hosts
@@ -136,7 +137,7 @@ Strongest form: the server makes no outbound call at all, and each reader fetche
 
 - Bad: every reader's visit is reported to the host, which ADR-0097 refused for players of other sites.
 - Bad: the content security policy would have to admit the hosts.
-- Bad: the conversion would run in the browser, against ADR-0014's rule that foreign formats are converted on the server.
+- Bad: every reader's browser would convert the file at every view, and the hourly update, which runs without a browser, could not.
 - Bad: the drawbacks of option 2 apply as well.
 
 ### Option 4: import once
@@ -148,11 +149,11 @@ Strongest form: the simplest; the text is the wiki's from then on and is edited 
 
 ### A parser of our own instead of goldmark
 
-Strongest form: no dependency, as the project prefers the standard library. The block model is lossy anyway, so a subset of Markdown would do.
+Strongest form: no dependency, as the project prefers the standard library. The block model is lossy anyway, so a subset of Markdown would do, and ADR-0133 shows that a closed converter of about 900 lines is enough for pasted text; porting it to Go would make one design in two languages.
 
-- Good: no code we do not own.
-- Bad: CommonMark's rules for emphasis, nested containers and lazy continuation are intricate. A parser of our own would differ from what the hosts show in exactly the cases people notice, and getting it right means maintaining a test suite of the size of the specification.
+- Good: no code we do not own; the two converters could be kept in step line by line.
+- Bad: a paste is checked by the person who pastes it, and ADR-0133 errs towards plain text. A mirrored folder is read in bulk, unattended, from documentation that uses the whole of CommonMark: nested containers, reference links across a file, blocks of HTML. CommonMark's rules for emphasis, nested containers and lazy continuation are intricate; a parser of our own would differ from what the hosts show in exactly the cases people notice, and getting it right means maintaining a test suite of the size of the specification.
 
 ## Links
 
-- relates to [ADR-0131](0131-pages-export-as-markdown-and-agents-read-them-so.md) (pages export as Markdown; this record reads Markdown in), [ADR-0014](0014-closed-renderer-for-user-content.md) (Markdown is converted, not rendered), [ADR-0127](0127-connectors-read-any-json-source-into-a-type-of-ones-own.md) and [ADR-0077](0077-connectors-keep-catalogs-in-step-with-their-sources.md) (a further kind of connector), [ADR-0080](0080-one-page-per-data-set-written-from-the-source.md) (this kind writes a page only when its source changed), [ADR-0106](0106-an-embedded-item-is-shown-whole.md) and [ADR-0114](0114-tasks-in-a-text.md) (a page made below the text and shown whole), [ADR-0039](0039-link-check-on-demand-public-addresses-only.md) (outbound calls only when wanted), [ADR-0023](0023-import-and-sync-from-jira-and-confluence.md) (origin), [ADR-0045](0045-attachments-encrypted-files-beside-the-log.md) (pictures), ADR-0096 (pasting an address)
+- relates to [ADR-0133](0133-markdown-is-pasted-into-the-editor-and-converted-in-the-browser.md) (pasted Markdown, converted in the browser the same way), [ADR-0131](0131-pages-export-as-markdown-and-agents-read-them-so.md) (pages export as Markdown; this record reads Markdown in), [ADR-0014](0014-closed-renderer-for-user-content.md) (Markdown is converted, not rendered), [ADR-0127](0127-connectors-read-any-json-source-into-a-type-of-ones-own.md) and [ADR-0077](0077-connectors-keep-catalogs-in-step-with-their-sources.md) (a further kind of connector), [ADR-0080](0080-one-page-per-data-set-written-from-the-source.md) (this kind writes a page only when its source changed), [ADR-0106](0106-an-embedded-item-is-shown-whole.md) and [ADR-0114](0114-tasks-in-a-text.md) (a page made below the text and shown whole), [ADR-0039](0039-link-check-on-demand-public-addresses-only.md) (outbound calls only when wanted), [ADR-0023](0023-import-and-sync-from-jira-and-confluence.md) (origin), [ADR-0045](0045-attachments-encrypted-files-beside-the-log.md) (pictures), ADR-0096 (pasting an address)

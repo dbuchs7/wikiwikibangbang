@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Origin records where an imported item came from (ADR-0023). System,
@@ -164,7 +165,7 @@ func (s *Store) FindByOrigin(system, instance, externalID string) (Item, bool) {
 
 // FindBySystem returns the live items whose origin names a system, in the
 // order they were made, e.g. the pages that mirror files of Git
-// repositories (ADR-0133).
+// repositories (ADR-0135).
 func (s *Store) FindBySystem(system string) []Item {
 	var out []Item
 	for key, id := range s.bySource {
@@ -177,7 +178,7 @@ func (s *Store) FindBySystem(system string) []Item {
 }
 
 // Mirror makes or updates, as the principal, a page that mirrors a file
-// of another system (ADR-0133), matched by its origin as an import is. It
+// of another system (ADR-0135), matched by its origin as an import is. It
 // counts as making a page below an item the principal may edit; a page
 // made before must be one the principal may edit, and stays where it is.
 func (x *Session) Mirror(u Upsert) (Item, error) {
@@ -239,6 +240,12 @@ func (s *Store) applyImport(e Event, touch func(...ID)) {
 			} else {
 				s.assignKey(it)
 			}
+		}
+		switch {
+		case e.To == "":
+			it.StateSince = time.Time{}
+		case !exists || it.State != e.To:
+			it.StateSince = e.At
 		}
 		it.Type, it.TypeVersion = e.TypeName, e.TypeVersion
 		it.Parent, it.Title, it.State = e.Parent, e.Title, e.To

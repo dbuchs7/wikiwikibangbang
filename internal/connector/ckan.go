@@ -582,7 +582,7 @@ type reading struct {
 	// version is the source's version read, e.g. a commit; seen is what
 	// the runner remembers of a run that applied it without a problem, and
 	// same is set when the source is still at what it remembers (Env.Seen),
-	// so nothing was read (ADR-0133).
+	// so nothing was read (ADR-0135).
 	version, seen string
 	same          bool
 }

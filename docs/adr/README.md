@@ -145,4 +145,6 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0130](0130-an-api-description-fills-a-json-source.md) | An API description fills a JSON source | Accepted | Landed |
 | [0131](0131-pages-export-as-markdown-and-agents-read-them-so.md) | Pages export as Markdown, and agents read them so | Proposed | Partial |
 | [0132](0132-kanban-cards-columns-and-the-status-at-a-glance.md) | Kanban cards, columns and the status, readable at a glance | Accepted | Landed |
-| [0133](0133-markdown-from-git-repositories.md) | Markdown from Git repositories: folders as page trees, files in a text | Proposed | Partial |
+| [0133](0133-markdown-is-pasted-into-the-editor-and-converted-in-the-browser.md) | Markdown is pasted into the editor and converted in the browser | Proposed | Partial |
+| [0134](0134-kanban-filter-limits-colours-and-finished-cards-by-day.md) | A kanban filters its cards, limits its columns, colours cards by a task's field and lists finished cards by day | Accepted | Landed |
+| [0135](0135-markdown-from-git-repositories.md) | Markdown from Git repositories: folders as page trees, files in a text | Proposed | Partial |

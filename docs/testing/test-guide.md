@@ -122,15 +122,23 @@ Paste something that looks like a password (`password: Test1234!`), a card numbe
 - Does the governance view show the finding masked, and can an administrator lift the restriction?
 - **Report** every harmless text that was flagged, and every secret that was not.
 
-### 10. Markdown from Git repositories (ADR-0133)
+### 10. Pasting Markdown (ADR-0133)
 
-Under *Administration → Connectors*, start *New connector (Git)*, give it a space and the address of a folder of a public repository as its host shows it, e.g. `https://github.com/owner/repository/tree/main/docs`, and run it. With `WWBB_GIT_FILES=on`, edit a page, paste the address of a Markdown file and choose *Show the file's content* in the link's bubble, or use *Insert… → Markdown file…*.
+Copy Markdown from an assistant, a README or a code editor and paste it into a page with Ctrl+V; paste other Markdown through *Insert… → Paste Markdown…*. The [Markdown guide](../guides/markdown.md) lists what is converted.
+
+- Does Markdown become the formatting you expected — headings, lists, tasks, tables, code, links?
+- Did ordinary text you pasted (a mail, a list, a piece of code) ever turn into formatting you did not want? That is a finding: say what you pasted.
+- Is it clear what happened to pictures and to what the page cannot show?
+
+### 11. Markdown from Git repositories (ADR-0135)
+
+Under *Administration → Connectors*, start *New connector (Git)*, give it a space and the address of a folder of a public repository as its host shows it, e.g. `https://github.com/owner/repository/tree/main/docs`, and run it. With `WWBB_GIT_FILES=on`, edit a page, paste the address of a Markdown file and choose *Show the file's content* in the link's bubble, or use *Insert… → Markdown file from a repository…*.
 
 - Do the pages read as the files do at the host? Report what looks different and how it looks there.
 - Do links between the files lead to their pages, and are the pictures there?
 - Does a page follow its branch after a change at the host (within an hour, or at once with *Update now*), and does a pinned one stay?
 
-### 11. Everything else
+### 12. Everything else
 
 Search, item history, relations, mentions (toolbar: *Mention*), formatting, the API at `/api/openapi.json`. Anything that surprises you is worth a report.
 

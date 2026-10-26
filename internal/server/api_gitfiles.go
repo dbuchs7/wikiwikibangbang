@@ -16,7 +16,7 @@ import (
 const filesTimeout = 2 * time.Minute
 
 // gitFileRoutes make pages from Markdown files of public repositories that
-// a text shows (ADR-0133). They are off unless WWBB_GIT_FILES=on.
+// a text shows (ADR-0135). They are off unless WWBB_GIT_FILES=on.
 func gitFileRoutes(h itemHandlers) []Route {
 	return []Route{
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/markdown", Summary: "Make a page below the item from a Markdown file of a public repository, given by its address at the host; " +

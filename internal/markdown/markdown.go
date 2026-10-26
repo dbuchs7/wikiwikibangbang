@@ -1,5 +1,5 @@
 // Package markdown converts Markdown into the block document of an item
-// (ADR-0133). goldmark parses the text; this package walks its syntax tree
+// (ADR-0135). goldmark parses the text; this package walks its syntax tree
 // and creates every block and mark itself. No renderer of goldmark is ever
 // called, so Markdown never reaches a browser as markup and the closed
 // renderer of ADR-0014 stays the only one.
@@ -64,8 +64,9 @@ func (d *Doc) Show(p Picture, id item.ID) {
 	d.Blocks[p.Block] = item.Block{Kind: item.Image, Ref: id, Text: oneLine(p.Alt)}
 }
 
-// alerts map the markers that open a quote to the tones of a panel.
-var alerts = map[string]string{"NOTE": "note", "TIP": "tip", "IMPORTANT": "info", "WARNING": "warning", "CAUTION": "error"}
+// alerts map the markers that open a quote to the tones of a panel, as
+// pasted Markdown maps them (ADR-0133).
+var alerts = map[string]string{"NOTE": "info", "TIP": "tip", "IMPORTANT": "note", "WARNING": "warning", "CAUTION": "error"}
 
 // newParser is goldmark's CommonMark parser with the extensions for
 // tables, strike-through, task lists and bare addresses, without any
@@ -237,7 +238,9 @@ func (c *converter) block(n ast.Node, kind item.BlockKind, tone string) {
 
 // list writes a list's items as flat blocks, as the body model holds
 // lists (ADR-0032): an item's first paragraph is the item, its further
-// blocks follow, and a list inside it continues the flat list.
+// blocks follow, and a list inside it continues the flat list. Inside a
+// quote or a panel, an item keeps its marker as text, as pasted Markdown
+// does (ADR-0133).
 func (c *converter) list(l *ast.List, kind item.BlockKind, tone string) {
 	itemKind := item.BulletItem
 	if l.IsOrdered() {
@@ -246,7 +249,7 @@ func (c *converter) list(l *ast.List, kind item.BlockKind, tone string) {
 	if kind != item.Paragraph {
 		itemKind = kind
 	}
-	for li := l.FirstChild(); li != nil; li = li.NextSibling() {
+	for n, li := 0, l.FirstChild(); li != nil; n, li = n+1, li.NextSibling() {
 		first := true
 		for ch := li.FirstChild(); ch != nil; ch = ch.NextSibling() {
 			switch ch.(type) {
@@ -257,6 +260,20 @@ func (c *converter) list(l *ast.List, kind item.BlockKind, tone string) {
 				}
 				first = false
 				r := c.inline(ch)
+				if kind != item.Paragraph {
+					marker := "• "
+					switch {
+					case r.task != nil && *r.task:
+						marker = "☑ "
+					case r.task != nil:
+						marker = "☐ "
+					case l.IsOrdered():
+						marker = strconv.Itoa(l.Start+n) + ". "
+					}
+					r = &run{}
+					r.add(marker, nil)
+					c.walk(ch, r, nil)
+				}
 				k := itemKind
 				if r.task != nil && kind == item.Paragraph {
 					k = item.TaskItem
@@ -418,8 +435,7 @@ func (c *converter) table(t *extast.Table) {
 	for row := t.FirstChild(); row != nil; row = row.NextSibling() {
 		var cells []string
 		for cell := row.FirstChild(); cell != nil; cell = cell.NextSibling() {
-			r := c.inline(cell)
-			cells = append(cells, strings.Join(strings.Fields(strings.ReplaceAll(r.text.String(), "\t", " ")), " "))
+			cells = append(cells, strings.Join(strings.Fields(strings.ReplaceAll(cellText(c.inline(cell)), "\t", " ")), " "))
 		}
 		width = max(width, len(cells))
 		rows = append(rows, cells)
@@ -435,6 +451,27 @@ func (c *converter) table(t *extast.Table) {
 		lines[i] = strings.Join(cells, "\t")
 	}
 	c.out = append(c.out, item.Block{Kind: item.Table, Text: strings.Join(lines, "\n")})
+}
+
+// cellText is the text of a table cell, which holds no formatting
+// (ADR-0042): a link keeps its address in parentheses, as pasted Markdown
+// does (ADR-0133).
+func cellText(r *run) string {
+	runes := []rune(r.text.String())
+	links := slices.Clone(r.marks)
+	slices.SortFunc(links, func(a, b item.Mark) int { return b.End - a.End })
+	for _, m := range links {
+		if m.Type != item.MarkLink || m.End > len(runes) {
+			continue
+		}
+		label := string(runes[m.Start:m.End])
+		href := strings.TrimPrefix(m.Href, "mailto:")
+		if label == href || label == m.Href {
+			continue
+		}
+		runes = slices.Insert(runes, m.End, []rune(" ("+m.Href+")")...)
+	}
+	return string(runes)
 }
 
 // dest is a link's or picture's target with its escapes and character

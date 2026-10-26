@@ -16,6 +16,7 @@ import { openDrawing, drawingName } from "./drawing.js";
 import { diagramView, openModeler, pickProcess, bpmnName } from "./bpmn.js";
 import { pickFromAlbum, pictureFile, captionOf, copiedPicture, clipMark } from "./album.js";
 import { assist } from "./assist.js";
+import { markdownToBlocks, pastesAsMarkdown } from "./markdown.js";
 
 // Every block carries bid, its ID in a live session (ADR-0010); it is not
 // stored. Text blocks keep the mentions they had without a mention mark
@@ -261,6 +262,31 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.panel) b.tone = node.attrs.tone;
   if (node.attrs.align) b.align = node.attrs.align;
   return b;
+}
+
+// --- Markdown (ADR-0133) ----------------------------------------------------------
+
+// markdownInsertion converts Markdown into blocks of the body (markdown.js)
+// and returns the transaction that puts them at the selection as a paste
+// does, replacing what is selected: { tr, pictures, dropped }, the last two
+// counting what was simplified. One paragraph goes into the text at the
+// cursor; other blocks split the block there or follow it. Without a
+// transaction, reason says why: "empty" (nothing to insert), "protected"
+// (the selection touches a protected passage, ADR-0088) or "code" (the
+// cursor is in a code block, where a paste stays text unless explicit).
+export function markdownInsertion(state, text, explicit = false) {
+  const { $from, from, to } = state.selection;
+  const secret = schema.marks.secret;
+  if (state.doc.rangeHasMark(from, to, secret) || secret.isInSet($from.marks())) return { reason: "protected" };
+  const inCode = Boolean($from.parent.type.spec.code);
+  if (inCode && !explicit) return { reason: "code" };
+  const { blocks, pictures, dropped } = markdownToBlocks(text, isSafeLink);
+  if (blocks.length === 0) return { reason: "empty" };
+  const doc = docFromBlocks(blocks);
+  const inline = blocks.length === 1 && blocks[0].kind === "paragraph" && $from.parent.isTextblock && !inCode;
+  const slice = inline ? doc.slice(1, doc.content.size - 1) : doc.slice(0, doc.content.size);
+  const tr = state.tr.replaceSelection(slice).scrollIntoView().setMeta("paste", true).setMeta("uiEvent", "paste");
+  return { tr, pictures, dropped };
 }
 
 // --- the editor -----------------------------------------------------------------
@@ -662,7 +688,7 @@ function imageView(node, view, getPos, files) {
 // embedContent(ref), if given, returns the content of an embedded item,
 // shown in its block (ADR-0106). markdown.insert(address), if given, makes
 // a page from a Markdown file of a repository below the item and returns
-// it, or null when cancelled (ADR-0133).
+// it, or null when cancelled (ADR-0135).
 export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, note, actions = [], embedContent, tasks, markdown }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
@@ -672,14 +698,20 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   let onUpdate = () => {};
   const statePlugin = new Plugin({ view: () => ({ update: (v) => onUpdate(v.state) }) });
   // Links, "@" and embedding as in a word processor (ADR-0096); a link to
-  // a Markdown file offers to show the file instead (ADR-0133).
+  // a Markdown file offers to show the file instead (ADR-0135).
   let showFile = null;
   const aids = assist(schema, isSafeLink, { showFile: markdown ? (href) => showFile(href) : null });
   const aidKeys = keymap({ "Mod-k": (state, dispatch, v) => { aids.openLink(v); return true; } });
   // Pictures pasted into the text (ADR-0108): one copied in the album
   // becomes a copy of its original file, any other image an upload.
+  // Markdown becomes formatted text (ADR-0133), unless Ctrl+Shift+V
+  // (Cmd+Shift+V) pastes plain text.
   let onPaste = () => false;
-  const pastePlugin = new Plugin({ props: { handlePaste: (v, ev) => onPaste(ev) } });
+  let plain = false;
+  const pastePlugin = new Plugin({ props: {
+    handleKeyDown: (v, ev) => { plain = ev.shiftKey && (ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "v"; return false; },
+    handlePaste: (v, ev) => { const asText = plain; plain = false; return onPaste(ev, asText); },
+  } });
   const view = new EditorView(mount, {
     state: EditorState.create({ doc: docFromBlocks(blocks, embeds), plugins: [...extra, ...(editable ? [pastePlugin, ...aids.plugins, aidKeys] : []), ...plugins(), tocPlugin, statePlugin] }),
     editable: () => editable,
@@ -730,11 +762,12 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind === "album") fromAlbum();
     else if (kind === "clip") fromClip();
     else if (kind === "embed") embed();
+    else if (kind === "markdown") markdownDialog();
     else if (kind === "newtask") newTask();
     else if (kind === "tasklist") taskList();
-    else if (kind === "markdown") markdownFile("");
+    else if (kind === "markdownfile") markdownFile("");
     else if (kind) insertBlock(schema.nodes[kind].create());
-  } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], markdown ? ["markdown", t("editor.markdownFile")] : null, tasks?.create ? ["newtask", t("editor.newTask")] : null, tasks?.pickLabel ? ["tasklist", t("editor.taskList")] : null, ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["figures", t("editor.figures")], ["tables", t("editor.tables")], ["children", t("editor.children")],
+  } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], ["markdown", t("editor.markdown")], markdown ? ["markdownfile", t("editor.markdownFile")] : null, tasks?.create ? ["newtask", t("editor.newTask")] : null, tasks?.pickLabel ? ["tasklist", t("editor.taskList")] : null, ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["figures", t("editor.figures")], ["tables", t("editor.tables")], ["children", t("editor.children")],
     files ? ["image", t("editor.image")] : null, files ? ["video", t("editor.video")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null, files ? ["clip", t("editor.copiedPicture")] : null,
     files ? ["bpmnnew", t("bpmn.insertNew")] : null, files ? ["bpmnfile", t("bpmn.insertFile")] : null, ["process", t("bpmn.insertProcess")]].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
@@ -845,19 +878,62 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     if (!p) status.textContent = t("editor.noClip");
     else pasteAlbum(p.item.id, p.attachment.id);
   };
-  onPaste = (ev) => {
-    if (!files) return false;
-    const m = (ev.clipboardData?.getData("text/html") || "").match(clipMark);
+  onPaste = (ev, asText) => {
+    const html = ev.clipboardData?.getData("text/html") || "";
+    const m = files && html.match(clipMark);
     if (m) {
       pasteAlbum(m[1], m[2]);
       return true;
     }
-    const file = [...(ev.clipboardData?.files || [])].find((f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type));
+    const file = files && [...(ev.clipboardData?.files || [])].find((f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type));
     if (file) {
       uploadImage(file);
       return true;
     }
-    return false;
+    const text = ev.clipboardData?.getData("text/plain") || "";
+    if (asText || !pastesAsMarkdown(text, html)) return false;
+    // In a code block or a protected passage the paste stays as it is.
+    const reason = insertMarkdown(text, false);
+    if (reason === "code" || reason === "protected" || reason === "empty") return false;
+    if (reason) status.textContent = markdownError(reason);
+    return true;
+  };
+  // insertMarkdown puts Markdown at the selection (ADR-0133) and tells in
+  // the status what was simplified; it returns why nothing was inserted,
+  // or null. A transaction refused because someone else holds a block
+  // there (live.js, ADR-0010) changes nothing.
+  const insertMarkdown = (text, explicit) => {
+    if (!view.editable) return "refused";
+    const r = markdownInsertion(view.state, text, explicit);
+    if (!r.tr) return r.reason;
+    const before = view.state.doc;
+    view.dispatch(r.tr);
+    if (view.state.doc === before) return "refused";
+    status.textContent = [r.pictures ? t("editor.markdownPictures", { n: r.pictures }) : "",
+      r.dropped ? t("editor.markdownDropped", { n: r.dropped }) : ""].filter(Boolean).join(" ");
+    return null;
+  };
+  const markdownError = (reason) => (reason === "empty" ? t("editor.markdownEmpty")
+    : reason === "protected" ? t("editor.markdownProtected") : t("editor.markdownRefused"));
+  // Markdown pasted into a dialog, for text the paste does not recognise
+  // as Markdown; it goes where the cursor was. Ctrl+Enter inserts it too.
+  const markdownDialog = async () => {
+    status.textContent = "";
+    const area = h("textarea", { name: "markdown", class: "code", rows: "12", spellcheck: "false", "aria-describedby": "pm-markdown-hint" });
+    area.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) area.form.requestSubmit();
+    });
+    const done = aids.dialog(t("editor.markdownTitle"), [
+      h("label", { class: "field" }, h("span", { text: t("editor.markdownText") }), area),
+      h("p", { class: "muted", id: "pm-markdown-hint", text: t("editor.markdownHint") }),
+    ], { ok: t("editor.markdownInsert"), submit: () => {
+      const reason = insertMarkdown(area.value, true);
+      if (reason) throw new Error(markdownError(reason));
+      return true;
+    } });
+    setTimeout(() => area.focus(), 0);
+    await done;
+    view.focus();
   };
   // A picture from the album (ADR-0054) is copied into this item, unless
   // it is one of its own files already.
@@ -896,7 +972,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     }
   };
   // A Markdown file of a repository becomes a page below this item, which
-  // the text shows whole (ADR-0133). From a link's bubble, it takes the
+  // the text shows whole (ADR-0135). From a link's bubble, it takes the
   // place of a paragraph that holds the link alone.
   const markdownFile = async (address) => {
     status.textContent = "";

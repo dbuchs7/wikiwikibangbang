@@ -49,7 +49,7 @@ type Runner struct {
 	mu    sync.Mutex
 	state map[string]*state
 	// filesRun is when the pages made from files in a text were last
-	// read (ADR-0133).
+	// read (ADR-0135).
 	filesRun time.Time
 }
 

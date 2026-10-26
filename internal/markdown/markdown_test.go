@@ -142,11 +142,12 @@ hard break.
 }
 
 func TestAlerts(t *testing.T) {
-	for marker, tone := range map[string]string{"NOTE": "note", "TIP": "tip", "IMPORTANT": "info", "WARNING": "warning", "CAUTION": "error", "note": "note"} {
+	// As pasted Markdown maps them (ADR-0133).
+	for marker, tone := range map[string]string{"NOTE": "info", "TIP": "tip", "IMPORTANT": "note", "WARNING": "warning", "CAUTION": "error", "note": "info"} {
 		d := conv(t, "> [!"+marker+"]\n> Mind *this*.\n>\n> - and that", repo())
 		want := []item.Block{
 			{Kind: item.Panel, Tone: tone, Text: "Mind this.", Marks: []item.Mark{{Type: item.MarkItalic, Start: 5, End: 9}}},
-			{Kind: item.Panel, Tone: tone, Text: "and that"},
+			{Kind: item.Panel, Tone: tone, Text: "• and that"},
 		}
 		if !reflect.DeepEqual(d.Blocks, want) {
 			t.Errorf("%s: %+v", marker, d.Blocks)
@@ -316,5 +317,22 @@ func TestMergeMarks(t *testing.T) {
 	want := []item.Mark{{Type: item.MarkBold, Start: 0, End: 1}, {Type: item.MarkBold, Start: 2, End: 3}, {Type: item.MarkBold, Start: 4, End: 5}, {Type: item.MarkItalic, Start: 4, End: 5}}
 	if !reflect.DeepEqual(d.Blocks[0].Marks, want) {
 		t.Errorf("%+v", d.Blocks[0].Marks)
+	}
+}
+
+// Inside a quote, list items keep their marker as text, and a table's
+// cell keeps a link's address, as pasted Markdown does (ADR-0133).
+func TestQuotedListsAndTableLinks(t *testing.T) {
+	d := conv(t, "> - one\n> 3. three\n> 4. four\n> - [ ] open\n> - [x] done\n\n| A | B |\n|---|---|\n| [site](https://x.org) | <https://y.org> |", repo())
+	var texts []string
+	for _, b := range d.Blocks {
+		texts = append(texts, b.Text)
+	}
+	want := []string{"• one", "3. three", "4. four", "☐ open", "☑ done", "A\tB\nsite (https://x.org)\thttps://y.org"}
+	if !reflect.DeepEqual(texts, want) {
+		t.Errorf("%q,\nwant %q", texts, want)
+	}
+	if d.Blocks[0].Kind != item.Quote || d.Blocks[3].Kind != item.Quote {
+		t.Errorf("%+v", d.Blocks)
 	}
 }

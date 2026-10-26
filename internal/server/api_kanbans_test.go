@@ -82,3 +82,45 @@ func TestKanbanColumnsThroughTheAPI(t *testing.T) {
 	w.bert.expect("POST", path+"/place", `{"card":"`+key+`","column":"state:open"}`, http.StatusNoContent)
 	w.carla.expect("GET", path+"/board", "", http.StatusNotFound)
 }
+
+// TestKanbanLimitsColoursAndCardSigns: a column's limit and a kanban's
+// colouring go through the API and come back on the board; a card in the
+// listing tells when it reached its state and how many comments and
+// files it has (ADR-0134).
+func TestKanbanLimitsColoursAndCardSigns(t *testing.T) {
+	w := newWorld(t)
+	k := w.bert.expect("POST", "/api/spaces/PLAT/kanbans", `{"name":"Web","type":"task"}`, http.StatusCreated)
+	path := "/api/spaces/PLAT/kanbans/" + field(k, "kanban", "id").(string)
+	got := w.bert.expect("PUT", path, `{"name":"Web","columns":[{"name":"To do","state":"open","limit":3},{"name":"Done","state":"done"}],"colorField":"priority","colors":{"high":"red"}}`, http.StatusOK)
+	if s := jsonOf(got); !strings.Contains(s, `"limit":3`) || !strings.Contains(s, `"colorField":"priority"`) || !strings.Contains(s, `"colors":{"high":"red"}`) {
+		t.Fatalf("kanban %s", s)
+	}
+	if s := jsonOf(w.vera.expect("GET", path+"/board", "", http.StatusOK)); !strings.Contains(s, `"limit":3`) || !strings.Contains(s, `"colorField":"priority"`) {
+		t.Fatalf("board %s", s)
+	}
+	// A rename keeps the colouring; an empty field takes it off.
+	if s := jsonOf(w.bert.expect("PUT", path, `{"name":"Website"}`, http.StatusOK)); !strings.Contains(s, `"colorField":"priority"`) {
+		t.Fatalf("rename %s", s)
+	}
+	if s := jsonOf(w.bert.expect("PUT", path, `{"name":"Website","colorField":""}`, http.StatusOK)); strings.Contains(s, `"colorField"`) || strings.Contains(s, `"colors"`) {
+		t.Fatalf("off %s", s)
+	}
+	w.bert.expect("PUT", path, `{"name":"Website","colorField":"priority","colors":{"high":"pink"}}`, http.StatusBadRequest)
+	w.bert.expect("PUT", path, `{"name":"Website","columns":[{"name":"To do","state":"open","limit":-1}]}`, http.StatusBadRequest)
+
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Card","properties":{"priority":"low"}}`, http.StatusCreated)
+	key := field(it, "item", "key").(string)
+	if field(it, "item", "stateSince") == nil || strings.Contains(jsonOf(it), "commentCount") || strings.Contains(jsonOf(it), "fileCount") {
+		t.Fatalf("a new card has reached its state and has no comments or files: %s", jsonOf(it))
+	}
+	w.bert.expect("POST", "/api/items/"+key+"/comments", `{"text":"one"}`, http.StatusCreated)
+	c := w.bert.expect("POST", "/api/items/"+key+"/comments", `{"text":"two"}`, http.StatusCreated)
+	w.bert.expect("DELETE", "/api/items/"+key+"/comments/"+field(c, "comment", "id").(string), "", http.StatusNoContent)
+	if rec := w.bert.upload("/api/items/"+key+"/attachments?name=a.txt", "application/octet-stream", []byte("text")); rec.Code != http.StatusCreated {
+		t.Fatalf("upload %d %s", rec.Code, rec.Body)
+	}
+	listed := field(w.vera.expect("GET", "/api/items?space=PLAT&type=task", "", http.StatusOK), "items").([]any)[0].(map[string]any)
+	if listed["commentCount"] != float64(1) || listed["fileCount"] != float64(1) || listed["stateSince"] == nil {
+		t.Fatalf("a listed card %s", jsonOf(listed))
+	}
+}

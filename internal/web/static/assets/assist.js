@@ -41,12 +41,12 @@ function linkRange(state, pos, type) {
 }
 
 // markdownFileRE is the address of a Markdown file as a repository's host
-// shows it (ADR-0133).
+// shows it (ADR-0135).
 const markdownFileRE = /^https?:\/\/[^\s]+\/(blob|raw|src|browse|-\/blob|-\/raw)\/[^\s]*\.(md|markdown)([?#][^\s]*)?$|^https:\/\/raw\.githubusercontent\.com\/[^\s]+\.(md|markdown)$/i;
 
 // assist makes the aids for a schema; isSafe decides which link targets
 // the model keeps (ADR-0014). showFile(href), if given, shows a Markdown
-// file a link leads to instead of the link (ADR-0133).
+// file a link leads to instead of the link (ADR-0135).
 export function assist(schema, isSafe, { showFile } = {}) {
   const link = schema.marks.link;
 
@@ -110,14 +110,14 @@ export function assist(schema, isSafe, { showFile } = {}) {
   });
 
   // dialog shows a modal dialog and resolves with what submit returns, or
-  // null when it is cancelled.
-  const dialog = (heading, body, { submit, extra = [] }) => new Promise((resolve) => {
+  // null when it is cancelled; ok labels its button.
+  const dialog = (heading, body, { submit, extra = [], ok = t("common.ok") }) => new Promise((resolve) => {
     const error = h("p", { class: "error", role: "alert" });
     const form = h("form", { method: "dialog" },
       h("h2", { text: heading }), ...body, error,
       h("div", { class: "pm-dialog-actions" }, ...extra,
         h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => close(null) }),
-        h("button", { type: "submit", class: "primary", text: t("common.ok") })));
+        h("button", { type: "submit", class: "primary", text: ok })));
     const el = h("dialog", { class: "pm-dialog" }, form);
     let done = false;
     const close = (v) => {
@@ -383,5 +383,5 @@ export function assist(schema, isSafe, { showFile } = {}) {
     },
   });
 
-  return { plugins: [atPlugin, autolinkPlugin, bubblePlugin], openLink, pickItem };
+  return { plugins: [atPlugin, autolinkPlugin, bubblePlugin], openLink, pickItem, dialog };
 }
