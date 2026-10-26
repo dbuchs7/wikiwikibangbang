@@ -9,6 +9,7 @@ import { h } from "./dom.js";
 import { get } from "./api.js";
 import { t } from "./i18n.js";
 import { describe as describeModel } from "./bpmndoc.js";
+import { MARGIN } from "./drawprocesses.js";
 
 // BPMN ends the name of a model's file.
 export const BPMN = ".bpmn";
@@ -301,13 +302,13 @@ export function diagramView(node, view, getPos, files) {
       if (was === "text" && viewer) requestAnimationFrame(fit);
     }
     tools.replaceChildren(
-      view.editable ? h("select", { class: "pm-diagram-view", "aria-label": t("bpmn.view"), onchange: (e) => {
+      view.editable ? h("label", { class: "pm-diagram-view-label" }, t("bpmn.view"), h("select", { class: "pm-diagram-view", onchange: (e) => {
         try {
           setAttrs({ view: e.target.value });
         } catch {
           render(shown = null);
         }
-      } }, views().map(([v, label]) => h("option", { value: v, text: label, selected: v === mode() }))) : "",
+      } }, views().map(([v, label]) => h("option", { value: v, text: label, selected: v === mode() })))) : "",
       mode() !== "text" ? h("button", { type: "button", class: "link pm-diagram-fit", text: t("bpmn.fit"), disabled: !drawn, onclick: fit }) : "",
       isProcess() ? h("button", { type: "button", class: "link pm-diagram-refresh", text: t("bpmn.refresh"), onclick: () => draw(true) }) : "",
       isProcess() && engine?.operations ? h("label", { class: "check pm-diagram-operations" },
@@ -506,11 +507,11 @@ export function pickProcess({ operations = false } = {}) {
 }
 
 // snapshot draws a model as a picture for a drawing (ADR-0142): an SVG as
-// a data URL, with its width and height, on white, as diagrams are shown.
-// bpmn-js lays the model out in a box out of sight. The SVG is changed as
-// text: parsed into a document, its style attributes would break the UI's
-// content security policy.
-async function snapshot(xml) {
+// a data URL, with its width and height, on white, as diagrams are shown,
+// with margin model units of room around it. bpmn-js lays the model out in
+// a box out of sight. The SVG is changed as text: parsed into a document,
+// its style attributes would break the UI's content security policy.
+async function snapshot(xml, margin = 0) {
   const Viewer = await loadViewer();
   const box = h("div", { class: "bpmn-snapshot", "aria-hidden": "true" });
   document.body.append(box);
@@ -519,15 +520,18 @@ async function snapshot(xml) {
     await viewer.importXML(xml);
     const { svg } = await viewer.saveSVG();
     const root = /<svg\b[^>]*>/.exec(svg);
-    const [x, y, width, height] = (/\sviewBox="([^"]*)"/.exec(root?.[0] || "")?.[1] || "").split(/[\s,]+/).map(Number);
-    if (root[0].endsWith("/>") || ![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) throw new Error(t("bpmn.notShown", { error: "SVG" }));
-    const at = root.index + root[0].length;
+    const [vx, vy, vw, vh] = (/\sviewBox="([^"]*)"/.exec(root?.[0] || "")?.[1] || "").split(/[\s,]+/).map(Number);
+    if (root[0].endsWith("/>") || ![vx, vy, vw, vh].every(Number.isFinite) || vw <= 0 || vh <= 0) throw new Error(t("bpmn.notShown", { error: "SVG" }));
+    const [x, y, width, height] = [vx - margin, vy - margin, vw + 2 * margin, vh + 2 * margin];
+    const tag = root[0].replace(/\swidth="[^"]*"/, ` width="${width}"`).replace(/\sheight="[^"]*"/, ` height="${height}"`)
+      .replace(/\sviewBox="[^"]*"/, ` viewBox="${x} ${y} ${width} ${height}"`);
     const white = `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="#ffffff"/>`;
+    const out = svg.slice(0, root.index) + tag + white + svg.slice(root.index + root[0].length);
     const data = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
       reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(new Blob([svg.slice(0, at) + white + svg.slice(at)], { type: "image/svg+xml" }));
+      reader.readAsDataURL(new Blob([out], { type: "image/svg+xml" }));
     });
     return { svg: data, width, height };
   } finally {
@@ -581,9 +585,44 @@ export function pickModel(files) {
 }
 
 // processPicture is the picture of a process's newest version.
-async function processPicture(engine, process, operations) {
+async function processPicture(engine, process, operations, margin) {
   const { diagram } = await get(processPath(engine, process));
-  return { ...(await snapshot(diagram.xml)), data: { kind: "process", engine, process, name: diagram.name || process, operations } };
+  return { ...(await snapshot(diagram.xml, margin)), data: { kind: "process", engine, process, name: diagram.name || process, operations, margin } };
+}
+
+// The margins a process in a drawing may have, in its model's units.
+const margins = () => [[0, t("draw.marginNone")], [20, t("draw.marginSmall")], [MARGIN, t("draw.marginMedium")], [80, t("draw.marginLarge")]];
+
+// processSettings asks how a process in a drawing is shown: the room
+// around its model and, for a process of an engine, whether its operations
+// show at first. It resolves to {margin, operations}, or null when closed.
+function processSettings(current) {
+  return new Promise((resolve) => {
+    const known = margins();
+    if (!known.some(([v]) => v === current.margin)) known.push([current.margin, String(current.margin)]);
+    const margin = h("select", { class: "bpmn-margin", "aria-label": t("draw.processMargin") },
+      known.map(([v, label]) => h("option", { value: String(v), text: label, selected: v === current.margin })));
+    const ops = h("input", { type: "checkbox", class: "bpmn-settings-operations", checked: current.operations });
+    const close = h("button", { type: "button", text: t("common.cancel") });
+    const apply = h("button", { type: "button", class: "primary", text: t("draw.processApply") });
+    const dialog = h("dialog", { class: "drawing bpmn-pick bpmn-settings", "aria-label": t("draw.processSettings") },
+      h("div", { class: "drawing-bar" }, h("strong", { text: t("draw.processSettings") }), close, apply),
+      h("div", { class: "bpmn-pick-body" }, h("label", { class: "field" }, t("draw.processMargin"), margin),
+        current.kind === "process" ? h("label", { class: "check" }, ops, " ", t("draw.processOperations")) : ""));
+    let done = false;
+    const finish = (result) => {
+      if (done) return;
+      done = true;
+      dialog.close();
+      dialog.remove();
+      resolve(result);
+    };
+    apply.addEventListener("click", () => finish({ margin: Number(margin.value), operations: ops.checked }));
+    close.addEventListener("click", () => finish(null));
+    dialog.addEventListener("close", () => finish(null));
+    document.body.append(dialog);
+    dialog.showModal();
+  });
 }
 
 // drawingProcesses answers the drawing page's asks for a process (ADR-0142)
@@ -595,19 +634,27 @@ async function processPicture(engine, process, operations) {
 // drawing is its one source, wherever it is copied to.
 export function drawingProcesses(files) {
   return async (want, current) => {
+    // A process placed anew has the usual margin; one edited keeps its own.
+    const margin = current ? current.margin : MARGIN;
     if (want === "new" || (want === "edit" && current?.kind === "bpmn")) {
       const xml = await openModeler(current?.xml || "");
-      return xml ? { ...(await snapshot(xml)), data: { kind: "bpmn", name: current?.name || "", xml } } : null;
+      return xml ? { ...(await snapshot(xml, margin)), data: { kind: "bpmn", name: current?.name || "", xml, margin } } : null;
     }
     if (want === "file") {
       const m = await pickModel(files);
-      return m ? { ...(await snapshot(m.xml)), data: { kind: "bpmn", name: m.name, xml: m.xml } } : null;
+      return m ? { ...(await snapshot(m.xml, margin)), data: { kind: "bpmn", name: m.name, xml: m.xml, margin } } : null;
     }
     if (want === "process") {
       const p = await pickProcess({ operations: true });
-      return p ? processPicture(p.engine, p.process, p.operations) : null;
+      return p ? processPicture(p.engine, p.process, p.operations, margin) : null;
     }
-    if (want === "edit" && current?.kind === "process") return processPicture(current.engine, current.process, current.operations);
+    if (want === "edit" && current?.kind === "process") return processPicture(current.engine, current.process, current.operations, margin);
+    if (want === "settings" && current) {
+      const set = await processSettings(current);
+      if (!set) return null;
+      if (current.kind === "bpmn") return { ...(await snapshot(current.xml, set.margin)), data: { ...current, margin: set.margin } };
+      return processPicture(current.engine, current.process, set.operations, set.margin);
+    }
     return null;
   };
 }
@@ -620,7 +667,8 @@ export function drawingProcesses(files) {
 // The region does not pan or zoom; the page scrolls over it.
 export function processRegion(r) {
   const canvas = h("span", { class: "pm-live-canvas" });
-  const toggle = h("button", { type: "button", class: "pm-live-ops", hidden: true, "aria-pressed": "false", text: t("bpmn.operations") });
+  // A link, so no theme's button style makes it larger than the region.
+  const toggle = h("button", { type: "button", class: "link pm-live-ops", hidden: true, "aria-pressed": "false", text: t("bpmn.operations") });
   const state = h("span", { class: "pm-live-state", role: "status" });
   const dom = h("span", { class: "pm-live-region", title: r.name }, canvas, h("span", { class: "pm-live-bar" }, toggle, state));
   for (const [k, v] of [["left", r.x], ["top", r.y], ["width", r.w], ["height", r.h]]) dom.style[k] = `${v * 100}%`;
@@ -630,6 +678,19 @@ export function processRegion(r) {
   let timer = 0;
   let gone = false;
 
+  // fit lays the model out as its picture shows it: centred, with the
+  // drawing's margin around it, so the live view covers the picture.
+  const fit = () => {
+    const c = viewer.get("canvas");
+    c.resized();
+    const inner = c.viewbox().inner;
+    const [cw, ch] = [canvas.clientWidth, canvas.clientHeight];
+    if (!cw || !ch || !inner.width || !inner.height) return c.zoom("fit-viewport", "auto");
+    const scale = Math.min(cw / (inner.width + 2 * r.margin), ch / (inner.height + 2 * r.margin));
+    const [w, hh] = [cw / scale, ch / scale];
+    c.viewbox({ x: inner.x - (w - inner.width) / 2, y: inner.y - (hh - inner.height) / 2, width: w, height: hh });
+  };
+
   const draw = async () => {
     const { engine, diagram } = await get(processPath(r.engine, r.process));
     const Viewer = await loadViewer();
@@ -637,7 +698,7 @@ export function processRegion(r) {
     viewer ||= new Viewer({ container: canvas, zoomScroll: { enabled: false } });
     await viewer.importXML(diagram.xml);
     version = diagram.version;
-    viewer.get("canvas").zoom("fit-viewport", "auto");
+    fit();
     dom.classList.add("pm-live-drawn");
     dom.title = t("bpmn.processInfo", { name: diagram.name || diagram.process, version, engine: engine.name });
     toggle.hidden = !engine.operations;
