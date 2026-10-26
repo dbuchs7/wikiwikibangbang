@@ -20,6 +20,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/notes"
+	querylang "github.com/dbuchs7/wikiwikibangbang/internal/query"
 )
 
 // itemRoutes are the item API (ADR-0028). Every handler acts through
@@ -50,7 +51,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: get, Pattern: "/api/audit", Summary: "The security audit trail, newest first, paged; filtered by q, event and actor (administrators)", Handler: http.HandlerFunc(h.listAudit)},
 		{Method: get, Pattern: "/api/audit/verify", Summary: "Check the audit trail's hash chain over the whole journal: entries, the newest link, and the first entry that breaks it (administrators)", Handler: http.HandlerFunc(h.verifyAudit)},
 
-		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged; q narrows to items whose key, title, type, state or labels hold every word", Handler: http.HandlerFunc(h.findItems)},
+		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged; q narrows to items whose key, title, type, state or labels hold every word; query selects and orders them in the query language", Handler: http.HandlerFunc(h.findItems)},
 		{Method: get, Pattern: "/api/spaces/{space}/tree", Summary: "The readable children of an item (parent) or the top of a space, in sibling order, paged", Handler: http.HandlerFunc(h.tree)},
 		{Method: get, Pattern: "/api/search", Summary: "Full-text search over readable items (q; space, type, state), best first, paged", Handler: http.HandlerFunc(h.searchItems)},
 		{Method: post, Pattern: "/api/items", Summary: "Create an item", Handler: http.HandlerFunc(h.createItem)},
@@ -109,7 +110,11 @@ func who(r *http.Request) string {
 
 // fail answers an item-model error with its HTTP status.
 func (h itemHandlers) fail(w http.ResponseWriter, err error) {
+	var qe *querylang.Error
 	switch {
+	case errors.As(err, &qe):
+		// A mistake in a query says where it is (ADR-0136).
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": qe.Error(), "at": qe.Pos})
 	case errors.Is(err, item.ErrReferenced):
 		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, item.ErrValidation):
@@ -511,8 +516,19 @@ func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 	query := item.Query{Space: q.Get("space"), Type: q.Get("type"), State: q.Get("state"), Parent: item.ID(q.Get("parent")),
 		IncludeDeleted: q.Get("deleted") == "true", Label: q.Get("label"), WhereText: where, Text: q.Get("q")}
 	h.read(w, r, func(x *item.Session) (any, error) {
-		page, total, next, err := x.FindPage(query, item.ID(q.Get("after")), limit)
-		if err != nil {
+		find := x.FindPage
+		if q.Has("query") {
+			// The query language (ADR-0136) narrows the listing further.
+			find = func(base item.Query, after item.ID, limit int) ([]item.Item, int, item.ID, error) {
+				return x.SelectPage(base, q.Get("query"), h.queryEnv(), after, limit)
+			}
+		}
+		page, total, next, err := find(query, item.ID(q.Get("after")), limit)
+		var qe *querylang.Error
+		switch {
+		case errors.As(err, &qe):
+			return nil, err
+		case err != nil:
 			return nil, badInput("%s", strings.TrimPrefix(err.Error(), item.ErrValidation.Error()+": "))
 		}
 		res := map[string]any{"total": map[string]any{"value": total, "exact": true}}
@@ -526,6 +542,24 @@ func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 		res["items"] = out
 		return res, nil
 	})
+}
+
+// queryEnv is what a query reads besides the items (ADR-0136): the time,
+// and the accounts a name in a user condition stands for, by username in
+// any case. The accounts are listed once per request, when a condition
+// names someone.
+func (h itemHandlers) queryEnv() item.QueryEnv {
+	var byName map[string][]string
+	return item.QueryEnv{Now: time.Now(), Users: func(name string) []string {
+		if byName == nil {
+			byName = map[string][]string{}
+			for _, u := range h.d.DB.Accounts.Users() {
+				k := strings.ToLower(u.Username)
+				byName[k] = append(byName[k], string(u.ID))
+			}
+		}
+		return byName[strings.ToLower(name)]
+	}}
 }
 
 // parseWhere reads the where conditions of a listing (ADR-0074): each

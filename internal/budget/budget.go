@@ -36,6 +36,11 @@ type Budgets struct {
 	// which scans the live state (ADR-0033).
 	SearchQueryBytes int
 	SearchQueryTerms int
+	// QueryBytes and QueryTerms bound one query of the query language
+	// (ADR-0136): its length, and its conditions, each value of a list
+	// counted as one. A query is checked against every readable item.
+	QueryBytes int
+	QueryTerms int
 	// LiveSessions, LiveClients and LiveBlocks bound live editing
 	// (ADR-0010): sessions on the server, participants per session, and
 	// blocks one session may hold.
@@ -79,7 +84,7 @@ type Budgets struct {
 	// process engine, such as a process's BPMN model (ADR-0129).
 	EngineResponseBytes int64
 	// MarkdownPictureBytes bounds the pictures one page written from a
-	// Markdown file of a repository reads and holds, together (ADR-0136);
+	// Markdown file of a repository reads and holds, together (ADR-0137);
 	// the pictures beyond it stay links.
 	MarkdownPictureBytes int64
 }
@@ -91,6 +96,8 @@ func Default() Budgets {
 		PageItems:            500,
 		SearchQueryBytes:     256,
 		SearchQueryTerms:     10,
+		QueryBytes:           2048,
+		QueryTerms:           64,
 		LiveSessions:         1000,
 		LiveClients:          50,
 		LiveBlocks:           5000,

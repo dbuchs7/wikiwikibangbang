@@ -22,10 +22,10 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 )
 
-// maxMarkdown bounds a Markdown file a page is written from (ADR-0136).
+// maxMarkdown bounds a Markdown file a page is written from (ADR-0137).
 const maxMarkdown = 2 << 20
 
-// maxGitFiles bounds how many Markdown files one run reads (ADR-0136).
+// maxGitFiles bounds how many Markdown files one run reads (ADR-0137).
 const maxGitFiles = 2000
 
 // indexNames are the files whose text is their folder's page, the first
@@ -35,7 +35,7 @@ var indexNames = []string{"index.md", "_index.md", "readme.md"}
 
 // gitReader reads a folder (or a file) of a Git repository: the folder
 // and every folder below it that holds Markdown files become pages, each
-// Markdown file a page below its folder's (ADR-0136).
+// Markdown file a page below its folder's (ADR-0137).
 type gitReader struct{}
 
 func (gitReader) Read(ctx context.Context, c site.Connector, env Env) (reading, error) {
@@ -233,7 +233,7 @@ func (t *gitTree) heading(addr, name string) item.Block {
 
 // read reads one Markdown file and converts it: its links resolved
 // within the repository at the followed ref, its pictures read at the
-// commit (ADR-0136).
+// commit (ADR-0137).
 func (t *gitTree) read(file, name, addr string) (Content, error) {
 	data, err := t.client.Read(t.ctx, t.a, t.commit, file, maxMarkdown)
 	if errors.Is(err, gitrepo.ErrTooLarge) {

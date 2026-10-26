@@ -688,7 +688,7 @@ function imageView(node, view, getPos, files) {
 // embedContent(ref), if given, returns the content of an embedded item,
 // shown in its block (ADR-0106). markdown.insert(address), if given, makes
 // a page from a Markdown file of a repository below the item and returns
-// it, or null when cancelled (ADR-0136).
+// it, or null when cancelled (ADR-0137).
 export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, note, actions = [], embedContent, tasks, markdown }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
@@ -698,7 +698,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   let onUpdate = () => {};
   const statePlugin = new Plugin({ view: () => ({ update: (v) => onUpdate(v.state) }) });
   // Links, "@" and embedding as in a word processor (ADR-0096); a link to
-  // a Markdown file offers to show the file instead (ADR-0136).
+  // a Markdown file offers to show the file instead (ADR-0137).
   let showFile = null;
   const aids = assist(schema, isSafeLink, { showFile: markdown ? (href) => showFile(href) : null });
   const aidKeys = keymap({ "Mod-k": (state, dispatch, v) => { aids.openLink(v); return true; } });
@@ -972,7 +972,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     }
   };
   // A Markdown file of a repository becomes a page below this item, which
-  // the text shows whole (ADR-0136). From a link's bubble, it takes the
+  // the text shows whole (ADR-0137). From a link's bubble, it takes the
   // place of a paragraph that holds the link alone.
   const markdownFile = async (address) => {
     status.textContent = "";

@@ -60,6 +60,16 @@ const blockFormat = "A body is a list of blocks, each an object with kind and te
 	"Example: [{\"kind\":\"heading\",\"level\":1,\"text\":\"Runbook\"},{\"kind\":\"paragraph\",\"text\":\"Stop the writers first.\"," +
 	"\"marks\":[{\"type\":\"bold\",\"start\":0,\"end\":4}]},{\"kind\":\"bullet\",\"text\":\"db1\"},{\"kind\":\"bullet\",\"text\":\"db2\"}]."
 
+// queryLanguage describes the query language (ADR-0136) to agents.
+const queryLanguage = "A query is conditions joined with AND, OR, NOT and parentheses, then optionally ORDER BY field [ASC|DESC], further fields after commas. " +
+	"A condition is field = value, !=, <, <=, >, >=, ~ (every word of the value occurs), !~, field IN (a, b), field NOT IN (...), field IS EMPTY, field IS NOT EMPTY. " +
+	"Fields: id, key, title, type, space, state, parent and ancestor (an item's key or ID), label, text (title, key, body, text properties, labels, comments; ~ only), " +
+	"body and comment (~ and IS EMPTY), created, updated, creator, finished (true when the workflow is done), and any property by its name, as list_types names them; " +
+	"quote a name with spaces, or a property whose name is also a built-in field's, e.g. \"due date\". Values with spaces or commas are quoted. " +
+	"Dates are 2026-10-01, a time is RFC 3339, -7d, 2w, +12h and -1y count from now; functions: now(), startOfDay(), endOfDay(), startOfWeek(), endOfWeek(), " +
+	"startOfMonth(), endOfMonth(), startOfYear(), endOfYear(), each with an optional offset such as -1, and currentUser(), your caller. " +
+	"A user field takes a username or a user ID. != and NOT IN also hold for items without the field. A mistake is answered with the character where it is."
+
 var (
 	refParam = param{"ref", str, inPath, true, "The item's ID or key, e.g. PLAT-12."}
 	paging   = []param{
@@ -113,6 +123,10 @@ var tools = []tool{
 			{"parent", str, inQuery, false, "The ID of the containing item."},
 			{"label", str, inQuery, false, "A label the items carry, e.g. runbook."},
 			{"where", str, inQuery, false, "A property's value, as <field>=<value>, e.g. source-id=4f2a; a date as YYYY-MM-DD."},
+		}, paging...)},
+	{Name: "query_items", Description: "Select readable items with the query language, in its order, paged. " + queryLanguage,
+		Method: "GET", Path: "/api/items", Params: append([]param{
+			{"query", str, inQuery, true, "The query, e.g. type = task AND assignee = currentUser() AND state != done ORDER BY due."},
 		}, paging...)},
 	{Name: "get_governance", Description: "The governance check of a space: sensitive data, stale items, implausible values and empty recommended fields, and items due for review, " +
 		"each with the person responsible. Fix what can be fixed, e.g. a missing contact; a review is a person's decision.",

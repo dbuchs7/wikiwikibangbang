@@ -130,7 +130,7 @@ Copy Markdown from an assistant, a README or a code editor and paste it into a p
 - Did ordinary text you pasted (a mail, a list, a piece of code) ever turn into formatting you did not want? That is a finding: say what you pasted.
 - Is it clear what happened to pictures and to what the page cannot show?
 
-### 11. Markdown from Git repositories (ADR-0136)
+### 11. Markdown from Git repositories (ADR-0137)
 
 Under *Administration → Connectors*, start *New connector (Git)*, give it a space and the address of a folder of a public repository as its host shows it, e.g. `https://github.com/owner/repository/tree/main/docs`, and run it. With `WWBB_GIT_FILES=on`, edit a page, paste the address of a Markdown file and choose *Show the file's content* in the link's bubble, or use *Insert… → Markdown file from a repository…*.
 

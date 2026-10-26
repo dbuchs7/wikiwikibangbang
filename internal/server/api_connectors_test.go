@@ -113,7 +113,7 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	}
 	w.admin.expect("DELETE", "/api/connectors/feed", "", http.StatusNoContent)
 
-	// A Git connector names a folder of a repository (ADR-0136); its
+	// A Git connector names a folder of a repository (ADR-0137); its
 	// address is checked, and the list names the values it gives.
 	gitConnector := func(url string) string {
 		return `{"id":"docs","name":"Docs","kind":"git","space":"PLAT","intervalHours":1,"git":{"url":"` + url + `"}}`

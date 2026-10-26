@@ -193,7 +193,7 @@ function atlassianSource() {
 }
 
 // gitSource answers as a Gitea instance holding one repository, o/r,
-// whose folder docs has an index file and one page (ADR-0136).
+// whose folder docs has an index file and one page (ADR-0137).
 function gitSource() {
   const commit = "1".repeat(40);
   const files = { "docs/index.md": "# Handbook\n\nRead [the first page](a.md).", "docs/a.md": "# First page\n\nWritten in the *repository*." };
@@ -563,6 +563,27 @@ function gitSource() {
     await page.waitForTimeout(2500); // the item view has answered by now
     check(await page.locator(".hits li").count() > 0 && (await page.textContent(".hits li a")) === "PLAT-2", "the search results stay");
     await page.unroute("**/api/items/PLAT-1");
+
+    step("query: the search's words lead to a query of the fields; a mistake says where it is (ADR-0136)");
+    await page.click("#search-to-query");
+    await page.waitForSelector("#query-results tbody tr");
+    check(await page.inputValue("#query-text") === 'text ~ "alert body"', "the search's words become a condition: " + await page.inputValue("#query-text"));
+    check((await page.locator("#query-results tbody tr a.key").allTextContents()).includes("PLAT-2"), "the runbook is selected");
+    await page.fill("#query-text", "key = PLAT-2 ORDER BY");
+    expectedConsole = /status of 400/; // the mistake is refused
+    await page.click("#query-run");
+    await page.waitForSelector("#query-error");
+    expectedConsole = null;
+    check((await page.textContent("#query-error")).startsWith("at character 22:"), "the mistake names its place: " + await page.textContent("#query-error"));
+    check(await page.evaluate(() => document.getElementById("query-text").selectionStart) === 21, "the cursor stands at the mistake");
+    await page.fill("#query-text", "key IN (PLAT-1, PLAT-2) ORDER BY key DESC");
+    await page.press("#query-text", "Control+Enter");
+    await page.waitForFunction(() => document.querySelectorAll("#query-results tbody tr").length === 2);
+    check((await page.locator("#query-results tbody tr a.key").allTextContents()).join(",") === "PLAT-2,PLAT-1", "ordered by key, the newest first");
+    check((await page.getAttribute("#query-csv", "href")).startsWith("/api/items.csv?query="), "the query exports as CSV");
+    await page.reload();
+    await page.waitForFunction(() => document.querySelectorAll("#query-results tbody tr").length === 2);
+    check(await page.inputValue("#query-text") === "key IN (PLAT-1, PLAT-2) ORDER BY key DESC", "the query survives a reload in the address");
 
     step("app switcher: nine dots open the modules; Tasks lists open work across spaces");
     await page.click("#app-switcher");
@@ -2396,7 +2417,7 @@ function gitSource() {
     await page.goto(base + "/#/item/" + handbook.key);
     await page.waitForSelector("#edit");
 
-    step("connectors: a folder of a Git repository becomes a tree of pages, its index file the folder's text, links between its files mentions (ADR-0136)");
+    step("connectors: a folder of a Git repository becomes a tree of pages, its index file the folder's text, links between its files mentions (ADR-0137)");
     await page.goto(base + "/#/admin");
     await page.click("#connector-new-git");
     await page.waitForSelector("#connector-settings [name=url]");
@@ -2486,7 +2507,7 @@ function gitSource() {
     await page.fill("#body section.pm-tasklist .filter-text", "notes");
     await page.waitForFunction((sel) => [...document.querySelectorAll(sel)].filter((r) => !r.hidden).length === 1, rows);
 
-    step("a Markdown file in a text: a pasted link offers its content, a page below the item shown whole, following its branch; pinned and read again from its page (ADR-0136)");
+    step("a Markdown file in a text: a pasted link offers its content, a page below the item shown whole, following its branch; pinned and read again from its page (ADR-0137)");
     const notesHost = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ space: "PLAT", type: "page", title: "Release notes" }) })).json()).item);
     await page.goto(base + "/#/item/" + notesHost.key + "?edit");
@@ -2678,5 +2699,6 @@ function gitSource() {
     engine.close();
     feed.close();
     atlassian.close();
+    repo.close();
   }
 })();
