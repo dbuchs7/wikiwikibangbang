@@ -573,8 +573,11 @@ func (c Client) get(ctx context.Context, path string, v any) error {
 type reading struct {
 	// write, if set, writes what was read itself, as the Atlassian import
 	// does (ADR-0128); otherwise apply says to apply the entries.
-	write    func(db *storage.DB, dry bool) (Result, error)
-	apply    bool
+	write func(db *storage.DB, dry bool) (Result, error)
+	apply bool
+	// partial says the entries are only those changed since a time, so
+	// none is withdrawn for missing (ADR-0140).
+	partial  bool
 	datasets int
 	formats  []string
 	entries  []Entry

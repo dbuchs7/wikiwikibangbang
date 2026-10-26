@@ -172,6 +172,7 @@ func (d spec) list(base *url.URL, path string, item, op map[string]any) (List, s
 	}
 	q := url.Values{}
 	var paging *site.Paging
+	var since *site.Since
 	sizeParam, size := "", 0
 	for _, p := range append(slices.Clone(arr(item["parameters"])), arr(op["parameters"])...) {
 		p := d.resolve(p)
@@ -197,6 +198,17 @@ func (d spec) list(base *url.URL, path string, item, op map[string]any) (List, s
 		case role == "size":
 			sizeParam = name
 			size = cmp.Or(min(number(str(cmp.Or(p["maximum"], schema["maximum"]))), 1000), number(def), 100)
+		case in == "query" && sinceNames[strings.ToLower(name)] && def == "":
+			// A time the list is asked from: what changed since (ADR-0140).
+			format := cmp.Or(str(schema["format"]), str(p["format"]))
+			switch t := cmp.Or(str(schema["type"]), str(p["type"])); {
+			case t == "string" && format == "date-time":
+				since = &site.Since{Param: name, Format: site.SinceRFC3339, FullDays: 7}
+			case t == "string" && format == "date":
+				since = &site.Since{Param: name, Format: site.SinceDate, FullDays: 7}
+			case t == "integer" || t == "number":
+				since = &site.Since{Param: name, Format: site.SinceUnix, FullDays: 7}
+			}
 		case in == "query" && def != "":
 			q.Set(name, def)
 		case p["required"] == true && (in == "query" || in == "path"):
@@ -258,7 +270,19 @@ func (d spec) list(base *url.URL, path string, item, op map[string]any) (List, s
 		}
 		src.Paging = paging
 	}
+	if since != nil && (src.Paging == nil || since.Param != src.Paging.Param && since.Param != src.Paging.SizeParam) {
+		src.Since = since
+	}
 	return List{Source: src}, ""
+}
+
+// sinceNames are the usual names of a parameter that asks a list for
+// what changed since a time (ADR-0140).
+var sinceNames = map[string]bool{
+	"since": true, "modified_since": true, "modifiedsince": true, "updated_since": true, "updatedsince": true,
+	"changed_since": true, "changedsince": true, "modifiedafter": true, "modified_after": true, "updatedafter": true,
+	"updated_after": true, "changedafter": true, "changed_after": true, "lastmodified": true, "last_modified": true,
+	"modified_from": true, "updated_from": true, "updatedsincetime": true,
 }
 
 // pagingRoles are the usual names of the parameters that page a list

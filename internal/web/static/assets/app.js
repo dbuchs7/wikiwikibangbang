@@ -5519,6 +5519,15 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     pagingBox.hidden = pagingKind.value === "";
     pagingBox.querySelector("[name=pagingParam]").required = pagingKind.value !== "";
   };
+  // Only what changed since the last run (ADR-0140): the parameter that
+  // asks for it, the time's format, and how often a run reads in full.
+  const sc = j?.since || {};
+  const sinceBox = h("fieldset", { class: "connector-target", id: "since" }, h("legend", { text: t("since.title") }),
+    field(t("since.param"), h("input", { name: "sinceParam", value: sc.param || "", maxlength: 64, placeholder: "updated_since" })),
+    field(t("since.format"), h("select", { name: "sinceFormat" }, [["rfc3339", "2026-10-26T13:00:00Z"], ["date", "2026-10-26"], ["unix", t("since.unix")], ["unixms", t("since.unixms")]]
+      .map(([v, text]) => h("option", { value: v, text, selected: v === (sc.format || "rfc3339") })))),
+    field(t("since.fullDays"), h("input", { name: "fullDays", type: "number", min: 1, max: 90, value: sc.fullDays || 7 })),
+    h("p", { class: "muted", text: t("since.help") }));
   pagingKind.addEventListener("change", () => {
     // Offsets count from 0, pages mostly from 1.
     const start = pagingBox.querySelector("[name=pagingStart]");
@@ -5557,6 +5566,8 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
         pagingKind.value = p.kind || "";
         set("pagingParam", p.param); set("pagingStart", p.start ?? (p.kind === "offset" ? 0 : 1)); set("sizeParam", p.sizeParam);
         set("pageSize", p.size || ""); set("totalPath", p.total);
+        const sn = s.since || {};
+        set("sinceParam", sn.param); set("sinceFormat", sn.format || "rfc3339"); set("fullDays", sn.fullDays || 7);
         showPaging();
         valuesInput.value = Object.entries(s.values || {}).map(([n, p]) => `${n} = ${p}`).join("\n");
         showFields();
@@ -5591,6 +5602,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     field(t("paging.kind"), pagingKind),
     nextBox,
     pagingBox,
+    sinceBox,
     h("p", { class: "muted", text: t("json.pathsHelp") }),
     field(t("json.values"), valuesInput),
     h("p", { class: "muted", text: t("json.valuesHelp") }),
@@ -5635,10 +5647,10 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       runStatus.replaceChildren(errorBox(err));
     }
   } });
-  const run = (dryRun, id, text) => h("button", { type: "button", class: dryRun ? "secondary" : "primary", id, disabled: st.running || !c.space && !a, text, onclick: async () => {
+  const run = (dryRun, id, text, full) => h("button", { type: "button", class: dryRun || full ? "secondary" : "primary", id, disabled: st.running || !c.space && !a, text, onclick: async () => {
     runStatus.replaceChildren();
     try {
-      await post(path + "/run", { dryRun });
+      await post(path + "/run", { dryRun, full: !!full });
       reopen(c.id);
     } catch (err) {
       runStatus.replaceChildren(errorBox(err));
@@ -5652,6 +5664,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
           : t(g ? "git.counts" : "catalog.counts", { datasets: r.datasets, entries: r.entries, created: r.new, changed: r.changed, unchanged: r.unchanged, withdrawn: r.withdrawn, removed: r.removed || 0 })),
     r.version && !r.same && !r.error ? h("p", { class: "muted", text: t("git.read", { commit: r.version.slice(0, 8) }) }) : "",
     r.formats?.length ? h("p", { class: "muted", text: t("catalog.formatsRead", { list: r.formats.join(", ") }) }) : "",
+    r.since ? h("p", { class: "muted run-since", text: t("since.run", { when: when(r.since) }) }) : "",
     r.examples.length ? h("ul", {}, r.examples.map((x) => h("li", {}, h("span", { class: "chip", text: { new: t("catalog.kind.new"), changed: t("catalog.kind.changed"), withdrawn: t("catalog.kind.withdrawn"), removed: t("catalog.kind.removed") }[x.kind] }), " ",
       x.key ? link("#/item/" + encodeURIComponent(x.key), `${x.key} ${x.title}`) : x.title))) : "",
     r.problems.length ? filtered(h("ul", { class: "catalog-problems" }, r.problems.map((p) => h("li", { class: "muted", text: p }))),
@@ -5710,6 +5723,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
           text: d.get("text").trim(), next: d.get("pagingKind") ? "" : d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language"),
           paging: d.get("pagingKind") ? { kind: d.get("pagingKind"), param: d.get("pagingParam").trim(), start: Number(d.get("pagingStart")) || 0,
             sizeParam: d.get("sizeParam").trim(), size: Number(d.get("pageSize")) || 0, total: d.get("totalPath").trim() } : null,
+          since: d.get("sinceParam").trim() ? { param: d.get("sinceParam").trim(), format: d.get("sinceFormat"), fullDays: Number(d.get("fullDays")) || 7 } : null,
           spec: picked.spec, operation: picked.operation };
       } else {
         body.ckan = { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(), language: d.get("language") };
@@ -5719,6 +5733,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     }),
     c.isNew ? "" : h("p", { id: "connector-next" }, st.running ? t("catalog.running") : st.next ? t("catalog.next", { when: when(st.next) }) : t("catalog.off")),
     c.isNew ? "" : h("div", { class: "actions-row" }, run(true, "connector-dry-run", t("catalog.dryRunNow")), run(false, "connector-run-now", t("catalog.runNow")),
+      j?.since ? run(false, "connector-run-full", t("since.runFull"), true) : "",
       c.space ? link("#/space/" + encodeURIComponent(c.space), t("catalog.openSpace"), "button") : "", a ? release() : ""),
     c.isNew || !a ? "" : h("p", { class: "muted", text: t("atlassian.releaseHelp") }),
     runStatus,

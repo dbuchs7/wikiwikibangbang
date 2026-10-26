@@ -343,3 +343,34 @@ func TestGitConnectorsAreChecked(t *testing.T) {
 		}
 	}
 }
+
+func TestSinceIsChecked(t *testing.T) {
+	s, _ := New(nil, func([]byte) error { return nil })
+	c := jsonConnector()
+	c.JSON.Since = &Since{Param: " updated_since "}
+	kept, err := s.SetConnector("admin", c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := *kept.JSON.Since; got != (Since{Param: "updated_since", Format: SinceRFC3339, FullDays: 7}) {
+		t.Fatalf("normalized %+v", got)
+	}
+	got, _ := s.Connector("feed")
+	got.JSON.Since.Param = "x"
+	if again, _ := s.Connector("feed"); again.JSON.Since.Param != "updated_since" {
+		t.Fatal("a caller changed the settings")
+	}
+	for name, change := range map[string]func(*JSONSource){
+		"no parameter":   func(j *JSONSource) { j.Since.Param = "" },
+		"a bad format":   func(j *JSONSource) { j.Since.Format = "iso" },
+		"too rarely":     func(j *JSONSource) { j.Since.FullDays = 91 },
+		"a page's param": func(j *JSONSource) { j.Next, j.Paging = "", &Paging{Kind: PagingPage, Param: "since"} },
+	} {
+		bad := jsonConnector()
+		bad.JSON.Since = &Since{Param: "since", Format: SinceUnix, FullDays: 1}
+		change(bad.JSON)
+		if _, err := s.SetConnector("admin", bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

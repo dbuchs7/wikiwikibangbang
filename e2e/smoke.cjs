@@ -148,6 +148,14 @@ function feedSource() {
         ""].join("\n"));
       return;
     }
+    // Three entries; asked for what changed since a time, one (ADR-0140).
+    if (new URL(req.url, "http://x").pathname === "/changes") {
+      const since = new URL(req.url, "http://x").searchParams.get("since");
+      const all = ["Alpha", "Beta", "Gamma"].map((title, i) => ({ id: "c" + (i + 1), title }));
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ entries: since && !Number.isNaN(Date.parse(since)) ? all.slice(1, 2) : all }));
+      return;
+    }
     // Three entries, two a page, by a page number (ADR-0135).
     const asked = new URL(req.url, "http://x");
     if (asked.pathname === "/paged") {
@@ -2455,6 +2463,27 @@ function gitSource() {
     check(await page.inputValue("#paging-kind") === "page", "the paging is kept");
     await page.click("#connector-dry-run");
     await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('3 new')");
+
+    step("connectors: a run reads only what changed since the last one, and in full when asked (ADR-0140)");
+    await page.goto(base + "/#/admin");
+    await page.click("#connector-new-json");
+    await page.waitForSelector("#since [name=sinceParam]");
+    await page.fill("#connector-settings [name=id]", "changes");
+    await page.fill("#connector-settings [name=name]", "Changes");
+    await page.selectOption("#connector-settings [name=space]", "APIS");
+    await page.fill("#connector-settings [name=url]", `http://127.0.0.1:${feed.address().port}/changes`);
+    await page.fill("#since [name=sinceParam]", "since");
+    await page.click("#connector-settings button[type=submit]");
+    await page.waitForSelector("#connector-list tr[data-connector='changes']");
+    await page.click("#connector-run-now");
+    await page.waitForSelector("#connector-history .catalog-run:has-text('Sync'):has-text('3 new')");
+    check(await page.locator("#connector-history .catalog-run[open] .run-since").count() === 0, "the first run reads in full");
+    await page.click("#connector-run-now");
+    await page.waitForSelector("#connector-history .catalog-run[open] .run-since");
+    await page.waitForSelector("#connector-history .catalog-run[open]:has-text('1 unchanged'):has-text('0 withdrawn')");
+    await page.click("#connector-run-full");
+    await page.waitForSelector("#connector-history .catalog-run[open]:has-text('3 unchanged')");
+    check(await page.locator("#connector-history .catalog-run[open] .run-since").count() === 0, "a run asked for in full reads in full");
 
     step("connectors: an Atlassian site is imported on a schedule; its pages are read-only until the cut-over (ADR-0128)");
     await page.goto(base + "/#/admin");
