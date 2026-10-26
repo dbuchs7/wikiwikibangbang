@@ -1,6 +1,7 @@
 package connector
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -48,7 +49,7 @@ type Runner struct {
 	mu    sync.Mutex
 	state map[string]*state
 	// filesRun is when the pages made from files in a text were last
-	// read (ADR-0128).
+	// read (ADR-0131).
 	filesRun time.Time
 }
 
@@ -81,7 +82,14 @@ func New(db *storage.DB, log *slog.Logger) *Runner {
 // TokenVar is the environment variable that holds a connector's
 // credential, e.g. WWBB_CONNECTOR_OPENDATA_SWISS_TOKEN. Credentials are
 // never kept in the settings (ADR-0077).
-func TokenVar(id string) string {
+func TokenVar(id string) string { return envVar(id, "TOKEN") }
+
+// EmailVar is the environment variable that holds the e-mail address of
+// the account a connector of the kind atlassian signs in with, which goes
+// with its API token (ADR-0128).
+func EmailVar(id string) string { return envVar(id, "EMAIL") }
+
+func envVar(id, what string) string {
 	return "WWBB_CONNECTOR_" + strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' {
 			return r - 'a' + 'A'
@@ -90,7 +98,7 @@ func TokenVar(id string) string {
 			return r
 		}
 		return '_'
-	}, id) + "_TOKEN"
+	}, id) + "_" + what
 }
 
 // Close stops the runs Start began and waits until they have ended.
@@ -193,7 +201,10 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 		r.mu.Unlock()
 		rd, err = rdr.Read(ctx, c, env)
 	}
-	if err == nil && rd.apply {
+	switch {
+	case err == nil && rd.write != nil:
+		res, err = rd.write(r.db, dry)
+	case err == nil && rd.apply:
 		res, err = Apply(r.db, c, rd.entries, dry)
 	}
 	res.Connector, res.Datasets, res.Formats, res.Version, res.Same = c.ID, rd.datasets, rd.formats, rd.version, rd.same
@@ -224,14 +235,14 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 		if err != nil {
 			detail["error"] = err.Error()
 		}
-		r.db.Audit.Record(audit.Entry{Event: audit.CatalogSynced, Actor: actor, Subject: c.Space, Detail: detail})
+		r.db.Audit.Record(audit.Entry{Event: audit.CatalogSynced, Actor: actor, Subject: cmp.Or(c.Space, c.ID), Detail: detail})
 	}
 	return res, err
 }
 
 // env is what a connector's reader is given (ADR-0127).
 func (r *Runner) env(id string) Env {
-	return Env{Token: r.getenv(TokenVar(id)), HTTP: r.httpClient(), CKAN: r.client}
+	return Env{Token: r.getenv(TokenVar(id)), Email: r.getenv(EmailVar(id)), HTTP: r.httpClient(), CKAN: r.client}
 }
 
 // Forget drops what the runner remembers of a removed connector.
@@ -267,12 +278,19 @@ type Status struct {
 	// environment, and names the variable; never its value.
 	Credential    bool   `json:"credential"`
 	CredentialVar string `json:"credentialVar"`
+	// Email does the same for the account's e-mail address, which a
+	// connector of the kind atlassian signs in with (ADR-0128).
+	Email    bool   `json:"email,omitempty"`
+	EmailVar string `json:"emailVar,omitempty"`
 }
 
 // Status reports a connector's last runs and when it runs next.
 func (r *Runner) Status(id string) Status {
 	c, _ := r.db.Site.Connector(id)
 	s := Status{CredentialVar: TokenVar(id), Credential: r.getenv(TokenVar(id)) != ""}
+	if c.Kind == site.KindAtlassian {
+		s.EmailVar, s.Email = EmailVar(id), r.getenv(EmailVar(id)) != ""
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	st := r.state[id]

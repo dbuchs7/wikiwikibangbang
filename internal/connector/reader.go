@@ -21,6 +21,9 @@ type Reader interface {
 // source with, which keeps to public addresses unless allowed (guard.go).
 type Env struct {
 	Token string
+	// Email is the account's e-mail address an Atlassian site is signed in
+	// to with Token (ADR-0128).
+	Email string
 	HTTP  *http.Client
 	// Seen is what the last run that applied its reading without a
 	// problem remembered of the source (reading.seen), and Force asks for
@@ -33,9 +36,10 @@ type Env struct {
 
 // readers are the kinds of source this server reads, by kind.
 var readers = map[string]Reader{
-	site.KindCKAN: ckanReader{},
-	site.KindJSON: jsonReader{},
-	site.KindGit:  gitReader{},
+	site.KindCKAN:      ckanReader{},
+	site.KindJSON:      jsonReader{},
+	site.KindAtlassian: atlassianReader{},
+	site.KindGit:       gitReader{},
 }
 
 // reader returns the reader of a connector's kind.

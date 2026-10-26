@@ -164,7 +164,7 @@ func (s *Store) FindByOrigin(system, instance, externalID string) (Item, bool) {
 
 // FindBySystem returns the live items whose origin names a system, in the
 // order they were made, e.g. the pages that mirror files of Git
-// repositories (ADR-0128).
+// repositories (ADR-0131).
 func (s *Store) FindBySystem(system string) []Item {
 	var out []Item
 	for key, id := range s.bySource {
@@ -177,7 +177,7 @@ func (s *Store) FindBySystem(system string) []Item {
 }
 
 // Mirror makes or updates, as the principal, a page that mirrors a file
-// of another system (ADR-0128), matched by its origin as an import is. It
+// of another system (ADR-0131), matched by its origin as an import is. It
 // counts as making a page below an item the principal may edit; a page
 // made before must be one the principal may edit, and stays where it is.
 func (x *Session) Mirror(u Upsert) (Item, error) {

@@ -26,6 +26,8 @@ func connectorRoutes(d Deps) []Route {
 		{Method: http.MethodPut, Pattern: "/api/connectors/{id}", Summary: "Change a connector's settings; its ID stays (administrators)", Handler: http.HandlerFunc(h.setConnector)},
 		{Method: http.MethodDelete, Pattern: "/api/connectors/{id}", Summary: "Remove a connector; the entries it wrote stay, with their origin (administrators)", Handler: http.HandlerFunc(h.removeConnector)},
 		{Method: http.MethodPost, Pattern: "/api/connectors/{id}/run", Summary: "Run a connector now, in the background; dryRun reports what it would change without writing (administrators)", Handler: http.HandlerFunc(h.runConnector)},
+		{Method: http.MethodPost, Pattern: "/api/connectors/{id}/release", Summary: "Cut over from an Atlassian import: its items become ordinary items people change, and its schedule is turned off (administrators)", Handler: http.HandlerFunc(h.releaseConnector)},
+		{Method: http.MethodGet, Pattern: "/api/connectors/{id}/openapi", Summary: "The lists an API description at url (OpenAPI 3 or Swagger 2.0, JSON or YAML) offers, each as the settings of a JSON source; the connector's credential is sent (administrators)", Handler: http.HandlerFunc(h.connectorOpenAPI)},
 		{Method: http.MethodGet, Pattern: "/api/connectors/{id}/formats", Summary: "The resource formats a CKAN source's data sets use, with how many data sets use each, to choose the interfaces from; baseURL and organizations as typed, else as saved (administrators)", Handler: http.HandlerFunc(h.connectorFormats)},
 	}
 }
@@ -88,6 +90,15 @@ func (h authHandlers) checkConnector(w http.ResponseWriter, c site.Connector) bo
 	if !exists {
 		writeError(w, http.StatusBadRequest, "the space "+space+" does not exist; create it first")
 		return false
+	}
+	// An Atlassian import writes as its mapping says (ADR-0128); the
+	// accounts it names must exist.
+	if c.Kind == site.KindAtlassian {
+		if err := connector.CheckAccounts(h.d.DB.Accounts, c); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return false
+		}
+		return true
 	}
 	// The type must take what the connector writes; page is defined by
 	// the first run if the site has none (ADR-0127).
@@ -166,6 +177,9 @@ func (h authHandlers) keepConnector(w http.ResponseWriter, r *http.Request, acto
 	if k := kept.CKAN; k != nil {
 		detail["source"], detail["formats"], detail["organizations"] = k.BaseURL, strings.Join(k.Formats, " "), strings.Join(k.Organizations, " ")
 	}
+	if a := kept.Atlassian; a != nil {
+		detail["source"], detail["spaces"], detail["projects"], detail["grants"] = a.Site, strings.Join(a.Spaces, " "), strings.Join(a.Projects, " "), strings.Join(a.Grants, " ")
+	}
 	if g := kept.Git; g != nil {
 		detail["source"] = g.URL
 	}
@@ -197,6 +211,33 @@ func (h authHandlers) removeConnector(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// releaseConnector is the cut-over from an Atlassian import (ADR-0128).
+func (h authHandlers) releaseConnector(w http.ResponseWriter, r *http.Request) {
+	actor, ok := h.adminOnly(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	spaces, err := h.d.Connectors.ReleaseAtlassian(id, actor)
+	switch {
+	case errors.Is(err, connector.ErrUnknown):
+		writeError(w, http.StatusNotFound, "no connector "+id)
+	case errors.Is(err, connector.ErrBusy):
+		writeError(w, http.StatusConflict, "the connector is running")
+	case errors.Is(err, connector.ErrNotManaging):
+		writeError(w, http.StatusConflict, err.Error())
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "the items were not released")
+	default:
+		if spaces == nil {
+			spaces = []string{}
+		}
+		h.record(audit.Entry{Event: audit.CatalogSyncChanged, Actor: actor, Addr: clientAddr(r), Subject: id,
+			Detail: map[string]string{"connector": id, "released": strings.Join(spaces, " "), "enabled": "false"}})
+		writeJSON(w, http.StatusOK, map[string]any{"released": spaces})
+	}
+}
+
 func (h authHandlers) runConnector(w http.ResponseWriter, r *http.Request) {
 	actor, ok := h.adminOnly(w, r)
 	if !ok {
@@ -215,7 +256,7 @@ func (h authHandlers) runConnector(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "no connector "+id)
 		return
 	}
-	if c.Space == "" {
+	if c.Space == "" && c.Kind != site.KindAtlassian {
 		writeError(w, http.StatusConflict, "set the connector's space first")
 		return
 	}
@@ -232,6 +273,29 @@ func (h authHandlers) runConnector(w http.ResponseWriter, r *http.Request) {
 
 // formatsTimeout bounds asking the source for its formats.
 const formatsTimeout = 30 * time.Second
+
+// connectorOpenAPI reads an API description for an administrator to pick
+// a list from (ADR-0130); the connector need not be saved yet.
+func (h authHandlers) connectorOpenAPI(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.adminOnly(w, r); !ok {
+		return
+	}
+	addr := strings.TrimSpace(r.URL.Query().Get("url"))
+	probe := site.JSONSource{URL: addr, ID: "id", Title: "title", Spec: addr}
+	c := site.Connector{ID: r.PathValue("id"), Name: "x", Kind: site.KindJSON, IntervalHours: 1, JSON: &probe}
+	if err := c.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, "the description's address: "+err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), formatsTimeout)
+	defer cancel()
+	d, err := h.d.Connectors.DescribeOpenAPI(ctx, c.ID, addr)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
 
 func (h authHandlers) connectorFormats(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.adminOnly(w, r); !ok {

@@ -122,7 +122,7 @@ Paste something that looks like a password (`password: Test1234!`), a card numbe
 - Does the governance view show the finding masked, and can an administrator lift the restriction?
 - **Report** every harmless text that was flagged, and every secret that was not.
 
-### 10. Markdown from Git repositories (ADR-0128)
+### 10. Markdown from Git repositories (ADR-0131)
 
 Under *Administration → Connectors*, start *New connector (Git)*, give it a space and the address of a folder of a public repository as its host shows it, e.g. `https://github.com/owner/repository/tree/main/docs`, and run it. With `WWBB_GIT_FILES=on`, edit a page, paste the address of a Markdown file and choose *Show the file's content* in the link's bubble, or use *Insert… → Markdown file…*.
 

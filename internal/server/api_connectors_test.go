@@ -113,7 +113,7 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	}
 	w.admin.expect("DELETE", "/api/connectors/feed", "", http.StatusNoContent)
 
-	// A Git connector names a folder of a repository (ADR-0128); its
+	// A Git connector names a folder of a repository (ADR-0131); its
 	// address is checked, and the list names the values it gives.
 	gitConnector := func(url string) string {
 		return `{"id":"docs","name":"Docs","kind":"git","space":"PLAT","intervalHours":1,"git":{"url":"` + url + `"}}`
@@ -124,6 +124,50 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 		t.Errorf("git values %s, kinds %s", jsonOf(listed["gitValues"]), jsonOf(listed["kinds"]))
 	}
 	w.admin.expect("DELETE", "/api/connectors/docs", "", http.StatusNoContent)
+
+	// An API description offers its lists as JSON sources (ADR-0130).
+	spec := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "openapi: 3.0.0\ninfo: {title: Registry}\npaths:\n  /services:\n    get:\n      responses:\n        200:\n"+
+			"          content: {application/json: {schema: {type: array, items: {properties: {id: {type: string}, name: {type: string}}}}}}\n")
+	}))
+	defer spec.Close()
+	described := w.admin.expect("GET", "/api/connectors/new/openapi?url="+spec.URL+"/openapi.yaml", "", http.StatusOK)
+	if described["title"] != "Registry" || field(described["lists"].([]any)[0].(map[string]any), "source", "url") != spec.URL+"/services" {
+		t.Errorf("described %s", jsonOf(described))
+	}
+	w.bert.expect("GET", "/api/connectors/new/openapi?url="+spec.URL, "", http.StatusForbidden)
+	w.admin.expect("GET", "/api/connectors/new/openapi?url=ftp://x", "", http.StatusBadRequest)
+	w.admin.expect("GET", "/api/connectors/new/openapi?url=http://127.0.0.1:1/spec", "", http.StatusBadGateway)
+
+	// An Atlassian import names its spaces itself (ADR-0128); the accounts
+	// it names must exist, and the cut-over turns its schedule off.
+	atlassian := func(user string) string {
+		return `{"id":"acme","name":"Acme","kind":"atlassian","enabled":true,"intervalHours":24,` +
+			`"atlassian":{"site":"https://acme.atlassian.net","spaces":["ENG"],"projects":[],"users":{"acc-1":"` + user + `"},"grants":["@eng=viewer"]}}`
+	}
+	w.admin.expect("POST", "/api/connectors", atlassian("nobody"), http.StatusBadRequest)
+	w.admin.expect("POST", "/api/connectors", atlassian("bert"), http.StatusCreated)
+	listed = w.admin.expect("GET", "/api/connectors", "", http.StatusOK)
+	if !strings.Contains(jsonOf(listed["connectors"]), `"emailVar":"WWBB_CONNECTOR_ACME_EMAIL"`) {
+		t.Errorf("the e-mail address's variable %s", jsonOf(listed["connectors"]))
+	}
+	w.bert.expect("POST", "/api/connectors/acme/release", "", http.StatusForbidden)
+	w.admin.expect("POST", "/api/connectors/nope/release", "", http.StatusNotFound)
+	w.admin.expect("POST", "/api/connectors/wetter/release", "", http.StatusConflict)
+	if got := w.admin.expect("POST", "/api/connectors/acme/release", "", http.StatusOK); jsonOf(got) != `{"released":[]}` {
+		t.Errorf("released %s", jsonOf(got))
+	}
+	listed = w.admin.expect("GET", "/api/connectors", "", http.StatusOK)
+	if acme := listed["connectors"].([]any)[0].(map[string]any); acme["id"] != "acme" || acme["enabled"] != false {
+		t.Errorf("the schedule is on after the cut-over: %s", jsonOf(listed["connectors"]))
+	}
+	w.admin.expect("POST", "/api/connectors/acme/run", `{"dryRun":true}`, http.StatusAccepted)
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if !strings.Contains(jsonOf(w.admin.expect("GET", "/api/connectors", "", http.StatusOK)), `"running":true`) {
+			break
+		}
+	}
+	w.admin.expect("DELETE", "/api/connectors/acme", "", http.StatusNoContent)
 
 	// A connector without a space does not run; removing one keeps its
 	// entries.

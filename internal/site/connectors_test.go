@@ -195,9 +195,78 @@ func TestJSONConnectorsAreChecked(t *testing.T) {
 	}
 }
 
+func atlassianConnector() Connector {
+	c := ConnectorTemplates()[2]
+	c.ID, c.Atlassian.Site = "acme", "https://acme.atlassian.net"
+	c.Atlassian.Spaces, c.Atlassian.Projects = []string{"eng", " ~5f1a ", "ENG"}, []string{"plat"}
+	c.Atlassian.Users = map[string]string{"acc-1": " anna "}
+	c.Atlassian.Groups = map[string]string{" dev team ": "@engineering"}
+	c.Atlassian.Grants = []string{" @engineering = editor", "anna=space-admin", "anna=space-admin"}
+	return c
+}
+
+func TestAtlassianConnectorsAreChecked(t *testing.T) {
+	s, _ := New(nil, func([]byte) error { return nil })
+	c := atlassianConnector()
+	c.Enabled = true // without a space: the import names its spaces
+	kept, err := s.SetConnector("admin", c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := kept.Atlassian
+	if !slices.Equal(a.Spaces, []string{"ENG", "~5f1a"}) || !slices.Equal(a.Projects, []string{"PLAT"}) || a.Users["acc-1"] != "anna" ||
+		a.Groups["dev team"] != "@engineering" || !slices.Equal(a.Grants, []string{"@engineering=editor", "anna=space-admin"}) || kept.Values() != nil {
+		t.Fatalf("normalized %+v", a)
+	}
+	got, _ := s.Connector("acme")
+	got.Atlassian.Spaces[0], got.Atlassian.Users["acc-1"] = "X", "x"
+	if again, _ := s.Connector("acme"); again.Atlassian.Spaces[0] != "ENG" || again.Atlassian.Users["acc-1"] != "anna" {
+		t.Fatal("a caller changed the settings")
+	}
+	for _, local := range []string{"https://acme.example/", "http://127.0.0.1:8080", "http://localhost"} {
+		ok := atlassianConnector()
+		ok.Atlassian.Site = local
+		if _, err := s.SetConnector("admin", ok); err != nil {
+			t.Errorf("%s: %v", local, err)
+		}
+	}
+	for name, change := range map[string]func(*Connector){
+		"no site":           func(c *Connector) { c.Atlassian = nil },
+		"the template's":    func(c *Connector) { c.Atlassian.Site = "https://" },
+		"plain http":        func(c *Connector) { c.Atlassian.Site = "http://acme.example" },
+		"a path":            func(c *Connector) { c.Atlassian.Site = "https://acme.example/wiki" },
+		"a password":        func(c *Connector) { c.Atlassian.Site = "https://u:p@acme.example" },
+		"nothing to import": func(c *Connector) { c.Atlassian.Spaces, c.Atlassian.Projects = nil, nil },
+		"a bad key":         func(c *Connector) { c.Atlassian.Spaces = []string{"A B"} },
+		"a bad account":     func(c *Connector) { c.Atlassian.Users = map[string]string{"a b": "anna"} },
+		"a bad username":    func(c *Connector) { c.Atlassian.Users = map[string]string{"acc": "an na"} },
+		"a bad group":       func(c *Connector) { c.Atlassian.Groups = map[string]string{"dev": "engineering"} },
+		"a bad grant":       func(c *Connector) { c.Atlassian.Grants = []string{"anna=owner"} },
+		"a grant to no one": func(c *Connector) { c.Atlassian.Grants = []string{"@=viewer"} },
+		"a space":           func(c *Connector) { c.Space = "API" },
+		"a type":            func(c *Connector) { c.Type = "page" },
+		"too many spaces": func(c *Connector) {
+			for i := range 101 {
+				c.Atlassian.Spaces = append(c.Atlassian.Spaces, fmt.Sprintf("S%d", i))
+			}
+		},
+		"too many grants": func(c *Connector) {
+			for i := range 101 {
+				c.Atlassian.Grants = append(c.Atlassian.Grants, fmt.Sprintf("u%d=viewer", i))
+			}
+		},
+	} {
+		bad := atlassianConnector()
+		change(&bad)
+		if _, err := s.SetConnector("admin", bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
 func TestGitConnectorsAreChecked(t *testing.T) {
 	s, _ := New(nil, func([]byte) error { return nil })
-	c := ConnectorTemplates()[2]
+	c := ConnectorTemplates()[len(ConnectorTemplates())-1]
 	if c.Kind != KindGit || c.IntervalHours != 1 {
 		t.Fatalf("the Git template runs every hour: %+v", c)
 	}

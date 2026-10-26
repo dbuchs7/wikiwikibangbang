@@ -149,7 +149,12 @@ func gitSetup(t *testing.T, path string) (*fixture, *forge, string) {
 	src := newForge()
 	srv := httptest.NewServer(src)
 	t.Cleanup(srv.Close)
-	c := site.ConnectorTemplates()[2]
+	var c site.Connector
+	for _, tpl := range site.ConnectorTemplates() {
+		if tpl.Kind == site.KindGit {
+			c = tpl
+		}
+	}
 	c.ID, c.Name, c.Enabled, c.Space = "docs", "Docs", true, "API"
 	c.Git.URL = srv.URL + "/o/r/src/branch/main/" + path
 	if _, err := f.db.Site.SetConnector("admin", c); err != nil {
@@ -183,7 +188,7 @@ func marks(b item.Block) map[string]item.Mark {
 
 // A folder becomes a tree of pages: folders with Markdown files and the
 // files, the folder's index file as its text; links between the files
-// become mentions, pictures attachments (ADR-0128).
+// become mentions, pictures attachments (ADR-0131).
 func TestAFolderBecomesAPageTree(t *testing.T) {
 	f, src, base := gitSetup(t, "docs")
 	ctx := context.Background()
@@ -363,7 +368,7 @@ func TestGitSourceErrors(t *testing.T) {
 }
 
 // The pictures of a page are read up to their budget together; the ones
-// beyond it stay links (ADR-0128).
+// beyond it stay links (ADR-0131).
 func TestPicturesKeepToTheirBudget(t *testing.T) {
 	b := budget.Default()
 	b.MarkdownPictureBytes = int64(len(png)) - 1

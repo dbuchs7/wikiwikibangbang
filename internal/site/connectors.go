@@ -39,12 +39,36 @@ type Connector struct {
 	CKAN *CKAN `json:"ckan,omitempty"`
 	// JSON holds the settings of a connector of the kind json.
 	JSON *JSONSource `json:"json,omitempty"`
+	// Atlassian holds the settings of a connector of the kind atlassian.
+	Atlassian *Atlassian `json:"atlassian,omitempty"`
 	// Git holds the settings of a connector of the kind git.
 	Git *GitSource `json:"git,omitempty"`
 }
 
+// Atlassian is an Atlassian Cloud site whose spaces and projects are
+// imported and kept in step (ADR-0023, ADR-0128). The import decides
+// where they go and as what: a space each, keeping its key, pages as
+// pages, issue types as types of their own. So a connector of this kind
+// has no space, type or fields of its own.
+type Atlassian struct {
+	// Site is the site's address, e.g. https://example.atlassian.net.
+	Site string `json:"site"`
+	// Spaces and Projects are the keys of the site's spaces and projects
+	// to import.
+	Spaces   []string `json:"spaces"`
+	Projects []string `json:"projects"`
+	// Users maps source account IDs to local usernames; the source hides
+	// e-mail addresses by default, so it is written by hand.
+	Users map[string]string `json:"users,omitempty"`
+	// Groups maps source groups to local groups, "@name".
+	Groups map[string]string `json:"groups,omitempty"`
+	// Grants give a role in every imported space, as "username=role" or
+	// "@group=role" with role viewer, editor or space-admin.
+	Grants []string `json:"grants,omitempty"`
+}
+
 // GitSource is a folder (or a file) of a Git repository whose Markdown
-// files become a tree of pages (ADR-0128): its address as the host shows
+// files become a tree of pages (ADR-0131): its address as the host shows
 // it in the browser, at a branch, tag or commit.
 type GitSource struct {
 	URL string `json:"url"`
@@ -77,6 +101,11 @@ type JSONSource struct {
 	Values map[string]string `json:"values,omitempty"`
 	// Language is the one of the page's own words; empty is German.
 	Language string `json:"language,omitempty"`
+	// Spec and Operation, if set, name the API description and its
+	// operation the settings were taken from (ADR-0130), so they can be
+	// taken again; a run reads URL, not the description.
+	Spec      string `json:"spec,omitempty"`
+	Operation string `json:"operation,omitempty"`
 }
 
 // CKAN is a source that runs CKAN, such as opendata.swiss (ADR-0075):
@@ -105,13 +134,14 @@ var ConnectorLanguages = []string{"de", "fr", "it", "en"}
 // The kinds of source a connector reads: CKAN, any JSON over http, and
 // the Markdown files of a Git repository.
 const (
-	KindCKAN = "ckan"
-	KindJSON = "json"
-	KindGit  = "git"
+	KindCKAN      = "ckan"
+	KindJSON      = "json"
+	KindAtlassian = "atlassian"
+	KindGit       = "git"
 )
 
 // ConnectorKinds are the kinds of source a connector reads.
-var ConnectorKinds = []string{KindCKAN, KindJSON, KindGit}
+var ConnectorKinds = []string{KindCKAN, KindJSON, KindAtlassian, KindGit}
 
 // maxConnectors bounds how many connectors a site keeps.
 const maxConnectors = 20
@@ -132,6 +162,11 @@ func ConnectorTemplates() []Connector {
 	}}, {Name: "JSON", Kind: KindJSON, IntervalHours: 24, JSON: &JSONSource{
 		URL: "https://", Items: "entries", ID: "id", Title: "title", Link: "url", Text: "text", Next: "next",
 		Values: map[string]string{}, Language: "de",
+	}}, {Name: "Atlassian Cloud", Kind: KindAtlassian, IntervalHours: 24, Atlassian: &Atlassian{
+		Site: "https://", Spaces: []string{}, Projects: []string{}, Users: map[string]string{}, Groups: map[string]string{}, Grants: []string{},
+	}}, {Name: "OpenAPI", Kind: KindJSON, IntervalHours: 24, JSON: &JSONSource{
+		// A JSON source whose settings an API description gives (ADR-0130).
+		URL: "https://", ID: "id", Title: "title", Values: map[string]string{}, Language: "de", Spec: "https://",
 	}}, {Name: "Git", Kind: KindGit, IntervalHours: 1, Git: &GitSource{URL: "https://", Language: "de"}}}
 }
 
@@ -159,7 +194,7 @@ func (c Connector) Validate() error {
 		return fmt.Errorf("%w: the name is a single line of 1 to 80 characters", ErrInvalid)
 	case !slices.Contains(ConnectorKinds, c.Kind):
 		return fmt.Errorf("%w: %q is not a kind of connector (%s)", ErrInvalid, c.Kind, strings.Join(ConnectorKinds, ", "))
-	case c.Enabled && c.Space == "":
+	case c.Enabled && c.Space == "" && c.Kind != KindAtlassian:
 		return fmt.Errorf("%w: the connector needs a space", ErrInvalid)
 	case c.IntervalHours < 1 || c.IntervalHours > 24*31:
 		return fmt.Errorf("%w: the connector runs every 1 to 744 hours", ErrInvalid)
@@ -187,6 +222,14 @@ func (c Connector) Validate() error {
 			return fmt.Errorf("%w: a JSON connector needs its source", ErrInvalid)
 		}
 		err = c.JSON.validate()
+	case KindAtlassian:
+		switch {
+		case c.Atlassian == nil:
+			return fmt.Errorf("%w: an Atlassian connector needs its site", ErrInvalid)
+		case c.Space != "" || c.Type != "" || len(c.Fields) > 0:
+			return fmt.Errorf("%w: an Atlassian connector writes into the spaces of its import; it has no space, type or fields of its own", ErrInvalid)
+		}
+		err = c.Atlassian.validate()
 	case KindGit:
 		if c.Git == nil {
 			return fmt.Errorf("%w: a Git connector needs its source", ErrInvalid)
@@ -211,7 +254,7 @@ var CKANValues = []string{"dataset", "publisher", "contact", "url", "formats"}
 
 // GitValues are the values a Git source gives of each page: the file's
 // path in the repository, its address there and the commit it was read
-// at (ADR-0128).
+// at (ADR-0131).
 var GitValues = []string{"commit", "path", "url"}
 
 // Values are the names of the values the connector's source gives of
@@ -253,6 +296,10 @@ func (j JSONSource) validate() error {
 		return fmt.Errorf("%w: name at most 50 values", ErrInvalid)
 	case j.Language != "" && !slices.Contains(ConnectorLanguages, j.Language):
 		return fmt.Errorf("%w: %q is not a language of the pages (%s)", ErrInvalid, j.Language, strings.Join(ConnectorLanguages, ", "))
+	case j.Spec != "" && !httpURL(j.Spec):
+		return fmt.Errorf("%w: %q is not the address of an API description", ErrInvalid, j.Spec)
+	case len(j.Operation) > 300 || strings.ContainsAny(j.Operation, "\n\r"):
+		return fmt.Errorf("%w: the operation is a single line of at most 300 characters", ErrInvalid)
 	}
 	for _, p := range []string{j.Items, j.ID, j.Title, j.Link, j.Text, j.Next} {
 		if p != "" && !pathRE.MatchString(p) {
@@ -265,6 +312,70 @@ func (j JSONSource) validate() error {
 		}
 	}
 	return nil
+}
+
+// atlassianKeyRE accepts the key of a space or project; a personal space's
+// key starts with ~.
+var atlassianKeyRE = regexp.MustCompile(`^~?[A-Za-z0-9_-]{1,128}$`)
+
+// accountRE accepts an Atlassian account ID.
+var accountRE = regexp.MustCompile(`^[A-Za-z0-9:_-]{1,128}$`)
+
+// localGroupRE accepts a local group, "@name".
+var localGroupRE = regexp.MustCompile(`^@[^\s@]{1,64}$`)
+
+func (a Atlassian) validate() error {
+	if !siteURL(a.Site) {
+		return fmt.Errorf("%w: %q is not a site address: https, or http to this machine only, as the API token travels with every request", ErrInvalid, a.Site)
+	}
+	switch {
+	case len(a.Spaces)+len(a.Projects) == 0:
+		return fmt.Errorf("%w: name at least one space or project", ErrInvalid)
+	case len(a.Spaces) > 100 || len(a.Projects) > 100:
+		return fmt.Errorf("%w: name at most 100 spaces and 100 projects", ErrInvalid)
+	case len(a.Users) > 10000 || len(a.Groups) > 1000 || len(a.Grants) > 100:
+		return fmt.Errorf("%w: map at most 10000 accounts and 1000 groups, and give at most 100 roles", ErrInvalid)
+	}
+	for _, k := range append(slices.Clone(a.Spaces), a.Projects...) {
+		if !atlassianKeyRE.MatchString(k) {
+			return fmt.Errorf("%w: %q is not the key of a space or project", ErrInvalid, k)
+		}
+	}
+	for src, name := range a.Users {
+		if !accountRE.MatchString(src) || strings.ContainsAny(name, " \t\n") || name == "" || len(name) > 64 {
+			return fmt.Errorf("%w: %q for %q is not an account ID and a username", ErrInvalid, name, src)
+		}
+	}
+	for src, local := range a.Groups {
+		if strings.ContainsAny(src, "\n") || len(src) > 255 || !localGroupRE.MatchString(local) {
+			return fmt.Errorf("%w: %q for %q is not a source group and a local group, \"@name\"", ErrInvalid, local, src)
+		}
+	}
+	for _, g := range a.Grants {
+		who, role, ok := strings.Cut(g, "=")
+		if !ok || who == "" || who == "@" || strings.ContainsAny(who, " \t\n") || !slices.Contains([]string{"viewer", "editor", "space-admin"}, role) {
+			return fmt.Errorf(`%w: %q is not a grant, "username=role" or "@group=role" with role viewer, editor or space-admin`, ErrInvalid, g)
+		}
+	}
+	return nil
+}
+
+// siteURL reports whether u is an address the API token may travel to:
+// https, or plain http to the local machine only, which a test or a
+// tunnel uses.
+func siteURL(u string) bool {
+	p, err := url.Parse(u)
+	if err != nil || p.Host == "" || p.User != nil || len(u) > 512 || p.Path != "" && p.Path != "/" || p.RawQuery != "" {
+		return false
+	}
+	switch p.Scheme {
+	case "https":
+		return true
+	case "http":
+		host := p.Hostname()
+		return host == "localhost" || host == "127.0.0.1" || host == "::1"
+	}
+	return false
 }
 
 // httpURL reports whether u is an http or https address without
@@ -309,7 +420,7 @@ func (c Connector) Normalize() Connector {
 	c.Fields = trimMap(c.Fields)
 	if c.JSON != nil {
 		j := *c.JSON
-		for _, p := range []*string{&j.URL, &j.Items, &j.ID, &j.Title, &j.Link, &j.Text, &j.Next} {
+		for _, p := range []*string{&j.URL, &j.Items, &j.ID, &j.Title, &j.Link, &j.Text, &j.Next, &j.Spec, &j.Operation} {
 			*p = strings.TrimSpace(*p)
 		}
 		j.Values = trimMap(j.Values)
@@ -320,16 +431,37 @@ func (c Connector) Normalize() Connector {
 		g.URL = strings.TrimSpace(g.URL)
 		c.Git = &g
 	}
-	if c.CKAN != nil {
-		clean := func(in []string, f func(string) string) []string {
-			out := []string{}
-			for _, s := range in {
-				if s = f(strings.TrimSpace(s)); s != "" && !slices.Contains(out, s) {
-					out = append(out, s)
-				}
+	clean := func(in []string, f func(string) string) []string {
+		out := []string{}
+		for _, s := range in {
+			if s = f(strings.TrimSpace(s)); s != "" && !slices.Contains(out, s) {
+				out = append(out, s)
 			}
-			return out
 		}
+		return out
+	}
+	if c.Atlassian != nil {
+		a := *c.Atlassian
+		a.Site = strings.TrimRight(strings.TrimSpace(a.Site), "/")
+		// A personal space's key, ~ and an account ID, keeps its case.
+		a.Spaces = clean(a.Spaces, func(k string) string {
+			if strings.HasPrefix(k, "~") {
+				return k
+			}
+			return strings.ToUpper(k)
+		})
+		a.Projects = clean(a.Projects, strings.ToUpper)
+		a.Users, a.Groups = trimMap(a.Users), trimMap(a.Groups)
+		a.Grants = clean(a.Grants, func(g string) string {
+			who, role, _ := strings.Cut(g, "=")
+			if who = strings.TrimSpace(who); who == "" {
+				return ""
+			}
+			return who + "=" + strings.TrimSpace(role)
+		})
+		c.Atlassian = &a
+	}
+	if c.CKAN != nil {
 		k := *c.CKAN
 		k.Formats = clean(k.Formats, strings.ToUpper)
 		k.Organizations = clean(k.Organizations, strings.ToLower)
@@ -366,6 +498,12 @@ func (c Connector) clone() Connector {
 		k := *c.CKAN
 		k.Formats, k.Organizations = slices.Clone(k.Formats), slices.Clone(k.Organizations)
 		c.CKAN = &k
+	}
+	if c.Atlassian != nil {
+		a := *c.Atlassian
+		a.Spaces, a.Projects, a.Grants = slices.Clone(a.Spaces), slices.Clone(a.Projects), slices.Clone(a.Grants)
+		a.Users, a.Groups = maps.Clone(a.Users), maps.Clone(a.Groups)
+		c.Atlassian = &a
 	}
 	if c.Git != nil {
 		g := *c.Git
