@@ -20,7 +20,7 @@ export function drawingName(caption) {
 // an attachment; the dialog stays open, saving, until it has, and shows
 // what went wrong if it fails. It resolves to what store returns, or to
 // null when the dialog is closed without saving. process(want, current),
-// if given, answers the drawing's asks for a process (ADR-0139) with the
+// if given, answers the drawing's asks for a process (ADR-0141) with the
 // picture to place, or null.
 export function openDrawing(scene = null, store = async (png) => png, process = null) {
   return new Promise((resolve) => {

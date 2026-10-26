@@ -300,7 +300,7 @@ export function openModeler(xml = "", store = async (out) => out) {
 
 // pickProcess lets the reader choose a process of a process engine; it
 // resolves to {engine, process, name} or to null when closed. With
-// operations set, as for a drawing (ADR-0139), it also asks whether the
+// operations set, as for a drawing (ADR-0141), it also asks whether the
 // operations are shown at first, where the engine allows them, and adds
 // operations to what it resolves to.
 export function pickProcess({ operations = false } = {}) {
@@ -369,7 +369,7 @@ export function pickProcess({ operations = false } = {}) {
   });
 }
 
-// snapshot draws a model as a picture for a drawing (ADR-0139): an SVG as
+// snapshot draws a model as a picture for a drawing (ADR-0141): an SVG as
 // a data URL, with its width and height, on white, as diagrams are shown.
 // bpmn-js lays the model out in a box out of sight. The SVG is changed as
 // text: parsed into a document, its style attributes would break the UI's
@@ -450,7 +450,7 @@ async function processPicture(engine, process, operations) {
   return { ...(await snapshot(diagram.xml)), data: { kind: "process", engine, process, name: diagram.name || process, operations } };
 }
 
-// drawingProcesses answers the drawing page's asks for a process (ADR-0139)
+// drawingProcesses answers the drawing page's asks for a process (ADR-0141)
 // with a picture and what it shows, or null when the editor gave up: a
 // model drawn anew in the modeler, one chosen from the item's files or
 // this device, or a process of an engine. Edited, a model is drawn again
@@ -477,7 +477,7 @@ export function drawingProcesses(files) {
 }
 
 // processRegion shows the newest version of a process of an engine over
-// its picture in a drawing (ADR-0139), and its operations while they are
+// its picture in a drawing (ADR-0141), and its operations while they are
 // on: at first when the drawing says so and the engine allows them, then
 // as the reader switches them. The picture shows through until the
 // process is drawn, and stays when it cannot be: it is what was saved.

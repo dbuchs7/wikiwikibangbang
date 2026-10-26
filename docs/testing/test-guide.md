@@ -52,6 +52,7 @@ Two people open the same item and type into its body at the same time. A paragra
 
 - Is it clear who is in the document and which paragraph is locked?
 - When you want to type into a paragraph someone else holds, is it obvious what to do?
+- Type a few words and press *Done* at once: does the page show them straight away, without a reload?
 - **The open question:** is "one person per paragraph" acceptable for how you work, or do you need several people typing in the same paragraph?
 
 ### 2. Showing versus containing (ADR-0020)

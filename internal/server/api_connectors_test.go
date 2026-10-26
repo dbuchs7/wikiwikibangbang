@@ -64,7 +64,7 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	w.admin.expect("GET", "/api/connectors/wetter/formats?baseURL=http://127.0.0.1:1", "", http.StatusBadGateway)
 	w.admin.expect("POST", "/api/connectors/wetter/run", `{`, http.StatusBadRequest)
 	w.admin.expect("POST", "/api/connectors/nope/run", `{}`, http.StatusNotFound)
-	w.admin.expect("POST", "/api/connectors/wetter/run", `{"dryRun":false}`, http.StatusAccepted)
+	w.admin.expect("POST", "/api/connectors/wetter/run", `{"dryRun":false,"full":true}`, http.StatusAccepted)
 	var status map[string]any
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) {

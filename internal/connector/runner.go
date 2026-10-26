@@ -3,6 +3,7 @@ package connector
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -60,7 +61,17 @@ type state struct {
 	// seen is what the last run that applied its reading without a
 	// problem remembered of its source (reading.seen).
 	seen string
+	// since is when the last run that wrote began, full is when the last
+	// full one did, and settings what they read by; a run of a source
+	// that can read what changed asks from since (ADR-0140).
+	since, full time.Time
+	settings    string
 }
+
+// sinceOverlap is how much earlier than the last run began a run asks
+// for what changed, so an entry changed while it ran, or a source's
+// clock a little behind, is not missed.
+const sinceOverlap = time.Hour
 
 // New returns a runner for db; credentials come from the process
 // environment.
@@ -194,18 +205,26 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 	res := Result{Connector: c.ID, DryRun: dry, Problems: []string{}, Examples: []Change{}}
 	var rd reading
 	rdr, err := reader(c.Kind)
+	env := r.env(c.ID)
+	settings := fingerprint(c)
+	r.mu.Lock()
+	env.Seen, env.Force = r.of(c.ID).seen, actor != ""
+	if st := r.of(c.ID); c.JSON != nil && c.JSON.Since != nil && !st.since.IsZero() && st.settings == settings &&
+		start.Sub(st.full) < time.Duration(c.JSON.Since.FullDays)*24*time.Hour {
+		env.Since = st.since.Add(-sinceOverlap)
+	}
+	r.mu.Unlock()
 	if err == nil {
-		env := r.env(c.ID)
-		r.mu.Lock()
-		env.Seen, env.Force = r.of(c.ID).seen, actor != ""
-		r.mu.Unlock()
 		rd, err = rdr.Read(ctx, c, env)
 	}
 	switch {
 	case err == nil && rd.write != nil:
 		res, err = rd.write(r.db, dry)
 	case err == nil && rd.apply:
-		res, err = Apply(r.db, c, rd.entries, dry)
+		res, err = apply(r.db, c, rd.entries, dry, rd.partial)
+	}
+	if rd.partial {
+		res.Since = env.Since.UTC()
 	}
 	res.Connector, res.Datasets, res.Formats, res.Version, res.Same = c.ID, rd.datasets, rd.formats, rd.version, rd.same
 	res.Problems = append(append([]string{}, rd.problems...), res.Problems...)
@@ -225,6 +244,12 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 			st.seen = rd.seen
 		}
 	}
+	if !dry && err == nil {
+		st.since, st.settings = start, settings
+		if !rd.partial {
+			st.full = start
+		}
+	}
 	st.history = append([]Result{res}, st.history...)
 	if len(st.history) > historyLength {
 		st.history = st.history[:historyLength]
@@ -232,6 +257,9 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 	r.mu.Unlock()
 	if !dry {
 		detail := map[string]string{"source": c.ID, "new": strconv.Itoa(res.New), "changed": strconv.Itoa(res.Changed), "withdrawn": strconv.Itoa(res.Withdrawn)}
+		if rd.partial {
+			detail["since"] = res.Since.Format(time.RFC3339)
+		}
 		if err != nil {
 			detail["error"] = err.Error()
 		}
@@ -243,6 +271,23 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 // env is what a connector's reader is given (ADR-0127).
 func (r *Runner) env(id string) Env {
 	return Env{Token: r.getenv(TokenVar(id)), Email: r.getenv(EmailVar(id)), HTTP: r.httpClient(), CKAN: r.client}
+}
+
+// fingerprint is what a run of a connector reads by: its space, type,
+// fields and source. A run after a change reads in full (ADR-0140).
+func fingerprint(c site.Connector) string {
+	b, _ := json.Marshal([]any{c.Space, c.Type, c.Fields, c.JSON, c.CKAN, c.Atlassian})
+	return string(b)
+}
+
+// ReadInFull has the next run of a connector read its source in full, as
+// after a restart (ADR-0140).
+func (r *Runner) ReadInFull(id string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if st := r.state[id]; st != nil {
+		st.since, st.full, st.seen = time.Time{}, time.Time{}, ""
+	}
 }
 
 // Forget drops what the runner remembers of a removed connector.
@@ -278,6 +323,10 @@ type Status struct {
 	// environment, and names the variable; never its value.
 	Credential    bool   `json:"credential"`
 	CredentialVar string `json:"credentialVar"`
+	// LastFull is when the last full run began, since the server started;
+	// a run of a source that reads what changed is full after it
+	// (ADR-0140).
+	LastFull time.Time `json:"lastFull,omitzero"`
 	// Email does the same for the account's e-mail address, which a
 	// connector of the kind atlassian signs in with (ADR-0128).
 	Email    bool   `json:"email,omitempty"`
@@ -298,6 +347,7 @@ func (r *Runner) Status(id string) Status {
 		st = &state{}
 	}
 	s.Running, s.History = st.running, append([]Result{}, st.history...)
+	s.LastFull = st.full
 	if c.Enabled {
 		s.Next = st.lastRun.Add(time.Duration(c.IntervalHours) * time.Hour)
 		if s.Next.Before(r.now()) {

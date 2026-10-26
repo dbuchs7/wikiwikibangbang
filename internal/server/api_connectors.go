@@ -25,7 +25,7 @@ func connectorRoutes(d Deps) []Route {
 		{Method: http.MethodPost, Pattern: "/api/connectors", Summary: "Add a connector: ID, name, kind, space, interval, steward and the settings of its kind (administrators)", Handler: http.HandlerFunc(h.addConnector)},
 		{Method: http.MethodPut, Pattern: "/api/connectors/{id}", Summary: "Change a connector's settings; its ID stays (administrators)", Handler: http.HandlerFunc(h.setConnector)},
 		{Method: http.MethodDelete, Pattern: "/api/connectors/{id}", Summary: "Remove a connector; the entries it wrote stay, with their origin (administrators)", Handler: http.HandlerFunc(h.removeConnector)},
-		{Method: http.MethodPost, Pattern: "/api/connectors/{id}/run", Summary: "Run a connector now, in the background; dryRun reports what it would change without writing (administrators)", Handler: http.HandlerFunc(h.runConnector)},
+		{Method: http.MethodPost, Pattern: "/api/connectors/{id}/run", Summary: "Run a connector now, in the background; dryRun reports what it would change without writing; full reads in full a source that is otherwise read for what changed (administrators)", Handler: http.HandlerFunc(h.runConnector)},
 		{Method: http.MethodPost, Pattern: "/api/connectors/{id}/release", Summary: "Cut over from an Atlassian import: its items become ordinary items people change, and its schedule is turned off (administrators)", Handler: http.HandlerFunc(h.releaseConnector)},
 		{Method: http.MethodGet, Pattern: "/api/connectors/{id}/openapi", Summary: "The lists an API description at url (OpenAPI 3 or Swagger 2.0, JSON or YAML) offers, each as the settings of a JSON source; the connector's credential is sent (administrators)", Handler: http.HandlerFunc(h.connectorOpenAPI)},
 		{Method: http.MethodGet, Pattern: "/api/connectors/{id}/formats", Summary: "The resource formats a CKAN source's data sets use, with how many data sets use each, to choose the interfaces from; baseURL and organizations as typed, else as saved (administrators)", Handler: http.HandlerFunc(h.connectorFormats)},
@@ -245,6 +245,8 @@ func (h authHandlers) runConnector(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		DryRun bool `json:"dryRun"`
+		// Full reads the source in full, not only what changed (ADR-0140).
+		Full bool `json:"full"`
 	}
 	if err := readJSON(w, r, &req); err != nil {
 		badRequest(w, err)
@@ -259,6 +261,9 @@ func (h authHandlers) runConnector(w http.ResponseWriter, r *http.Request) {
 	if c.Space == "" && c.Kind != site.KindAtlassian {
 		writeError(w, http.StatusConflict, "set the connector's space first")
 		return
+	}
+	if req.Full && !req.DryRun && !h.d.Connectors.Status(id).Running {
+		h.d.Connectors.ReadInFull(id)
 	}
 	err := h.d.Connectors.Start(id, req.DryRun, actor)
 	switch {

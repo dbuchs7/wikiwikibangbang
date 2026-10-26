@@ -148,6 +148,14 @@ function feedSource() {
         ""].join("\n"));
       return;
     }
+    // Three entries; asked for what changed since a time, one (ADR-0140).
+    if (new URL(req.url, "http://x").pathname === "/changes") {
+      const since = new URL(req.url, "http://x").searchParams.get("since");
+      const all = ["Alpha", "Beta", "Gamma"].map((title, i) => ({ id: "c" + (i + 1), title }));
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ entries: since && !Number.isNaN(Date.parse(since)) ? all.slice(1, 2) : all }));
+      return;
+    }
     // Three entries, two a page, by a page number (ADR-0135).
     const asked = new URL(req.url, "http://x");
     if (asked.pathname === "/paged") {
@@ -669,6 +677,34 @@ function gitSource() {
     await page.dragAndDrop(`${column("open")} .card-item:has-text('PLAT-2')`, column("done"));
     await page.waitForSelector(`${column("done")} .card-item:has-text('PLAT-2')`);
     check(await page.locator(`${column("open")} .card-item`).count() === 0, "the open column is empty");
+    // The board of a type has the cards of a kanban (ADR-0139): their
+    // details open beside it, and colour and lanes are chosen for the view
+    // and kept in its address.
+    await page.click(`${column("done")} .card-item:has-text('PLAT-2') .card-title`);
+    await page.waitForSelector("#kanban-detail:not([hidden]) .state-bar");
+    check(page.url().includes("card=PLAT-2"), "the open card is in the address: " + page.url());
+    await page.click("#kanban-detail-close");
+    await page.selectOption("#board-color", "priority");
+    await page.waitForSelector("#board .card-item.toned:has-text('PLAT-2')");
+    await page.waitForSelector("#kanban-legend .legend-chip[data-value=high]");
+    await page.selectOption("#board-lanes", "priority");
+    await page.waitForSelector("#board .board-lanes .lane-head[data-lane=low]");
+    check(page.url().includes("color=priority") && page.url().includes("lanes=priority"), "the view is in the address: " + page.url());
+    await page.reload();
+    await page.waitForSelector("#board .board-lanes .lane-cell .card-item.toned:has-text('PLAT-2')");
+    // A card dropped into another lane of its column takes the lane's value.
+    const plat2 = (await (await page.request.get(base + "/api/items/PLAT-2")).json()).item;
+    const otherLane = plat2.properties.priority === "high" ? "low" : "high";
+    await page.evaluate(([id, lane]) => {
+      const cell = document.querySelector(`#board .lane-cell[data-lane=${lane}][data-state=done]`);
+      const dt = new DataTransfer();
+      dt.setData("text/plain", id);
+      cell.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    }, [plat2.id, otherLane]);
+    await page.waitForSelector(`#board .lane-cell[data-lane=${otherLane}][data-state=done] .card-item:has-text('PLAT-2')`);
+    check((await (await page.request.get(base + "/api/items/PLAT-2")).json()).item.properties.priority === otherLane, "the lane set the task's priority");
+    await page.selectOption("#board-lanes", "");
+    await page.waitForSelector("#board .board:not(.board-lanes)");
 
     step("page tree: child pages, reordered by button and by dragging");
     await page.click("a.brand");
@@ -1683,6 +1719,23 @@ function gitSource() {
     await page.waitForSelector("#labelboard .board-column[data-state=closed] .card-item:has-text('Hero image')");
     await page.dragAndDrop("#labelboard .card-item:has-text('Hero image')", "#labelboard .board-column[data-state=open]");
     await page.waitForSelector("#labelboard .board-column[data-state=open] .card-item:has-text('Hero image')");
+    // A board by label has the cards of a kanban (ADR-0139): the label is
+    // not repeated on them, a card is made in the one space it shows,
+    // with the label, and its details take the label off again.
+    check(await page.locator("#labelboard .card-item:has-text('Hero image') .card-label:has-text('website-relaunch')").count() === 0,
+      "the board's own label is not repeated on its cards");
+    await page.waitForSelector("#labelboard .card-item:has-text('Hero image') .card-waiting");
+    await page.click("#labelboard .board-column[data-state=open] .column-add");
+    await page.fill("#labelboard .board-column[data-state=open] .card-new [name=title]", "Press kit");
+    await page.click("#labelboard .board-column[data-state=open] .card-new button[type=submit]");
+    await page.waitForSelector("#labelboard .board-column[data-state=open] .card-item:has-text('Press kit')");
+    await page.click("#labelboard .card-item:has-text('Press kit') .card-title");
+    await page.waitForSelector("#kanban-detail:not([hidden]) #kanban-detail-off:has-text('Remove the label')");
+    await page.click("#kanban-detail-off");
+    await page.waitForSelector("#labelboard .card-item:has-text('Press kit')", { state: "detached" });
+    await page.selectOption("#board-lanes", "priority");
+    await page.waitForSelector("#labelboard .lane-cell[data-lane=low] .card-item:has-text('Hero image')");
+    check(page.url().includes("lanes=priority"), "the lanes are in the address: " + page.url());
     await page.goto(base + "/#/labelboard/no-such-label");
     await page.waitForSelector("#labelboard-empty");
     // Labelling suggests the labels in use while typing.
@@ -2367,7 +2420,7 @@ function gitSource() {
       await live.locator(".pm-diagram-ops:has-text('Version 4 · running: 3 · finished: 12 · incidents: 1')").waitFor();
       check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader");
 
-      step("drawing: a model of its own and a process of an engine go into a drawing; the latter shows live over its picture, with its operations (ADR-0139)");
+      step("drawing: a model of its own and a process of an engine go into a drawing; the latter shows live over its picture, with its operations (ADR-0141)");
       await page.click("#edit");
       await page.waitForSelector("#body.editing .ProseMirror");
       await page.locator("#body .ProseMirror").click();
@@ -2457,6 +2510,27 @@ function gitSource() {
     check(await page.inputValue("#paging-kind") === "page", "the paging is kept");
     await page.click("#connector-dry-run");
     await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('3 new')");
+
+    step("connectors: a run reads only what changed since the last one, and in full when asked (ADR-0140)");
+    await page.goto(base + "/#/admin");
+    await page.click("#connector-new-json");
+    await page.waitForSelector("#since [name=sinceParam]");
+    await page.fill("#connector-settings [name=id]", "changes");
+    await page.fill("#connector-settings [name=name]", "Changes");
+    await page.selectOption("#connector-settings [name=space]", "APIS");
+    await page.fill("#connector-settings [name=url]", `http://127.0.0.1:${feed.address().port}/changes`);
+    await page.fill("#since [name=sinceParam]", "since");
+    await page.click("#connector-settings button[type=submit]");
+    await page.waitForSelector("#connector-list tr[data-connector='changes']");
+    await page.click("#connector-run-now");
+    await page.waitForSelector("#connector-history .catalog-run:has-text('Sync'):has-text('3 new')");
+    check(await page.locator("#connector-history .catalog-run[open] .run-since").count() === 0, "the first run reads in full");
+    await page.click("#connector-run-now");
+    await page.waitForSelector("#connector-history .catalog-run[open] .run-since");
+    await page.waitForSelector("#connector-history .catalog-run[open]:has-text('1 unchanged'):has-text('0 withdrawn')");
+    await page.click("#connector-run-full");
+    await page.waitForSelector("#connector-history .catalog-run[open]:has-text('3 unchanged')");
+    check(await page.locator("#connector-history .catalog-run[open] .run-since").count() === 0, "a run asked for in full reads in full");
 
     step("connectors: an Atlassian site is imported on a schedule; its pages are read-only until the cut-over (ADR-0128)");
     await page.goto(base + "/#/admin");
@@ -2621,7 +2695,7 @@ function gitSource() {
     await phone.fill("#login [name=password]", adminPassword);
     await phone.press("#login [name=password]", "Enter");
     await phone.waitForSelector("#account-button");
-    for (const view of ["#/", "#/space/PLAT", "#/item/PLAT-2", "#/item/" + plan.key, "#/item/" + plan.key + "?edit", "#/tasks/all", "#/kanbans", "#/governance", "#/governance/PLAT", "#/mcp", "#/admin", "#/search/runbook"]) {
+    for (const view of ["#/", "#/space/PLAT", "#/item/PLAT-2", "#/item/" + plan.key, "#/item/" + plan.key + "?edit", "#/tasks/all", "#/kanbans", "#/board/PLAT/task?lanes=priority", "#/labelboard/website-relaunch", "#/governance", "#/governance/PLAT", "#/mcp", "#/admin", "#/search/runbook"]) {
       await phone.goto(base + "/" + view);
       await phone.waitForSelector("main h1, main .welcome, #body");
       await phone.waitForTimeout(400);
@@ -2758,6 +2832,24 @@ function gitSource() {
     await page.waitForSelector("#body .ProseMirror p:has-text('Due Friday.')");
     const erasedText = await page.textContent("#body .ProseMirror");
     check(!erasedText.includes("Paul") && !erasedText.includes("▒") && await page.$("#body .pm-secret") === null, "the erased passage is gone: " + erasedText);
+
+    step("editing: Done stores the text at once, also when the server learns late that the editor was left (ADR-0010)");
+    const quick = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ space: "PLAT", type: "task", title: "Quick edit", properties: { priority: "low" }, body: [{ kind: "paragraph", text: "Typed and left at once." }] }) })).json()).item.key);
+    const quickCtx = await browser.newContext({ storageState: await page.context().storageState() });
+    const quickPage = await quickCtx.newPage();
+    quickPage.on("pageerror", (e) => problems.push("bert's second page error: " + e.message));
+    await quickPage.goto(base + "/#/item/" + quick + "?edit");
+    await quickPage.waitForSelector("#body .ProseMirror[contenteditable=true] p");
+    // The editor's stream stays open while Done closes it, as when the
+    // close reaches the server only after the page has been read again.
+    await quickPage.evaluate(() => { EventSource.prototype.close = () => {}; });
+    await quickPage.click("#body .ProseMirror p");
+    await quickPage.keyboard.press("End");
+    await quickPage.keyboard.type(" Stored.");
+    await quickPage.click("#edit-done");
+    await quickPage.waitForSelector("#body.reading .ProseMirror p:has-text('Stored.')");
+    await quickCtx.close();
 
     check(problems.length === 0, problems.join("; "));
     console.log("ok");

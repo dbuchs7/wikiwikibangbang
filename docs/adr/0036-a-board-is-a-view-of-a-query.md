@@ -32,7 +32,7 @@ Chosen option: **1**.
 - **Order of cards:** creation order, oldest first. There is no manual ranking yet: ranking needs persisted order, which is a decision of its own.
 - **Size:** the board loads at most 2,000 items, in pages within the page budget (ADR-0015), and says when it shows fewer than exist.
 
-**Implementation is Partial:** no ranking, no filters beyond space and type, no swimlanes, no work-in-progress limits, no live updates (a board shows the state when it was opened).
+**Implementation is Partial:** no ranking, no work-in-progress limits, no live updates (a board shows the state when it was opened). The filter and swimlanes came with [ADR-0139](0139-the-boards-of-a-type-and-a-label-show-the-cards-of-a-kanban.md).
 
 ### Consequences
 
@@ -63,4 +63,5 @@ Strongest form: D1 taken literally; a board would get history, comments, permiss
 
 ## Links
 
+- amended by [ADR-0139](0139-the-boards-of-a-type-and-a-label-show-the-cards-of-a-kanban.md) (the cards, filter and details of a kanban; a move with several transitions is chosen in the details)
 - uses [ADR-0001](0001-unified-item-data-model.md) (workflows, D3), [ADR-0015](0015-resource-budgets-and-paged-listings.md), [ADR-0022](0022-permission-model.md), [ADR-0031](0031-web-ui-shell.md); live updates would use [ADR-0010](0010-real-time-collaboration-with-block-locks.md)

@@ -5,7 +5,7 @@
 //   UI → page  {type: "open", lang, scene: Blob?}  start, or edit a drawing
 //   UI → page  {type: "export"}                    asks for the picture
 //   page → UI  {type: "png", blob} | {type: "error", message}
-//   page → UI  {type: "process", want, current}    asks for a process (ADR-0139)
+//   page → UI  {type: "process", want, current}    asks for a process (ADR-0141)
 //   UI → page  {type: "process", picture}          {svg, width, height, data}, or null
 //
 // A drawing is a PNG that carries its scene (Excalidraw's exportEmbedScene),
@@ -60,7 +60,7 @@ function paletteChooser(className) {
   }, h("option", { value: "", disabled: true }, t("draw.palette")), ...palettes().map(([value, label]) => h("option", { key: value, value }, label)));
 }
 
-// A process in a drawing (ADR-0139) is a picture of a BPMN model whose
+// A process in a drawing (ADR-0141) is a picture of a BPMN model whose
 // customData says what it shows: a model kept in the drawing, drawn anew
 // in the modeler, or a process of a process engine, which a page shows in
 // its newest version over the picture. The UI makes the picture: the

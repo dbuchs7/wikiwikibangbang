@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
@@ -34,6 +35,20 @@ type jsonReader struct{}
 func (jsonReader) Read(ctx context.Context, c site.Connector, env Env) (reading, error) {
 	var rd reading
 	j := c.JSON
+	if s := j.Since; s != nil && !env.Since.IsZero() {
+		// Only what changed (ADR-0140): the parameter goes into the list's
+		// address, and so into every page's.
+		changed := *j
+		u, err := url.Parse(j.URL)
+		if err != nil {
+			return rd, err
+		}
+		q := u.Query()
+		q.Set(s.Param, sinceText(env.Since, s.Format))
+		u.RawQuery = q.Encode()
+		changed.URL, j = u.String(), &changed
+		rd.partial = true
+	}
 	next, seen, read, longest := pageAddress(j, 0, 0), map[string]bool{}, 0, 0
 	for page := 0; next != "" && page < maxPages; page++ {
 		answer, err := getJSON(ctx, env, next)
@@ -126,6 +141,20 @@ func pageAddress(j *site.JSONSource, page, read int) string {
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+// sinceText writes a time as a source is asked for it (ADR-0140).
+func sinceText(t time.Time, format string) string {
+	t = t.UTC()
+	switch format {
+	case site.SinceDate:
+		return t.Format(time.DateOnly)
+	case site.SinceUnix:
+		return strconv.FormatInt(t.Unix(), 10)
+	case site.SinceUnixMS:
+		return strconv.FormatInt(t.UnixMilli(), 10)
+	}
+	return t.Format(time.RFC3339)
 }
 
 // total is the number at a path of an answer, or -1.
