@@ -83,7 +83,9 @@ import (
 //     Process (ADR-0129). Versions 1 to 28 are still read.
 //   - 30: a kanban column may carry Limit, and a kanban ColorField and
 //     Colors (ADR-0134). Versions 1 to 29 are still read.
-const CodecVersion = 30
+//   - 31: a kanban may carry LaneField (ADR-0137). Versions 1 to 30 are
+//     still read.
+const CodecVersion = 31
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

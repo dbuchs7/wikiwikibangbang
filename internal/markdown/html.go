@@ -10,7 +10,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
-// HTML in Markdown never becomes markup (ADR-0014, ADR-0137): comments,
+// HTML in Markdown never becomes markup (ADR-0014, ADR-0138): comments,
 // scripts and styles go, <br> and the end of a block of HTML break the
 // line, <img> is a picture, and of every other tag only the text between
 // tags stays. The patterns only find where text and pictures are; what

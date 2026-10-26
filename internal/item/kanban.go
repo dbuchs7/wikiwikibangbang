@@ -31,6 +31,11 @@ type Kanban struct {
 	// Colors give values of the colour field a tone of KanbanTones; a
 	// value without one takes the tone of its place among the values.
 	Colors map[string]string `json:",omitempty"`
+	// LaneField, when set, names a person or enumeration field of the type
+	// whose value lays the cards out in lanes (ADR-0137). Moving a card to
+	// another lane sets the item's value, so the lanes too are the item's
+	// own information; the kanban only picks the field.
+	LaneField string `json:",omitempty"`
 }
 
 // KanbanTones are the tones a kanban colours its cards with, in the
@@ -115,7 +120,8 @@ func (x *Session) Kanbans(space string) map[string][]Kanban {
 // cards. When changing a kanban, Columns and CardFields left nil keep
 // what the kanban has, and so do ColorField and Colors when both are
 // unset; an empty ColorField with an empty, non-nil Colors takes the
-// colouring off.
+// colouring off. LaneField is taken as given; the API keeps it when a
+// change leaves it out.
 func (x *Session) SetKanban(space string, k Kanban) (Kanban, error) {
 	if _, ok := x.s.spaces[space]; !ok || x.s.spaceRole(x.who, space) < Viewer {
 		return Kanban{}, notFound("space %q", space)
@@ -170,6 +176,9 @@ func (x *Session) SetKanban(space string, k Kanban) (Kanban, error) {
 	}
 	if err := checkColors(&k, td); err != nil {
 		return Kanban{}, err
+	}
+	if f, ok := td.field(k.LaneField); k.LaneField != "" && (!ok || (f.Kind != KindUser && f.Kind != KindEnum)) {
+		return Kanban{}, invalid("type %q has no person or enumeration field %q to lay the cards out in lanes by", td.Name, k.LaneField)
 	}
 	return k, x.s.record(x.who, Event{Kind: KanbanSet, Space: space, Kanban: &k})
 }
@@ -266,6 +275,60 @@ func checkColors(k *Kanban, td TypeDef) error {
 		}
 	}
 	return nil
+}
+
+// The relation types a kanban reads as dependencies (ADR-0137): an item
+// waits on what it depends on and on what blocks it. They are the names
+// the UI suggests; a relation's type is otherwise free.
+const (
+	RelDependsOn = "depends-on"
+	RelBlocks    = "blocks"
+)
+
+// RelationSummary counts, for a readable item, its relations made by hand
+// to items the principal may read, both ways, and how many of those items
+// it waits on while they are not finished: those it depends on and those
+// that block it (ADR-0137). Relations derived from a body are left out:
+// they say that a text names an item, not that the work is linked.
+func (x *Session) RelationSummary(id ID) (related, waiting int, err error) {
+	if _, err := x.readable(id); err != nil {
+		return 0, 0, err
+	}
+	sum := x.RelationSummaries([]ID{id})[id]
+	return sum[0], sum[1], nil
+}
+
+// RelationSummaries is RelationSummary for the items of a listing, which
+// the caller has read already: one pass over the relations, however many
+// items, so a long listing does not walk them once per item.
+func (x *Session) RelationSummaries(ids []ID) map[ID][2]int {
+	out := make(map[ID][2]int, len(ids))
+	for _, id := range ids {
+		out[id] = [2]int{}
+	}
+	waits := func(r *Relation, other *Item, kind string) bool {
+		td, ok := x.s.TypeAt(other.Type, other.TypeVersion)
+		return ok && r.Type == kind && td.Workflow != nil && !td.Workflow.Finished(other.State)
+	}
+	count := func(id ID, r *Relation, other *Item, kind string) {
+		sum, ok := out[id]
+		if !ok || other == nil || other.Presence != Live || !x.s.canRead(x.who, other) {
+			return
+		}
+		sum[0]++
+		if waits(r, other, kind) {
+			sum[1]++
+		}
+		out[id] = sum
+	}
+	for _, r := range x.s.rels {
+		if r.Derived || x.s.items[r.From].Presence != Live || x.s.items[r.To].Presence != Live {
+			continue
+		}
+		count(r.From, r, x.s.items[r.To], RelDependsOn)
+		count(r.To, r, x.s.items[r.From], RelBlocks)
+	}
+	return out
 }
 
 // Columns are a kanban's columns as they show: its own, or the

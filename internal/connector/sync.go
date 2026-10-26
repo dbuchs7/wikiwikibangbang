@@ -97,7 +97,7 @@ type Result struct {
 	Error    string   `json:"error,omitempty"`
 	// Version is the source's version the run read, e.g. a commit, and
 	// Same is set when it is the one the last run applied, with the same
-	// settings, so the run read nothing further (ADR-0137).
+	// settings, so the run read nothing further (ADR-0138).
 	Version string `json:"version,omitempty"`
 	Same    bool   `json:"same,omitempty"`
 	// retry is set when an entry could not be read or written for a
@@ -232,7 +232,7 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 	words := wordsIn(language(cfg))
 	seen := map[string]bool{}
 	// ids are the pages of the entries by SourceID, for the parents of new
-	// pages and for links between pages (ADR-0137).
+	// pages and for links between pages (ADR-0138).
 	ids := map[string]item.ID{}
 	for sid, it := range existing {
 		ids[sid] = it.ID
@@ -258,7 +258,7 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 		newLabels := !slices.Equal(labels, old.Labels)
 		// The page is the source's: every run writes it anew, and only
 		// when it changed (ADR-0080); a source read only when it changed
-		// keeps its raw text, and its page is written only then (ADR-0137).
+		// keeps its raw text, and its page is written only then (ADR-0138).
 		body := item.Doc{Blocks: e.Body}
 		if e.Load != nil {
 			u.Origin.Version, u.Origin.Raw = e.Version, c.Raw
@@ -518,7 +518,7 @@ func nonEmpty(p item.Props) item.Props {
 }
 
 // loadEntry reads an entry's content when the entry has to be read
-// (ADR-0137): when it is new, withdrawn, or its Blob does not tell that
+// (ADR-0138): when it is new, withdrawn, or its Blob does not tell that
 // the raw text kept in its origin is still the source's. write reports
 // whether its page is to be written; an entry without Load always is.
 func loadEntry(e Entry, old item.Item, had bool) (Entry, Content, bool, error) {

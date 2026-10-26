@@ -313,7 +313,7 @@ table.history td { font-size: 13px; }
 .card-chip.card-label { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
 .card-chip.late { border-color: color-mix(in srgb, var(--danger) 30%, transparent); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
 .card-chip.near { border-color: color-mix(in srgb, var(--warning) 30%, transparent); background: var(--warning-soft); color: var(--warning); font-weight: 600; }
-.card-foot { display: flex; align-items: center; gap: 10px; min-height: 24px; font-size: 12px; color: var(--muted); }
+.card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 24px; font-size: 12px; color: var(--muted); }
 /* Positioned, so the text only screen readers hear stays inside the
    board's scrolling instead of widening the page. */
 .card-sign { position: relative; display: inline-flex; align-items: center; gap: 3px; }
@@ -352,6 +352,35 @@ table.history td { font-size: 13px; }
 #kanban .board-column.expanded .card-show-all { display: none; }
 .card-show-all { list-style: none; text-align: center; font-size: 13px; }
 .kanban-columns-edit .column-limit { width: 6.5rem; }
+
+/* Swimlanes (ADR-0137): one grid, the column heads once above the lanes,
+   a cell per column in each lane. The template of the columns is set by
+   the view, folded columns narrow. */
+#kanban .board.board-lanes { display: grid; gap: 8px 14px; align-items: stretch; }
+.board-lanes .lane-col-head { padding: 0 10px; min-width: 0; }
+.board-lanes .lane-col-head .column-head { margin: 0; }
+.board-lanes .lane-col-head.folded .column-head { flex-direction: column; gap: 10px; }
+.board-lanes .lane-col-head.folded h2 { writing-mode: vertical-rl; white-space: nowrap; overflow: visible; }
+.board-lanes .lane-col-head.folded .column-fold svg { transform: rotate(180deg); }
+.board-lanes .lane-col-head.folded .column-fold { order: -1; margin: 0; }
+.board-lanes .lane-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-top: 8px;
+  border-top: 1px solid var(--border); }
+.board-lanes .lane-head h3 { margin: 0; font-size: 14px; }
+.board-lanes .lane-head .lane-fold { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 0;
+  padding: 0; border-radius: 6px; color: var(--muted); }
+.board-lanes .lane-head .lane-fold svg { width: 16px; height: 16px; transition: transform .12s; }
+.board-lanes .lane-head.lane-folded .lane-fold svg { transform: rotate(-90deg); }
+#kanban .board-lanes .board-column.lane-cell { min-width: 0; max-width: none; min-height: 90px; padding: 8px; }
+#kanban .board-lanes .board-column.lane-cell.folded { padding: 8px 4px; }
+#kanban .board-lanes .lane-cell.lane-folded { display: none; }
+.lane-cell .cell-add { position: absolute; top: 4px; right: 4px; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; margin: 0; padding: 0; border-radius: 6px; color: var(--muted); opacity: 0; }
+.lane-cell .cell-add svg { width: 16px; height: 16px; }
+.lane-cell:hover .cell-add, .lane-cell:focus-within .cell-add, .lane-cell .cell-add:focus { opacity: 1; }
+@media (hover: none) { .lane-cell .cell-add { opacity: 1; } }
+.lane-cell .board-cards { padding-top: 18px; }
+.lane-cell.folded .cell-add { display: none; }
+.card-chip.card-waiting svg { width: 12px; height: 12px; }
 .kanban-tones { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .kanban-tone { display: flex; align-items: center; gap: 8px; }
 .kanban-tone span:nth-child(2) { min-width: 8rem; }

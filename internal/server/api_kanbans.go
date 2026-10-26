@@ -38,6 +38,9 @@ type kanbanJSON struct {
 	// (ADR-0134).
 	ColorField string            `json:"colorField,omitempty"`
 	Colors     map[string]string `json:"colors,omitempty"`
+	// LaneField names the field whose value lays the cards out in lanes
+	// (ADR-0137).
+	LaneField string `json:"laneField,omitempty"`
 	// Icon names the content of the kanban's picture, empty for none
 	// (ADR-0087).
 	Icon string `json:"icon,omitempty"`
@@ -56,7 +59,7 @@ type columnJSON struct {
 
 func toKanbanJSON(space string, k item.Kanban) kanbanJSON {
 	j := kanbanJSON{ID: k.ID, Space: space, Name: k.Name, Type: k.Type, Label: k.Label, Columns: []columnJSON{}, CardFields: []string{},
-		ColorField: k.ColorField, Colors: k.Colors}
+		ColorField: k.ColorField, Colors: k.Colors, LaneField: k.LaneField}
 	for _, c := range k.Columns {
 		j.Columns = append(j.Columns, columnJSON{ID: c.ID, Name: c.Name, State: c.State, Limit: c.Limit})
 	}
@@ -107,6 +110,7 @@ func (h itemHandlers) renameKanban(w http.ResponseWriter, r *http.Request) {
 		CardFields *[]string          `json:"cardFields"`
 		ColorField *string            `json:"colorField"`
 		Colors     *map[string]string `json:"colors"`
+		LaneField  *string            `json:"laneField"`
 	}
 	if !decode(w, r, &req) {
 		return
@@ -136,6 +140,16 @@ func (h itemHandlers) renameKanban(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	h.write(w, r, http.StatusOK, func(x *item.Session, _ *item.Store) (any, error) {
+		// Left out, the lanes stay as they are; an empty field takes them off.
+		if req.LaneField != nil {
+			k.LaneField = *req.LaneField
+		} else {
+			for _, o := range x.Kanbans(space)[space] {
+				if o.ID == k.ID {
+					k.LaneField = o.LaneField
+				}
+			}
+		}
 		k, err := x.SetKanban(space, k)
 		return map[string]kanbanJSON{"kanban": toKanbanJSON(space, k)}, err
 	})

@@ -33,7 +33,7 @@ type Entry struct {
 
 	// The fields below serve sources whose entries form a tree and whose
 	// content is read only when it changed: a Git repository's Markdown
-	// files (ADR-0137).
+	// files (ADR-0138).
 
 	// Parent is the SourceID of the entry whose page holds this one's
 	// page; empty puts it at the top of the space. Only a new page is

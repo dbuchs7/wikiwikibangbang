@@ -170,7 +170,7 @@ type originJSON struct {
 	URL         string `json:"url,omitempty"`
 	// Version is the source's version the item was read at, e.g. a
 	// commit; Pinned is set when a page made from a file shows it at a
-	// fixed commit (ADR-0137).
+	// fixed commit (ADR-0138).
 	Version string `json:"version,omitempty"`
 	Pinned  bool   `json:"pinned,omitempty"`
 }
@@ -205,6 +205,11 @@ type itemJSON struct {
 	StateSince   *time.Time `json:"stateSince,omitempty"`
 	CommentCount int        `json:"commentCount,omitempty"`
 	FileCount    int        `json:"fileCount,omitempty"`
+	// RelationCount counts the item's relations made by hand to items the
+	// caller may read, and WaitingOn the unfinished ones it depends on or
+	// is blocked by; set in listings (ADR-0137).
+	RelationCount int `json:"relationCount,omitempty"`
+	WaitingOn     int `json:"waitingOn,omitempty"`
 }
 
 type secretJSON struct {

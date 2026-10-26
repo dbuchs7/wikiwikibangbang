@@ -1,5 +1,5 @@
 // Package markdown converts Markdown into the block document of an item
-// (ADR-0137). goldmark parses the text; this package walks its syntax tree
+// (ADR-0138). goldmark parses the text; this package walks its syntax tree
 // and creates every block and mark itself. No renderer of goldmark is ever
 // called, so Markdown never reaches a browser as markup and the closed
 // renderer of ADR-0014 stays the only one.

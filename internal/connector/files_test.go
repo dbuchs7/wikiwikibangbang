@@ -50,7 +50,7 @@ func (f *fixture) item(t *testing.T, id item.ID) item.Item {
 }
 
 // A file in a text becomes a page below the item, following its branch:
-// the hourly update writes it when the file changed (ADR-0137).
+// the hourly update writes it when the file changed (ADR-0138).
 func TestAFileInATextFollowsItsBranch(t *testing.T) {
 	f, src, base, host := filesSetup(t)
 	ctx := context.Background()
