@@ -34,8 +34,13 @@ func (s *Store) SetWatch(actor, principal string, item ID, space string, on bool
 		return invalid("a watch needs a principal")
 	case (item == "") == (space == ""):
 		return invalid("a watch names an item or a space")
-	case item != "":
+	case item != "" && on:
 		if _, err := s.live(item); err != nil {
+			return err
+		}
+	case item != "":
+		// A watch of an item in the trash or purged can still end.
+		if _, err := s.item(item); err != nil {
 			return err
 		}
 	default:
@@ -57,6 +62,10 @@ func (s *Store) SetWatch(actor, principal string, item ID, space string, on bool
 // applyWatch keeps the watches. It touches no item: a watch is not part
 // of what happened to the item.
 func (s *Store) applyWatch(e Event) {
+	// The change feed counts the watches that held at the time of each
+	// event, ended ones too; it finds them through this index, derived
+	// from the log like everything apply keeps.
+	s.watchLog[e.Principal] = append(s.watchLog[e.Principal], len(s.log)-1)
 	k := watchKey(e.Item, e.Space)
 	if e.Kind == Unwatched {
 		delete(s.watches[e.Principal], k)
@@ -93,9 +102,11 @@ type Notification struct {
 
 // --- sessions ---------------------------------------------------------------
 
-// Watch starts or stops watching a readable item.
+// Watch starts or stops watching a readable item. A watch of an item one
+// may no longer read can still be stopped (ADR-0121): one knows of one's
+// own watch, so this reveals nothing about the item.
 func (x *Session) Watch(id ID, on bool) error {
-	if _, err := x.readable(id); err != nil {
+	if _, err := x.readable(id); err != nil && (on || !x.Watching(id)) {
 		return err
 	}
 	return x.s.SetWatch(x.who, x.who, id, "", on)

@@ -59,7 +59,12 @@ type Route struct {
 	Pattern string // net/http pattern without the method
 	Summary string
 	Access  Access
-	Handler http.Handler
+	// ReadScope lets a token of scope read call a route that is not a
+	// GET or HEAD. It is the deliberate exception for watching, which
+	// changes no item and no item's history (ADR-0046, ADR-0121); every
+	// other change stays refused to such a token.
+	ReadScope bool
+	Handler   http.Handler
 }
 
 // Deps are what the routes serve from.
@@ -169,9 +174,10 @@ func Routes(d Deps) []Route {
 	routes = append(routes, doc)
 	routes[len(routes)-1].Handler = openAPI(routes)
 	for i, rt := range routes {
-		// Event streams and downloads run as long as they take; their
+		// Event streams, downloads and the change feed's long polls run as
+		// long as they take; their
 		// durations would only blur the latency of everything else.
-		long := rt.Pattern == "/api/items/{ref}/live" && rt.Method == http.MethodGet || rt.Pattern == "/api/backup"
+		long := rt.Pattern == "/api/items/{ref}/live" && rt.Method == http.MethodGet || rt.Pattern == "/api/backup" || rt.Pattern == "/api/changes"
 		routes[i].Handler = d.Metrics.Instrument(rt.Pattern, long, rt.Handler)
 	}
 	return routes
@@ -276,15 +282,16 @@ func noListing(h http.Handler) http.Handler {
 func Handler(routes []Route, accounts *auth.Accounts) http.Handler {
 	mux := http.NewServeMux()
 	for _, rt := range routes {
-		mux.Handle(rt.Method+" "+rt.Pattern, gate(rt.Access, rt.Handler))
+		mux.Handle(rt.Method+" "+rt.Pattern, gate(rt))
 	}
 	var h http.Handler
 	h = securityHeaders(principals(accounts, withSelf(&h, mux)))
 	return h
 }
 
-func gate(a Access, h http.Handler) http.Handler {
-	if a == Public {
+func gate(rt Route) http.Handler {
+	h := rt.Handler
+	if rt.Access == Public {
 		return h
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +306,9 @@ func gate(a Access, h http.Handler) http.Handler {
 		// The MCP endpoint is posted to even by a reading agent; each tool
 		// call it makes passes this gate on its own (ADR-0012).
 		mcpCall := r.Method == http.MethodPost && r.URL.Path == MCPPath
-		if p.Scope == auth.ScopeRead && r.Method != http.MethodGet && r.Method != http.MethodHead && !mcpCall {
+		// A read token reads; it may also watch for its own principal
+		// (rt.ReadScope, ADR-0121), which changes nothing anyone reads.
+		if p.Scope == auth.ScopeRead && r.Method != http.MethodGet && r.Method != http.MethodHead && !mcpCall && !rt.ReadScope {
 			writeError(w, http.StatusForbidden, "this token may only read")
 			return
 		}

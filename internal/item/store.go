@@ -54,6 +54,9 @@ type Store struct {
 	// watches are what each principal watches (ADR-0046): principal ->
 	// watchKey -> the sequence number of the event that started it.
 	watches map[string]map[string]int
+	// watchLog indexes each principal's Watched and Unwatched events in
+	// log, oldest first, for the change feed.
+	watchLog map[string][]int
 
 	journal Journal
 
@@ -111,6 +114,7 @@ func NewStore(opts ...Option) *Store {
 		groups:     map[string]map[string]bool{},
 		order:      map[string][]ID{},
 		watches:    map[string]map[string]int{},
+		watchLog:   map[string][]int{},
 		spaceRoles: map[string]map[string]Role{},
 		sysRoles:   map[string]map[string]bool{},
 

@@ -15,10 +15,10 @@ import (
 func watchRoutes(h itemHandlers) []Route {
 	get, put, del, post := http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPost
 	return []Route{
-		{Method: put, Pattern: "/api/items/{ref}/watch", Summary: "Watch an item: be told what others change on it and of new items below it", Handler: http.HandlerFunc(h.watchItem(true))},
-		{Method: del, Pattern: "/api/items/{ref}/watch", Summary: "Stop watching an item", Handler: http.HandlerFunc(h.watchItem(false))},
-		{Method: put, Pattern: "/api/spaces/{space}/watch", Summary: "Watch every item of a space", Handler: http.HandlerFunc(h.watchSpace(true))},
-		{Method: del, Pattern: "/api/spaces/{space}/watch", Summary: "Stop watching a space", Handler: http.HandlerFunc(h.watchSpace(false))},
+		{Method: put, Pattern: "/api/items/{ref}/watch", Summary: "Watch an item: be told what others change on it and of new items below it; allowed to tokens of scope read (ADR-0121)", ReadScope: true, Handler: http.HandlerFunc(h.watchItem(true))},
+		{Method: del, Pattern: "/api/items/{ref}/watch", Summary: "Stop watching an item, also one the caller may no longer read (by its ID); allowed to tokens of scope read (ADR-0121)", ReadScope: true, Handler: http.HandlerFunc(h.watchItem(false))},
+		{Method: put, Pattern: "/api/spaces/{space}/watch", Summary: "Watch every item of a space; allowed to tokens of scope read (ADR-0121)", ReadScope: true, Handler: http.HandlerFunc(h.watchSpace(true))},
+		{Method: del, Pattern: "/api/spaces/{space}/watch", Summary: "Stop watching a space; allowed to tokens of scope read (ADR-0121)", ReadScope: true, Handler: http.HandlerFunc(h.watchSpace(false))},
 		{Method: get, Pattern: "/api/me/watches", Summary: "What one watches", Handler: http.HandlerFunc(h.listWatches)},
 		{Method: get, Pattern: "/api/notifications", Summary: "What others changed on what one watches and comments mentioning one by @username, newest first, paged (before, limit), with the unread count; filtered by q, unread and kind (mentions, comments, changes, governance)", Handler: http.HandlerFunc(h.notifications)},
 		{Method: post, Pattern: "/api/notifications/seen", Summary: "Mark the notifications up to an event (seq) as seen", Handler: http.HandlerFunc(h.notificationsSeen)},
@@ -28,11 +28,15 @@ func watchRoutes(h itemHandlers) []Route {
 func (h itemHandlers) watchItem(on bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.write(w, r, http.StatusOK, func(x *item.Session, _ *item.Store) (any, error) {
-			it, err := resolveItem(x, r.PathValue("ref"))
-			if err != nil {
+			id := item.ID(r.PathValue("ref"))
+			if it, err := resolveItem(x, r.PathValue("ref")); err == nil {
+				id = it.ID
+			} else if on || !x.Watching(id) {
+				// A watch of an item one may no longer read ends by its ID
+				// (ADR-0121); anything else unreadable stays unknown.
 				return nil, err
 			}
-			if err := x.Watch(it.ID, on); err != nil {
+			if err := x.Watch(id, on); err != nil {
 				return nil, err
 			}
 			return map[string]bool{"watching": on}, nil
