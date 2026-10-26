@@ -140,4 +140,5 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0125](0125-archimate-relationships-and-a-microsoft-palette.md) | ArchiMate relationships and a Microsoft palette for the drawing editor | Accepted | Landed |
 | [0126](0126-excalidraw-0-18.md) | The drawing editor runs on Excalidraw 0.18 | Accepted | Landed |
 | [0127](0127-connectors-read-any-json-source-into-a-type-of-ones-own.md) | Connectors read any JSON source into a type of one's own | Accepted | Landed |
+| [0128](0128-the-atlassian-import-as-a-connector.md) | The Atlassian import as a connector | Accepted | Landed |
 | [0129](0129-bpmn-diagrams-and-processes-from-a-process-engine.md) | BPMN diagrams in the text, and processes from a process engine with their operations | Proposed | Partial |

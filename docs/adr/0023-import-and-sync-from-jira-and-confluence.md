@@ -190,3 +190,4 @@ Strongest form: specialised vendors already handle Atlassian's formats and edge 
 - relates to [ADR-0008](0008-event-sourced-persistence.md) (imported events, crypto-shredding), [ADR-0011](0011-http-api-route-table-and-access-classes.md) (redirects from old URLs)
 - ADR-0001 named "import" as a follow-up record; this is it
 - extended by [ADR-0124](0124-restoring-spaces-from-a-backup.md) (a backup as a source: restoring spaces)
+- amended by [ADR-0128](0128-the-atlassian-import-as-a-connector.md) (the import runs as a connector too, managed until a cut-over)

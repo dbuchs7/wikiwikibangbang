@@ -136,8 +136,36 @@ function feedSource() {
   return server;
 }
 
+// atlassianSource answers the wiki API of an Atlassian Cloud site, with
+// one space of two pages, to the account the server's
+// environment names for the connector "acme" (ADR-0128).
+function atlassianSource() {
+  const server = require("http").createServer((req, res) => {
+    const [user, pass] = Buffer.from((req.headers.authorization || "").replace(/^Basic /, ""), "base64").toString().split(":");
+    if (user !== "e2e@acme.example" || pass !== "e2e-atlassian-token") {
+      res.statusCode = 401;
+      res.end("unauthorized");
+      return;
+    }
+    const path = new URL(req.url, "http://x").pathname;
+    const page = (id, title, parent) => ({ id, title, version: { number: 1 }, body: { storage: { value: `<p>${title} of the engineers.</p>` } },
+      ...(parent ? { parentId: parent, parentType: "page" } : {}) });
+    res.setHeader("Content-Type", "application/json");
+    if (path === "/wiki/api/v2/spaces") res.end(JSON.stringify({ results: [{ id: "7", key: "ENG", name: "Engineering" }] }));
+    else if (path === "/wiki/api/v2/pages") res.end(JSON.stringify({ results: [page("1", "Handbook", ""), page("2", "On call", "1")] }));
+    else if (path.startsWith("/wiki/rest/api/content/")) res.end(JSON.stringify({ restrictions: { user: { results: [] }, group: { results: [] } } }));
+    else {
+      res.statusCode = 404;
+      res.end("{}");
+    }
+  });
+  server.listen(0, "127.0.0.1");
+  return server;
+}
+
 (async () => {
   const sink = mailSink(process.env.SMTP_SINK_PORT);
+  const atlassian = atlassianSource();
   const ckan = ckanSource();
   const engine = engineSource();
   const feed = feedSource();
@@ -1951,6 +1979,39 @@ function feedSource() {
       check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader");
     }
 
+    step("connectors: an Atlassian site is imported on a schedule; its pages are read-only until the cut-over (ADR-0128)");
+    await page.goto(base + "/#/admin");
+    await page.click("#connector-new-atlassian");
+    await page.waitForSelector("#connector-settings [name=site]");
+    check(await page.$("#connector-settings [name=space]") === null, "the import names its rooms itself");
+    await page.fill("#connector-settings [name=id]", "acme");
+    await page.fill("#connector-settings [name=name]", "Acme");
+    await page.fill("#connector-settings [name=site]", `http://127.0.0.1:${atlassian.address().port}`);
+    await page.fill("#connector-settings [name=spaces]", "eng");
+    await page.fill("#connector-settings [name=grants]", "bert=viewer");
+    await page.click("#connector-settings button[type=submit]");
+    await page.waitForSelector("#connector-list tr[data-connector='acme']");
+    await page.waitForSelector("#connector-credential:has-text('WWBB_CONNECTOR_ACME_EMAIL'):has-text('are set')");
+    check(await page.inputValue("#connector-settings [name=spaces]") === "ENG", "the keys are kept in capitals");
+    await page.click("#connector-dry-run");
+    await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('2 new')");
+    check(!(await (await page.request.get(base + "/api/spaces")).json()).spaces.some((sp) => sp.key === "ENG"), "the dry run wrote nothing");
+    await page.click("#connector-run-now");
+    await page.waitForSelector("#connector-history .catalog-run:has-text('Sync'):has-text('2 new')");
+    const handbook = (await (await page.request.get(base + "/api/items?space=ENG")).json()).items.find((it) => it.title === "Handbook");
+    check(handbook && handbook.managed === "sync:acme", "the page is kept in step by the connector");
+    await page.goto(base + "/#/item/" + handbook.key);
+    await page.waitForSelector(".item-main :text('Handbook of the engineers.')");
+    await page.waitForSelector("text=read-only here until the cut-over");
+    check(await page.$("#edit") === null, "a page kept in step is not edited here");
+    await page.goto(base + "/#/admin");
+    await page.click("#connector-list tr[data-connector='acme'] button");
+    answer = true;
+    await page.click("#connector-release");
+    await page.waitForSelector("#connector-list tr[data-connector='acme'] td:text-is('by hand')");
+    await page.goto(base + "/#/item/" + handbook.key);
+    await page.waitForSelector("#edit");
+
     step("spaces: an administrator deletes a space into the trash, restores it, and deletes it for good");
     await page.goto(base + "/#/admin");
     await page.fill("#new-space [name=key]", "TMP");
@@ -2176,5 +2237,6 @@ function feedSource() {
     ckan.close();
     engine.close();
     feed.close();
+    atlassian.close();
   }
 })();

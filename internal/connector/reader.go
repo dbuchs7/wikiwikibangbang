@@ -21,6 +21,9 @@ type Reader interface {
 // source with, which keeps to public addresses unless allowed (guard.go).
 type Env struct {
 	Token string
+	// Email is the account's e-mail address an Atlassian site is signed in
+	// to with Token (ADR-0128).
+	Email string
 	HTTP  *http.Client
 	// CKAN makes the client of a CKAN API; tests replace it.
 	CKAN func(base, token string) Client
@@ -28,8 +31,9 @@ type Env struct {
 
 // readers are the kinds of source this server reads, by kind.
 var readers = map[string]Reader{
-	site.KindCKAN: ckanReader{},
-	site.KindJSON: jsonReader{},
+	site.KindCKAN:      ckanReader{},
+	site.KindJSON:      jsonReader{},
+	site.KindAtlassian: atlassianReader{},
 }
 
 // reader returns the reader of a connector's kind.

@@ -114,12 +114,15 @@ jobs:
           # Mail goes to the smoke test's own mail sink (ADR-0064); automatic
           # backups go to a directory of the runner (ADR-0073); connectors
           # may reach the smoke test's own sources on the loopback address
-          # (ADR-0127), and the process engine is the smoke test's own
-          # (ADR-0129).
+          # (ADR-0127), the Atlassian one with the account of the smoke
+          # test's fake site (ADR-0128), and the process engine is the smoke
+          # test's own (ADR-0129).
           mkdir -p "$RUNNER_TEMP/autobackup"
           WWBB_ADMIN_PASSWORD=e2e-admin-password WWBB_PUBLIC_URL=http://127.0.0.1:8080 \
             WWBB_SMTP_HOST=127.0.0.1 WWBB_SMTP_PORT=2525 WWBB_SMTP_SECURITY=none WWBB_SMTP_FROM=wiki@example.org \
-            WWBB_BACKUP_PASSPHRASE="a long backup passphrase" WWBB_CONNECTOR_ALLOW_PRIVATE=on WWBB_ENGINE_ATLAS_TOKEN=e2e-engine-token WWBB_ENGINE_ALLOW_PRIVATE=on \
+            WWBB_BACKUP_PASSPHRASE="a long backup passphrase" WWBB_CONNECTOR_ALLOW_PRIVATE=on \
+            WWBB_CONNECTOR_ACME_EMAIL=e2e@acme.example WWBB_CONNECTOR_ACME_TOKEN=e2e-atlassian-token \
+            WWBB_ENGINE_ATLAS_TOKEN=e2e-engine-token WWBB_ENGINE_ALLOW_PRIVATE=on \
             "$RUNNER_TEMP/wwbb" serve -addr 127.0.0.1:8080 -data-dir "$RUNNER_TEMP/data" > "$RUNNER_TEMP/server.log" 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
           cd e2e && SMTP_SINK_PORT=2525 ENGINE_TOKEN=e2e-engine-token BACKUP_OUT="$RUNNER_TEMP/backup.wwbb" AUTOBACKUP_DIR="$RUNNER_TEMP/autobackup" BASE_URL=http://127.0.0.1:8080 ADMIN_PASSWORD=e2e-admin-password node smoke.cjs

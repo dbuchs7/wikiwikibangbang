@@ -4769,6 +4769,9 @@ function connectorsCard(spaces, users) {
 function connectorEditor(c, data, spaces, users, list, reopen) {
   const k = c.ckan || { formats: [], organizations: [], baseURL: "", portalURL: "", language: "de" };
   const j = c.json;
+  // An Atlassian import names its spaces, types and fields itself
+  // (ADR-0128): it has no space, type or steward of its own.
+  const a = c.atlassian;
   const path = "/api/connectors/" + encodeURIComponent(c.id);
   const st = c.status;
   const runStatus = h("div", { class: "status", id: "connector-run-status" });
@@ -4854,7 +4857,38 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     field(t("connector.language"), languageSelect(j.language)),
     h("p", { class: "muted", text: t("json.languageHelp") }),
   ];
-  const run = (dryRun, id, text) => h("button", { type: "button", class: dryRun ? "secondary" : "primary", id, disabled: st.running || !c.space, text, onclick: async () => {
+  // The source accounts, groups and roles of an Atlassian import, one a
+  // line: "accountId username", "source group @local-group", "username=role".
+  const lines = (v) => v.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+  const pairs = (v) => Object.fromEntries(lines(v).map((l) => {
+    const i = l.search(/\s+\S*$/);
+    return i < 0 ? [l, ""] : [l.slice(0, i).trim(), l.slice(i).trim()];
+  }));
+  const atlassianSource = () => [
+    field(t("atlassian.site"), h("input", { name: "site", type: "url", required: true, value: a.site, maxlength: 512 })),
+    field(t("atlassian.spaces"), h("input", { name: "spaces", value: a.spaces.join(", "), placeholder: "ENG, OPS" })),
+    field(t("atlassian.projects"), h("input", { name: "projects", value: a.projects.join(", "), placeholder: "PLAT" })),
+    h("p", { class: "muted", text: t("atlassian.keysHelp") }),
+    field(t("atlassian.users"), h("textarea", { name: "users", rows: 4, placeholder: "5b10ac8d82e05b22cc7d4ef5 anna",
+      value: Object.entries(a.users || {}).map(([id, name]) => `${id} ${name}`).join("\n") })),
+    h("p", { class: "muted", text: t("atlassian.usersHelp") }),
+    field(t("atlassian.groups"), h("textarea", { name: "groups", rows: 3, placeholder: "dev team @engineering",
+      value: Object.entries(a.groups || {}).map(([src, local]) => `${src} ${local}`).join("\n") })),
+    field(t("atlassian.grants"), h("textarea", { name: "grants", rows: 3, placeholder: "@engineering=editor", value: (a.grants || []).join("\n") })),
+    h("p", { class: "muted", text: t("atlassian.grantsHelp") }),
+  ];
+  // The cut-over: the items become people's, the schedule stops.
+  const release = () => h("button", { type: "button", class: "secondary", id: "connector-release", disabled: st.running, text: t("atlassian.release"), onclick: async () => {
+    if (!confirm(t("atlassian.releaseConfirm", { name: c.name }))) return;
+    runStatus.replaceChildren();
+    try {
+      await post(path + "/release", {});
+      reopen(c.id);
+    } catch (err) {
+      runStatus.replaceChildren(errorBox(err));
+    }
+  } });
+  const run = (dryRun, id, text) => h("button", { type: "button", class: dryRun ? "secondary" : "primary", id, disabled: st.running || !c.space && !a, text, onclick: async () => {
     runStatus.replaceChildren();
     try {
       await post(path + "/run", { dryRun });
@@ -4875,30 +4909,31 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       { id: "run-problems-" + Date.parse(r.started), label: t("catalog.problems") }) : "");
   editor.replaceChildren(
     h("h3", { text: c.isNew ? t("connector.newTitle") : c.name }),
-    h("p", { class: "muted", text: j ? t("json.note") : t("catalog.note") }),
+    h("p", { class: "muted", text: a ? t("atlassian.note") : j ? t("json.note") : t("catalog.note") }),
     h("p", { class: "muted", text: t("connector.publicOnly") }),
     form({ id: "connector-settings" }, [
       field(t("connector.id"), h("input", { name: "id", value: c.id, required: true, readonly: !c.isNew, pattern: "[a-z0-9][a-z0-9.\\-]{0,39}", maxlength: 40 })),
       c.isNew ? h("p", { class: "muted", text: t("connector.idHelp") }) : "",
       field(t("connector.name"), h("input", { name: "name", value: c.name, required: true, maxlength: 80 })),
       h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: c.enabled }), " ", t("catalog.enabled")),
-      field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
+      a ? "" : field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
         spaces.map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === c.space })))),
-      j ? jsonSource() : ckanSource(),
-      h("fieldset", { class: "connector-target" }, h("legend", { text: t("connector.target") }),
+      a ? atlassianSource() : j ? jsonSource() : ckanSource(),
+      a ? "" : h("fieldset", { class: "connector-target" }, h("legend", { text: t("connector.target") }),
         field(t("connector.type"), typeSelect),
         h("p", { class: "muted", text: t("connector.targetHelp") }),
         mapping,
         h("p", { class: "muted", text: t("connector.fieldsHelp") })),
-      field(t("catalog.steward"), h("select", { name: "steward" }, h("option", { value: "", text: "—" }),
+      a ? "" : field(t("catalog.steward"), h("select", { name: "steward" }, h("option", { value: "", text: "—" }),
         users.map((u) => h("option", { value: u.id, text: u.username, selected: u.id === c.steward })))),
-      h("p", { class: "muted", text: t("catalog.stewardHelp") }),
+      a ? "" : h("p", { class: "muted", text: t("catalog.stewardHelp") }),
       field(t("catalog.interval"), h("input", { name: "intervalHours", type: "number", min: 1, max: 744, required: true, value: c.intervalHours })),
-      j ? "" : h("details", {}, h("summary", { text: t("catalog.source") }),
+      j || a ? "" : h("details", {}, h("summary", { text: t("catalog.source") }),
         field(t("catalog.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: k.baseURL })),
         field(t("catalog.portalURL"), h("input", { name: "portalURL", type: "url", required: true, value: k.portalURL }))),
       c.isNew ? "" : h("p", { class: "muted", id: "connector-credential",
-        text: st.credential ? t("connector.credentialSet", { name: st.credentialVar }) : t("connector.credentialUnset", { name: st.credentialVar }) }),
+        text: a ? t(st.credential && st.email ? "atlassian.credentialSet" : "atlassian.credentialUnset", { email: st.emailVar, token: st.credentialVar })
+          : st.credential ? t("connector.credentialSet", { name: st.credentialVar }) : t("connector.credentialUnset", { name: st.credentialVar }) }),
       h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", text: t("autobackup.save") }),
         c.isNew ? h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => reopen(null) })
           : h("button", { type: "button", class: "link danger", id: "connector-delete", text: t("connector.remove"), onclick: async () => {
@@ -4913,10 +4948,13 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     ], async (d) => {
       const fields = Object.fromEntries([...mapping.querySelectorAll("select[data-field]")].filter((x) => x.value).map((x) => [x.dataset.field, x.value]));
       const body = {
-        id: d.get("id").trim(), name: d.get("name").trim(), kind: c.kind, enabled: d.get("enabled") === "on", space: d.get("space"),
-        steward: d.get("steward"), intervalHours: Number(d.get("intervalHours")), type: d.get("type"), fields,
+        id: d.get("id").trim(), name: d.get("name").trim(), kind: c.kind, enabled: d.get("enabled") === "on", space: d.get("space") || "",
+        steward: d.get("steward") || "", intervalHours: Number(d.get("intervalHours")), type: a ? "" : d.get("type"), fields: a ? {} : fields,
       };
-      if (j) {
+      if (a) {
+        body.atlassian = { site: d.get("site").trim(), spaces: list(d.get("spaces")), projects: list(d.get("projects")), users: pairs(d.get("users")),
+          groups: pairs(d.get("groups")), grants: lines(d.get("grants")) };
+      } else if (j) {
         body.json = { url: d.get("url").trim(), items: d.get("items").trim(), id: d.get("idPath").trim(), title: d.get("titlePath").trim(), link: d.get("link").trim(),
           text: d.get("text").trim(), next: d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language") };
       } else {
@@ -4927,7 +4965,8 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     }),
     c.isNew ? "" : h("p", { id: "connector-next" }, st.running ? t("catalog.running") : st.next ? t("catalog.next", { when: when(st.next) }) : t("catalog.off")),
     c.isNew ? "" : h("div", { class: "actions-row" }, run(true, "connector-dry-run", t("catalog.dryRunNow")), run(false, "connector-run-now", t("catalog.runNow")),
-      c.space ? link("#/space/" + encodeURIComponent(c.space), t("catalog.openSpace"), "button") : ""),
+      c.space ? link("#/space/" + encodeURIComponent(c.space), t("catalog.openSpace"), "button") : "", a ? release() : ""),
+    c.isNew || !a ? "" : h("p", { class: "muted", text: t("atlassian.releaseHelp") }),
     runStatus,
     c.isNew ? "" : st.history.length ? filtered(h("div", { id: "connector-history" }, st.history.map(result)),
       { id: "connector-runs", label: t("connector.lastRun"), choices: [{ key: "outcome", label: t("filter.kind") }] }) : h("p", { class: "muted", text: t("catalog.noRuns") }),
