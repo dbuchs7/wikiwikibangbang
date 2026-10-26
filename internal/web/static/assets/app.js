@@ -119,9 +119,10 @@ function printExport(path, children) {
   document.body.append(frame);
 }
 
-// exportMenu offers a page as PDF and as a Word document, both with what
-// it embeds, and each of its tables as CSV; a page with subpages also as a
-// handbook with them.
+// exportMenu offers a page as PDF, as a Word document and as Markdown in a
+// ZIP archive with its pictures (ADR-0131), all with what it embeds, and
+// each of its tables as CSV; a page with subpages also as a handbook with
+// them.
 function exportMenu(item) {
   const path = "/api/items/" + encodeURIComponent(item.id);
   const tables = (item.body || []).filter((b) => b.kind === "table");
@@ -132,6 +133,7 @@ function exportMenu(item) {
     h("div", { class: "export-list" },
       h("button", { type: "button", class: "link", id: "export-pdf", text: t("export.pdf"), onclick: (ev) => { close(ev); printExport(path, false); } }),
       h("a", { href: path + "/export/docx", id: "export-docx", download: "", text: t("export.docx") }),
+      h("a", { href: path + "/export/md.zip", id: "export-md", download: "", text: t("export.markdown") }),
       handbook,
       tables.map((b, i) => h("a", { href: `${path}/tables/${i + 1}`, class: "export-table", download: "",
         text: t("export.table", { n: i + 1, head: (b.text || "").split("\n")[0].split("\t").slice(0, 3).join(", ") }) }))));
@@ -144,7 +146,8 @@ function exportMenu(item) {
     const kids = await childPagesOf(item)().catch(() => []);
     if (kids.length) handbook.append(
       h("button", { type: "button", class: "link", id: "export-pdf-handbook", text: t("export.pdfHandbook"), onclick: (ev) => { close(ev); printExport(path, true); } }),
-      h("a", { href: path + "/export/docx?children=true", id: "export-docx-handbook", download: "", text: t("export.docxHandbook") }));
+      h("a", { href: path + "/export/docx?children=true", id: "export-docx-handbook", download: "", text: t("export.docxHandbook") }),
+      h("a", { href: path + "/export/md.zip?children=true", id: "export-md-handbook", download: "", text: t("export.markdownHandbook") }));
   });
   return menu;
 }
@@ -4851,7 +4854,8 @@ function connectorsCard(spaces, users) {
       data.connectors.length ? filtered(h("table", { id: "connector-list" },
         h("thead", {}, h("tr", {}, [t("connector.name"), t("connector.kind"), t("catalog.space"), t("connector.lastRun"), t("connector.schedule"), ""].map((x) => h("th", { text: x })))),
         h("tbody", {}, rows)), { id: "connectors", label: t("connector.title"), choices: [{ key: "state", label: t("connector.schedule") }] }) : empty(t("connector.none")),
-      h("p", { class: "actions-row" }, data.templates.map((tpl, i) => h("button", { type: "button", class: i ? "secondary" : null, id: i ? "connector-new-" + tpl.kind : "connector-new",
+      h("p", { class: "actions-row" }, data.templates.map((tpl, i) => h("button", { type: "button", class: i ? "secondary" : null,
+        id: i ? "connector-new-" + (tpl.json?.spec !== undefined ? "openapi" : tpl.kind) : "connector-new",
         text: t("connector.new", { name: tpl.name }), onclick: () => { open = i; load(); } }))),
       chosen ? connectorEditor(chosen, data, spaces, users, list, (id) => { open = id; load(); }) : "",
     );
@@ -4942,7 +4946,46 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     field(t("catalog.organizations"), h("input", { name: "organizations", value: k.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
     h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
   ];
+  // An API description offers its lists (ADR-0130): one picked fills
+  // the settings below, which stay the connector's.
+  const specInput = h("input", { name: "specURL", type: "url", value: j?.spec || "", placeholder: "https://api.example/openapi.yaml", maxlength: 512 });
+  const picked = { spec: j?.operation ? j.spec : "", operation: j?.operation || "" };
+  const pickedNote = h("p", { class: "muted", id: "openapi-picked", text: picked.operation ? t("openapi.picked", { operation: picked.operation }) : "" });
+  const listsBox = h("div", { id: "openapi-lists" });
+  const showLists = async () => {
+    listsBox.replaceChildren(h("p", { class: "muted", text: t("openapi.loading") }));
+    try {
+      const id = editor.querySelector("#connector-settings [name=id]").value.trim() || "new";
+      const d = await get(`/api/connectors/${encodeURIComponent(id)}/openapi?` + new URLSearchParams({ url: specInput.value.trim() }));
+      const use = (l) => {
+        const form = editor.querySelector("#connector-settings");
+        const set = (name, v) => { form.querySelector(`[name=${name}]`).value = v || ""; };
+        const s = l.source;
+        set("url", s.url); set("items", s.items); set("idPath", s.id); set("titlePath", s.title);
+        set("link", s.link); set("text", s.text); set("next", s.next);
+        valuesInput.value = Object.entries(s.values || {}).map(([n, p]) => `${n} = ${p}`).join("\n");
+        showFields();
+        picked.spec = s.spec; picked.operation = s.operation;
+        pickedNote.textContent = t("openapi.picked", { operation: s.operation });
+        listsBox.replaceChildren();
+      };
+      listsBox.replaceChildren(
+        h("p", { class: "muted", text: t("openapi.found", { title: d.title || specInput.value.trim(), n: d.lists.length }) }),
+        d.lists.length ? h("ul", { class: "openapi-lists" }, d.lists.map((l) => h("li", {},
+          h("button", { type: "button", class: "link", "data-operation": l.operation, text: l.operation, onclick: () => use(l) }),
+          l.summary ? h("span", { class: "muted", text: " · " + l.summary }) : ""))) : "",
+        d.problems.length ? h("details", {}, h("summary", { text: t("openapi.skipped", { n: d.problems.length }) }),
+          h("ul", {}, d.problems.map((p) => h("li", { class: "muted", text: p })))) : "");
+    } catch (err) {
+      listsBox.replaceChildren(errorBox(err));
+    }
+  };
   const jsonSource = () => [
+    h("fieldset", { class: "connector-target", id: "openapi" }, h("legend", { text: t("openapi.title") }),
+      field(t("openapi.spec"), specInput),
+      h("p", { class: "muted" }, t("openapi.help"), " ",
+        h("button", { type: "button", class: "link", id: "openapi-read", text: t("openapi.read"), onclick: showLists })),
+      listsBox, pickedNote),
     field(t("json.url"), h("input", { name: "url", type: "url", required: true, value: j.url, maxlength: 512 })),
     h("p", { class: "muted", text: t("json.urlHelp") }),
     path_("items", t("json.items"), j.items),
@@ -5056,7 +5099,8 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
           groups: pairs(d.get("groups")), grants: lines(d.get("grants")) };
       } else if (j) {
         body.json = { url: d.get("url").trim(), items: d.get("items").trim(), id: d.get("idPath").trim(), title: d.get("titlePath").trim(), link: d.get("link").trim(),
-          text: d.get("text").trim(), next: d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language") };
+          text: d.get("text").trim(), next: d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language"),
+          spec: picked.spec, operation: picked.operation };
       } else {
         body.ckan = { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(), language: d.get("language") };
       }

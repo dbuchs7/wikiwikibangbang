@@ -27,6 +27,7 @@ func connectorRoutes(d Deps) []Route {
 		{Method: http.MethodDelete, Pattern: "/api/connectors/{id}", Summary: "Remove a connector; the entries it wrote stay, with their origin (administrators)", Handler: http.HandlerFunc(h.removeConnector)},
 		{Method: http.MethodPost, Pattern: "/api/connectors/{id}/run", Summary: "Run a connector now, in the background; dryRun reports what it would change without writing (administrators)", Handler: http.HandlerFunc(h.runConnector)},
 		{Method: http.MethodPost, Pattern: "/api/connectors/{id}/release", Summary: "Cut over from an Atlassian import: its items become ordinary items people change, and its schedule is turned off (administrators)", Handler: http.HandlerFunc(h.releaseConnector)},
+		{Method: http.MethodGet, Pattern: "/api/connectors/{id}/openapi", Summary: "The lists an API description at url (OpenAPI 3 or Swagger 2.0, JSON or YAML) offers, each as the settings of a JSON source; the connector's credential is sent (administrators)", Handler: http.HandlerFunc(h.connectorOpenAPI)},
 		{Method: http.MethodGet, Pattern: "/api/connectors/{id}/formats", Summary: "The resource formats a CKAN source's data sets use, with how many data sets use each, to choose the interfaces from; baseURL and organizations as typed, else as saved (administrators)", Handler: http.HandlerFunc(h.connectorFormats)},
 	}
 }
@@ -268,6 +269,29 @@ func (h authHandlers) runConnector(w http.ResponseWriter, r *http.Request) {
 
 // formatsTimeout bounds asking the source for its formats.
 const formatsTimeout = 30 * time.Second
+
+// connectorOpenAPI reads an API description for an administrator to pick
+// a list from (ADR-0130); the connector need not be saved yet.
+func (h authHandlers) connectorOpenAPI(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.adminOnly(w, r); !ok {
+		return
+	}
+	addr := strings.TrimSpace(r.URL.Query().Get("url"))
+	probe := site.JSONSource{URL: addr, ID: "id", Title: "title", Spec: addr}
+	c := site.Connector{ID: r.PathValue("id"), Name: "x", Kind: site.KindJSON, IntervalHours: 1, JSON: &probe}
+	if err := c.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, "the description's address: "+err.Error())
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), formatsTimeout)
+	defer cancel()
+	d, err := h.d.Connectors.DescribeOpenAPI(ctx, c.ID, addr)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
 
 func (h authHandlers) connectorFormats(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.adminOnly(w, r); !ok {

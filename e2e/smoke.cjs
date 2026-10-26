@@ -128,6 +128,19 @@ function engineSource() {
 // entry and two further values (ADR-0127).
 function feedSource() {
   const server = require("http").createServer((req, res) => {
+    // Its API description, for the OpenAPI connector (ADR-0130).
+    if (req.url === "/openapi.yaml") {
+      res.setHeader("Content-Type", "application/yaml");
+      res.end(["openapi: 3.0.3", "info: {title: Feed}", "paths:", "  /entries:", "    get:", "      summary: The entries",
+        "      responses:", "        200:", "          content:", "            application/json:", "              schema:",
+        "                type: object", "                properties:", "                  next: {type: string}",
+        "                  entries:", "                    type: array", "                    items:", "                      type: object",
+        "                      properties:", "                        id: {type: string}", "                        title: {type: string}",
+        "                        url: {type: string, format: uri}", "                        text: {type: string}",
+        "                        owner: {type: string}", "                        since: {type: string, format: date}",
+        "  /entries/{id}:", "    get: {responses: {200: {description: one}}}", ""].join("\n"));
+      return;
+    }
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ entries: [{ id: "svc-1", title: "Adressdienst", url: "https://registry.example.org/svc-1",
       text: "Liefert die Adressen des Kantons.", owner: "Amt für Geoinformation", since: "2024-03-01" }], next: "" }));
@@ -1710,8 +1723,14 @@ function atlassianSource() {
       const res = await call({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "create_item", arguments: {
         space: "PLAT", type: "task", title: "Written by an assistant", properties: { priority: "low" },
         body: [{ kind: "heading", level: 1, text: "Summary" }, { kind: "paragraph", text: "Made through MCP." }] } } });
-      return JSON.parse(res.result.content[0].text).item.key;
-    }, mcpToken);
+      const key = JSON.parse(res.result.content[0].text).item.key;
+      // An agent reads a page as Markdown (ADR-0131).
+      const md = await call({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_item_markdown", arguments: { ref: key } } });
+      return { key, md: md.result.isError ? "" : md.result.content[0].text };
+    }, mcpToken).then((x) => {
+      check(x.md.startsWith("# Written by an assistant\n") && x.md.includes("\n## Summary\n\nMade through MCP.\n"), "an agent reads the page as Markdown: " + JSON.stringify(x.md));
+      return x.key;
+    });
     await page.goto(base + "/#/item/" + made);
     await page.waitForSelector("#body .ProseMirror:has-text('Made through MCP.')");
 
@@ -1793,6 +1812,16 @@ function atlassianSource() {
     const [table] = await Promise.all([page.waitForEvent("download"), page.click("#item-export a.export-table")]);
     const tableText = require("fs").readFileSync(await table.path(), "utf8");
     check(tableText === "\ufeffItem,Price\r\nTea,3\r\n", "the table as CSV: " + JSON.stringify(tableText));
+    // As Markdown: an archive with the text and its pictures for people,
+    // the text alone for the API and agents (ADR-0131).
+    await page.click("#item-export summary");
+    const [mdZip] = await Promise.all([page.waitForEvent("download"), page.click("#export-md")]);
+    check(mdZip.suggestedFilename() === exported + " Price list.zip", "the Markdown archive is named after the page: " + mdZip.suggestedFilename());
+    const zipBytes = require("fs").readFileSync(await mdZip.path());
+    check(zipBytes.subarray(0, 4).toString("latin1") === "PK\x03\x04" && zipBytes.includes(Buffer.from(exported + " Price list.md")), "the archive holds the Markdown");
+    const mdText = await (await page.request.get(base + "/api/items/" + exported + "/export/md")).text();
+    check(mdText.startsWith("# Price list\n") && mdText.includes("\n## Prices\n") && mdText.includes("| Item | Price |\n| --- | --- |\n| Tea | 3 |"),
+      "the page as Markdown: " + JSON.stringify(mdText));
     await page.emulateMedia({ media: "print" });
     check(!(await page.isVisible("header.top")) && !(await page.isVisible("#item-export")) && await page.isVisible("h1.item-title"), "printing shows the page without the surroundings");
     await page.emulateMedia({ media: "screen" });
@@ -1804,6 +1833,9 @@ function atlassianSource() {
     await page.waitForSelector("#export-docx-handbook");
     const [book] = await Promise.all([page.waitForEvent("download"), page.click("#export-docx-handbook")]);
     check(book.suggestedFilename().endsWith("Tidy the wiki.docx"), "the handbook is named after its root page: " + book.suggestedFilename());
+    await page.click("#item-export summary");
+    const [mdBook] = await Promise.all([page.waitForEvent("download"), page.click("#export-md-handbook")]);
+    check(mdBook.suggestedFilename().endsWith("Tidy the wiki.zip"), "the Markdown handbook is an archive named after its root page: " + mdBook.suggestedFilename());
     await page.click("#item-export summary");
     // Each print the frame asks for is noted instead of opening the dialog.
     await page.evaluate(() => {
@@ -2018,6 +2050,29 @@ function atlassianSource() {
       await live.locator(".pm-diagram-ops:has-text('Version 4 · running: 3 · finished: 12 · incidents: 1')").waitFor();
       check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader");
     }
+
+    step("connectors: an API description offers its lists; the one picked fills a JSON source's settings (ADR-0130)");
+    await page.goto(base + "/#/admin");
+    await page.click("#connector-new-openapi");
+    await page.waitForSelector("#openapi [name=specURL]");
+    await page.fill("#connector-settings [name=id]", "described");
+    await page.fill("#connector-settings [name=name]", "Described");
+    await page.selectOption("#connector-settings [name=space]", "APIS");
+    await page.fill("#openapi [name=specURL]", `http://127.0.0.1:${feed.address().port}/openapi.yaml`);
+    await page.click("#openapi-read");
+    await page.waitForSelector("#openapi-lists :text('“Feed” offers 1 lists')");
+    await page.click("#openapi-lists details summary");
+    await page.waitForSelector("#openapi-lists li:has-text('it needs path parameters')");
+    await page.click("#openapi-lists button[data-operation='GET /entries']");
+    check(await page.inputValue("#connector-settings [name=url]") === `http://127.0.0.1:${feed.address().port}/entries`, "the list's address is taken");
+    check(await page.inputValue("#connector-settings [name=items]") === "entries" && await page.inputValue("#connector-settings [name=link]") === "url" &&
+      await page.inputValue("#connector-settings [name=next]") === "next", "the paths are taken");
+    check((await page.inputValue("#connector-settings [name=values]")).split("\n").sort().join(",") === "owner = owner,since = since", "the further values are taken");
+    await page.click("#connector-settings button[type=submit]");
+    await page.waitForSelector("#connector-list tr[data-connector='described']");
+    await page.waitForSelector("#openapi-picked:has-text('GET /entries')");
+    await page.click("#connector-dry-run");
+    await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('1 new')");
 
     step("connectors: an Atlassian site is imported on a schedule; its pages are read-only until the cut-over (ADR-0128)");
     await page.goto(base + "/#/admin");
