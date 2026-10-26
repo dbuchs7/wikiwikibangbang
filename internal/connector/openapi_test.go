@@ -209,3 +209,71 @@ func TestADescriptionIsFetchedAsASource(t *testing.T) {
 		t.Errorf("a description in the server's own network: %v", err)
 	}
 }
+
+func TestADescriptionNamesItsPaging(t *testing.T) {
+	doc := `
+openapi: 3.0.3
+paths:
+  /pages:
+    get:
+      parameters:
+        - {in: query, name: page, required: true, schema: {type: integer, minimum: 0}}
+        - {in: query, name: per_page, schema: {type: integer, default: 30, maximum: 5000}}
+        - {in: query, name: from, schema: {type: string, format: date}}
+      responses:
+        200:
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  meta: {type: object, properties: {totalCount: {type: integer}}}
+                  data: {type: array, items: {type: object, properties: {id: {type: string}}}}
+  /skipped:
+    get:
+      parameters:
+        - {in: query, name: $skip, schema: {type: integer}}
+        - {in: query, name: $top, schema: {type: integer, default: 25}}
+      responses:
+        200: {content: {application/json: {schema: {type: array, items: {type: object, properties: {id: {type: string}}}}}}}
+  /linked:
+    get:
+      parameters: [{in: query, name: page, schema: {type: integer}}]
+      responses:
+        200: {content: {application/json: {schema: {type: object, properties: {next: {type: string}, items: {type: array, items: {properties: {id: {type: string}}}}}}}}}
+  /sized:
+    get:
+      parameters: [{in: query, name: limit, required: true, schema: {type: integer}}]
+      responses:
+        200: {content: {application/json: {schema: {type: array, items: {properties: {id: {type: string}}}}}}}
+`
+	d, err := describeSpec([]byte(doc), "https://api.example/spec.yaml")
+	if err != nil || len(d.Lists) != 4 {
+		t.Fatalf("%+v %v", d, err)
+	}
+	byOp := map[string]site.JSONSource{}
+	for _, l := range d.Lists {
+		byOp[l.Operation] = l.Source
+	}
+	if p := byOp["GET /pages"].Paging; p == nil || *p != (site.Paging{Kind: site.PagingPage, Param: "page", Start: 0, SizeParam: "per_page", Size: 1000, Total: "meta.totalCount"}) {
+		t.Errorf("by page %+v", p)
+	}
+	if s := byOp["GET /pages"]; s.URL != "https://api.example/pages" {
+		t.Errorf("the address keeps the page parameters out %s", s.URL)
+	}
+	if p := byOp["GET /skipped"].Paging; p == nil || *p != (site.Paging{Kind: site.PagingOffset, Param: "$skip", SizeParam: "$top", Size: 25}) {
+		t.Errorf("by offset %+v", p)
+	}
+	if s := byOp["GET /linked"]; s.Paging != nil || s.Next != "next" {
+		t.Errorf("a next link is followed %+v", s)
+	}
+	if s := byOp["GET /sized"]; s.Paging != nil || s.URL != "https://api.example/sized?limit=100" {
+		t.Errorf("a size alone %+v", s)
+	}
+	for _, l := range d.Lists {
+		c := site.Connector{ID: "x", Name: "x", Kind: site.KindJSON, IntervalHours: 1, JSON: &l.Source}
+		if err := c.Validate(); err != nil {
+			t.Errorf("%s: %v", l.Operation, err)
+		}
+	}
+}

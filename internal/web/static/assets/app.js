@@ -591,7 +591,7 @@ function formDialog(title, id, fields, submit, ok = t("common.create")) {
 }
 
 // markdownTools make a page below the item from a Markdown file of a
-// repository, which the text then shows whole (ADR-0135): insert(address)
+// repository, which the text then shows whole (ADR-0136): insert(address)
 // asks for the address and the version and answers the page, or null.
 function markdownTools(item) {
   const insert = (address) => {
@@ -612,7 +612,7 @@ function markdownTools(item) {
 }
 
 // fileSource says where a page made from a Markdown file comes from and
-// which version it shows (ADR-0135), in the reader's language.
+// which version it shows (ADR-0136), in the reader's language.
 function fileSource(origin) {
   const file = origin.externalId.slice(origin.externalId.indexOf("/") + 1);
   const repo = origin.instance.replace(/^https?:\/\//, "");
@@ -5162,6 +5162,31 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
   valuesInput.addEventListener("change", showFields);
   showFields();
   const path_ = (name, label, value, required) => field(label, h("input", { name, value: value || "", required: !!required, maxlength: 200 }));
+  // How a long list is read (ADR-0135): by the next page's address the
+  // answer names, or by a page number or an offset in the address.
+  const pg = j?.paging || {};
+  const pagingKind = h("select", { name: "pagingKind", id: "paging-kind" }, [["", t("paging.next")], ["page", t("paging.page")], ["offset", t("paging.offset")]]
+    .map(([v, text]) => h("option", { value: v, text, selected: v === (pg.kind || "") })));
+  const nextBox = h("div", {}, path_("next", t("json.next"), j?.next));
+  const pagingBox = h("div", { id: "paging-params" },
+    field(t("paging.param"), h("input", { name: "pagingParam", value: pg.param || "", maxlength: 64, placeholder: "page" })),
+    field(t("paging.start"), h("input", { name: "pagingStart", type: "number", min: 0, max: 1000000, value: pg.start ?? 1 })),
+    field(t("paging.sizeParam"), h("input", { name: "sizeParam", value: pg.sizeParam || "", maxlength: 64, placeholder: "limit" })),
+    field(t("paging.size"), h("input", { name: "pageSize", type: "number", min: 0, max: 10000, value: pg.size || "" })),
+    path_("totalPath", t("paging.total"), pg.total),
+    h("p", { class: "muted", text: t("paging.help") }));
+  const showPaging = () => {
+    nextBox.hidden = pagingKind.value !== "";
+    pagingBox.hidden = pagingKind.value === "";
+    pagingBox.querySelector("[name=pagingParam]").required = pagingKind.value !== "";
+  };
+  pagingKind.addEventListener("change", () => {
+    // Offsets count from 0, pages mostly from 1.
+    const start = pagingBox.querySelector("[name=pagingStart]");
+    if (pagingKind.value === "offset" && start.value === "1") start.value = "0";
+    showPaging();
+  });
+  showPaging();
   const ckanSource = () => [
     field(t("catalog.formats"), formatsInput),
     h("p", { class: "muted" }, t("catalog.formatsHelp", { defaults: data.templates[0].ckan.formats.join(", ") }), " ",
@@ -5189,6 +5214,11 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
         const s = l.source;
         set("url", s.url); set("items", s.items); set("idPath", s.id); set("titlePath", s.title);
         set("link", s.link); set("text", s.text); set("next", s.next);
+        const p = s.paging || {};
+        pagingKind.value = p.kind || "";
+        set("pagingParam", p.param); set("pagingStart", p.start ?? (p.kind === "offset" ? 0 : 1)); set("sizeParam", p.sizeParam);
+        set("pageSize", p.size || ""); set("totalPath", p.total);
+        showPaging();
         valuesInput.value = Object.entries(s.values || {}).map(([n, p]) => `${n} = ${p}`).join("\n");
         showFields();
         picked.spec = s.spec; picked.operation = s.operation;
@@ -5219,14 +5249,16 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     path_("titlePath", t("json.title"), j.title, true),
     path_("link", t("json.link"), j.link),
     path_("text", t("json.text"), j.text),
-    path_("next", t("json.next"), j.next),
+    field(t("paging.kind"), pagingKind),
+    nextBox,
+    pagingBox,
     h("p", { class: "muted", text: t("json.pathsHelp") }),
     field(t("json.values"), valuesInput),
     h("p", { class: "muted", text: t("json.valuesHelp") }),
     field(t("connector.language"), languageSelect(j.language)),
     h("p", { class: "muted", text: t("json.languageHelp") }),
   ];
-  // A folder or file of a Git repository (ADR-0135).
+  // A folder or file of a Git repository (ADR-0136).
   const gitSource = () => [
     field(t("git.url"), h("input", { name: "url", type: "url", required: true, value: g.url, maxlength: 512, placeholder: "https://github.com/owner/repository/tree/main/docs" })),
     h("p", { class: "muted", text: t("git.urlHelp") }),
@@ -5336,7 +5368,9 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
           groups: pairs(d.get("groups")), grants: lines(d.get("grants")) };
       } else if (j) {
         body.json = { url: d.get("url").trim(), items: d.get("items").trim(), id: d.get("idPath").trim(), title: d.get("titlePath").trim(), link: d.get("link").trim(),
-          text: d.get("text").trim(), next: d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language"),
+          text: d.get("text").trim(), next: d.get("pagingKind") ? "" : d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language"),
+          paging: d.get("pagingKind") ? { kind: d.get("pagingKind"), param: d.get("pagingParam").trim(), start: Number(d.get("pagingStart")) || 0,
+            sizeParam: d.get("sizeParam").trim(), size: Number(d.get("pageSize")) || 0, total: d.get("totalPath").trim() } : null,
           spec: picked.spec, operation: picked.operation };
       } else {
         body.ckan = { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(), language: d.get("language") };

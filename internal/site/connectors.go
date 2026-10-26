@@ -68,7 +68,7 @@ type Atlassian struct {
 }
 
 // GitSource is a folder (or a file) of a Git repository whose Markdown
-// files become a tree of pages (ADR-0135): its address as the host shows
+// files become a tree of pages (ADR-0136): its address as the host shows
 // it in the browser, at a branch, tag or commit.
 type GitSource struct {
 	URL string `json:"url"`
@@ -106,6 +106,52 @@ type JSONSource struct {
 	// taken again; a run reads URL, not the description.
 	Spec      string `json:"spec,omitempty"`
 	Operation string `json:"operation,omitempty"`
+	// Paging, if set, reads the list page by page by a parameter of its
+	// address, instead of following Next (ADR-0135).
+	Paging *Paging `json:"paging,omitempty"`
+}
+
+// The kinds of paging by a parameter of a list's address.
+const (
+	PagingPage   = "page"   // a page number, counted from Start
+	PagingOffset = "offset" // the number of entries to skip, from Start
+)
+
+// Paging reads a list page by page (ADR-0135): Param counts the pages,
+// or the entries skipped, from Start; SizeParam, if set, asks for Size
+// entries a page. Where Total, a path in the answer, names how many
+// entries the list holds, a run reads until it has them; otherwise it
+// stops at an empty page or one shorter than those before. It always
+// stops at a page that brings nothing new.
+type Paging struct {
+	Kind      string `json:"kind"`
+	Param     string `json:"param"`
+	Start     int    `json:"start"`
+	SizeParam string `json:"sizeParam,omitempty"`
+	Size      int    `json:"size,omitempty"`
+	Total     string `json:"total,omitempty"`
+}
+
+// queryRE accepts the name of a query parameter, e.g. page, $skip or
+// page[number].
+var queryRE = regexp.MustCompile(`^[A-Za-z0-9_.$\[\]-]{1,64}$`)
+
+func (p Paging) validate() error {
+	switch {
+	case p.Kind != PagingPage && p.Kind != PagingOffset:
+		return fmt.Errorf("%w: %q is not a kind of paging (page, offset)", ErrInvalid, p.Kind)
+	case !queryRE.MatchString(p.Param):
+		return fmt.Errorf("%w: %q is not the name of a parameter", ErrInvalid, p.Param)
+	case p.Start < 0 || p.Start > 1_000_000:
+		return fmt.Errorf("%w: the first page or offset is 0 to 1000000", ErrInvalid)
+	case p.Size < 0 || p.Size > 10_000:
+		return fmt.Errorf("%w: a page holds at most 10000 entries", ErrInvalid)
+	case p.SizeParam != "" && (!queryRE.MatchString(p.SizeParam) || p.Size == 0 || p.SizeParam == p.Param):
+		return fmt.Errorf("%w: %q asks for a page's size: name a parameter of its own and how many entries", ErrInvalid, p.SizeParam)
+	case p.Total != "" && !pathRE.MatchString(p.Total):
+		return fmt.Errorf("%w: %q is not a path, e.g. total or meta.count", ErrInvalid, p.Total)
+	}
+	return nil
 }
 
 // CKAN is a source that runs CKAN, such as opendata.swiss (ADR-0075):
@@ -254,7 +300,7 @@ var CKANValues = []string{"dataset", "publisher", "contact", "url", "formats"}
 
 // GitValues are the values a Git source gives of each page: the file's
 // path in the repository, its address there and the commit it was read
-// at (ADR-0135).
+// at (ADR-0136).
 var GitValues = []string{"commit", "path", "url"}
 
 // Values are the names of the values the connector's source gives of
@@ -300,6 +346,13 @@ func (j JSONSource) validate() error {
 		return fmt.Errorf("%w: %q is not the address of an API description", ErrInvalid, j.Spec)
 	case len(j.Operation) > 300 || strings.ContainsAny(j.Operation, "\n\r"):
 		return fmt.Errorf("%w: the operation is a single line of at most 300 characters", ErrInvalid)
+	case j.Paging != nil && j.Next != "":
+		return fmt.Errorf("%w: a list is read either by its next page's address or by a page parameter, not both", ErrInvalid)
+	}
+	if j.Paging != nil {
+		if err := j.Paging.validate(); err != nil {
+			return err
+		}
 	}
 	for _, p := range []string{j.Items, j.ID, j.Title, j.Link, j.Text, j.Next} {
 		if p != "" && !pathRE.MatchString(p) {
@@ -424,6 +477,11 @@ func (c Connector) Normalize() Connector {
 			*p = strings.TrimSpace(*p)
 		}
 		j.Values = trimMap(j.Values)
+		if j.Paging != nil {
+			p := *j.Paging
+			p.Kind, p.Param, p.SizeParam, p.Total = strings.TrimSpace(p.Kind), strings.TrimSpace(p.Param), strings.TrimSpace(p.SizeParam), strings.TrimSpace(p.Total)
+			j.Paging = &p
+		}
 		c.JSON = &j
 	}
 	if c.Git != nil {
@@ -492,6 +550,10 @@ func (c Connector) clone() Connector {
 	if c.JSON != nil {
 		j := *c.JSON
 		j.Values = maps.Clone(j.Values)
+		if j.Paging != nil {
+			p := *j.Paging
+			j.Paging = &p
+		}
 		c.JSON = &j
 	}
 	if c.CKAN != nil {

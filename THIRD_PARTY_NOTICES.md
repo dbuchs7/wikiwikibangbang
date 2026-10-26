@@ -619,7 +619,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ## MIT (github.com/yuin/goldmark)
 
-Used to parse Markdown, never to render it (ADR-0135).
+Used to parse Markdown, never to render it (ADR-0136).
 
 ```text
 MIT License

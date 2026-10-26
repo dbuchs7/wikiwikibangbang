@@ -9,6 +9,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,19 +20,21 @@ import (
 
 // maxPages bounds how many pages of a list a JSON source is read in, so
 // a misbehaving source cannot keep a run going; one answer is bounded by
-// maxAnswer, as for CKAN.
-const maxPages = 50
+// maxAnswer, as for CKAN (ADR-0127, ADR-0135).
+const maxPages = 500
 
 // jsonReader reads any source that answers JSON over http (ADR-0127):
 // a list of entries at a path of the answer, each with an ID, a title,
 // a link, a text and further values at paths of its own. Its defaults
-// read the connectors' own feed format.
+// read the connectors' own feed format. A long list is read page by
+// page: by the address of the next page the answer names, or by a page
+// number or an offset in the address (ADR-0135).
 type jsonReader struct{}
 
 func (jsonReader) Read(ctx context.Context, c site.Connector, env Env) (reading, error) {
 	var rd reading
 	j := c.JSON
-	next, seen := j.URL, map[string]bool{}
+	next, seen, read, longest := pageAddress(j, 0, 0), map[string]bool{}, 0, 0
 	for page := 0; next != "" && page < maxPages; page++ {
 		answer, err := getJSON(ctx, env, next)
 		if err != nil {
@@ -42,34 +45,96 @@ func (jsonReader) Read(ctx context.Context, c site.Connector, env Env) (reading,
 			return rd, fmt.Errorf("connector: the answer of %s has no list at %q", next, cmp.Or(j.Items, "(the answer itself)"))
 		}
 		rd.datasets += len(list)
+		added, again := 0, 0
 		for i, v := range list {
 			e, err := jsonEntry(v, j, c.Name)
 			switch {
 			case err != nil:
 				rd.problem("entry %d of %s: %v", i+1, next, err)
 			case seen[e.SourceID]:
-				rd.problem("%s: the ID %q is given twice; the second is left out", e.Title, e.SourceID)
+				again++
+				if j.Paging == nil {
+					rd.problem("%s: the ID %q is given twice; the second is left out", e.Title, e.SourceID)
+				}
 			default:
 				seen[e.SourceID] = true
 				rd.entries = append(rd.entries, e)
+				added++
 			}
 		}
+		read += len(list)
+		this := next
 		next = ""
-		if j.Next != "" {
-			if n, _ := at(answer, j.Next).(string); n != "" {
-				if !webLink(n) {
-					rd.problem("the address of the next page, %q, is not an http or https address; reading stops", n)
-					break
+		switch p := j.Paging; {
+		case added == 0 && again > 0:
+			// A source that ignores its paging answers the same page again.
+			rd.problem("%s answered only entries already read; reading stops", this)
+		case p == nil:
+			if j.Next != "" {
+				if n, _ := at(answer, j.Next).(string); n != "" {
+					if !webLink(n) {
+						rd.problem("the address of the next page, %q, is not an http or https address; reading stops", n)
+						break
+					}
+					next = n
 				}
-				next = n
 			}
+		case p.Total != "" && total(answer, p.Total) >= 0:
+			// The total the source names decides.
+			if read < total(answer, p.Total) && len(list) > 0 {
+				next = pageAddress(j, page+1, read)
+			}
+		case len(list) == 0, len(list) < longest:
+			// An empty page, or one shorter than those before, is the last;
+			// a source may answer fewer entries than a page's size asks.
+		default:
+			next = pageAddress(j, page+1, read)
 		}
+		longest = max(longest, len(list))
 		if page == maxPages-1 && next != "" {
 			rd.problem("the list has more than %d pages; the rest is not read", maxPages)
 		}
 	}
 	rd.apply = true
 	return rd, nil
+}
+
+// pageAddress is the address of a list's page, counted from 0, after
+// read entries: the list's own address, with the page number or offset
+// and the page's size as Paging says.
+func pageAddress(j *site.JSONSource, page, read int) string {
+	p := j.Paging
+	if p == nil {
+		if page > 0 {
+			return ""
+		}
+		return j.URL
+	}
+	u, err := url.Parse(j.URL)
+	if err != nil {
+		return ""
+	}
+	q := u.Query()
+	switch p.Kind {
+	case site.PagingPage:
+		q.Set(p.Param, strconv.Itoa(p.Start+page))
+	case site.PagingOffset:
+		q.Set(p.Param, strconv.Itoa(p.Start+read))
+	}
+	if p.SizeParam != "" {
+		q.Set(p.SizeParam, strconv.Itoa(p.Size))
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// total is the number at a path of an answer, or -1.
+func total(answer any, path string) int {
+	n, err := strconv.ParseFloat(text(at(answer, path)), 64)
+	if err != nil || n < 0 {
+		return -1
+	}
+	return int(n)
 }
 
 // getJSON fetches and decodes one answer, sending the credential as a

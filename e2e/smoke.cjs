@@ -138,7 +138,23 @@ function feedSource() {
         "                      properties:", "                        id: {type: string}", "                        title: {type: string}",
         "                        url: {type: string, format: uri}", "                        text: {type: string}",
         "                        owner: {type: string}", "                        since: {type: string, format: date}",
-        "  /entries/{id}:", "    get: {responses: {200: {description: one}}}", ""].join("\n"));
+        "  /entries/{id}:", "    get: {responses: {200: {description: one}}}",
+        "  /paged:", "    get:", "      summary: The entries a page at a time",
+        "      parameters:", "        - {in: query, name: page, schema: {type: integer, minimum: 1}}",
+        "        - {in: query, name: size, schema: {type: integer, maximum: 2}}",
+        "      responses:", "        200:", "          content:", "            application/json:", "              schema:",
+        "                type: object", "                properties:", "                  total: {type: integer}",
+        "                  items: {type: array, items: {type: object, properties: {id: {type: string}, name: {type: string}}}}",
+        ""].join("\n"));
+      return;
+    }
+    // Three entries, two a page, by a page number (ADR-0135).
+    const asked = new URL(req.url, "http://x");
+    if (asked.pathname === "/paged") {
+      const page = Number(asked.searchParams.get("page") || 1), size = Math.min(Number(asked.searchParams.get("size") || 2), 2);
+      const all = ["Erster", "Zweiter", "Dritter"].map((name, i) => ({ id: "p" + (i + 1), name }));
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ total: all.length, items: all.slice((page - 1) * size, page * size) }));
       return;
     }
     res.setHeader("Content-Type", "application/json");
@@ -177,7 +193,7 @@ function atlassianSource() {
 }
 
 // gitSource answers as a Gitea instance holding one repository, o/r,
-// whose folder docs has an index file and one page (ADR-0135).
+// whose folder docs has an index file and one page (ADR-0136).
 function gitSource() {
   const commit = "1".repeat(40);
   const files = { "docs/index.md": "# Handbook\n\nRead [the first page](a.md).", "docs/a.md": "# First page\n\nWritten in the *repository*." };
@@ -2313,7 +2329,7 @@ function gitSource() {
     await page.selectOption("#connector-settings [name=space]", "APIS");
     await page.fill("#openapi [name=specURL]", `http://127.0.0.1:${feed.address().port}/openapi.yaml`);
     await page.click("#openapi-read");
-    await page.waitForSelector("#openapi-lists :text('“Feed” offers 1 lists')");
+    await page.waitForSelector("#openapi-lists :text('“Feed” offers 2 lists')");
     await page.click("#openapi-lists details summary");
     await page.waitForSelector("#openapi-lists li:has-text('it needs path parameters')");
     await page.click("#openapi-lists button[data-operation='GET /entries']");
@@ -2326,6 +2342,26 @@ function gitSource() {
     await page.waitForSelector("#openapi-picked:has-text('GET /entries')");
     await page.click("#connector-dry-run");
     await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('1 new')");
+
+    step("connectors: a list is read page by page by a page number its description names (ADR-0135)");
+    await page.goto(base + "/#/admin");
+    await page.click("#connector-new-openapi");
+    await page.waitForSelector("#openapi [name=specURL]");
+    await page.fill("#connector-settings [name=id]", "paged");
+    await page.fill("#connector-settings [name=name]", "Paged");
+    await page.selectOption("#connector-settings [name=space]", "APIS");
+    await page.fill("#openapi [name=specURL]", `http://127.0.0.1:${feed.address().port}/openapi.yaml`);
+    await page.click("#openapi-read");
+    await page.click("#openapi-lists button[data-operation='GET /paged']");
+    check(await page.inputValue("#paging-kind") === "page" && await page.inputValue("#connector-settings [name=pagingParam]") === "page" &&
+      await page.inputValue("#connector-settings [name=pageSize]") === "2" && await page.inputValue("#connector-settings [name=totalPath]") === "total",
+      "the description's paging is taken");
+    check(await page.isHidden("#connector-settings [name=next]"), "a next page's address is not asked for");
+    await page.click("#connector-settings button[type=submit]");
+    await page.waitForSelector("#connector-list tr[data-connector='paged']");
+    check(await page.inputValue("#paging-kind") === "page", "the paging is kept");
+    await page.click("#connector-dry-run");
+    await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('3 new')");
 
     step("connectors: an Atlassian site is imported on a schedule; its pages are read-only until the cut-over (ADR-0128)");
     await page.goto(base + "/#/admin");
@@ -2360,7 +2396,7 @@ function gitSource() {
     await page.goto(base + "/#/item/" + handbook.key);
     await page.waitForSelector("#edit");
 
-    step("connectors: a folder of a Git repository becomes a tree of pages, its index file the folder's text, links between its files mentions (ADR-0135)");
+    step("connectors: a folder of a Git repository becomes a tree of pages, its index file the folder's text, links between its files mentions (ADR-0136)");
     await page.goto(base + "/#/admin");
     await page.click("#connector-new-git");
     await page.waitForSelector("#connector-settings [name=url]");
@@ -2450,7 +2486,7 @@ function gitSource() {
     await page.fill("#body section.pm-tasklist .filter-text", "notes");
     await page.waitForFunction((sel) => [...document.querySelectorAll(sel)].filter((r) => !r.hidden).length === 1, rows);
 
-    step("a Markdown file in a text: a pasted link offers its content, a page below the item shown whole, following its branch; pinned and read again from its page (ADR-0135)");
+    step("a Markdown file in a text: a pasted link offers its content, a page below the item shown whole, following its branch; pinned and read again from its page (ADR-0136)");
     const notesHost = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ space: "PLAT", type: "page", title: "Release notes" }) })).json()).item);
     await page.goto(base + "/#/item/" + notesHost.key + "?edit");

@@ -38,18 +38,18 @@ var classified = map[string]string{
 	"internal/connector.maxSpec": "the size of an API description a connector reads (ADR-0130), not a caller's input to this server; " +
 		"it guards the server against a description that misbehaves",
 	"internal/connector.maxLists": "how many lists an API description offers to choose from (ADR-0130), the length of a list on a page",
-	"internal/connector.maxMarkdown": "a Markdown file of a Git repository a page is written from (ADR-0135), not a caller's input to this server; " +
+	"internal/connector.maxMarkdown": "a Markdown file of a Git repository a page is written from (ADR-0136), not a caller's input to this server; " +
 		"it guards against a file that would make a page of megabytes",
-	"internal/connector.maxGitFiles": "the size of one Git connector's run (ADR-0135), so a repository with a huge folder cannot make it endless; " +
+	"internal/connector.maxGitFiles": "the size of one Git connector's run (ADR-0136), so a repository with a huge folder cannot make it endless; " +
 		"not memory a caller of this server can claim",
-	"internal/connector.maxPictures": "the shape of a page written from a Git repository (ADR-0135): how many pictures it keeps; " +
+	"internal/connector.maxPictures": "the shape of a page written from a Git repository (ADR-0136): how many pictures it keeps; " +
 		"each picture is bounded by AttachmentBytes",
-	"internal/gitrepo.maxListing": "an answer of the API of a Git host the server reads (ADR-0135), not a caller's input to this server; " +
+	"internal/gitrepo.maxListing": "an answer of the API of a Git host the server reads (ADR-0136), not a caller's input to this server; " +
 		"it guards against a host that misbehaves",
 	"internal/gitrepo/gitrepo.go:maxListing + 1": "the same bound, where the answer is read",
-	"internal/gitrepo.maxListPages": "how many pages of a Git host's listing are followed (ADR-0135), not a caller's input to this server; " +
+	"internal/gitrepo.maxListPages": "how many pages of a Git host's listing are followed (ADR-0136), not a caller's input to this server; " +
 		"it guards against a host that names a next page for ever",
-	"internal/connector.maxPages": "how many pages of a JSON source's list a connector follows (ADR-0127), not a caller's input to this server; " +
+	"internal/connector.maxPages": "how many pages of a JSON source's list a connector reads (ADR-0127, ADR-0135), not a caller's input to this server; " +
 		"it guards the connector against a source that names a next page for ever",
 	"internal/connector.maxCell":  "the shape of a generated catalog page (ADR-0080): how long one value of the source may be on it, like the length of a title",
 	"internal/site.maxConnectors": "the shape of the site's settings (ADR-0077): how many connectors an administrator keeps, like the number of regulations",

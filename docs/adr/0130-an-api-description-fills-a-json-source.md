@@ -60,5 +60,6 @@ Strongest form: nothing to build, and the JSON source can already read every suc
 
 ## Links
 
+- amended by [ADR-0135](0135-a-json-source-is-read-by-page-numbers-or-offsets.md) (paging by page numbers and offsets)
 - amends [ADR-0127](0127-connectors-read-any-json-source-into-a-type-of-ones-own.md) (a JSON source's settings from an API description)
 - relates to ADR-0062 (public addresses only), ADR-0077 (credentials from the environment)

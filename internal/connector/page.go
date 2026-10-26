@@ -23,7 +23,7 @@ type labels struct {
 	withdrawn                                                                         string
 	// entry links an entry of a JSON source to its page there (ADR-0127).
 	entry string
-	// fromGit heads a page written from a Git repository (ADR-0135).
+	// fromGit heads a page written from a Git repository (ADR-0136).
 	fromGit string
 }
 
