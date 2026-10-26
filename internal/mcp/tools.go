@@ -16,6 +16,7 @@ type kind string
 const (
 	str     kind = "string"
 	integer kind = "integer" // a positive whole number
+	boolean kind = "boolean"
 	object  kind = "object"
 	array   kind = "array"
 	anyJSON kind = "" // any JSON value, null included
@@ -76,6 +77,10 @@ var (
 // credentials. An agent with an administrator's token still cannot reach
 // them through this adapter.
 //
+// A page as Markdown (ADR-0129) is offered as a read: it gives an agent the
+// text as a person reads it, protected passages veiled, with exactly the
+// caller's rights; the ZIP archive with pictures is for people.
+//
 // Of the change feed and the own-roles query (ADR-0121), the reads are
 // offered: list_changes without its wait, as a tool call answers at once,
 // and get_own_roles. Watching and unwatching are not offered: they are
@@ -117,6 +122,10 @@ var tools = []tool{
 		}, paging...)},
 	{Name: "get_item", Description: "Get one item: title, type, state, properties and body. A protected passage your caller may not read shows as ▒▒▒▒▒▒▒▒ under a mark of type secret; secrets says who protected it.", Method: "GET", Path: "/api/items/{ref}",
 		Params: []param{refParam}},
+	{Name: "get_item_markdown", Description: "Get one item as Markdown to read: title, properties and body, the items it embeds as quotes, pictures linked to their attachments. " +
+		"A protected passage your caller may not read shows as ▒▒▒▒▒▒▒▒. To change a body, use commit_body with blocks, not Markdown.",
+		Method: "GET", Path: "/api/items/{ref}/export/md", Params: []param{refParam,
+			{"children", boolean, inQuery, false, "true adds every readable page below the item, as a handbook."}}},
 	{Name: "get_history", Description: "The item's history: who changed what, and when.", Method: "GET", Path: "/api/items/{ref}/history",
 		Params: []param{refParam}},
 	{Name: "get_relations", Description: "Typed relations at one end of the item.", Method: "GET", Path: "/api/items/{ref}/relations",
@@ -270,6 +279,10 @@ func check(p param, v any) error {
 		}
 		if s == "" && (p.Required || p.In == inPath) {
 			return fmt.Errorf("%s must not be empty", p.Name)
+		}
+	case boolean:
+		if _, ok := v.(bool); !ok {
+			return fmt.Errorf("%s must be true or false", p.Name)
 		}
 	case integer:
 		n, ok := v.(json.Number)

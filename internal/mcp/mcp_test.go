@@ -149,6 +149,8 @@ func TestEachToolIsOneAPIRequest(t *testing.T) {
 		{"get_history", `{"ref":"PLAT-1"}`, call{"GET", "/api/items/PLAT-1/history", ""}},
 		{"get_relations", `{"ref":"PLAT-1","direction":"incoming"}`, call{"GET", "/api/items/PLAT-1/relations?direction=incoming", ""}},
 		{"get_embeds", `{"ref":"PLAT-1"}`, call{"GET", "/api/items/PLAT-1/embeds", ""}},
+		{"get_item_markdown", `{"ref":"PLAT-1"}`, call{"GET", "/api/items/PLAT-1/export/md", ""}},
+		{"get_item_markdown", `{"ref":"PLAT-1","children":true}`, call{"GET", "/api/items/PLAT-1/export/md?children=true", ""}},
 		{"create_item", `{"space":"PLAT","type":"task","title":"x","properties":{"priority":"low"}}`,
 			call{"POST", "/api/items", `{"properties":{"priority":"low"},"space":"PLAT","title":"x","type":"task"}`}},
 		{"set_title", `{"ref":"PLAT-1","title":"New"}`, call{"PUT", "/api/items/PLAT-1/title", `{"title":"New"}`}},
@@ -202,6 +204,9 @@ func TestBadArgumentsReachNoAPI(t *testing.T) {
 		if code := errorCode(t, handle(t, api, toolCall("find_items", args))); code != codeInvalidParams {
 			t.Errorf("find_items %s: code %v", args, code)
 		}
+	}
+	if code := errorCode(t, handle(t, api, toolCall("get_item_markdown", `{"ref":"x","children":"yes"}`))); code != codeInvalidParams {
+		t.Errorf("children must be true or false, code %v", code)
 	}
 	if code := errorCode(t, handle(t, api, toolCall("commit_body", `{"ref":"x","blocks":"text"}`))); code != codeInvalidParams {
 		t.Errorf("blocks must be an array, code %v", code)

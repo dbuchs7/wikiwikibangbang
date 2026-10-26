@@ -1618,8 +1618,14 @@ function atlassianSource() {
       const res = await call({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "create_item", arguments: {
         space: "PLAT", type: "task", title: "Written by an assistant", properties: { priority: "low" },
         body: [{ kind: "heading", level: 1, text: "Summary" }, { kind: "paragraph", text: "Made through MCP." }] } } });
-      return JSON.parse(res.result.content[0].text).item.key;
-    }, mcpToken);
+      const key = JSON.parse(res.result.content[0].text).item.key;
+      // An agent reads a page as Markdown (ADR-0129).
+      const md = await call({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_item_markdown", arguments: { ref: key } } });
+      return { key, md: md.result.isError ? "" : md.result.content[0].text };
+    }, mcpToken).then((x) => {
+      check(x.md.startsWith("# Written by an assistant\n") && x.md.includes("\n## Summary\n\nMade through MCP.\n"), "an agent reads the page as Markdown: " + JSON.stringify(x.md));
+      return x.key;
+    });
     await page.goto(base + "/#/item/" + made);
     await page.waitForSelector("#body .ProseMirror:has-text('Made through MCP.')");
 
@@ -1701,6 +1707,16 @@ function atlassianSource() {
     const [table] = await Promise.all([page.waitForEvent("download"), page.click("#item-export a.export-table")]);
     const tableText = require("fs").readFileSync(await table.path(), "utf8");
     check(tableText === "\ufeffItem,Price\r\nTea,3\r\n", "the table as CSV: " + JSON.stringify(tableText));
+    // As Markdown: an archive with the text and its pictures for people,
+    // the text alone for the API and agents (ADR-0129).
+    await page.click("#item-export summary");
+    const [mdZip] = await Promise.all([page.waitForEvent("download"), page.click("#export-md")]);
+    check(mdZip.suggestedFilename() === exported + " Price list.zip", "the Markdown archive is named after the page: " + mdZip.suggestedFilename());
+    const zipBytes = require("fs").readFileSync(await mdZip.path());
+    check(zipBytes.subarray(0, 4).toString("latin1") === "PK\x03\x04" && zipBytes.includes(Buffer.from(exported + " Price list.md")), "the archive holds the Markdown");
+    const mdText = await (await page.request.get(base + "/api/items/" + exported + "/export/md")).text();
+    check(mdText.startsWith("# Price list\n") && mdText.includes("\n## Prices\n") && mdText.includes("| Item | Price |\n| --- | --- |\n| Tea | 3 |"),
+      "the page as Markdown: " + JSON.stringify(mdText));
     await page.emulateMedia({ media: "print" });
     check(!(await page.isVisible("header.top")) && !(await page.isVisible("#item-export")) && await page.isVisible("h1.item-title"), "printing shows the page without the surroundings");
     await page.emulateMedia({ media: "screen" });
@@ -1712,6 +1728,9 @@ function atlassianSource() {
     await page.waitForSelector("#export-docx-handbook");
     const [book] = await Promise.all([page.waitForEvent("download"), page.click("#export-docx-handbook")]);
     check(book.suggestedFilename().endsWith("Tidy the wiki.docx"), "the handbook is named after its root page: " + book.suggestedFilename());
+    await page.click("#item-export summary");
+    const [mdBook] = await Promise.all([page.waitForEvent("download"), page.click("#export-md-handbook")]);
+    check(mdBook.suggestedFilename().endsWith("Tidy the wiki.zip"), "the Markdown handbook is an archive named after its root page: " + mdBook.suggestedFilename());
     await page.click("#item-export summary");
     // Each print the frame asks for is noted instead of opening the dialog.
     await page.evaluate(() => {

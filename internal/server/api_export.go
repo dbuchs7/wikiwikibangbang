@@ -19,11 +19,15 @@ import (
 
 // exportRoutes export pages and lists (ADR-0071): a page as a Word
 // document, its tables and lists of items as CSV. A PDF is the browser's:
-// the UI prints a page without its surroundings.
+// the UI prints a page without its surroundings. A page as Markdown is
+// text for the API and agents, and an archive with its pictures for
+// people (ADR-0129).
 func exportRoutes(h itemHandlers) []Route {
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/docx", Summary: "The item as a Word document: title, properties and body with its pictures and the items it embeds; children=true adds every page below it, as a handbook", Handler: http.HandlerFunc(h.exportDOCX)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/html", Summary: "The item as a page to print as PDF, with what it embeds; children=true adds every page below it, as a handbook", Handler: http.HandlerFunc(h.exportHTML)},
+		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/md", Summary: "The item as Markdown text: title, properties and body, the items it embeds as quotes, pictures linked to their attachments; children=true adds every page below it, as a handbook", Handler: http.HandlerFunc(h.exportMarkdown)},
+		{Method: http.MethodGet, Pattern: "/api/items/{ref}/export/md.zip", Summary: "The item as Markdown in a ZIP archive with the pictures it shows; children=true adds every page below it, as a handbook", Handler: http.HandlerFunc(h.exportMarkdownArchive)},
 		{Method: http.MethodGet, Pattern: "/api/items/{ref}/tables/{n}", Summary: "The item's n-th table (from 1) as CSV", Handler: http.HandlerFunc(h.exportTable)},
 		{Method: http.MethodGet, Pattern: "/api/items.csv", Summary: "Readable items as CSV, with the filters of /api/items: key, title, space, type, state, labels and every property", Handler: http.HandlerFunc(h.exportItems)},
 		{Method: http.MethodGet, Pattern: "/api/search.csv", Summary: "A full-text search as CSV (q; space, type, state, label), best first", Handler: http.HandlerFunc(h.exportSearch)},
@@ -303,6 +307,34 @@ func (h itemHandlers) exportHTML(w http.ResponseWriter, r *http.Request) {
 	hd.Set("Content-Security-Policy", ExportPolicy)
 	hd.Set("Cache-Control", "no-store")
 	if err := export.HTML(w, doc, h.lang(r)); err != nil {
+		h.log.Error("export failed", "item", it.ID, "err", err)
+	}
+}
+
+// exportMarkdown answers the page, or the handbook, as Markdown text,
+// its pictures linked to the server (ADR-0129).
+func (h itemHandlers) exportMarkdown(w http.ResponseWriter, r *http.Request) {
+	doc, it, err := h.exportDocument(r, r.URL.Query().Get("children") == "true", false)
+	if err != nil {
+		h.exportFailed(w, err)
+		return
+	}
+	attach(w, "text/markdown; charset=utf-8", fileName(it.Key, it.Title, ".md"))
+	if err := export.Markdown(w, doc); err != nil {
+		h.log.Error("export failed", "item", it.ID, "err", err)
+	}
+}
+
+// exportMarkdownArchive answers the page, or the handbook, as Markdown in
+// a ZIP archive that holds its pictures (ADR-0129).
+func (h itemHandlers) exportMarkdownArchive(w http.ResponseWriter, r *http.Request) {
+	doc, it, err := h.exportDocument(r, r.URL.Query().Get("children") == "true", true)
+	if err != nil {
+		h.exportFailed(w, err)
+		return
+	}
+	attach(w, "application/zip", fileName(it.Key, it.Title, ".zip"))
+	if err := export.MarkdownArchive(w, doc, fileName(it.Key, it.Title, ".md")); err != nil {
 		h.log.Error("export failed", "item", it.ID, "err", err)
 	}
 }
