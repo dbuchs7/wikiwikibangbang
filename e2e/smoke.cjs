@@ -93,12 +93,48 @@ const processModel = (version) => `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
+// decisionModel is a DMN 1.5 model, as atlas writes one, of two decisions:
+// the table "Bonität", whose rule names the version so a reader can tell
+// the versions apart, and the table "Kreditentscheid" that requires it,
+// with its requirements graph.
+const decisionModel = (version) => `<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="https://www.omg.org/spec/DMN/20230324/MODEL/" xmlns:dmndi="https://www.omg.org/spec/DMN/20230324/DMNDI/" xmlns:dc="http://www.omg.org/spec/DMN/20180521/DC/" xmlns:di="http://www.omg.org/spec/DMN/20180521/DI/" id="defs_credit" name="Credit" namespace="http://atlas/dmn/credit">
+  <inputData id="in_income" name="income"/>
+  <decision id="dec_rating" name="Bonität">
+    <informationRequirement id="ir_rating"><requiredInput href="#in_income"/></informationRequirement>
+    <decisionTable id="dt_rating" hitPolicy="FIRST">
+      <input id="i_income" label="Monthly income"><inputExpression id="ie_income" typeRef="number"><text>income</text></inputExpression></input>
+      <output id="o_rating" label="Rating" name="rating" typeRef="string"/>
+      <rule id="r1"><description>High income, rule v${version}</description><inputEntry id="e1"><text>&gt;= 8000</text></inputEntry><outputEntry id="x1"><text>"A"</text></outputEntry></rule>
+      <rule id="r2"><inputEntry id="e2"><text>-</text></inputEntry><outputEntry id="x2"><text>"B"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+  <decision id="dec_decide" name="Kreditentscheid">
+    <informationRequirement id="ir_decide"><requiredDecision href="#dec_rating"/></informationRequirement>
+    <decisionTable id="dt_decide" hitPolicy="FIRST">
+      <input id="i_rating" label="Rating"><inputExpression id="ie_rating" typeRef="string"><text>rating</text></inputExpression></input>
+      <output id="o_decide" label="Decision" name="decision" typeRef="string"/>
+      <rule id="r3"><inputEntry id="e3"><text>"A"</text></inputEntry><outputEntry id="x3"><text>"granted"</text></outputEntry></rule>
+    </decisionTable>
+  </decision>
+  <dmndi:DMNDI><dmndi:DMNDiagram id="dia_credit">
+    <dmndi:DMNShape id="s_decide" dmnElementRef="dec_decide"><dc:Bounds x="200" y="80" width="180" height="80"/></dmndi:DMNShape>
+    <dmndi:DMNShape id="s_rating" dmnElementRef="dec_rating"><dc:Bounds x="200" y="240" width="180" height="80"/></dmndi:DMNShape>
+    <dmndi:DMNShape id="s_income" dmnElementRef="in_income"><dc:Bounds x="228" y="400" width="125" height="45"/></dmndi:DMNShape>
+    <dmndi:DMNEdge id="d_decide" dmnElementRef="ir_decide"><di:waypoint x="290" y="240"/><di:waypoint x="290" y="160"/></dmndi:DMNEdge>
+    <dmndi:DMNEdge id="d_rating" dmnElementRef="ir_rating"><di:waypoint x="290" y="400"/><di:waypoint x="290" y="320"/></dmndi:DMNEdge>
+  </dmndi:DMNDiagram></dmndi:DMNDI>
+</definitions>`;
+
 // engineSource answers like an atlas engine (ADR-0129), for the credential
 // ENGINE_TOKEN, which the server under test holds as WWBB_ENGINE_ATLAS_TOKEN:
 // the versions of the process "order", their models and where the
-// newest's instances are. deploy() adds a version.
+// newest's instances are. deploy() adds a version. It also answers its
+// forms and the deployed versions of its decisions (ADR-0144); decide()
+// deploys the decisions anew.
 function engineSource() {
   let versions = 3;
+  let decided = 2;
   const server = require("http").createServer((req, res) => {
     if (req.headers.authorization !== "Bearer " + process.env.ENGINE_TOKEN) {
       res.statusCode = 401;
@@ -108,6 +144,23 @@ function engineSource() {
     if (req.url === "/api/v1/processes") {
       return res.end(JSON.stringify([...Array.from({ length: versions }, (_, i) => ({ key: 100 + i, processId: "order", name: "Order to cash", version: i + 1, deployedAt: 1761400000 + i })),
         { key: 7, processId: "approve", name: "Approve leave", version: 1, deployedAt: 1761300000 }]));
+    }
+    if (req.url === "/api/v1/forms") return res.end(JSON.stringify([{ id: "travel", name: "Travel request", projectId: "p1", savedAt: 1791795101 }]));
+    if (req.url === "/api/v1/forms/travel") {
+      return res.end(JSON.stringify({ id: "travel", name: "Travel request", savedAt: 1791795101, schema: { type: "default", id: "travel", components: [
+        { type: "textfield", key: "destination", label: "Destination", validate: { required: true } },
+        { type: "mailview", key: "mail", label: "The request mail" },
+        { type: "button", action: "submit", label: "Send request" }] } }));
+    }
+    if (req.url === "/api/v1/decision-deployments") {
+      return res.end(JSON.stringify(Array.from({ length: decided }, (_, i) => [
+        { key: 200 + i, decisionId: "Bonität", version: i + 1, modelName: "Credit", deployedAt: 1791000000 + i, current: i === decided - 1 },
+        { key: 200 + i, decisionId: "Kreditentscheid", version: i + 1, modelName: "Credit", deployedAt: 1791000000 + i, current: i === decided - 1 }]).flat()));
+    }
+    const d = /^\/api\/v1\/decision-deployments\/(\d+)\/xml$/.exec(req.url);
+    if (d) {
+      res.setHeader("Content-Type", "application/xml; charset=utf-8");
+      return res.end(decisionModel(Number(d[1]) - 199));
     }
     const m = /^\/api\/v1\/processes\/(\d+)\/(xml|runtime)$/.exec(req.url);
     if (m && m[2] === "xml") return res.end(processModel(Number(m[1]) - 99));
@@ -121,6 +174,7 @@ function engineSource() {
   });
   server.listen(0, "127.0.0.1");
   server.deploy = () => { versions++; };
+  server.decide = () => { decided++; };
   return server;
 }
 
@@ -238,7 +292,12 @@ function gitSource() {
   page.on("pageerror", (e) => problems.push("page error: " + e.message));
   // A step that provokes an error on purpose names it here while it runs.
   let expectedConsole = null;
-  page.on("console", (m) => { if (m.type() === "error" && !/status of 401/.test(m.text()) && !(expectedConsole && expectedConsole.test(m.text()))) problems.push("console: " + m.text()); });
+  // dmn-js places its bpmn.io watermark with two style attributes, which
+  // the UI's policy drops and style.css puts back (ADR-0144); the browser
+  // reports each drop, naming the value by its hash. These two values, and
+  // no other inline style, are expected.
+  const watermarkStyles = /'sha256-(r3vOsuepBDg6tz\/cOusiNJ9Y4Lp9hGQTT7pzDks1Xxc=|CA\/eh4\+2R0J7cEQ14gBMtx834RIOjzMUqCM\+evtrkp4=)'/;
+  page.on("console", (m) => { if (m.type() === "error" && !/status of 401/.test(m.text()) && !watermarkStyles.test(m.text()) && !(expectedConsole && expectedConsole.test(m.text()))) problems.push("console: " + m.text()); });
   // A step that expects a confirmation or prompt sets its answer first:
   // true accepts, a string is typed in; any other dialog is a problem.
   let answer = null;
@@ -2548,6 +2607,47 @@ function gitSource() {
       await page.waitForSelector("dialog.drawing", { state: "detached" });
       await page.click("#edit-done");
       await page.waitForSelector("#body.reading");
+
+      step("forms and decisions: a form of an engine is a preview that sends nothing; a decision shows its newest deployed table and its model's graph (ADR-0144)");
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .ProseMirror");
+      await page.locator("#body .ProseMirror").click();
+      await page.selectOption("#body .pm-toolbar select:has(option[value=form])", "form");
+      await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Travel request')");
+      await page.waitForSelector("dialog.bpmn-pick", { state: "detached" });
+      await page.selectOption("#body .pm-toolbar select:has(option[value=decision])", "decision");
+      await page.fill("dialog.bpmn-pick[open] input[type=search]", "bon");
+      check(await page.locator("dialog.bpmn-pick[open] .bpmn-processes li").count() === 1, "the decisions are filtered");
+      await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Bonität')");
+      await page.waitForSelector("dialog.bpmn-pick", { state: "detached" });
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
+      const formBlock = page.locator("#body .pm-form");
+      await formBlock.scrollIntoViewIfNeeded();
+      await formBlock.locator(".pm-diagram-info:has-text('Travel request')").waitFor();
+      await formBlock.locator(".pm-diagram-ops:has-text('Preview: what is entered here is not sent.')").waitFor();
+      await formBlock.locator(":text('A field of the kind “mailview” is shown only by the engine.')").waitFor(); // atlas's own component
+      await formBlock.getByLabel("Destination").fill("Bern");
+      await formBlock.locator("button:has-text('Send request')").click();
+      await formBlock.locator(".pm-diagram-ops:has-text('Nothing was sent')").waitFor();
+      check(await formBlock.locator(".fjs-powered-by").isVisible(), "the bpmn.io watermark stays visible on a form");
+      const decisionBlock = page.locator("#body .pm-dmn");
+      await decisionBlock.scrollIntoViewIfNeeded();
+      await decisionBlock.locator(".pm-diagram-info:has-text('Bonität · Credit · version 2 · Atlas test')").waitFor();
+      await decisionBlock.locator(".dmn-decision-table-container :text('High income, rule v2')").waitFor(); // the newest version, at its own table
+      await decisionBlock.locator(".pm-diagram-ops:has-text('A DMN 1.5 model, shown as DMN 1.3.')").waitFor();
+      check(await decisionBlock.locator(".bjs-powered-by").isVisible(), "the bpmn.io watermark stays visible on a decision table");
+      engine.decide();
+      await decisionBlock.locator(".pm-diagram-refresh").click();
+      await decisionBlock.locator(".dmn-decision-table-container :text('High income, rule v3')").waitFor(); // always the newest version
+      await decisionBlock.locator("select.pm-dmn-views").selectOption({ label: "Requirements graph" });
+      await decisionBlock.locator(".djs-element[data-element-id=dec_decide]").waitFor();
+      const mark = await decisionBlock.locator(".bjs-powered-by").boundingBox();
+      const box = await decisionBlock.locator(".pm-dmn-canvas").boundingBox();
+      check(mark && box && mark.x + mark.width <= box.x + box.width && mark.y + mark.height <= box.y + box.height && mark.y > box.y + box.height / 2,
+        "the watermark of the graph stays at its corner, as dmn-js places it");
+      await decisionBlock.locator("select.pm-dmn-views").selectOption({ label: "Kreditentscheid" });
+      await decisionBlock.locator(".dmn-decision-table-container :text('granted')").waitFor();
     }
 
     step("connectors: an API description offers its lists; the one picked fills a JSON source's settings (ADR-0130)");
