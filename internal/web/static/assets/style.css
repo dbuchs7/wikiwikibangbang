@@ -419,6 +419,39 @@ label.upload { display: inline-flex; align-items: center; gap: 8px; }
 .pm-image figcaption input { width: 60%; text-align: center; border: 0; border-bottom: 1px dashed var(--border-strong); background: transparent; color: inherit; font: inherit; }
 .pm-image.ProseMirror-selectednode img { outline: 2px solid var(--accent); }
 
+/* BPMN diagrams (ADR-0129): drawn light in either scheme, as drawings
+   are. The canvas pans and zooms; the bpmn.io watermark at its bottom
+   right stays clear of everything here. */
+.pm-diagram { margin: 12px 0; border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); overflow: hidden; background: var(--surface); }
+.pm-diagram.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.pm-diagram-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.pm-diagram-info { font-weight: 600; }
+.pm-diagram-ops { color: var(--muted); }
+.pm-diagram-ops.error { color: var(--danger); }
+.pm-diagram-tools { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.pm-diagram-tools .check { display: inline-flex; align-items: center; gap: 4px; margin: 0; }
+.pm-diagram-canvas { position: relative; height: 420px; background: #fff; color: #222; }
+.pm-diagram-error { margin: 6px 10px; }
+.pm-diagram-error:empty { display: none; }
+.pm-diagram figcaption { padding: 6px 10px; color: var(--muted); font-size: 13px; text-align: center; border-top: 1px solid var(--border); }
+.pm-diagram figcaption[hidden] { display: none; }
+.pm-diagram figcaption input { width: 60%; text-align: center; border: 0; border-bottom: 1px dashed var(--border-strong); background: transparent; color: inherit; font: inherit; }
+/* The counts of the operations view, read past to present: passed (grey),
+   waiting (green), held by an incident (red), as atlas shows them. */
+.pm-ops-badges { display: inline-flex; gap: 3px; align-items: center; pointer-events: none; }
+.pm-ops-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; font: 700 12px/20px system-ui, sans-serif; text-align: center; color: #fff; background: #2e7d32; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+.pm-ops-passed { background: #6b7280; }
+.pm-ops-incidents { background: #c62828; }
+dialog.bpmn-modeler .bpmn-modeler-canvas { flex: 1; position: relative; background: #fff; color: #222; }
+dialog.drawing.bpmn-pick { width: min(640px, calc(100vw - 32px)); height: auto; max-height: calc(100vh - 32px); }
+dialog.drawing.bpmn-pick .drawing-bar button { margin-left: auto; }
+.bpmn-pick-body { padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.bpmn-processes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bpmn-processes button { text-align: left; }
+@media (max-width: 640px) {
+  .pm-diagram-canvas { height: 300px; }
+}
+
 /* Watching and notifications (ADR-0046). */
 #nav > a.unread { color: var(--accent); font-weight: 600; }
 /* The notification bell and its count. */

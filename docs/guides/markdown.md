@@ -1,6 +1,6 @@
 # Pasting Markdown
 
-Markdown written or copied elsewhere — an assistant's answer, a README, a file in a code editor — goes into a page as formatted text that stays editable. Markdown is only a way in: the page is stored as its usual blocks, never as Markdown ([ADR-0129](../adr/0129-markdown-is-pasted-into-the-editor-and-converted-in-the-browser.md)).
+Markdown written or copied elsewhere — an assistant's answer, a README, a file in a code editor — goes into a page as formatted text that stays editable. Markdown is only a way in: the page is stored as its usual blocks, never as Markdown ([ADR-0131](../adr/0131-markdown-is-pasted-into-the-editor-and-converted-in-the-browser.md)).
 
 ## With Ctrl+V
 

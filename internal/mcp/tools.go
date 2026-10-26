@@ -51,7 +51,8 @@ const blockFormat = "A body is a list of blocks, each an object with kind and te
 	"heading (level 1-3), bullet and ordered (one block per list item), task (checked true or false), quote, code, " +
 	"panel (tone info, note, warning, tip or error), table (text holds rows separated by \\n and cells by \\t; the first row " +
 	"is the header), toc, children and divider (no text: a table of contents, a list of child pages, a horizontal rule), embed (ref: an item ID), " +
-	"image (ref: an attachment ID of the item, text the caption, width 10-100 percent of the column or absent for its own size, align left or right to let text flow beside it, or center). " +
+	"image (ref: an attachment ID of the item, text the caption, width 10-100 percent of the column or absent for its own size, align left or right to let text flow beside it, or center), " +
+	"bpmn (ref: an attachment ID of the item holding a BPMN 2.0 model, text the caption), process (engine: a process engine's ID, process: a BPMN process ID, text the caption; shows the process's newest version). " +
 	"Paragraphs, headings, quotes and panels may have align center, right or justify. " +
 	"Inline formats are marks over the text, counted in Unicode code points: " +
 	"{\"type\": \"bold\"|\"italic\"|\"underline\"|\"strike\"|\"highlight\"|\"code\"|\"link\" (with href)|\"mention\" (with ref, an item ID), \"start\": 0, \"end\": 5}. " +
@@ -81,6 +82,11 @@ var (
 // and get_own_roles. Watching and unwatching are not offered: they are
 // the caller's own subscription, which an agent does not take out or end
 // on a person's behalf.
+//
+// The process engines' routes (ADR-0129) are not offered: whether agents
+// read an engine's processes and their operations through this server,
+// with the engine's credential rather than their own, is a decision of
+// its own.
 var tools = []tool{
 	{Name: "list_spaces", Description: "List the spaces the caller holds a role in.", Method: "GET", Path: "/api/spaces"},
 	{Name: "get_own_roles", Description: "The caller's own roles: the system roles held, and every space role granted to the caller, directly or through a group (via), one entry per grant.",

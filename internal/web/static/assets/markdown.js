@@ -1,4 +1,4 @@
-// Markdown as a way into a body (ADR-0129). Text pasted or typed as
+// Markdown as a way into a body (ADR-0131). Text pasted or typed as
 // Markdown becomes blocks of the item model (ADR-0001, ADR-0032): the same
 // blocks the editor reads with nodeFromBlock and the server validates.
 // Markdown is an input format only; nothing is stored as Markdown.

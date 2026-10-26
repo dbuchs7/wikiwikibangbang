@@ -29,7 +29,9 @@ func TestCopyPages(t *testing.T) {
 		t.Fatalf("upload %d %s", up.Code, up.Body)
 	}
 	fileID := field(decodeBody(t, up), "attachment", "id").(string)
-	w.bert.expect("PUT", "/api/items/"+guide+"/body", `{"blocks":[{"kind":"paragraph","text":"Read me"},{"kind":"image","ref":"`+fileID+`","text":"Chart"}]}`, http.StatusOK)
+	model := w.bert.upload("/api/items/"+guide+"/attachments?name=order.bpmn", "application/octet-stream", []byte(`<?xml version="1.0"?><definitions/>`))
+	modelID := field(decodeBody(t, model), "attachment", "id").(string)
+	w.bert.expect("PUT", "/api/items/"+guide+"/body", `{"blocks":[{"kind":"paragraph","text":"Read me"},{"kind":"image","ref":"`+fileID+`","text":"Chart"},{"kind":"bpmn","ref":"`+modelID+`","text":"Flow"}]}`, http.StatusOK)
 	w.bert.expect("PUT", "/api/items/"+guide+"/labels", `{"labels":["howto"]}`, http.StatusOK)
 
 	w.vera.expect("POST", "/api/items/"+guide+"/copy", `{"space":"PLAT","title":"x"}`, http.StatusForbidden)
@@ -43,12 +45,12 @@ func TestCopyPages(t *testing.T) {
 		t.Fatalf("copy %v", c)
 	}
 	blocks := c["body"].([]any)
-	img := blocks[1].(map[string]any)
-	if len(blocks) != 2 || img["ref"] == fileID || img["text"] != "Chart" {
+	img, diagram := blocks[1].(map[string]any), blocks[2].(map[string]any)
+	if len(blocks) != 3 || img["ref"] == fileID || img["text"] != "Chart" || diagram["ref"] == modelID || diagram["kind"] != "bpmn" {
 		t.Fatalf("body %v", blocks)
 	}
 	files := w.bert.expect("GET", "/api/items/"+copyKey+"/attachments", "", http.StatusOK)["attachments"].([]any)
-	if len(files) != 1 || files[0].(map[string]any)["id"] != img["ref"] || files[0].(map[string]any)["origin"] == nil {
+	if len(files) != 2 || files[0].(map[string]any)["id"] != img["ref"] || files[0].(map[string]any)["origin"] == nil || files[1].(map[string]any)["id"] != diagram["ref"] {
 		t.Fatalf("files %v", files)
 	}
 	if r := w.bert.do("GET", "/api/items/"+copyKey+"/attachments/"+img["ref"].(string), ""); r.Code != http.StatusOK || !bytes.Equal(r.Body.Bytes(), png) {

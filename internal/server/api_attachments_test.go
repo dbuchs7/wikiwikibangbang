@@ -387,3 +387,29 @@ func TestVideosPlayInTheText(t *testing.T) {
 		t.Fatalf("the video block %v", b)
 	}
 }
+
+// TestBPMNDiagramsShowTheirFile: a BPMN model is uploaded as a file and
+// shown by a bpmn block, which refuses a picture; a process block keeps its
+// engine and process (ADR-0129).
+func TestBPMNDiagramsShowTheirFile(t *testing.T) {
+	w := newWorld(t)
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Flow","properties":{"priority":"low"}}`, http.StatusCreated)
+	key := field(it, "item", "key").(string)
+	base := "/api/items/" + key + "/attachments"
+	var model, pic struct{ Attachment attachmentJSON }
+	_ = json.Unmarshal(w.bert.upload(base+"?name=order.bpmn", "application/octet-stream", []byte(`<?xml version="1.0" encoding="UTF-8"?><bpmn:definitions/>`)).Body.Bytes(), &model)
+	_ = json.Unmarshal(w.bert.upload(base+"?name=still.png", "application/octet-stream", append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{7}, 100)...)).Body.Bytes(), &pic)
+	if model.Attachment.Type != "text/xml; charset=utf-8" {
+		t.Fatalf("the model reads as %q", model.Attachment.Type)
+	}
+	body := func(ref item.ID) string {
+		return `{"blocks":[{"kind":"bpmn","ref":"` + string(ref) + `","text":"Order"},{"kind":"process","engine":"atlas","process":"order-to-cash","text":"Live"}]}`
+	}
+	w.bert.expect("PUT", "/api/items/"+key+"/body", body(pic.Attachment.ID), http.StatusBadRequest)
+	got := field(w.bert.expect("PUT", "/api/items/"+key+"/body", body(model.Attachment.ID), http.StatusOK), "item", "body").([]any)
+	if d, p := got[0].(map[string]any), got[1].(map[string]any); d["kind"] != "bpmn" || d["ref"] != string(model.Attachment.ID) ||
+		p["kind"] != "process" || p["engine"] != "atlas" || p["process"] != "order-to-cash" || p["text"] != "Live" {
+		t.Fatalf("the body %v", got)
+	}
+	w.bert.expect("PUT", "/api/items/"+key+"/body", `{"blocks":[{"kind":"paragraph","text":"x","engine":"atlas"}]}`, http.StatusBadRequest)
+}

@@ -35,10 +35,14 @@ var classified = map[string]string{
 	"internal/connector.maxAnswer": "the answer of the catalog source a connector reads (ADR-0075, ADR-0077), not a caller's input to this server; " +
 		"it guards the connector against a source that misbehaves",
 	"internal/connector/ckan.go:maxAnswer": "the same bound, where the answer is read",
+	"internal/connector.maxSpec": "the size of an API description a connector reads (ADR-0130), not a caller's input to this server; " +
+		"it guards the server against a description that misbehaves",
+	"internal/connector.maxLists": "how many lists an API description offers to choose from (ADR-0130), the length of a list on a page",
 	"internal/connector.maxPages": "how many pages of a JSON source's list a connector follows (ADR-0127), not a caller's input to this server; " +
 		"it guards the connector against a source that names a next page for ever",
 	"internal/connector.maxCell":  "the shape of a generated catalog page (ADR-0080): how long one value of the source may be on it, like the length of a title",
 	"internal/site.maxConnectors": "the shape of the site's settings (ADR-0077): how many connectors an administrator keeps, like the number of regulations",
+	"internal/site.maxEngines":    "the shape of the site's settings (ADR-0129): how many process engines an administrator keeps, like the number of connectors",
 	"internal/connector.maxDatasets": "the size of one connector's run (ADR-0075), so a misbehaving source cannot make it endless; " +
 		"not memory a caller of this server can claim",
 	"internal/item.maxColumns":       "the shape of a kanban (ADR-0076), like the length of its name; a definition of the space, not memory a caller claims",

@@ -113,6 +113,20 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	}
 	w.admin.expect("DELETE", "/api/connectors/feed", "", http.StatusNoContent)
 
+	// An API description offers its lists as JSON sources (ADR-0130).
+	spec := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "openapi: 3.0.0\ninfo: {title: Registry}\npaths:\n  /services:\n    get:\n      responses:\n        200:\n"+
+			"          content: {application/json: {schema: {type: array, items: {properties: {id: {type: string}, name: {type: string}}}}}}\n")
+	}))
+	defer spec.Close()
+	described := w.admin.expect("GET", "/api/connectors/new/openapi?url="+spec.URL+"/openapi.yaml", "", http.StatusOK)
+	if described["title"] != "Registry" || field(described["lists"].([]any)[0].(map[string]any), "source", "url") != spec.URL+"/services" {
+		t.Errorf("described %s", jsonOf(described))
+	}
+	w.bert.expect("GET", "/api/connectors/new/openapi?url="+spec.URL, "", http.StatusForbidden)
+	w.admin.expect("GET", "/api/connectors/new/openapi?url=ftp://x", "", http.StatusBadRequest)
+	w.admin.expect("GET", "/api/connectors/new/openapi?url=http://127.0.0.1:1/spec", "", http.StatusBadGateway)
+
 	// An Atlassian import names its spaces itself (ADR-0128); the accounts
 	// it names must exist, and the cut-over turns its schedule off.
 	atlassian := func(user string) string {

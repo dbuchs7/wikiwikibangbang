@@ -244,3 +244,41 @@ func documentXML(t *testing.T, file []byte) string {
 	t.Fatal("no word/document.xml")
 	return ""
 }
+
+// TestDiagramsAreNamedInDocuments: a BPMN diagram and a process are named
+// with their captions in both exports, not drawn (ADR-0129).
+func TestDiagramsAreNamedInDocuments(t *testing.T) {
+	page := Page{ID: "p", Title: "Order to cash", Body: []item.Block{
+		{Kind: item.BPMN, Ref: "m", Text: "As <drawn>"},
+		{Kind: item.Process, Engine: "atlas", Process: "order-to-cash", Text: "As it runs"},
+	}, Images: map[item.ID]Image{"m": {Name: "order&co.bpmn", Type: "text/xml; charset=utf-8"}}}
+	var h bytes.Buffer
+	if err := HTML(&h, Document{Pages: []Page{page}}, "en"); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "<figcaption>As &lt;drawn&gt;</figcaption>", "[BPMN: order-to-cash (atlas)]", "<figcaption>As it runs</figcaption>"} {
+		if !strings.Contains(h.String(), want) {
+			t.Errorf("the HTML lacks %q:\n%s", want, h.String())
+		}
+	}
+	var w bytes.Buffer
+	if err := DOCX(&w, Document{Pages: []Page{page}}); err != nil {
+		t.Fatal(err)
+	}
+	z, err := zip.NewReader(bytes.NewReader(w.Bytes()), int64(w.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range z.File {
+		if f.Name != "word/document.xml" {
+			continue
+		}
+		r, _ := f.Open()
+		data, _ := io.ReadAll(r)
+		for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "As &lt;drawn&gt;", "[BPMN: order-to-cash (atlas)]", "As it runs"} {
+			if !strings.Contains(string(data), want) {
+				t.Errorf("the Word document lacks %q", want)
+			}
+		}
+	}
+}

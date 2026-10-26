@@ -4394,6 +4394,7 @@ async function adminView() {
 
   const albumSection = section("album", t("retention.title"), await retentionCard());
   const catalogSection = section("connectors", t("connector.title"), connectorsCard(spaces, users));
+  const enginesSection = section("engines", t("engine.title"), enginesCard());
   const designSection = section("design", t("design.title"), await designCard());
   const regulationsSection = section("regulations", t("dp.adminTitle"), await regulationsCard());
 
@@ -4477,7 +4478,7 @@ async function adminView() {
     h("div", { class: "admin-layout" },
       h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, ...tocLinks),
       h("div", { class: "admin-sections" },
-        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, albumSection, catalogSection, designSection, regulationsSection, importSection, auditSection)),
+        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, albumSection, catalogSection, enginesSection, designSection, regulationsSection, importSection, auditSection)),
   );
 }
 
@@ -4626,6 +4627,90 @@ function infoButton(help) {
   } }, infoIcon());
 }
 
+// enginesCard lists the process engines whose processes pages show in
+// their newest version, and sets one up (ADR-0129). The credential is an
+// environment variable; the card says which one and whether it is set,
+// and checks the engine by listing its processes.
+function enginesCard() {
+  const card = h("div", { id: "engines" }, h("p", { class: "muted", text: t("autobackup.loading") }));
+  let open = null;
+  const load = async () => {
+    let data;
+    try {
+      data = await get("/api/engines");
+    } catch (err) {
+      card.replaceChildren(errorBox(err));
+      return;
+    }
+    const chosen = open === "new" ? { id: "", name: "", kind: data.kinds[0], baseURL: "", operations: false, isNew: true } : data.engines.find((e) => e.id === open);
+    card.replaceChildren(
+      h("p", { class: "muted", text: t("engine.note") }),
+      data.engines.length ? h("table", { id: "engine-list" },
+        h("thead", {}, h("tr", {}, [t("engine.name"), t("engine.kind"), t("engine.baseURL"), t("engine.operations"), t("engine.credential"), ""].map((x) => h("th", { text: x })))),
+        h("tbody", {}, data.engines.map((e) => h("tr", { "data-engine": e.id },
+          h("td", {}, h("strong", { text: e.name }), h("br"), h("span", { class: "muted", text: e.id })),
+          h("td", { text: e.kind }),
+          h("td", { class: "muted", text: e.baseURL }),
+          h("td", { text: e.operations ? t("engine.operationsOn") : t("engine.operationsOff") }),
+          h("td", { class: e.credential ? "" : "error", text: e.credential ? t("engine.credentialSet") : t("engine.credentialUnset") }),
+          h("td", {}, h("button", { type: "button", class: "link", text: t("common.edit"), onclick: () => { open = e.id; load(); } })))))) : empty(t("engine.none")),
+      h("p", {}, h("button", { type: "button", id: "engine-new", text: t("engine.new"), onclick: () => { open = "new"; load(); } })),
+      chosen ? engineEditor(chosen, data.kinds, data.engines.map((x) => x.id), (id) => { open = id; load(); }) : "");
+  };
+  load();
+  return card;
+}
+
+// engineEditor sets up one process engine; taken are the IDs in use, which
+// a new one may not take over. reopen(id) shows the card again with id
+// open, or none.
+function engineEditor(e, kinds, taken, reopen) {
+  const checkStatus = h("div", { class: "status", id: "engine-check" });
+  const path = (id) => "/api/engines/" + encodeURIComponent(id);
+  return h("div", { class: "connector-editor", id: "engine-editor" },
+    h("h3", { text: e.isNew ? t("engine.newTitle") : e.name }),
+    form({ id: "engine-settings" }, [
+      field(t("engine.id"), h("input", { name: "id", value: e.id, required: true, readonly: !e.isNew, pattern: "[a-z0-9][a-z0-9.\\-]{0,39}", maxlength: 40 })),
+      e.isNew ? h("p", { class: "muted", text: t("engine.idHelp") }) : "",
+      field(t("engine.name"), h("input", { name: "name", value: e.name, required: true, maxlength: 80 })),
+      field(t("engine.kind"), h("select", { name: "kind" }, kinds.map((k) => h("option", { value: k, text: k, selected: k === e.kind })))),
+      field(t("engine.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: e.baseURL, placeholder: "https://atlas.example.org" })),
+      h("label", { class: "check" }, h("input", { type: "checkbox", name: "operations", checked: e.operations }), " ", t("engine.allowOperations")),
+      h("p", { class: "muted", text: t("engine.operationsHelp") }),
+      h("p", { class: "muted", text: t("engine.publicOnly") }),
+      e.isNew ? h("p", { class: "muted", text: t("engine.credentialHelpNew") })
+        : h("p", { class: e.credential ? "muted" : "error", id: "engine-credential",
+          text: e.credential ? t("engine.credentialIs", { name: e.credentialVar }) : t("engine.credentialMissing", { name: e.credentialVar }) }),
+      e.isNew ? "" : envHelp("engine-env-help"),
+      h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", text: t("engine.save") }),
+        e.isNew ? h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => reopen(null) })
+          : h("button", { type: "button", class: "secondary", id: "engine-check-now", text: t("engine.check"), onclick: async () => {
+            checkStatus.replaceChildren(h("p", { class: "muted", text: t("autobackup.loading") }));
+            try {
+              const { processes } = await get(path(e.id) + "/processes");
+              checkStatus.replaceChildren(h("p", { class: "notice", text: t("engine.checkOk", { n: processes.length }) }));
+            } catch (err) {
+              checkStatus.replaceChildren(errorBox(err));
+            }
+          } }),
+        e.isNew ? "" : h("button", { type: "button", class: "link danger", id: "engine-delete", text: t("engine.remove"), onclick: async () => {
+          if (!confirm(t("engine.removeConfirm", { name: e.name }))) return;
+          try {
+            await del(path(e.id));
+            reopen(null);
+          } catch (err) {
+            checkStatus.replaceChildren(errorBox(err));
+          }
+        } })),
+    ], async (d) => {
+      const id = d.get("id").trim();
+      if (e.isNew && taken.includes(id)) throw new Error(t("engine.taken", { id }));
+      const kept = await put(path(id), { name: d.get("name").trim(), kind: d.get("kind"), baseURL: d.get("baseURL").trim(), operations: d.get("operations") === "on" });
+      reopen(kept.id);
+    }),
+    checkStatus);
+}
+
 // connectorsCard lists the connectors that keep catalog spaces in step
 // with external sources, such as opendata.swiss, and opens one to set it
 // up and run it (ADR-0077). A dry run reports what a run would change;
@@ -4666,7 +4751,8 @@ function connectorsCard(spaces, users) {
       data.connectors.length ? filtered(h("table", { id: "connector-list" },
         h("thead", {}, h("tr", {}, [t("connector.name"), t("connector.kind"), t("catalog.space"), t("connector.lastRun"), t("connector.schedule"), ""].map((x) => h("th", { text: x })))),
         h("tbody", {}, rows)), { id: "connectors", label: t("connector.title"), choices: [{ key: "state", label: t("connector.schedule") }] }) : empty(t("connector.none")),
-      h("p", { class: "actions-row" }, data.templates.map((tpl, i) => h("button", { type: "button", class: i ? "secondary" : null, id: i ? "connector-new-" + tpl.kind : "connector-new",
+      h("p", { class: "actions-row" }, data.templates.map((tpl, i) => h("button", { type: "button", class: i ? "secondary" : null,
+        id: i ? "connector-new-" + (tpl.json?.spec !== undefined ? "openapi" : tpl.kind) : "connector-new",
         text: t("connector.new", { name: tpl.name }), onclick: () => { open = i; load(); } }))),
       chosen ? connectorEditor(chosen, data, spaces, users, list, (id) => { open = id; load(); }) : "",
     );
@@ -4757,7 +4843,46 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     field(t("catalog.organizations"), h("input", { name: "organizations", value: k.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
     h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
   ];
+  // An API description offers its lists (ADR-0130): one picked fills
+  // the settings below, which stay the connector's.
+  const specInput = h("input", { name: "specURL", type: "url", value: j?.spec || "", placeholder: "https://api.example/openapi.yaml", maxlength: 512 });
+  const picked = { spec: j?.operation ? j.spec : "", operation: j?.operation || "" };
+  const pickedNote = h("p", { class: "muted", id: "openapi-picked", text: picked.operation ? t("openapi.picked", { operation: picked.operation }) : "" });
+  const listsBox = h("div", { id: "openapi-lists" });
+  const showLists = async () => {
+    listsBox.replaceChildren(h("p", { class: "muted", text: t("openapi.loading") }));
+    try {
+      const id = editor.querySelector("#connector-settings [name=id]").value.trim() || "new";
+      const d = await get(`/api/connectors/${encodeURIComponent(id)}/openapi?` + new URLSearchParams({ url: specInput.value.trim() }));
+      const use = (l) => {
+        const form = editor.querySelector("#connector-settings");
+        const set = (name, v) => { form.querySelector(`[name=${name}]`).value = v || ""; };
+        const s = l.source;
+        set("url", s.url); set("items", s.items); set("idPath", s.id); set("titlePath", s.title);
+        set("link", s.link); set("text", s.text); set("next", s.next);
+        valuesInput.value = Object.entries(s.values || {}).map(([n, p]) => `${n} = ${p}`).join("\n");
+        showFields();
+        picked.spec = s.spec; picked.operation = s.operation;
+        pickedNote.textContent = t("openapi.picked", { operation: s.operation });
+        listsBox.replaceChildren();
+      };
+      listsBox.replaceChildren(
+        h("p", { class: "muted", text: t("openapi.found", { title: d.title || specInput.value.trim(), n: d.lists.length }) }),
+        d.lists.length ? h("ul", { class: "openapi-lists" }, d.lists.map((l) => h("li", {},
+          h("button", { type: "button", class: "link", "data-operation": l.operation, text: l.operation, onclick: () => use(l) }),
+          l.summary ? h("span", { class: "muted", text: " · " + l.summary }) : ""))) : "",
+        d.problems.length ? h("details", {}, h("summary", { text: t("openapi.skipped", { n: d.problems.length }) }),
+          h("ul", {}, d.problems.map((p) => h("li", { class: "muted", text: p })))) : "");
+    } catch (err) {
+      listsBox.replaceChildren(errorBox(err));
+    }
+  };
   const jsonSource = () => [
+    h("fieldset", { class: "connector-target", id: "openapi" }, h("legend", { text: t("openapi.title") }),
+      field(t("openapi.spec"), specInput),
+      h("p", { class: "muted" }, t("openapi.help"), " ",
+        h("button", { type: "button", class: "link", id: "openapi-read", text: t("openapi.read"), onclick: showLists })),
+      listsBox, pickedNote),
     field(t("json.url"), h("input", { name: "url", type: "url", required: true, value: j.url, maxlength: 512 })),
     h("p", { class: "muted", text: t("json.urlHelp") }),
     path_("items", t("json.items"), j.items),
@@ -4871,7 +4996,8 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
           groups: pairs(d.get("groups")), grants: lines(d.get("grants")) };
       } else if (j) {
         body.json = { url: d.get("url").trim(), items: d.get("items").trim(), id: d.get("idPath").trim(), title: d.get("titlePath").trim(), link: d.get("link").trim(),
-          text: d.get("text").trim(), next: d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language") };
+          text: d.get("text").trim(), next: d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language"),
+          spec: picked.spec, operation: picked.operation };
       } else {
         body.ckan = { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(), language: d.get("language") };
       }
