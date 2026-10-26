@@ -33,7 +33,7 @@ func TestProtectedPassagesThroughTheAPI(t *testing.T) {
 		t.Fatalf("vera reads %q, %v", text, vsec)
 	}
 	// Nothing else gives the passage away to her.
-	for _, p := range []string{"/api/search?q=Muster", "/api/items?space=PLAT", path + "/export/html"} {
+	for _, p := range []string{"/api/search?q=Muster", "/api/items?space=PLAT", path + "/export/html", path + "/export/md"} {
 		if body := w.vera.do("GET", p, "").Body.String(); strings.Contains(body, "Muster") {
 			t.Errorf("%s gives the passage away: %s", p, body)
 		}

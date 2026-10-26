@@ -143,3 +143,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0128](0128-the-atlassian-import-as-a-connector.md) | The Atlassian import as a connector | Accepted | Landed |
 | [0129](0129-bpmn-diagrams-and-processes-from-a-process-engine.md) | BPMN diagrams in the text, and processes from a process engine with their operations | Proposed | Partial |
 | [0130](0130-an-api-description-fills-a-json-source.md) | An API description fills a JSON source | Accepted | Landed |
+| [0131](0131-pages-export-as-markdown-and-agents-read-them-so.md) | Pages export as Markdown, and agents read them so | Proposed | Partial |

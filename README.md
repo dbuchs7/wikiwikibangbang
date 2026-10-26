@@ -11,6 +11,8 @@ Knowledge and work in one model: wiki pages and issues as typed items of one dat
 
 Trying a release? The [test guide](docs/testing/test-guide.md) says what to look at first and how to report a finding.
 
+Pages export as PDF, Word and Markdown from their *Export* menu ([ADR-0071](docs/adr/0071-exporting-pages-and-lists.md)); the Markdown comes as a ZIP archive with the page's pictures, and agents read a page as Markdown over MCP, as the [export guide](docs/guides/markdown-export.md) describes ([ADR-0131](docs/adr/0131-pages-export-as-markdown-and-agents-read-them-so.md)).
+
 ## Run
 
 The product is one binary for Linux, macOS and Windows on amd64 and arm64, and 32-bit ARM Linux ([ADR-0024](docs/adr/0024-release-targets-and-container-image.md)). Download the archive for your platform from the releases page, unpack it and run:
