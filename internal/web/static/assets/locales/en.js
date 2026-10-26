@@ -101,7 +101,7 @@ export default {
   "board.several": "Several transitions lead from {from} to {to}; choose one in the card's details.",
   "board.truncated": "This board shows the first {n} items.",
   "board.view": "View of the board",
-  "board.viewHint": "Colour and swimlanes apply to this view and are kept in its address; a kanban keeps them for everyone.",
+  "board.viewHint": "Colour and swimlanes are kept in the address and remembered in this browser; a kanban keeps them for everyone.",
 
   "tasks.none": "No open tasks.",
   "tasks.title": "Tasks",
