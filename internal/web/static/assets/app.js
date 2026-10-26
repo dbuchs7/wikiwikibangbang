@@ -119,9 +119,10 @@ function printExport(path, children) {
   document.body.append(frame);
 }
 
-// exportMenu offers a page as PDF and as a Word document, both with what
-// it embeds, and each of its tables as CSV; a page with subpages also as a
-// handbook with them.
+// exportMenu offers a page as PDF, as a Word document and as Markdown in a
+// ZIP archive with its pictures (ADR-0131), all with what it embeds, and
+// each of its tables as CSV; a page with subpages also as a handbook with
+// them.
 function exportMenu(item) {
   const path = "/api/items/" + encodeURIComponent(item.id);
   const tables = (item.body || []).filter((b) => b.kind === "table");
@@ -132,6 +133,7 @@ function exportMenu(item) {
     h("div", { class: "export-list" },
       h("button", { type: "button", class: "link", id: "export-pdf", text: t("export.pdf"), onclick: (ev) => { close(ev); printExport(path, false); } }),
       h("a", { href: path + "/export/docx", id: "export-docx", download: "", text: t("export.docx") }),
+      h("a", { href: path + "/export/md.zip", id: "export-md", download: "", text: t("export.markdown") }),
       handbook,
       tables.map((b, i) => h("a", { href: `${path}/tables/${i + 1}`, class: "export-table", download: "",
         text: t("export.table", { n: i + 1, head: (b.text || "").split("\n")[0].split("\t").slice(0, 3).join(", ") }) }))));
@@ -144,7 +146,8 @@ function exportMenu(item) {
     const kids = await childPagesOf(item)().catch(() => []);
     if (kids.length) handbook.append(
       h("button", { type: "button", class: "link", id: "export-pdf-handbook", text: t("export.pdfHandbook"), onclick: (ev) => { close(ev); printExport(path, true); } }),
-      h("a", { href: path + "/export/docx?children=true", id: "export-docx-handbook", download: "", text: t("export.docxHandbook") }));
+      h("a", { href: path + "/export/docx?children=true", id: "export-docx-handbook", download: "", text: t("export.docxHandbook") }),
+      h("a", { href: path + "/export/md.zip?children=true", id: "export-md-handbook", download: "", text: t("export.markdownHandbook") }));
   });
   return menu;
 }

@@ -969,6 +969,8 @@ export default {
   "design.darkOff": "Der Nachtmodus ist ausgeschaltet: Das Theme oder das eigene Stylesheet enthält keine Regeln @media (prefers-color-scheme: dark) { … }, deshalb sehen alle das helle Aussehen. Wählen Sie ein Theme mit dunklem Aussehen, oder ergänzen Sie solche Regeln für ein eigenes dunkles Aussehen.",
   "export.pdfHandbook": "PDF mit Unterseiten (Handbuch)",
   "export.docxHandbook": "Word mit Unterseiten (Handbuch)",
+  "export.markdown": "Markdown mit Bildern (.zip)",
+  "export.markdownHandbook": "Markdown mit Unterseiten (Handbuch, .zip)",
   "export.open": "Exportieren",
   "export.pdf": "PDF (drucken)",
   "export.docx": "Word (.docx)",

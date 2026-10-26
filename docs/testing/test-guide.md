@@ -122,7 +122,7 @@ Paste something that looks like a password (`password: Test1234!`), a card numbe
 - Does the governance view show the finding masked, and can an administrator lift the restriction?
 - **Report** every harmless text that was flagged, and every secret that was not.
 
-### 10. Pasting Markdown (ADR-0131)
+### 10. Pasting Markdown (ADR-0132)
 
 Copy Markdown from an assistant, a README or a code editor and paste it into a page with Ctrl+V; paste other Markdown through *Insert… → Paste Markdown…*. The [Markdown guide](../guides/markdown.md) lists what is converted.
 
