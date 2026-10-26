@@ -81,7 +81,9 @@ import (
 //     are still read.
 //   - 29: the block kinds bpmn and process, and the block fields Engine and
 //     Process (ADR-0129). Versions 1 to 28 are still read.
-const CodecVersion = 29
+//   - 30: a kanban column may carry Limit, and a kanban ColorField and
+//     Colors (ADR-0133). Versions 1 to 29 are still read.
+const CodecVersion = 30
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

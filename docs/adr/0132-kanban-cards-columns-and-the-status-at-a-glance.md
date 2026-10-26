@@ -4,8 +4,6 @@
 - **Implementation:** Landed
 - **Date:** 2026-10-26
 - **Deciders:** Project initiators (the maintainer did not yet like the kanbans and, after a comparison of what a kanban shows and how, asked for a first package: the cards, the columns, the settings and the details, in today's look; they found the status pills unacceptable; and they decided that information may also arise on a kanban, 2026-10-26)
-- **Open question:** where information that arises on a kanban is kept: with the kanban, or as properties of its items
-- **Question checked:** 2026-10
 
 ## Context and problem statement
 
@@ -104,7 +102,7 @@ The maintainer decided that information may also arise on a kanban. This record 
 - counts of comments, attachments and relations;
 - swimlanes.
 
-Each of them decides in its own record where such information is kept (see the open question).
+Each of them decides in its own record where such information is kept. Answered by [ADR-0133](0133-kanban-filter-limits-colours-and-finished-cards-by-day.md): with its items, as their properties.
 
 ### Consequences
 
@@ -156,3 +154,4 @@ Strongest form: the row shows where the item stands in the whole workflow.
 
 - amends [ADR-0060](0060-kanbans-are-topics-whose-cards-carry-their-label.md) (adding cards and taking them off) and [ADR-0076](0076-kanban-columns-card-fields-and-free-moves.md) (how card fields show, the details, the settings)
 - relates to ADR-0036 (boards), ADR-0050 (profile pictures), ADR-0082 (finished states), ADR-0087 (kanban pictures), ADR-0110 (the kanbans page), ADR-0114 (task items in a text), ADR-0116 (phones)
+- amended by [ADR-0133](0133-kanban-filter-limits-colours-and-finished-cards-by-day.md) (a filter, column limits, colours by a task's field, finished cards by day; answers the open question)

@@ -2531,7 +2531,7 @@ async function kanbanView(space, id) {
   const [cards, all] = await Promise.all([readAll(`${base}&label=${encodeURIComponent(k.label)}`), canEdit ? readAll(base) : { items: [] }]);
   const byID = new Map(cards.items.map((it) => [it.id, it]));
   const fieldOf = (name) => type.fields.find((f) => f.name === name);
-  await learnNames(cards.items.flatMap((it) => k.cardFields.filter((n) => fieldOf(n)?.kind === "user").map((n) => it.properties[n]).filter(Boolean)));
+  await learnNames(cards.items.flatMap((it) => type.fields.filter((f) => f.kind === "user").map((f) => it.properties[f.name]).filter(Boolean)));
   const status = h("div", { class: "status" });
   const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const setLabels = (it, labels) => put(`/api/items/${it.id}/labels`, { labels });
@@ -2565,11 +2565,34 @@ async function kanbanView(space, id) {
   // (ADR-0132): its title first; the fields the kanban names as chips, a
   // person as a face; at its foot its key, whether it has a text and how
   // far its checklist is.
+  // The open card is one part of the address; the filter keeps its own.
+  const setCard = (key) => {
+    const [route, query = ""] = location.hash.split("?");
+    const q = new URLSearchParams(query);
+    if (key) q.set("card", key); else q.delete("card");
+    const rest = q.toString();
+    history.replaceState(null, "", route + (rest ? "?" + rest : ""));
+  };
   const select = (it) => {
-    history.replaceState(null, "", `#/kanban/${encodeURIComponent(space)}/${encodeURIComponent(id)}?card=${encodeURIComponent(it.key)}`);
+    setCard(it.key);
     layout.querySelectorAll(".card-item.selected").forEach((el) => el.classList.remove("selected"));
     layout.querySelector(`.card-item[data-id="${it.id}"]`)?.classList.add("selected");
     openDetail(it);
+  };
+  // A card's colour is the value of the field the kanban colours by: the
+  // task's own, so it shows wherever the task does (ADR-0133).
+  const colorField = k.colorField && fieldOf(k.colorField)?.kind === "enum" ? fieldOf(k.colorField) : null;
+  const toneOf = (v) => k.colors?.[v] || kanbanTones[Math.max(0, colorField.values.indexOf(v)) % kanbanTones.length];
+  const dateFields = type.fields.filter((f) => f.kind === "date").map((f) => f.name);
+  const userFields = type.fields.filter((f) => f.kind === "user").map((f) => f.name);
+  // dueOf sorts a card for the filter by its dates: overdue, within a
+  // week, or without a date; a finished card is none of the first two.
+  const dueOf = (it) => {
+    const days = dateFields.map((n) => it.properties[n]).filter(Boolean).map((v) => daysFromToday(String(v).slice(0, 10))).filter((d) => d !== null);
+    if (!days.length) return "none";
+    if (finished(type.workflow, it.state)) return "";
+    if (days.some((d) => d < 0)) return "late";
+    return days.some((d) => d <= 7) ? "week" : "";
   };
   const cardEl = (it) => {
     const chips = [], people = [];
@@ -2586,7 +2609,11 @@ async function kanbanView(space, id) {
         chips.push(cardChip(n, f, v, finished(type.workflow, it.state)));
       }
     }
-    const li = h("li", { class: "card-item kanban-card", draggable: canEdit ? "true" : "false", "data-id": it.id, tabindex: "0",
+    const color = colorField ? it.properties[k.colorField] : "";
+    const who = userFields.map((n) => it.properties[n]).filter(Boolean);
+    const li = h("li", { class: "card-item kanban-card" + (color ? ` toned tone-${toneOf(color)}` : ""), draggable: canEdit ? "true" : "false", "data-id": it.id, tabindex: "0",
+      "data-filter-text": [it.key, it.title, ...it.labels, ...who.map(person), ...type.fields.filter((f) => f.kind !== "user").map((f) => it.properties[f.name] ?? "")].join(" "),
+      "data-f-who": who.join("|"), "data-f-label": it.labels.filter((l) => l !== k.label).join("|"), "data-f-due": dueOf(it), "data-f-color": color || "",
       ondragstart: (ev) => { ev.dataTransfer.setData("text/plain", it.id); ev.dataTransfer.effectAllowed = "move"; },
       onclick: (ev) => { if (!ev.target.closest("a, button")) select(it); },
       onkeydown: (ev) => { if (ev.key === "Enter" && ev.target === li) select(it); } },
@@ -2628,8 +2655,41 @@ async function kanbanView(space, id) {
     el.classList.toggle("folded", shut);
     button.setAttribute("aria-expanded", String(!shut));
   };
+  // A finished state's column lists its cards by the day they got there,
+  // the newest first, and the most recent only until asked for all
+  // (ADR-0133).
+  const cardsOf = (col) => {
+    const items = (col.cards || []).map((cid) => byID.get(cid)).filter(Boolean);
+    if (!col.state || !finished(wf, col.state)) return items.map(cardEl);
+    items.sort((a, b) => (Date.parse(b.stateSince) || 0) - (Date.parse(a.stateSince) || 0));
+    const out = [];
+    let day = null;
+    items.forEach((it, i) => {
+      const more = i >= recentDone ? " card-more" : "";
+      const d = it.stateSince ? localDay(it.stateSince) : "";
+      if (d && d !== day) out.push(h("li", { class: "card-day" + more, "data-day": d, text: dayName(d) }));
+      day = d;
+      const el = cardEl(it);
+      if (more) el.classList.add("card-more");
+      out.push(el);
+    });
+    if (items.length > recentDone) {
+      out.push(h("li", { class: "card-show-all" }, h("button", { type: "button", class: "link", text: t("kanban.showAll", { n: items.length }),
+        onclick: (ev) => ev.target.closest(".board-column").classList.add("expanded") })));
+    }
+    return out;
+  };
+  // A column's count names its limit beside it, and says when the column
+  // holds as many cards or more (ADR-0133); a limit is a signal, the move
+  // is never refused for it.
+  const countOf = (col) => {
+    const n = (col.cards || []).length;
+    if (!col.limit) return h("span", { class: "column-count", text: String(n) });
+    return h("span", { class: "column-count" + (n > col.limit ? " over" : n === col.limit ? " full" : ""),
+      title: t("kanban.limitHint", { n, limit: col.limit }), text: `${n} / ${col.limit}` });
+  };
   const columnEl = (col) => {
-    const list = h("ul", { class: "board-cards" }, (col.cards || []).map((cid) => byID.get(cid)).filter(Boolean).map(cardEl));
+    const list = h("ul", { class: "board-cards" }, cardsOf(col));
     const shut = folded.has(col.id);
     const el = h("section", { class: "board-column" + (col.state ? "" : " own-column") + (shut ? " folded" : ""), "data-state": col.state || "", "data-column": col.id,
       ondragover: (ev) => { if (!canEdit) return; ev.preventDefault(); el.classList.add("drop"); },
@@ -2649,7 +2709,7 @@ async function kanbanView(space, id) {
     // The state a column stands for is its tooltip; the name is what counts.
     el.append(h("div", { class: "column-head" },
       h("h2", { title: col.state ? t("kanban.stateColumnHint", { state: col.state }) : t("kanban.ownColumnHint"), text: col.name }),
-      h("span", { class: "column-count", text: String((col.cards || []).length) }),
+      countOf(col),
       takes(col) ? h("button", { type: "button", class: "link column-add", title: t("kanban.newCardIn", { column: col.name }),
         "aria-label": t("kanban.newCardIn", { column: col.name }), onclick: () => addCard(col, el, list) }, lineIcon("M12 5v14M5 12h14")) : "",
       toggle),
@@ -2664,7 +2724,7 @@ async function kanbanView(space, id) {
   const closeDetail = () => {
     detail.hidden = true;
     layout.querySelectorAll(".card-item.selected").forEach((el) => el.classList.remove("selected"));
-    history.replaceState(null, "", `#/kanban/${encodeURIComponent(space)}/${encodeURIComponent(id)}`);
+    setCard("");
   };
   const openDetail = async (it) => {
     detail.hidden = false;
@@ -2728,8 +2788,43 @@ async function kanbanView(space, id) {
       await setLabels(it, [...it.labels, k.label]);
       route();
     })) : null;
+  // The filter of the board (ADR-0098, ADR-0133): by text, person, label,
+  // due date and colour, kept in the address.
+  const boardEl = h("div", { class: "board" }, board.columns.map(columnEl));
+  const people = [...new Set(cards.items.flatMap((it) => userFields.map((n) => it.properties[n]).filter(Boolean)))]
+    .sort((a, b) => (a === me.user.id ? -1 : b === me.user.id ? 1 : person(a).localeCompare(person(b))));
+  const choices = [
+    userFields.length ? { key: "who", label: t("kanban.who"), options: people.map((v) => [v, person(v)]) } : null,
+    { key: "label", label: t("kanban.label") },
+    dateFields.length ? { key: "due", label: t("kanban.due"), options: [["late", t("kanban.dueLate")], ["week", t("kanban.dueWeek")], ["none", t("kanban.dueNone")]] } : null,
+    colorField ? { key: "color", label: k.colorField, options: colorField.values.map((v) => [v, v]) } : null,
+  ].filter(Boolean);
+  let filteredBoard = null;
+  // The legend says what a colour stands for; a click shows only its cards.
+  const legend = colorField ? h("div", { class: "kanban-legend", id: "kanban-legend", role: "group", "aria-label": k.colorField },
+    h("span", { class: "muted", text: k.colorField }),
+    colorField.values.map((v) => h("button", { type: "button", class: `legend-chip tone-${toneOf(v)}`, "data-value": v, "aria-pressed": "false", title: t("kanban.legendShow", { value: v }),
+      onclick: () => {
+        const sel = filteredBoard.querySelector("select[data-choice=color]");
+        sel.value = sel.value === v ? "" : v;
+        sel.dispatchEvent(new Event("change"));
+      } }, h("span", { class: "tone-swatch" }), v))) : null;
+  filteredBoard = filtered(boardEl, { id: "cards", label: t("kanban.cardList"), choices, rows: () => [...boardEl.querySelectorAll(".card-item")],
+    onApply: () => {
+      // A day without a card shown hides its heading; a filter shows every
+      // card it finds, also the older ones of a finished column.
+      for (const head of boardEl.querySelectorAll(".card-day")) {
+        let next = head.nextElementSibling;
+        while (next && !next.classList.contains("card-day") && !(next.classList.contains("card-item") && !next.hidden)) next = next.nextElementSibling;
+        head.hidden = !next || next.classList.contains("card-day");
+      }
+      boardEl.classList.toggle("filtering", Boolean(filteredBoard && !filteredBoard.querySelector(".filter-reset").hidden));
+      const shown = filteredBoard?.querySelector("select[data-choice=color]")?.value;
+      legend?.querySelectorAll(".legend-chip").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === shown)));
+    } });
+  filteredBoard.applyFilter();
   const layout = h("div", { class: "kanban-layout" },
-    h("div", { id: "kanban" }, h("div", { class: "board" }, board.columns.map(columnEl))),
+    h("div", { id: "kanban" }, legend, filteredBoard),
     detail);
   show(
     h("p", {}, link("#/tasks", t("nav.tasks")), " / ", link("#/kanbans", t("kanban.tab")), " / " + k.name),
@@ -2767,12 +2862,10 @@ function cardChip(name, f, v, done) {
 // are only dates.
 function dateChip(name, day, done) {
   const tip = `${name}: ${day}`, said = h("span", { class: "visually-hidden", text: `${name}: ` });
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
-  if (!m) return h("span", { class: "card-chip", title: tip }, said, day);
-  const [y, mo, d] = [Number(m[1]), Number(m[2]) - 1, Number(m[3])];
-  const now = new Date();
-  const days = Math.round((Date.UTC(y, mo, d) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
-  let text = new Date(y, mo, d).toLocaleDateString(language(), { day: "numeric", month: "short", year: y === now.getFullYear() ? undefined : "numeric" });
+  const days = daysFromToday(day);
+  if (days === null) return h("span", { class: "card-chip", title: tip }, said, day);
+  const [y, mo, d] = day.split("-").map(Number);
+  let text = new Date(y, mo - 1, d).toLocaleDateString(language(), { day: "numeric", month: "short", year: y === new Date().getFullYear() ? undefined : "numeric" });
   let tone = "";
   if (!done && days < 0) [text, tone] = [t("card.overdue", { n: -days }), "late"];
   else if (days === 0) [text, tone] = [t("card.today"), done ? "" : "near"];
@@ -2781,8 +2874,45 @@ function dateChip(name, day, done) {
   return h("span", { class: "card-chip card-date" + (tone ? " " + tone : ""), title: tip }, lineIcon("M5 6h14v13H5zM5 10h14M9 4v4M15 4v4"), said, text);
 }
 
-// cardSigns tell what is behind a card (ADR-0132): a text, and how far
-// its checklist is, which are the task items of its text.
+// daysFromToday counts the days from today to a date (YYYY-MM-DD) in the
+// reader's calendar: negative when it has passed, null for no date.
+function daysFromToday(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!m) return null;
+  const now = new Date();
+  return Math.round((Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+}
+
+// localDay is the day of a moment in the reader's calendar, YYYY-MM-DD.
+function localDay(iso) {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// dayName names a day: today, yesterday, else its weekday and date.
+function dayName(day) {
+  const n = daysFromToday(day);
+  if (n === 0) return t("kanban.dayToday");
+  if (n === -1) return t("kanban.dayYesterday");
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(language(), { weekday: "long", day: "numeric", month: "long", year: y === new Date().getFullYear() ? undefined : "numeric" });
+}
+
+// kanbanTones are the tones a kanban colours its cards with, named as the
+// server names them, in the order values take them (ADR-0133).
+const kanbanTones = ["blue", "green", "yellow", "orange", "red", "purple", "teal", "gray"];
+
+// toneNames names the tones in the reader's language.
+const toneNames = () => ({ blue: t("tone.blue"), green: t("tone.green"), yellow: t("tone.yellow"), orange: t("tone.orange"),
+  red: t("tone.red"), purple: t("tone.purple"), teal: t("tone.teal"), gray: t("tone.gray") });
+
+// recentDone is how many cards a finished column shows before one asks
+// for all of them (ADR-0133).
+const recentDone = 20;
+
+// cardSigns tell what is behind a card (ADR-0132, ADR-0133): a text, how
+// far its checklist is, which are the task items of its text, and how
+// many comments and files it has.
 function cardSigns(it) {
   const blocks = it.body || [];
   const checks = blocks.filter((b) => b.kind === "task");
@@ -2794,13 +2924,19 @@ function cardSigns(it) {
     checks.length ? h("span", { class: "card-sign card-checklist" + (ticked === checks.length ? " complete" : ""),
       title: t("card.checklist", { done: ticked, total: checks.length }) },
     lineIcon("M4 7l2 2 3-3M12 7h8M4 15l2 2 3-3M12 15h8"), `${ticked}/${checks.length}`) : null,
+    it.commentCount ? h("span", { class: "card-sign card-comments", title: t("card.comments", { n: it.commentCount }) },
+      lineIcon("M5 5h14v10H10l-5 4z"), h("span", { class: "visually-hidden", text: t("card.comments", { n: it.commentCount }) }),
+      h("span", { "aria-hidden": "true", text: String(it.commentCount) })) : null,
+    it.fileCount ? h("span", { class: "card-sign card-files", title: t("card.files", { n: it.fileCount }) },
+      lineIcon("M15 7l-6 6a2 2 0 0 0 3 3l6-6a4 4 0 0 0-6-6l-6 6a6 6 0 0 0 8 8l5-5"), h("span", { class: "visually-hidden", text: t("card.files", { n: it.fileCount }) }),
+      h("span", { "aria-hidden": "true", text: String(it.fileCount) })) : null,
   ];
 }
 
 // kanbanSettings is the dialog that sets a kanban's name, picture,
 // columns — the workflow's states, renamed and ordered, and columns of
-// its own — and the fields its cards show (ADR-0076), and removes it
-// (ADR-0132).
+// its own — and the fields its cards show (ADR-0076), its colours and
+// its columns' limits (ADR-0133), and removes it (ADR-0132).
 function kanbanSettings(k, type, columns, kpath) {
   const status = h("div", { class: "status" });
   const rows = h("ol", { class: "kanban-columns-edit", id: "kanban-columns" });
@@ -2808,18 +2944,43 @@ function kanbanSettings(k, type, columns, kpath) {
     const name = h("input", { value: c.name, "aria-label": t("kanban.columnName"), required: true, maxlength: 40 });
     name.addEventListener("input", () => { c.name = name.value; });
     const move = (d) => () => { const j = i + d; if (j < 0 || j >= cols.length) return; [cols[i], cols[j]] = [cols[j], cols[i]]; fill(cols); };
-    return h("li", { "data-column": c.id || "" }, name,
+    // A limit of cards, a signal when the column holds more (ADR-0133).
+    const limit = h("input", { type: "number", class: "column-limit", min: 0, max: 999, step: 1, value: c.limit || "", placeholder: t("kanban.noLimit"),
+      "aria-label": t("kanban.columnLimit", { column: c.name }), title: t("kanban.columnLimit", { column: c.name }) });
+    limit.addEventListener("input", () => { c.limit = Math.max(0, Math.trunc(Number(limit.value) || 0)); });
+    return h("li", { "data-column": c.id || "" }, name, limit,
       h("span", { class: "muted", text: c.state ? t("kanban.stateColumn", { state: c.state }) : t("kanban.ownColumn") }),
       h("button", { type: "button", class: "link", text: "↑", "aria-label": t("kanban.up"), onclick: move(-1) }),
       h("button", { type: "button", class: "link", text: "↓", "aria-label": t("kanban.down"), onclick: move(1) }),
       c.state ? "" : h("button", { type: "button", class: "link danger", text: t("kanban.removeColumn"), onclick: () => { cols.splice(i, 1); fill(cols); } }));
   }));
-  const cols = columns.map((c) => ({ id: c.id, name: c.name, state: c.state || "" }));
+  const cols = columns.map((c) => ({ id: c.id, name: c.name, state: c.state || "", limit: c.limit || 0 }));
   fill(cols);
   const name = h("input", { id: "kanban-name", value: k.name, required: true, maxlength: 80 });
   const newColumn = h("input", { id: "kanban-new-column", placeholder: t("kanban.newColumn"), "aria-label": t("kanban.newColumn"), maxlength: 40 });
   const choices = [...type.fields.map((f) => f.name), "labels", "state"];
   const boxes = choices.map((n) => h("input", { type: "checkbox", value: n, checked: k.cardFields.includes(n) }));
+  // The colour of the cards: a choice field of the type, and a tone for
+  // each of its values (ADR-0133). The value is the task's own.
+  const enums = type.fields.filter((f) => f.kind === "enum");
+  const colorField = h("select", { id: "kanban-color-field", "aria-label": t("kanban.colors") },
+    h("option", { value: "", text: t("kanban.colorNone") }), enums.map((f) => h("option", { value: f.name, text: f.name, selected: f.name === k.colorField })));
+  const toneRows = h("div", { class: "kanban-tones", id: "kanban-tones" });
+  let toneOf = {};
+  const fillTones = () => {
+    const f = enums.find((x) => x.name === colorField.value);
+    toneOf = {};
+    toneRows.replaceChildren(...(f ? f.values : []).map((v, i) => {
+      toneOf[v] = (f.name === k.colorField && k.colors?.[v]) || kanbanTones[i % kanbanTones.length];
+      const swatch = h("span", { class: `tone-swatch tone-${toneOf[v]}` });
+      const pick = h("select", { "data-value": v, "aria-label": t("kanban.colorOf", { value: v }) },
+        kanbanTones.map((tone) => h("option", { value: tone, text: toneNames()[tone], selected: tone === toneOf[v] })));
+      pick.addEventListener("change", () => { toneOf[v] = pick.value; swatch.className = `tone-swatch tone-${pick.value}`; });
+      return h("label", { class: "kanban-tone" }, swatch, h("span", { text: v }), pick);
+    }));
+  };
+  colorField.addEventListener("change", fillTones);
+  fillTones();
   const picker = h("input", { type: "file", id: "kanban-icon-file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml", "aria-label": t("kanban.iconChoose") });
   picker.addEventListener("change", () => action(async () => {
     const file = picker.files[0];
@@ -2841,12 +3002,15 @@ function kanbanSettings(k, type, columns, kpath) {
     h("h3", { text: t("kanban.cardFields") }),
     h("p", { class: "muted", text: t("kanban.cardFieldsHelp") }),
     h("div", { class: "format-list", id: "kanban-card-fields" }, choices.map((n, i) => h("label", { class: "check" }, boxes[i], " ", n))),
+    h("h3", { text: t("kanban.colors") }),
+    h("p", { class: "muted", text: t("kanban.colorsHelp") }),
+    enums.length ? h("div", {}, colorField, toneRows) : h("p", { class: "muted", text: t("kanban.colorsNoField", { type: type.name }) }),
     h("h3", { text: t("kanban.columns") }),
-    h("p", { class: "muted", text: t("kanban.columnsHelp") }),
+    h("p", { class: "muted", text: t("kanban.columnsHelp") + " " + t("kanban.limitHelp") }),
     rows,
     h("p", { class: "inline-form" }, newColumn, h("button", { type: "button", id: "kanban-add-column", text: t("kanban.addColumn"), onclick: () => {
       if (!newColumn.value.trim()) return;
-      cols.push({ name: newColumn.value.trim(), state: "" });
+      cols.push({ name: newColumn.value.trim(), state: "", limit: 0 });
       newColumn.value = "";
       fill(cols);
     } })),
@@ -2854,7 +3018,8 @@ function kanbanSettings(k, type, columns, kpath) {
     h("p", { class: "actions-row" },
       h("button", { type: "button", class: "primary", id: "kanban-settings-save", text: t("common.save"), onclick: () => action(() => put(kpath, {
         name: name.value.trim(), cardFields: boxes.filter((b) => b.checked).map((b) => b.value),
-        columns: cols.map((c) => ({ id: c.state ? "" : c.id || "", name: c.name.trim(), state: c.state })),
+        columns: cols.map((c) => ({ id: c.state ? "" : c.id || "", name: c.name.trim(), state: c.state, limit: c.limit || 0 })),
+        colorField: colorField.value, colors: colorField.value ? toneOf : {},
       }), status) }),
       h("button", { type: "button", text: t("common.cancel"), onclick: () => dialog.close() })),
     h("section", { class: "kanban-settings-remove" },

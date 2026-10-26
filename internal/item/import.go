@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Origin records where an imported item came from (ADR-0023). System,
@@ -194,6 +195,12 @@ func (s *Store) applyImport(e Event, touch func(...ID)) {
 			} else {
 				s.assignKey(it)
 			}
+		}
+		switch {
+		case e.To == "":
+			it.StateSince = time.Time{}
+		case !exists || it.State != e.To:
+			it.StateSince = e.At
 		}
 		it.Type, it.TypeVersion = e.TypeName, e.TypeVersion
 		it.Parent, it.Title, it.State = e.Parent, e.Title, e.To

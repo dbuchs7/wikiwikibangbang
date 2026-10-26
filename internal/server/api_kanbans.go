@@ -33,6 +33,11 @@ type kanbanJSON struct {
 	// states; CardFields what its cards show (ADR-0076).
 	Columns    []columnJSON `json:"columns"`
 	CardFields []string     `json:"cardFields"`
+	// ColorField names the enumeration field whose value colours a card,
+	// and Colors the tones of its values that do not take their place's
+	// (ADR-0133).
+	ColorField string            `json:"colorField,omitempty"`
+	Colors     map[string]string `json:"colors,omitempty"`
 	// Icon names the content of the kanban's picture, empty for none
 	// (ADR-0087).
 	Icon string `json:"icon,omitempty"`
@@ -42,14 +47,18 @@ type columnJSON struct {
 	ID    item.ID `json:"id,omitempty"`
 	Name  string  `json:"name"`
 	State string  `json:"state,omitempty"`
+	// Limit is how many cards the column should hold, 0 for no limit
+	// (ADR-0133).
+	Limit int `json:"limit,omitempty"`
 	// Cards are the column's cards in their order, on a board.
 	Cards []item.ID `json:"cards,omitempty"`
 }
 
 func toKanbanJSON(space string, k item.Kanban) kanbanJSON {
-	j := kanbanJSON{ID: k.ID, Space: space, Name: k.Name, Type: k.Type, Label: k.Label, Columns: []columnJSON{}, CardFields: []string{}}
+	j := kanbanJSON{ID: k.ID, Space: space, Name: k.Name, Type: k.Type, Label: k.Label, Columns: []columnJSON{}, CardFields: []string{},
+		ColorField: k.ColorField, Colors: k.Colors}
 	for _, c := range k.Columns {
-		j.Columns = append(j.Columns, columnJSON{ID: c.ID, Name: c.Name, State: c.State})
+		j.Columns = append(j.Columns, columnJSON{ID: c.ID, Name: c.Name, State: c.State, Limit: c.Limit})
 	}
 	j.CardFields = append(j.CardFields, k.CardFields...)
 	return j
@@ -93,9 +102,11 @@ func (h itemHandlers) createKanban(w http.ResponseWriter, r *http.Request) {
 
 func (h itemHandlers) renameKanban(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name       string        `json:"name"`
-		Columns    *[]columnJSON `json:"columns"`
-		CardFields *[]string     `json:"cardFields"`
+		Name       string             `json:"name"`
+		Columns    *[]columnJSON      `json:"columns"`
+		CardFields *[]string          `json:"cardFields"`
+		ColorField *string            `json:"colorField"`
+		Colors     *map[string]string `json:"colors"`
 	}
 	if !decode(w, r, &req) {
 		return
@@ -105,11 +116,24 @@ func (h itemHandlers) renameKanban(w http.ResponseWriter, r *http.Request) {
 	if req.Columns != nil {
 		k.Columns = []item.KanbanColumn{}
 		for _, c := range *req.Columns {
-			k.Columns = append(k.Columns, item.KanbanColumn{ID: c.ID, Name: c.Name, State: c.State})
+			k.Columns = append(k.Columns, item.KanbanColumn{ID: c.ID, Name: c.Name, State: c.State, Limit: c.Limit})
 		}
 	}
 	if req.CardFields != nil {
 		k.CardFields = append([]string{}, *req.CardFields...)
+	}
+	// Left out, the colouring is kept; an empty field takes it off.
+	if req.ColorField != nil || req.Colors != nil {
+		k.Colors = map[string]string{}
+		if req.ColorField != nil {
+			k.ColorField = *req.ColorField
+		}
+		if req.Colors != nil && *req.Colors != nil {
+			k.Colors = *req.Colors
+		}
+		if k.ColorField != "" && len(k.Colors) == 0 {
+			k.Colors = nil
+		}
 	}
 	h.write(w, r, http.StatusOK, func(x *item.Session, _ *item.Store) (any, error) {
 		k, err := x.SetKanban(space, k)
@@ -128,7 +152,7 @@ func (h itemHandlers) kanbanBoard(w http.ResponseWriter, r *http.Request) {
 		}
 		cols := []columnJSON{}
 		for _, c := range board {
-			cols = append(cols, columnJSON{ID: c.ID, Name: c.Name, State: c.State, Cards: c.Cards})
+			cols = append(cols, columnJSON{ID: c.ID, Name: c.Name, State: c.State, Limit: c.Limit, Cards: c.Cards})
 		}
 		j := toKanbanJSON(space, k)
 		j.Icon = kanbanIconTag(h.d.DB.Site, space, k.ID)

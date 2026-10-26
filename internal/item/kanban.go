@@ -24,7 +24,18 @@ type Kanban struct {
 	// CardFields name what a card shows besides its key and title: fields
 	// of the type, or "labels" and "state".
 	CardFields []string
+	// ColorField, when set, names an enumeration field of the type whose
+	// value colours a card (ADR-0133). The colour is the item's own value,
+	// so it shows wherever the item does; the kanban only picks the field.
+	ColorField string `json:",omitempty"`
+	// Colors give values of the colour field a tone of KanbanTones; a
+	// value without one takes the tone of its place among the values.
+	Colors map[string]string `json:",omitempty"`
 }
+
+// KanbanTones are the tones a kanban colours its cards with, in the
+// order values take them when they have none of their own (ADR-0133).
+var KanbanTones = []string{"blue", "green", "yellow", "orange", "red", "purple", "teal", "gray"}
 
 // KanbanColumn is a column of a kanban. A column with a State holds the
 // cards in that state, and putting a card there performs the transition
@@ -34,6 +45,10 @@ type KanbanColumn struct {
 	ID    ID
 	Name  string
 	State string
+	// Limit is how many cards the column should hold at most, 0 for no
+	// limit (ADR-0133). It is a signal, not a rule: a move past it is
+	// shown, not refused.
+	Limit int `json:",omitempty"`
 }
 
 // stateColumn is the ID of the column of a workflow state.
@@ -98,7 +113,9 @@ func (x *Session) Kanbans(space string) map[string][]Kanban {
 // space may. A new kanban's label is its name as a label unless one is
 // given; a kanban's type and label do not change, so its cards stay its
 // cards. When changing a kanban, Columns and CardFields left nil keep
-// what the kanban has.
+// what the kanban has, and so do ColorField and Colors when both are
+// unset; an empty ColorField with an empty, non-nil Colors takes the
+// colouring off.
 func (x *Session) SetKanban(space string, k Kanban) (Kanban, error) {
 	if _, ok := x.s.spaces[space]; !ok || x.s.spaceRole(x.who, space) < Viewer {
 		return Kanban{}, notFound("space %q", space)
@@ -122,6 +139,9 @@ func (x *Session) SetKanban(space string, k Kanban) (Kanban, error) {
 		}
 		if k.CardFields == nil {
 			k.CardFields = list[i].CardFields
+		}
+		if k.ColorField == "" && k.Colors == nil {
+			k.ColorField, k.Colors = list[i].ColorField, list[i].Colors
 		}
 	} else {
 		td, ok := x.s.latest(k.Type)
@@ -148,13 +168,18 @@ func (x *Session) SetKanban(space string, k Kanban) (Kanban, error) {
 	if err := checkCardFields(k.CardFields, td); err != nil {
 		return Kanban{}, err
 	}
+	if err := checkColors(&k, td); err != nil {
+		return Kanban{}, err
+	}
 	return k, x.s.record(x.who, Event{Kind: KanbanSet, Space: space, Kanban: &k})
 }
 
-// maxColumns and maxCardFields bound what a kanban shows.
+// maxColumns and maxCardFields bound what a kanban shows, and
+// maxColumnLimit the limit of cards a column may name.
 const (
-	maxColumns    = 30
-	maxCardFields = 12
+	maxColumns     = 30
+	maxCardFields  = 12
+	maxColumnLimit = 999
 )
 
 // checkColumns checks a kanban's own columns and gives new ones an ID: a
@@ -173,6 +198,9 @@ func (s *Store) checkColumns(k *Kanban, td TypeDef) error {
 		c.Name = strings.TrimSpace(c.Name)
 		if c.Name == "" || utf8.RuneCountInString(c.Name) > 40 || strings.ContainsAny(c.Name, "\r\n") {
 			return invalid("a column's name is a single line of 1 to 40 characters")
+		}
+		if c.Limit < 0 || c.Limit > maxColumnLimit {
+			return invalid("a column's limit is 0 for none or up to %d cards", maxColumnLimit)
 		}
 		switch {
 		case c.State != "":
@@ -208,6 +236,34 @@ func checkCardFields(names []string, td TypeDef) error {
 			return invalid("the field %q is shown twice", n)
 		}
 		seen[n] = true
+	}
+	return nil
+}
+
+// checkColors checks a kanban's colouring: an enumeration field of the
+// type, tones of KanbanTones for its values. Without a field there are no
+// tones, and an empty set of tones is none.
+func checkColors(k *Kanban, td TypeDef) error {
+	if len(k.Colors) == 0 {
+		k.Colors = nil
+	}
+	if k.ColorField == "" {
+		if k.Colors != nil {
+			return invalid("tones need a field to colour the cards by")
+		}
+		return nil
+	}
+	f, ok := td.field(k.ColorField)
+	if !ok || f.Kind != KindEnum {
+		return invalid("type %q has no enumeration field %q to colour the cards by", td.Name, k.ColorField)
+	}
+	for value, tone := range k.Colors {
+		if !slices.Contains(f.Values, value) {
+			return invalid("the field %q has no value %q", k.ColorField, value)
+		}
+		if !slices.Contains(KanbanTones, tone) {
+			return invalid("%q is not a tone: use one of %s", tone, strings.Join(KanbanTones, ", "))
+		}
 	}
 	return nil
 }
