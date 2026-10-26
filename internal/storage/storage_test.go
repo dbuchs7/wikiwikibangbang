@@ -234,3 +234,33 @@ func TestWarmUp(t *testing.T) {
 		t.Errorf("%d sensitive findings in plain titles", n)
 	}
 }
+
+// TestChangedWakesOnlyOnACommand: the change feed's waiting requests wake
+// when the log grows, not on a command that fails (ADR-0120).
+func TestChangedWakesOnlyOnACommand(t *testing.T) {
+	db, _ := mustOpen(t, t.TempDir())
+	defer db.Close()
+	ch := db.Changed()
+	if ch != db.Changed() {
+		t.Fatal("two waiters before a change wait on different channels")
+	}
+	if err := db.Write(func(s *item.Store) error { return s.CreateSpace("admin", "lower", "x") }); err == nil {
+		t.Fatal("an invalid space was created")
+	}
+	select {
+	case <-ch:
+		t.Fatal("a failed command woke the waiters")
+	default:
+	}
+	noErr(t, db.Write(func(s *item.Store) error { return s.CreateSpace("admin", "PLAT", "Platform") }))
+	select {
+	case <-ch:
+	default:
+		t.Fatal("a command did not wake the waiters")
+	}
+	if db.Changed() == ch {
+		t.Fatal("a closed channel is handed out again")
+	}
+	// A command with nobody waiting closes nothing.
+	noErr(t, db.Write(func(s *item.Store) error { return s.CreateSpace("admin", "OPS", "Ops") }))
+}

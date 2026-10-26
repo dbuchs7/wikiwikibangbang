@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
@@ -25,7 +26,7 @@ import (
 // item.Store.As(principal), so the permission model (ADR-0022) decides, and
 // through storage.DB.Read/Write, so commands are serialised (ADR-0008).
 func itemRoutes(d Deps) []Route {
-	h := itemHandlers{d: d, log: d.Log}
+	h := itemHandlers{d: d, log: d.Log, waiting: new(atomic.Int64)}
 	if h.log == nil {
 		h.log = slog.New(slog.DiscardHandler)
 	}
@@ -86,12 +87,16 @@ func itemRoutes(d Deps) []Route {
 	routes = append(routes, retentionRoutes(h)...)
 	routes = append(routes, noteRoutes(h)...)
 	routes = append(routes, watchRoutes(h)...)
+	routes = append(routes, changeRoutes(h)...)
 	return append(routes, liveRoutes(h)...)
 }
 
 type itemHandlers struct {
 	d   Deps
 	log *slog.Logger
+	// waiting counts the requests of the change feed held waiting for a
+	// change (ADR-0120), bounded by the budget ChangesWaiting.
+	waiting *atomic.Int64
 }
 
 // who is the item-store principal of a request: the user's permanent ID.

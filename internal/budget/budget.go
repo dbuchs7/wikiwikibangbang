@@ -66,6 +66,15 @@ type Budgets struct {
 	BrandingBytes int64
 	// ExportRows is the largest list one CSV export writes (ADR-0071).
 	ExportRows int
+	// ChangesPage is the largest page of the change feed (ADR-0120).
+	ChangesPage int
+	// ChangesWait is the longest a request of the change feed is held
+	// waiting for a change, in seconds (ADR-0120). It must stay below the
+	// server's write timeout of 60 seconds.
+	ChangesWait int
+	// ChangesWaiting bounds the requests of the change feed held waiting
+	// at once; beyond it, a request is answered without waiting.
+	ChangesWaiting int
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
@@ -87,6 +96,9 @@ func Default() Budgets {
 		AvatarBytes:      256 << 10,
 		BrandingBytes:    2 << 20,
 		ExportRows:       10_000,
+		ChangesPage:      1000,
+		ChangesWait:      30,
+		ChangesWaiting:   1000,
 	}
 }
 
