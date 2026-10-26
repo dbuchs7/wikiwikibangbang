@@ -195,7 +195,7 @@ type itemJSON struct {
 	ReadsAllSecrets *bool        `json:"readsAllSecrets,omitempty"`
 	// StateSince is when the item reached its state; CommentCount and
 	// FileCount count its comments and files, so a card tells them
-	// without reading them (ADR-0133).
+	// without reading them (ADR-0134).
 	StateSince   *time.Time `json:"stateSince,omitempty"`
 	CommentCount int        `json:"commentCount,omitempty"`
 	FileCount    int        `json:"fileCount,omitempty"`

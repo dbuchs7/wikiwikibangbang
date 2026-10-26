@@ -61,4 +61,4 @@ Strongest form: no question of state at all; a kanban is pure arrangement and mo
 - relates to ADR-0036 (boards), ADR-0044 (labels), ADR-0049 (task inbox)
 - amended by [ADR-0087](0087-kanban-pictures-and-boards-by-label.md) (a picture per kanban; a board for every label)
 - amended by [ADR-0132](0132-kanban-cards-columns-and-the-status-at-a-glance.md) (card fields as chips and faces; the settings in a dialog; the details on narrow screens)
-- amended by [ADR-0133](0133-kanban-filter-limits-colours-and-finished-cards-by-day.md) (a column's limit; colours by a field of the task)
+- amended by [ADR-0134](0134-kanban-filter-limits-colours-and-finished-cards-by-day.md) (a column's limit; colours by a field of the task)

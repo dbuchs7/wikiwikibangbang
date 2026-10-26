@@ -107,4 +107,4 @@ Strongest form: less to build, and no clutter on short lists.
 
 - amends [ADR-0091](0091-rules-every-view-follows.md) (a rule every view follows)
 - relates to ADR-0015 (paging), ADR-0022 (permissions), ADR-0049 (task inbox), ADR-0065 (UI system), ADR-0081 (scale), ADR-0083 (search), ADR-0090 (album)
-- amended by [ADR-0133](0133-kanban-filter-limits-colours-and-finished-cards-by-day.md) (a kanban's board has the filter too)
+- amended by [ADR-0134](0134-kanban-filter-limits-colours-and-finished-cards-by-day.md) (a kanban's board has the filter too)

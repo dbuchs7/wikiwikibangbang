@@ -246,7 +246,7 @@ func TestSpaceState(t *testing.T) {
 }
 
 // TestImportSetsStateSince: an import sets the time an item reached its
-// state when it changes the state, not otherwise (ADR-0133).
+// state when it changes the state, not otherwise (ADR-0134).
 func TestImportSetsStateSince(t *testing.T) {
 	s := setup(t)
 	u := Upsert{Origin: jiraRef("10001", "PLAT-70"), Space: "PLAT", Type: "task", Title: "Imported",

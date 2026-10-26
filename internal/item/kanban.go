@@ -25,7 +25,7 @@ type Kanban struct {
 	// of the type, or "labels" and "state".
 	CardFields []string
 	// ColorField, when set, names an enumeration field of the type whose
-	// value colours a card (ADR-0133). The colour is the item's own value,
+	// value colours a card (ADR-0134). The colour is the item's own value,
 	// so it shows wherever the item does; the kanban only picks the field.
 	ColorField string `json:",omitempty"`
 	// Colors give values of the colour field a tone of KanbanTones; a
@@ -34,7 +34,7 @@ type Kanban struct {
 }
 
 // KanbanTones are the tones a kanban colours its cards with, in the
-// order values take them when they have none of their own (ADR-0133).
+// order values take them when they have none of their own (ADR-0134).
 var KanbanTones = []string{"blue", "green", "yellow", "orange", "red", "purple", "teal", "gray"}
 
 // KanbanColumn is a column of a kanban. A column with a State holds the
@@ -46,7 +46,7 @@ type KanbanColumn struct {
 	Name  string
 	State string
 	// Limit is how many cards the column should hold at most, 0 for no
-	// limit (ADR-0133). It is a signal, not a rule: a move past it is
+	// limit (ADR-0134). It is a signal, not a rule: a move past it is
 	// shown, not refused.
 	Limit int `json:",omitempty"`
 }

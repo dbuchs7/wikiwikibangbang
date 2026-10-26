@@ -1,4 +1,4 @@
-# ADR-0133: A kanban filters its cards, limits its columns, colours cards by a task's field and lists finished cards by day
+# ADR-0134: A kanban filters its cards, limits its columns, colours cards by a task's field and lists finished cards by day
 
 - **Status:** Accepted
 - **Implementation:** Landed

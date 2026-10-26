@@ -2580,7 +2580,7 @@ async function kanbanView(space, id) {
     openDetail(it);
   };
   // A card's colour is the value of the field the kanban colours by: the
-  // task's own, so it shows wherever the task does (ADR-0133).
+  // task's own, so it shows wherever the task does (ADR-0134).
   const colorField = k.colorField && fieldOf(k.colorField)?.kind === "enum" ? fieldOf(k.colorField) : null;
   const toneOf = (v) => k.colors?.[v] || kanbanTones[Math.max(0, colorField.values.indexOf(v)) % kanbanTones.length];
   const dateFields = type.fields.filter((f) => f.kind === "date").map((f) => f.name);
@@ -2657,7 +2657,7 @@ async function kanbanView(space, id) {
   };
   // A finished state's column lists its cards by the day they got there,
   // the newest first, and the most recent only until asked for all
-  // (ADR-0133).
+  // (ADR-0134).
   const cardsOf = (col) => {
     const items = (col.cards || []).map((cid) => byID.get(cid)).filter(Boolean);
     if (!col.state || !finished(wf, col.state)) return items.map(cardEl);
@@ -2680,7 +2680,7 @@ async function kanbanView(space, id) {
     return out;
   };
   // A column's count names its limit beside it, and says when the column
-  // holds as many cards or more (ADR-0133); a limit is a signal, the move
+  // holds as many cards or more (ADR-0134); a limit is a signal, the move
   // is never refused for it.
   const countOf = (col) => {
     const n = (col.cards || []).length;
@@ -2788,7 +2788,7 @@ async function kanbanView(space, id) {
       await setLabels(it, [...it.labels, k.label]);
       route();
     })) : null;
-  // The filter of the board (ADR-0098, ADR-0133): by text, person, label,
+  // The filter of the board (ADR-0098, ADR-0134): by text, person, label,
   // due date and colour, kept in the address.
   const boardEl = h("div", { class: "board" }, board.columns.map(columnEl));
   const people = [...new Set(cards.items.flatMap((it) => userFields.map((n) => it.properties[n]).filter(Boolean)))]
@@ -2899,7 +2899,7 @@ function dayName(day) {
 }
 
 // kanbanTones are the tones a kanban colours its cards with, named as the
-// server names them, in the order values take them (ADR-0133).
+// server names them, in the order values take them (ADR-0134).
 const kanbanTones = ["blue", "green", "yellow", "orange", "red", "purple", "teal", "gray"];
 
 // toneNames names the tones in the reader's language.
@@ -2907,10 +2907,10 @@ const toneNames = () => ({ blue: t("tone.blue"), green: t("tone.green"), yellow:
   red: t("tone.red"), purple: t("tone.purple"), teal: t("tone.teal"), gray: t("tone.gray") });
 
 // recentDone is how many cards a finished column shows before one asks
-// for all of them (ADR-0133).
+// for all of them (ADR-0134).
 const recentDone = 20;
 
-// cardSigns tell what is behind a card (ADR-0132, ADR-0133): a text, how
+// cardSigns tell what is behind a card (ADR-0132, ADR-0134): a text, how
 // far its checklist is, which are the task items of its text, and how
 // many comments and files it has.
 function cardSigns(it) {
@@ -2936,7 +2936,7 @@ function cardSigns(it) {
 // kanbanSettings is the dialog that sets a kanban's name, picture,
 // columns — the workflow's states, renamed and ordered, and columns of
 // its own — and the fields its cards show (ADR-0076), its colours and
-// its columns' limits (ADR-0133), and removes it (ADR-0132).
+// its columns' limits (ADR-0134), and removes it (ADR-0132).
 function kanbanSettings(k, type, columns, kpath) {
   const status = h("div", { class: "status" });
   const rows = h("ol", { class: "kanban-columns-edit", id: "kanban-columns" });
@@ -2944,7 +2944,7 @@ function kanbanSettings(k, type, columns, kpath) {
     const name = h("input", { value: c.name, "aria-label": t("kanban.columnName"), required: true, maxlength: 40 });
     name.addEventListener("input", () => { c.name = name.value; });
     const move = (d) => () => { const j = i + d; if (j < 0 || j >= cols.length) return; [cols[i], cols[j]] = [cols[j], cols[i]]; fill(cols); };
-    // A limit of cards, a signal when the column holds more (ADR-0133).
+    // A limit of cards, a signal when the column holds more (ADR-0134).
     const limit = h("input", { type: "number", class: "column-limit", min: 0, max: 999, step: 1, value: c.limit || "", placeholder: t("kanban.noLimit"),
       "aria-label": t("kanban.columnLimit", { column: c.name }), title: t("kanban.columnLimit", { column: c.name }) });
     limit.addEventListener("input", () => { c.limit = Math.max(0, Math.trunc(Number(limit.value) || 0)); });
@@ -2961,7 +2961,7 @@ function kanbanSettings(k, type, columns, kpath) {
   const choices = [...type.fields.map((f) => f.name), "labels", "state"];
   const boxes = choices.map((n) => h("input", { type: "checkbox", value: n, checked: k.cardFields.includes(n) }));
   // The colour of the cards: a choice field of the type, and a tone for
-  // each of its values (ADR-0133). The value is the task's own.
+  // each of its values (ADR-0134). The value is the task's own.
   const enums = type.fields.filter((f) => f.kind === "enum");
   const colorField = h("select", { id: "kanban-color-field", "aria-label": t("kanban.colors") },
     h("option", { value: "", text: t("kanban.colorNone") }), enums.map((f) => h("option", { value: f.name, text: f.name, selected: f.name === k.colorField })));

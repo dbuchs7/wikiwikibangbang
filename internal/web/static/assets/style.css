@@ -312,7 +312,7 @@ table.history td { font-size: 13px; }
 .card-person + .card-person { margin-left: -6px; }
 .card-person .avatar { box-shadow: 0 0 0 2px var(--surface); }
 
-/* Package B of the kanban (ADR-0133). Tones colour a card by a value of
+/* Package B of the kanban (ADR-0134). Tones colour a card by a value of
    its own; mixed into the surface they suit light and dark alike. */
 .tone-blue { --tone: #2f6fde; }
 .tone-green { --tone: #1f9d55; }

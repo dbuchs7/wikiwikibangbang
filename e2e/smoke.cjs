@@ -1326,7 +1326,7 @@ function atlassianSource() {
     await page.click("#kanban .board-column[data-state=closed] .column-add");
     await page.fill("#kanban .board-column[data-state=closed] .card-new [name=title]", "Archive old pages");
     await page.press("#kanban .board-column[data-state=closed] .card-new [name=title]", "Enter");
-    // A finished column lists its newest card first, under the day it was finished (ADR-0133).
+    // A finished column lists its newest card first, under the day it was finished (ADR-0134).
     await page.waitForSelector("#kanban .board-column[data-state=closed] .card-day:text-is('Today')");
     check((await page.locator("#kanban .board-column[data-state=closed] .card-item").first().textContent()).includes("Archive old pages"), "the newest finished card comes first");
     // The status in the details: the state as a badge, the way on as a button.
@@ -1340,7 +1340,7 @@ function atlassianSource() {
       await page.waitForSelector(`#kanban .card-item:has-text('${title}')`, { state: "detached" });
     }
 
-    step("kanban filter, limits and colours (ADR-0133): cards coloured by a field of the task, a column over its limit, a filter kept in the address, counts on a card");
+    step("kanban filter, limits and colours (ADR-0134): cards coloured by a field of the task, a column over its limit, a filter kept in the address, counts on a card");
     await page.click("#kanban-settings-open");
     await page.selectOption("#kanban-color-field", "priority");
     await page.selectOption("#kanban-tones select[data-value=high]", "red");
@@ -2226,7 +2226,7 @@ function atlassianSource() {
       const wide = await phone.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       check(wide <= 0, `${view} is ${wide}px wider than a phone's screen`);
     }
-    // A kanban's board scrolls within itself, its cards' counts included (ADR-0133).
+    // A kanban's board scrolls within itself, its cards' counts included (ADR-0134).
     await phone.goto(base + "/#/kanbans");
     await phone.click("#kanbans .space-tile:has-text('Website relaunch')");
     await phone.waitForSelector("#kanban .card-item .card-comments");

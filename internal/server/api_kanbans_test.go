@@ -86,7 +86,7 @@ func TestKanbanColumnsThroughTheAPI(t *testing.T) {
 // TestKanbanLimitsColoursAndCardSigns: a column's limit and a kanban's
 // colouring go through the API and come back on the board; a card in the
 // listing tells when it reached its state and how many comments and
-// files it has (ADR-0133).
+// files it has (ADR-0134).
 func TestKanbanLimitsColoursAndCardSigns(t *testing.T) {
 	w := newWorld(t)
 	k := w.bert.expect("POST", "/api/spaces/PLAT/kanbans", `{"name":"Web","type":"task"}`, http.StatusCreated)

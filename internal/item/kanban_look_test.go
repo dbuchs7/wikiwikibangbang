@@ -8,7 +8,7 @@ import (
 // TestKanbanLimitsAndColours: a column may name how many cards it should
 // hold, and a kanban may colour its cards by an enumeration field, each
 // value with a tone of its own or of its place among the values
-// (ADR-0133). Both are kept when a change leaves them unset.
+// (ADR-0134). Both are kept when a change leaves them unset.
 func TestKanbanLimitsAndColours(t *testing.T) {
 	_, anna, k, _ := columnsBoard(t)
 	k.Columns = []KanbanColumn{{Name: "To do", State: "open", Limit: 5}, {Name: "Doing", State: "in progress", Limit: 2}, {Name: "Review", Limit: 1}}

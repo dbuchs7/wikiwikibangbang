@@ -3,7 +3,7 @@ package item
 import "testing"
 
 // TestStateSince: an item knows when it reached its state: when it was
-// made or by its last transition (ADR-0133); TestImportSetsStateSince
+// made or by its last transition (ADR-0134); TestImportSetsStateSince
 // covers imports. A change that leaves the state keeps the time; an item
 // without a workflow has none.
 func TestStateSince(t *testing.T) {

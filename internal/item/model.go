@@ -198,7 +198,7 @@ type Item struct {
 	Properties  Props
 	State       string
 	// StateSince is when the item reached its state: when it was made, by
-	// its last transition, or when an import changed the state (ADR-0133).
+	// its last transition, or when an import changed the state (ADR-0134).
 	// It is derived from the log, not stored apart; without a workflow it
 	// is zero.
 	StateSince time.Time

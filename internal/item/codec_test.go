@@ -889,7 +889,7 @@ func kanbanColumnsLog(t *testing.T) []Event {
 
 // kanbanLookLog gives a kanban's columns limits and colours its cards
 // by a field, then takes the colouring off again, so the golden file
-// pins the fields Limit, ColorField and Colors (ADR-0133).
+// pins the fields Limit, ColorField and Colors (ADR-0134).
 func kanbanLookLog(t *testing.T) []Event {
 	s := setup(t)
 	noErr(t, s.GrantRole("admin", "PLAT", "anna", Editor))

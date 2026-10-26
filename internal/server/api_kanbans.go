@@ -35,7 +35,7 @@ type kanbanJSON struct {
 	CardFields []string     `json:"cardFields"`
 	// ColorField names the enumeration field whose value colours a card,
 	// and Colors the tones of its values that do not take their place's
-	// (ADR-0133).
+	// (ADR-0134).
 	ColorField string            `json:"colorField,omitempty"`
 	Colors     map[string]string `json:"colors,omitempty"`
 	// Icon names the content of the kanban's picture, empty for none
@@ -48,7 +48,7 @@ type columnJSON struct {
 	Name  string  `json:"name"`
 	State string  `json:"state,omitempty"`
 	// Limit is how many cards the column should hold, 0 for no limit
-	// (ADR-0133).
+	// (ADR-0134).
 	Limit int `json:"limit,omitempty"`
 	// Cards are the column's cards in their order, on a board.
 	Cards []item.ID `json:"cards,omitempty"`
