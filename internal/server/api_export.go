@@ -213,7 +213,7 @@ func (h itemHandlers) exportDocument(r *http.Request, children, withData bool) (
 					if kind, ok := shown[a.ID]; ok && !a.Deleted {
 						p.Images[a.ID] = export.Image{Name: a.Name, Type: a.Type}
 						// A video or a BPMN diagram is named, not copied into
-						// the document (ADR-0097, ADR-0128).
+						// the document (ADR-0097, ADR-0129).
 						if kind == item.Image {
 							files = append(files, file{it.ID, a})
 						}

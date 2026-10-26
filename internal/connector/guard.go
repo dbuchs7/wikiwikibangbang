@@ -59,7 +59,7 @@ func (g guard) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // PublicOnly keeps next to public addresses as a connector's requests are
 // kept: a refusal is ErrPrivateAddress. Process engines are kept so too
-// (ADR-0128).
+// (ADR-0129).
 func PublicOnly(next http.RoundTripper) http.RoundTripper {
 	lookup := func(ctx context.Context, host string) ([]netip.Addr, error) {
 		return net.DefaultResolver.LookupNetIP(ctx, "ip", host)

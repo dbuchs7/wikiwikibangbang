@@ -68,7 +68,7 @@ export const schema = new Schema({
     image: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" }, width: { default: 0 }, align: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-image" }, ["figcaption", n.attrs.text]] },
     // A video plays in the text, sized and placed like a picture (ADR-0097).
     video: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" }, width: { default: 0 }, align: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-image pm-video" }, ["figcaption", n.attrs.text]] },
-    // A BPMN diagram (ADR-0128): a model kept as a file of the item, or the
+    // A BPMN diagram (ADR-0129): a model kept as a file of the item, or the
     // newest version of a process of a process engine; with a plain caption.
     bpmn: { group: "block", atom: true, selectable: true, attrs: { ...bid, ref: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     process: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, process: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
@@ -779,7 +779,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       status.textContent = err.message;
     }
   };
-  // A BPMN model (ADR-0128) is drawn in the modeler or uploaded as a file,
+  // A BPMN model (ADR-0129) is drawn in the modeler or uploaded as a file,
   // stored as a file of the item and shown as a diagram; a process of a
   // process engine is named, and read from the engine when shown.
   const newModel = async () => {

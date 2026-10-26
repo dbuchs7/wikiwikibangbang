@@ -93,7 +93,7 @@ const processModel = (version) => `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-// engineSource answers like an atlas engine (ADR-0128), for the credential
+// engineSource answers like an atlas engine (ADR-0129), for the credential
 // ENGINE_TOKEN, which the server under test holds as WWBB_ENGINE_ATLAS_TOKEN:
 // the versions of the process "order", their models and where the
 // newest's instances are. deploy() adds a version.
@@ -1867,7 +1867,7 @@ function feedSource() {
     check(await page.inputValue("tr[data-field=owner] input") === "Amt für Geoinformation", "the text field is filled from the source");
     check(await page.inputValue("tr[data-field=since] input") === "2024-03-01", "the date field is filled from the source");
     await page.waitForSelector(".item-main :text('Liefert die Adressen des Kantons.')");
-    step("BPMN: a diagram drawn in the modeler and a .bpmn file are files of the page, shown and drawn again (ADR-0128)");
+    step("BPMN: a diagram drawn in the modeler and a .bpmn file are files of the page, shown and drawn again (ADR-0129)");
     const flow = await (await page.request.post(base + "/api/items", { data: { space: "PLAT", type: "task", title: "Order to cash", properties: { priority: "low" } } })).json();
     await page.goto(base + "/#/item/" + flow.item.key);
     await page.click("#edit");
@@ -1907,7 +1907,7 @@ function feedSource() {
     await page.waitForSelector("#body.reading");
 
     if (process.env.ENGINE_TOKEN) {
-      step("BPMN: a process of an engine shows its newest version and, where allowed, its operations as counts only (ADR-0128)");
+      step("BPMN: a process of an engine shows its newest version and, where allowed, its operations as counts only (ADR-0129)");
       await page.goto(base + "/#/admin");
       await page.waitForSelector("#engines >> text=No process engine is set up yet.");
       await page.click("#engine-new");

@@ -3,7 +3,7 @@
 # prosemirror.js, the editor (ADR-0032), excalidraw.js with its stylesheet,
 # chunks and fonts, the drawing editor (ADR-0053, ADR-0126), and
 # bpmn-viewer.js and bpmn-modeler.js with their stylesheets and icon font in
-# bpmn/, the BPMN viewer and modeler (ADR-0128).
+# bpmn/, the BPMN viewer and modeler (ADR-0129).
 # Their license files name the packages each bundle takes code from
 # (bundled.mjs). Run after changing a version in package.json:
 #
@@ -75,7 +75,7 @@ done
 } > "$out/excalidraw.LICENSE.txt"
 rm draw-meta.json
 
-# The BPMN viewer and modeler (ADR-0128): two bundles, so a page that shows a
+# The BPMN viewer and modeler (ADR-0129): two bundles, so a page that shows a
 # diagram does not load the modeler, with bpmn-js's stylesheets and icon font
 # in bpmn/, copied as published. The watermark code is part of the bundles,
 # unchanged, as the bpmn.io license requires. The modeler holds all the

@@ -41,7 +41,7 @@ func TestNoMarkupFromStrings(t *testing.T) {
 		// schema allows (ADR-0032). Excalidraw runs on a page of its own,
 		// without the UI's session data in its DOM (ADR-0053). Both are
 		// third-party code, reviewed when updated, not written here. So is
-		// bpmn-js (ADR-0128), which renders diagrams as SVG it builds itself.
+		// bpmn-js (ADR-0129), which renders diagrams as SVG it builds itself.
 		if strings.HasPrefix(path, "vendor/") {
 			return nil
 		}

@@ -80,7 +80,7 @@ import (
 //   - 28: the block kinds figures and tables (ADR-0119). Versions 1 to 27
 //     are still read.
 //   - 29: the block kinds bpmn and process, and the block fields Engine and
-//     Process (ADR-0128). Versions 1 to 28 are still read.
+//     Process (ADR-0129). Versions 1 to 28 are still read.
 const CodecVersion = 29
 
 // Sealer encrypts the content of events with a key per item, so that

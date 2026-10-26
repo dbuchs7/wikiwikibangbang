@@ -115,7 +115,7 @@ jobs:
           # backups go to a directory of the runner (ADR-0073); connectors
           # may reach the smoke test's own sources on the loopback address
           # (ADR-0127), and the process engine is the smoke test's own
-          # (ADR-0128).
+          # (ADR-0129).
           mkdir -p "$RUNNER_TEMP/autobackup"
           WWBB_ADMIN_PASSWORD=e2e-admin-password WWBB_PUBLIC_URL=http://127.0.0.1:8080 \
             WWBB_SMTP_HOST=127.0.0.1 WWBB_SMTP_PORT=2525 WWBB_SMTP_SECURITY=none WWBB_SMTP_FROM=wiki@example.org \

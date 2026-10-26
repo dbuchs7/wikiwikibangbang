@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// TestEnginesAreKeptAndReplayed: process engines (ADR-0128) are set,
+// TestEnginesAreKeptAndReplayed: process engines (ADR-0129) are set,
 // listed by name, removed and replayed from the journal; what an
 // administrator types is tidied, and what is not an engine is refused.
 func TestEnginesAreKeptAndReplayed(t *testing.T) {

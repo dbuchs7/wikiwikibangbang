@@ -1,7 +1,7 @@
 {
   "name": "wikiwikibangbang-vendor",
   "private": true,
-  "description": "Builds the vendored editor (ADR-0032), drawing (ADR-0053) and BPMN (ADR-0128) bundles in ../static/vendor. Needed only to update them; go build never runs it.",
+  "description": "Builds the vendored editor (ADR-0032), drawing (ADR-0053) and BPMN (ADR-0129) bundles in ../static/vendor. Needed only to update them; go build never runs it.",
   "license": "AGPL-3.0-only",
   "scripts": {
     "build": "sh build.sh"

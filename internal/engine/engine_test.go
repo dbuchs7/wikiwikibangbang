@@ -135,7 +135,7 @@ func TestAnAnswerBeyondTheBudgetIsRefused(t *testing.T) {
 // TestEnginesAreKeptToPublicAddresses: as connectors (ADR-0127), a reader
 // reaches only addresses on the public internet unless the operator sets
 // WWBB_ENGINE_ALLOW_PRIVATE=on, which an engine in the organisation's own
-// network needs (ADR-0128).
+// network needs (ADR-0129).
 func TestEnginesAreKeptToPublicAddresses(t *testing.T) {
 	srv, _ := fakeAtlas(t)
 	e := site.Engine{ID: "atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}

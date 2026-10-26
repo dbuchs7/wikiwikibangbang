@@ -137,7 +137,7 @@ type event struct {
 	Type           string          `json:"type,omitempty"`
 	Data           []byte          `json:"data,omitempty"`
 	// Engine is set by EngineSet; EngineRemoved names it in Asset
-	// (ADR-0128).
+	// (ADR-0129).
 	Engine *Engine `json:"engine,omitempty"`
 }
 
@@ -180,7 +180,7 @@ type Settings struct {
 	connectors  map[string]Connector
 	// albumRetention is the album's default rule (ADR-0104).
 	albumRetention AlbumRetention
-	// engines are the process engines by ID (ADR-0128).
+	// engines are the process engines by ID (ADR-0129).
 	engines map[string]Engine
 }
 

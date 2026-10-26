@@ -1,4 +1,4 @@
-// BPMN diagrams in a text (ADR-0128): a model kept as a file of the item
+// BPMN diagrams in a text (ADR-0129): a model kept as a file of the item
 // (block kind bpmn) or the newest version of a process of a process engine
 // (block kind process), drawn by bpmn-js under the UI's own content
 // security policy. The viewer is loaded when a diagram first comes into
@@ -100,7 +100,7 @@ export function diagramView(node, view, getPos, files) {
   };
 
   // showOperations marks the elements with how many tokens passed, wait
-  // there and are held there by an incident (ADR-0128), as atlas does.
+  // there and are held there by an incident (ADR-0129), as atlas does.
   const showOperations = async () => {
     clearTimeout(opsTimer);
     if (!opsOn || !viewer) return;

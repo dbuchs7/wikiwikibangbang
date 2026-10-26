@@ -165,7 +165,7 @@ func (h *htmlBuilder) block(bl item.Block, p Page, base int) {
 		h.out.WriteString("</figure>")
 	case item.BPMN, item.Process:
 		// A printed page does not draw a diagram; it names the file or the
-		// process (ADR-0128).
+		// process (ADR-0129).
 		h.printf(`<figure class="diagram"><p>[BPMN: %s]</p>`, html.EscapeString(diagramName(bl, p.Images)))
 		if strings.TrimSpace(bl.Text) != "" {
 			h.printf("<figcaption>%s</figcaption>", html.EscapeString(bl.Text))

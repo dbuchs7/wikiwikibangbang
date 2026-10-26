@@ -8,7 +8,7 @@ import (
 
 // TestBPMNDiagramsAndProcesses: a bpmn block shows a text file of its own
 // item, a process block names an engine and a process of it, and neither
-// holds anything else (ADR-0128).
+// holds anything else (ADR-0129).
 func TestBPMNDiagramsAndProcesses(t *testing.T) {
 	s := permFixture(t)
 	anna := s.As("anna")

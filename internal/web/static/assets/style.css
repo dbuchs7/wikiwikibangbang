@@ -419,7 +419,7 @@ label.upload { display: inline-flex; align-items: center; gap: 8px; }
 .pm-image figcaption input { width: 60%; text-align: center; border: 0; border-bottom: 1px dashed var(--border-strong); background: transparent; color: inherit; font: inherit; }
 .pm-image.ProseMirror-selectednode img { outline: 2px solid var(--accent); }
 
-/* BPMN diagrams (ADR-0128): drawn light in either scheme, as drawings
+/* BPMN diagrams (ADR-0129): drawn light in either scheme, as drawings
    are. The canvas pans and zooms; the bpmn.io watermark at its bottom
    right stays clear of everything here. */
 .pm-diagram { margin: 12px 0; border: 1px solid var(--border); border-radius: var(--radius-sm, 6px); overflow: hidden; background: var(--surface); }
