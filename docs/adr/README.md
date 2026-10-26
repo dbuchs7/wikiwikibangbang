@@ -142,3 +142,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0127](0127-connectors-read-any-json-source-into-a-type-of-ones-own.md) | Connectors read any JSON source into a type of one's own | Accepted | Landed |
 | [0128](0128-the-atlassian-import-as-a-connector.md) | The Atlassian import as a connector | Accepted | Landed |
 | [0129](0129-bpmn-diagrams-and-processes-from-a-process-engine.md) | BPMN diagrams in the text, and processes from a process engine with their operations | Proposed | Partial |
+| [0130](0130-an-api-description-fills-a-json-source.md) | An API description fills a JSON source | Accepted | Landed |

@@ -88,6 +88,11 @@ type JSONSource struct {
 	Values map[string]string `json:"values,omitempty"`
 	// Language is the one of the page's own words; empty is German.
 	Language string `json:"language,omitempty"`
+	// Spec and Operation, if set, name the API description and its
+	// operation the settings were taken from (ADR-0130), so they can be
+	// taken again; a run reads URL, not the description.
+	Spec      string `json:"spec,omitempty"`
+	Operation string `json:"operation,omitempty"`
 }
 
 // CKAN is a source that runs CKAN, such as opendata.swiss (ADR-0075):
@@ -144,6 +149,9 @@ func ConnectorTemplates() []Connector {
 		Values: map[string]string{}, Language: "de",
 	}}, {Name: "Atlassian Cloud", Kind: KindAtlassian, IntervalHours: 24, Atlassian: &Atlassian{
 		Site: "https://", Spaces: []string{}, Projects: []string{}, Users: map[string]string{}, Groups: map[string]string{}, Grants: []string{},
+	}}, {Name: "OpenAPI", Kind: KindJSON, IntervalHours: 24, JSON: &JSONSource{
+		// A JSON source whose settings an API description gives (ADR-0130).
+		URL: "https://", ID: "id", Title: "title", Values: map[string]string{}, Language: "de", Spec: "https://",
 	}}}
 }
 
@@ -247,6 +255,10 @@ func (j JSONSource) validate() error {
 		return fmt.Errorf("%w: name at most 50 values", ErrInvalid)
 	case j.Language != "" && !slices.Contains(ConnectorLanguages, j.Language):
 		return fmt.Errorf("%w: %q is not a language of the pages (%s)", ErrInvalid, j.Language, strings.Join(ConnectorLanguages, ", "))
+	case j.Spec != "" && !httpURL(j.Spec):
+		return fmt.Errorf("%w: %q is not the address of an API description", ErrInvalid, j.Spec)
+	case len(j.Operation) > 300 || strings.ContainsAny(j.Operation, "\n\r"):
+		return fmt.Errorf("%w: the operation is a single line of at most 300 characters", ErrInvalid)
 	}
 	for _, p := range []string{j.Items, j.ID, j.Title, j.Link, j.Text, j.Next} {
 		if p != "" && !pathRE.MatchString(p) {
@@ -367,7 +379,7 @@ func (c Connector) Normalize() Connector {
 	c.Fields = trimMap(c.Fields)
 	if c.JSON != nil {
 		j := *c.JSON
-		for _, p := range []*string{&j.URL, &j.Items, &j.ID, &j.Title, &j.Link, &j.Text, &j.Next} {
+		for _, p := range []*string{&j.URL, &j.Items, &j.ID, &j.Title, &j.Link, &j.Text, &j.Next, &j.Spec, &j.Operation} {
 			*p = strings.TrimSpace(*p)
 		}
 		j.Values = trimMap(j.Values)
