@@ -19,7 +19,7 @@ func openAPI(routes []Route) http.Handler {
 		}
 		op := map[string]any{"summary": rt.Summary, "x-access": rt.Access.String()}
 		if rt.ReadScope {
-			// A token of scope read may call it, although it is no GET (ADR-0120).
+			// A token of scope read may call it, although it is no GET (ADR-0121).
 			op["x-read-scope"] = true
 		}
 		if rt.Access != Public {

@@ -72,4 +72,4 @@ Strongest form: the winner of the Password Hashing Competition and the current f
 ## Links
 
 - implements part of [ADR-0013](0013-authentication-and-security-boundary.md); relates to ADR-0011 (access classes), ADR-0015 (budgets), ADR-0022 (principals), ADR-0026 (erasure)
-- an exception to scope `read` is proposed in [ADR-0120](0120-a-change-feed-own-roles-and-watching-with-read-tokens.md): such a token may watch and stop watching for its own principal
+- an exception to scope `read` is proposed in [ADR-0121](0121-a-change-feed-own-roles-and-watching-with-read-tokens.md): such a token may watch and stop watching for its own principal

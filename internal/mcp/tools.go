@@ -76,7 +76,7 @@ var (
 // credentials. An agent with an administrator's token still cannot reach
 // them through this adapter.
 //
-// Of the change feed and the own-roles query (ADR-0120), the reads are
+// Of the change feed and the own-roles query (ADR-0121), the reads are
 // offered: list_changes without its wait, as a tool call answers at once,
 // and get_own_roles. Watching and unwatching are not offered: they are
 // the caller's own subscription, which an agent does not take out or end

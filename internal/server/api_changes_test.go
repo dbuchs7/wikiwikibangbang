@@ -62,7 +62,7 @@ func TestReadTokensWatchButChangeNothingElse(t *testing.T) {
 	w := newWorld(t)
 	id := field(w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Backup service","properties":{"priority":"low"}}`, http.StatusCreated), "item", "id").(string)
 	reader := readToken(w.vera)
-	// The one exception to "read allows only GET and HEAD" (ADR-0120).
+	// The one exception to "read allows only GET and HEAD" (ADR-0121).
 	reader.expect("PUT", "/api/items/"+id+"/watch", "", http.StatusOK)
 	reader.expect("PUT", "/api/spaces/PLAT/watch", "", http.StatusOK)
 	if n := len(reader.expect("GET", "/api/me/watches", "", http.StatusOK)["watches"].([]any)); n != 2 {

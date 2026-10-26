@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// The change feed (ADR-0120): every event of the log that touches what a
+// The change feed (ADR-0121): every event of the log that touches what a
 // principal watches, in the order of the log, after a cursor. Unlike
 // notifications (ADR-0046) it lists events of every kind and by anyone,
 // access changes included, so a system that copies items learns at once

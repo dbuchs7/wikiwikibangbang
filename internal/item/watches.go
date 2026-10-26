@@ -103,7 +103,7 @@ type Notification struct {
 // --- sessions ---------------------------------------------------------------
 
 // Watch starts or stops watching a readable item. A watch of an item one
-// may no longer read can still be stopped (ADR-0120): one knows of one's
+// may no longer read can still be stopped (ADR-0121): one knows of one's
 // own watch, so this reveals nothing about the item.
 func (x *Session) Watch(id ID, on bool) error {
 	if _, err := x.readable(id); err != nil && (on || !x.Watching(id)) {

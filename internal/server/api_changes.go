@@ -11,7 +11,7 @@ import (
 )
 
 // changeRoutes are the change feed and the query of one's own roles
-// (ADR-0120). Both are reads, so tokens of scope read reach them.
+// (ADR-0121). Both are reads, so tokens of scope read reach them.
 func changeRoutes(h itemHandlers) []Route {
 	get := http.MethodGet
 	return []Route{

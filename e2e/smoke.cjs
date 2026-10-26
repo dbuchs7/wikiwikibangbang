@@ -1484,6 +1484,8 @@ function ckanSource() {
     await page.waitForSelector("head link[rel=icon][href^='/favicon.ico']", { state: "attached" });
     // A ready-made theme applies under the design; the comic one has no
     // dark scheme (ADR-0085).
+    // The Swiss theme says whom it is for (ADR-0120).
+    check((await page.textContent("#design-themes label.theme-swiss .theme-notice")).includes("Swiss Confederation"), "the Swiss theme names whom it is for");
     await page.click("#design-themes label.theme-comic");
     await page.click("#design button[type=submit]");
     await page.waitForSelector("#design-dark:has-text('The dark scheme is off')");

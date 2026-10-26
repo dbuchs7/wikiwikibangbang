@@ -65,7 +65,7 @@ type DB struct {
 	dir      string
 
 	// changed is closed, and replaced, after every command, so that
-	// requests waiting for a change wake without holding mu (ADR-0120).
+	// requests waiting for a change wake without holding mu (ADR-0121).
 	changedMu sync.Mutex
 	changed   chan struct{}
 }
@@ -117,7 +117,7 @@ func (db *DB) Write(fn func(*item.Store) error) error {
 // Changed returns a channel that is closed once a command after this call
 // has added to the event log. A caller that waits for a change takes the
 // channel first, then reads, then waits on it, so no change between the
-// read and the wait is missed (ADR-0120).
+// read and the wait is missed (ADR-0121).
 func (db *DB) Changed() <-chan struct{} {
 	db.changedMu.Lock()
 	defer db.changedMu.Unlock()

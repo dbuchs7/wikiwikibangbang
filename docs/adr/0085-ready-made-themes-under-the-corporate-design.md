@@ -63,3 +63,4 @@ Strongest form: nothing to maintain in the product.
 ## Links
 
 - amends [ADR-0052](0052-corporate-design-in-a-journal-of-its-own.md) (a theme under the design) and [ADR-0070](0070-an-own-stylesheet-without-a-dark-look-turns-the-dark-scheme-off.md) (a theme turns the dark scheme off the same way)
+- amended by [ADR-0120](0120-the-swiss-theme-follows-the-confederations-design-system.md) (the Swiss theme follows the Confederation's design system)

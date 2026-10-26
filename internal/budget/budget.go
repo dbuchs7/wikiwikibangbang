@@ -66,10 +66,10 @@ type Budgets struct {
 	BrandingBytes int64
 	// ExportRows is the largest list one CSV export writes (ADR-0071).
 	ExportRows int
-	// ChangesPage is the largest page of the change feed (ADR-0120).
+	// ChangesPage is the largest page of the change feed (ADR-0121).
 	ChangesPage int
 	// ChangesWait is the longest a request of the change feed is held
-	// waiting for a change, in seconds (ADR-0120). It must stay below the
+	// waiting for a change, in seconds (ADR-0121). It must stay below the
 	// server's write timeout of 60 seconds.
 	ChangesWait int
 	// ChangesWaiting bounds the requests of the change feed held waiting

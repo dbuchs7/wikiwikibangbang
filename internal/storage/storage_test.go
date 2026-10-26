@@ -236,7 +236,7 @@ func TestWarmUp(t *testing.T) {
 }
 
 // TestChangedWakesOnlyOnACommand: the change feed's waiting requests wake
-// when the log grows, not on a command that fails (ADR-0120).
+// when the log grows, not on a command that fails (ADR-0121).
 func TestChangedWakesOnlyOnACommand(t *testing.T) {
 	db, _ := mustOpen(t, t.TempDir())
 	defer db.Close()

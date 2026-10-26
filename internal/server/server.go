@@ -61,7 +61,7 @@ type Route struct {
 	Access  Access
 	// ReadScope lets a token of scope read call a route that is not a
 	// GET or HEAD. It is the deliberate exception for watching, which
-	// changes no item and no item's history (ADR-0046, ADR-0120); every
+	// changes no item and no item's history (ADR-0046, ADR-0121); every
 	// other change stays refused to such a token.
 	ReadScope bool
 	Handler   http.Handler
@@ -307,7 +307,7 @@ func gate(rt Route) http.Handler {
 		// call it makes passes this gate on its own (ADR-0012).
 		mcpCall := r.Method == http.MethodPost && r.URL.Path == MCPPath
 		// A read token reads; it may also watch for its own principal
-		// (rt.ReadScope, ADR-0120), which changes nothing anyone reads.
+		// (rt.ReadScope, ADR-0121), which changes nothing anyone reads.
 		if p.Scope == auth.ScopeRead && r.Method != http.MethodGet && r.Method != http.MethodHead && !mcpCall && !rt.ReadScope {
 			writeError(w, http.StatusForbidden, "this token may only read")
 			return

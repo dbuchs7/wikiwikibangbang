@@ -95,7 +95,7 @@ type itemHandlers struct {
 	d   Deps
 	log *slog.Logger
 	// waiting counts the requests of the change feed held waiting for a
-	// change (ADR-0120), bounded by the budget ChangesWaiting.
+	// change (ADR-0121), bounded by the budget ChangesWaiting.
 	waiting *atomic.Int64
 }
 
