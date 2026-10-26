@@ -36,7 +36,7 @@ func fakeEngine(t *testing.T) *httptest.Server {
 	return srv
 }
 
-// TestProcessesFromAnEngine covers ADR-0126 through the API: administrators
+// TestProcessesFromAnEngine covers ADR-0128 through the API: administrators
 // set engines up; every signed-in person lists an engine's processes and
 // reads the newest version's model; operations only where allowed, and
 // only counts; the credential is never answered.

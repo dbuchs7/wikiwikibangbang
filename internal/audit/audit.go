@@ -99,7 +99,7 @@ const (
 	PartialRestore = "restore.partial"
 	OAuthFailed    = "oauth.token.failed"
 	// EngineChanged records a process engine added, changed or removed
-	// (ADR-0126).
+	// (ADR-0128).
 	EngineChanged = "engine.change"
 )
 

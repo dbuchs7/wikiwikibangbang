@@ -361,7 +361,7 @@ func TestReferencesToWhatIsSetAsideAreLeftOut(t *testing.T) {
 }
 
 // TestADiagramComesBackWithItsFile: a BPMN diagram shows the restored copy
-// of its file, and a process block comes back as it was (ADR-0126).
+// of its file, and a process block comes back as it was (ADR-0128).
 func TestADiagramComesBackWithItsFile(t *testing.T) {
 	b := newBackup(t)
 	model := item.ID("00112233445566778899aabbccddeeff")

@@ -83,7 +83,7 @@ var (
 // the caller's own subscription, which an agent does not take out or end
 // on a person's behalf.
 //
-// The process engines' routes (ADR-0126) are not offered: whether agents
+// The process engines' routes (ADR-0128) are not offered: whether agents
 // read an engine's processes and their operations through this server,
 // with the engine's credential rather than their own, is a decision of
 // its own.

@@ -3,7 +3,7 @@
 # prosemirror.js, the editor (ADR-0032), excalidraw.js with the files it
 # loads from excalidraw-assets/, the drawing editor (ADR-0053), and
 # bpmn-viewer.js and bpmn-modeler.js with their stylesheets and icon font in
-# bpmn/, the BPMN viewer and modeler (ADR-0126). Run after changing a
+# bpmn/, the BPMN viewer and modeler (ADR-0128). Run after changing a
 # version in package.json:
 #
 #   cd internal/web/vendor && npm ci && sh build.sh
@@ -68,7 +68,7 @@ cp "$assets"/locales/de-DE-json-*.js "$out/excalidraw-assets/locales/"
   cat "$assets"/vendor-*.js.LICENSE.txt
 } > "$out/excalidraw.LICENSE.txt"
 
-# The BPMN viewer and modeler (ADR-0126): two bundles, so a page that shows a
+# The BPMN viewer and modeler (ADR-0128): two bundles, so a page that shows a
 # diagram does not load the modeler. The stylesheets and the icon font are
 # copied as published; the watermark code is part of the bundles, unchanged,
 # as the bpmn.io license requires.

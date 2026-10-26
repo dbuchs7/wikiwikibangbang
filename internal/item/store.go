@@ -1204,7 +1204,7 @@ func (s *Store) subtree(root ID) []ID {
 // a bad block when it is typed, not only when it is committed.
 func CheckBlock(b Block, self ID) error { return checkBlock(b, self) }
 
-// engineID is the form of a process engine's ID (ADR-0126), that of a
+// engineID is the form of a process engine's ID (ADR-0128), that of a
 // connector's (ADR-0077). validProcessID is a BPMN process ID: an XML name
 // without a colon, as BPMN declares it, at most 255 characters.
 var (

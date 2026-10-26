@@ -390,7 +390,7 @@ func TestVideosPlayInTheText(t *testing.T) {
 
 // TestBPMNDiagramsShowTheirFile: a BPMN model is uploaded as a file and
 // shown by a bpmn block, which refuses a picture; a process block keeps its
-// engine and process (ADR-0126).
+// engine and process (ADR-0128).
 func TestBPMNDiagramsShowTheirFile(t *testing.T) {
 	w := newWorld(t)
 	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Flow","properties":{"priority":"low"}}`, http.StatusCreated)

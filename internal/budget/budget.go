@@ -76,7 +76,7 @@ type Budgets struct {
 	// at once; beyond it, a request is answered without waiting.
 	ChangesWaiting int
 	// EngineResponseBytes is the most the server reads of one answer of a
-	// process engine, such as a process's BPMN model (ADR-0126).
+	// process engine, such as a process's BPMN model (ADR-0128).
 	EngineResponseBytes int64
 }
 

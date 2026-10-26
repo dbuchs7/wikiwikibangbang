@@ -84,17 +84,17 @@ const (
 	Figures BlockKind = "figures"
 	Tables  BlockKind = "tables"
 	// BPMN shows a BPMN 2.0 model kept as an attachment of the item: Ref
-	// names the file and Text is its caption (ADR-0126).
+	// names the file and Text is its caption (ADR-0128).
 	BPMN BlockKind = "bpmn"
 	// Process shows the newest version of a process deployed to a process
 	// engine: Engine names the engine among the installation's, Process is
 	// the process's BPMN ID and Text the caption. The body holds no copy of
-	// the model (ADR-0126).
+	// the model (ADR-0128).
 	Process BlockKind = "process"
 )
 
 // BPMNTypes are the types a BPMN model's file has, as read from its bytes:
-// XML with its declaration, or text without one (ADR-0126).
+// XML with its declaration, or text without one (ADR-0128).
 var BPMNTypes = []string{"text/xml; charset=utf-8", "text/plain; charset=utf-8"}
 
 // VideoTypes are the formats of a video a body plays, as read from the
@@ -163,7 +163,7 @@ type Block struct {
 	Align string `json:",omitempty"`
 	// Engine and Process name the process a process block shows: the
 	// engine's ID among the installation's engines and the process's BPMN
-	// ID (ADR-0126).
+	// ID (ADR-0128).
 	Engine  string `json:",omitempty"`
 	Process string `json:",omitempty"`
 }

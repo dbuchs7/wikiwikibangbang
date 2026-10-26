@@ -946,7 +946,7 @@ func listsLog(t *testing.T) []Event {
 
 // bpmnLog keeps a BPMN model as a file of a page and shows it, and shows a
 // process of an engine beside it, so the golden files pin the block kinds
-// bpmn and process and the fields Engine and Process (ADR-0126).
+// bpmn and process and the fields Engine and Process (ADR-0128).
 func bpmnLog(t *testing.T) []Event {
 	s := setup(t)
 	noErr(t, s.GrantRole("admin", "PLAT", "anna", Editor))

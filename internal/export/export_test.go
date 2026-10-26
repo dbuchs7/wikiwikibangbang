@@ -246,7 +246,7 @@ func documentXML(t *testing.T, file []byte) string {
 }
 
 // TestDiagramsAreNamedInDocuments: a BPMN diagram and a process are named
-// with their captions in both exports, not drawn (ADR-0126).
+// with their captions in both exports, not drawn (ADR-0128).
 func TestDiagramsAreNamedInDocuments(t *testing.T) {
 	page := Page{ID: "p", Title: "Order to cash", Body: []item.Block{
 		{Kind: item.BPMN, Ref: "m", Text: "As <drawn>"},

@@ -113,7 +113,7 @@ jobs:
           go build -o "$RUNNER_TEMP/wwbb" ./cmd/wikiwikibangbang
           # Mail goes to the smoke test's own mail sink (ADR-0064); automatic
           # backups go to a directory of the runner (ADR-0073); the process
-          # engine is the smoke test's own (ADR-0126).
+          # engine is the smoke test's own (ADR-0128).
           mkdir -p "$RUNNER_TEMP/autobackup"
           WWBB_ADMIN_PASSWORD=e2e-admin-password WWBB_PUBLIC_URL=http://127.0.0.1:8080 \
             WWBB_SMTP_HOST=127.0.0.1 WWBB_SMTP_PORT=2525 WWBB_SMTP_SECURITY=none WWBB_SMTP_FROM=wiki@example.org \
