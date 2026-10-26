@@ -1,4 +1,4 @@
-# ADR-0130: Kanban cards, columns and the status, readable at a glance
+# ADR-0132: Kanban cards, columns and the status, readable at a glance
 
 - **Status:** Accepted
 - **Implementation:** Landed

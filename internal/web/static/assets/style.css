@@ -262,7 +262,7 @@ table.history td { font-size: 13px; }
 .kanban-columns-edit input { width: 14rem; }
 /* A kanban's columns share the width and reach down to the longest, so
    every column is a drop zone of its own; its head holds what it is, how
-   many cards it holds, a new card and folding it away (ADR-0130). */
+   many cards it holds, a new card and folding it away (ADR-0132). */
 #kanban .board { align-items: stretch; }
 #kanban .board-column { flex: 1 1 250px; min-width: 220px; max-width: 400px; min-height: 320px; padding: 10px;
   display: flex; flex-direction: column; }
@@ -289,7 +289,7 @@ table.history td { font-size: 13px; }
 .card-new input { width: 100%; }
 .card-new button { align-self: flex-start; margin: 0; min-height: 30px; padding: 4px 12px; font-size: 13px; }
 
-/* A kanban card (ADR-0130): the title first, the fields as chips, at the
+/* A kanban card (ADR-0132): the title first, the fields as chips, at the
    foot its key, what is behind it and the faces of its people. */
 #kanban .card-item.kanban-card { display: flex; flex-direction: column; gap: 6px; padding: 9px 11px; }
 #kanban .kanban-card .card-title { margin: 0; font-weight: 500; line-height: 1.35;
@@ -313,7 +313,7 @@ table.history td { font-size: 13px; }
 .card-person + .card-person { margin-left: -6px; }
 .card-person .avatar { box-shadow: 0 0 0 2px var(--surface); }
 
-/* The settings of a kanban, behind one button (ADR-0130). */
+/* The settings of a kanban, behind one button (ADR-0132). */
 .kanban-settings-open { display: inline-flex; align-items: center; gap: 6px; }
 .kanban-settings-open svg { width: 16px; height: 16px; }
 dialog.kanban-settings { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; padding: 20px 22px;
@@ -1289,7 +1289,7 @@ a.requests-notice:hover { border-color: var(--accent); }
 .kanban-title h1 { margin: 0; }
 .labelboard-type + .labelboard-type { margin-top: 18px; }
 
-/* ---------- An item's status, at the top of its details (ADR-0130) ----------
+/* ---------- An item's status, at the top of its details (ADR-0132) ----------
    The state is a badge; what can be done with it are ordinary buttons. */
 .state-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 14px; padding: 8px 12px;
   background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }

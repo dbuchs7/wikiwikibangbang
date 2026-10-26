@@ -309,7 +309,7 @@ function atlassianSource() {
     await page.reload();
     await page.waitForSelector("text=version 2");
     // The status leads the details: the state as a badge, each transition
-    // from it a button named by it with its target (ADR-0130).
+    // from it a button named by it with its target (ADR-0132).
     await page.waitForSelector("#item-status .state-now:text-is('open')");
     await page.waitForSelector("#item-status button[data-transition=finish] .state-move-to:text-is('→ done')");
     await page.click("#item-status button[data-transition=finish]");
@@ -1240,7 +1240,7 @@ function atlassianSource() {
     await page.selectOption("#new-kanban [name=type]", "ticket");
     await page.click("#new-kanban button[type=submit]");
     await page.waitForSelector("h1:has-text('Website relaunch')");
-    // A new card is made in its column, with the "+" in the column's head (ADR-0130).
+    // A new card is made in its column, with the "+" in the column's head (ADR-0132).
     await page.click("#kanban .board-column[data-state=open] .column-add");
     await page.fill("#kanban .board-column[data-state=open] .card-new [name=title]", "Hero image");
     await page.press("#kanban .board-column[data-state=open] .card-new [name=title]", "Enter");
@@ -1295,7 +1295,7 @@ function atlassianSource() {
     await page.click("#kanban-add-transition");
     await page.waitForSelector("#kanban .board-column[data-state=open] .card-item:has-text('Hero image')");
 
-    step("kanban cards and columns (ADR-0130): dates and people on a card; a column folds away and stays folded; a card made in a later column");
+    step("kanban cards and columns (ADR-0132): dates and people on a card; a column folds away and stays folded; a card made in a later column");
     await page.selectOption("#kanban-assign [name=item]", { label: (await page.locator("#kanban-assign option:has-text('Renew the certificate')").textContent()).trim() });
     await page.click("#kanban-assign button[type=submit]");
     const renew = "#kanban .card-item:has-text('Renew the certificate')";

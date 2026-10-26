@@ -344,7 +344,7 @@ function labelChip(label, onRemove) {
 }
 
 // statusBar shows an item's state and what can be done with it, told
-// apart (ADR-0130): the state is a badge, each transition from it a
+// apart (ADR-0132): the state is a badge, each transition from it a
 // button named by the transition with its target beside it. States it
 // cannot reach from here are left out; the type's workflow lists them.
 // perform is null for those who may not edit.
@@ -2455,7 +2455,7 @@ async function kanbansView() {
   ], async (d) => {
     const { kanban } = await post(`/api/spaces/${encodeURIComponent(d.get("space"))}/kanbans`, { name: d.get("name"), type: d.get("type"), label: (d.get("label") || "").trim() });
     // A new kanban's cards show who has them, their dates and their
-    // choices, so they say something before anyone sets them (ADR-0130).
+    // choices, so they say something before anyone sets them (ADR-0132).
     const shown = (flows.find((ty) => ty.name === kanban.type)?.fields || []).filter((f) => ["user", "date", "enum"].includes(f.kind)).map((f) => f.name).slice(0, 12);
     if (shown.length) await put(`/api/spaces/${encodeURIComponent(kanban.space)}/kanbans/${encodeURIComponent(kanban.id)}`, { name: kanban.name, cardFields: shown });
     location.hash = `#/kanban/${encodeURIComponent(kanban.space)}/${kanban.id}`;
@@ -2559,7 +2559,7 @@ async function kanbanView(space, id) {
   };
 
   // A card says at a glance what it is, who has it and what is behind it
-  // (ADR-0130): its title first; the fields the kanban names as chips, a
+  // (ADR-0132): its title first; the fields the kanban names as chips, a
   // person as a face; at its foot its key, whether it has a text and how
   // far its checklist is.
   const select = (it) => {
@@ -2714,7 +2714,7 @@ async function kanbanView(space, id) {
   };
 
   // The kanban's settings, its name and its removal wait behind one
-  // button, so the board starts right below its title (ADR-0130).
+  // button, so the board starts right below its title (ADR-0132).
   const settings = canEdit ? kanbanSettings(k, type, board.columns, kpath) : null;
   const tools = canEdit && elsewhere.length ? h("div", { class: "kanban-tools" },
     form({ id: "kanban-assign", class: "inline-form" }, [
@@ -2745,7 +2745,7 @@ async function kanbanView(space, id) {
 }
 
 // cardChip shows one field of a kanban card without its name, which is
-// the chip's tooltip and what a screen reader says first (ADR-0130): a
+// the chip's tooltip and what a screen reader says first (ADR-0132): a
 // value of an enumeration or a state as it is, a date by how far off it
 // is, a yes by the field's name, and text, numbers and links after a
 // muted name, since alone they say little. done tells whether the card's
@@ -2778,7 +2778,7 @@ function dateChip(name, day, done) {
   return h("span", { class: "card-chip card-date" + (tone ? " " + tone : ""), title: tip }, lineIcon("M5 6h14v13H5zM5 10h14M9 4v4M15 4v4"), said, text);
 }
 
-// cardSigns tell what is behind a card (ADR-0130): a text, and how far
+// cardSigns tell what is behind a card (ADR-0132): a text, and how far
 // its checklist is, which are the task items of its text.
 function cardSigns(it) {
   const blocks = it.body || [];
@@ -2797,7 +2797,7 @@ function cardSigns(it) {
 // kanbanSettings is the dialog that sets a kanban's name, picture,
 // columns — the workflow's states, renamed and ordered, and columns of
 // its own — and the fields its cards show (ADR-0076), and removes it
-// (ADR-0130).
+// (ADR-0132).
 function kanbanSettings(k, type, columns, kpath) {
   const status = h("div", { class: "status" });
   const rows = h("ol", { class: "kanban-columns-edit", id: "kanban-columns" });

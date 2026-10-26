@@ -58,4 +58,4 @@ Strongest form: nothing new to store.
 - amended by [ADR-0076](0076-kanban-columns-card-fields-and-free-moves.md) (columns of the kanban's own, card fields, order per kanban)
 - relates to ADR-0036 (boards), ADR-0044 (labels), ADR-0049 (task inbox)
 - amended by [ADR-0087](0087-kanban-pictures-and-boards-by-label.md) (a picture per kanban; a board for every label)
-- amended by [ADR-0130](0130-kanban-cards-columns-and-the-status-at-a-glance.md) (cards made in their column; taking a card off in its details)
+- amended by [ADR-0132](0132-kanban-cards-columns-and-the-status-at-a-glance.md) (cards made in their column; taking a card off in its details)
