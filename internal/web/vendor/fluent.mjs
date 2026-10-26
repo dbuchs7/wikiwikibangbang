@@ -1,6 +1,6 @@
 // Turns the Fluent UI System Icons (github.com/microsoft/fluentui-system-icons,
 // MIT) into Excalidraw shapes for the drawing editor's palette (ADR-0125).
-// Excalidraw 0.17 previews library items without their files, so an icon
+// Excalidraw (0.17 and 0.18) previews library items without their files, so an icon
 // cannot be an embedded picture: each outline of the SVG path becomes a
 // filled polygon instead. Excalidraw fills a polygon without holes, so an
 // outline inside another is filled with white, one inside that again with

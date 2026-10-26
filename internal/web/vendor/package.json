@@ -3,9 +3,11 @@
   "private": true,
   "description": "Builds the vendored editor (ADR-0032) and drawing (ADR-0053) bundles in ../static/vendor. Needed only to update them; go build never runs it.",
   "license": "AGPL-3.0-only",
-  "scripts": { "build": "sh build.sh" },
+  "scripts": {
+    "build": "sh build.sh"
+  },
   "dependencies": {
-    "@excalidraw/excalidraw": "0.17.6",
+    "@excalidraw/excalidraw": "0.18.1",
     "prosemirror-commands": "1.7.2",
     "prosemirror-history": "1.5.1",
     "prosemirror-inputrules": "1.5.1",
@@ -16,5 +18,7 @@
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
-  "devDependencies": { "esbuild": "0.28.2" }
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
 }

@@ -8,7 +8,6 @@
 //
 // A drawing is a PNG that carries its scene (Excalidraw's exportEmbedScene),
 // so the picture shown in a page is also the source it is edited from.
-import "./draw-boot.js";
 import { isDark } from "./theme.js";
 import { setLanguage, t } from "./i18n.js";
 import { React, createRoot, Excalidraw, exportToBlob, loadFromBlob, MIME_TYPES } from "/vendor/excalidraw.js";

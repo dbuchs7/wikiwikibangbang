@@ -36,38 +36,26 @@ const palettes = {
   }],
 };
 
-// The collection has no ArchiMate relationships, and Excalidraw 0.17 has
-// no diamond or hollow triangle as an arrowhead. They are drawn here
-// (ADR-0125): a line with Excalidraw's heads where ArchiMate's match
-// them, and a small diamond or triangle grouped with the line where they
-// do not. Each is 160 pixels long, crisp, in the text colour.
+// The collection has no ArchiMate relationships; they are drawn here
+// (ADR-0125, ADR-0126): each an arrow with Excalidraw's own heads, which
+// since 0.18 include ArchiMate's diamonds and hollow triangles, 160 pixels
+// long, crisp, in the text colour. Being single arrows, they bind to the
+// elements they connect and keep their heads when stretched.
 const ink = "#1e1e1e";
-function relationship(name, n, { style = "solid", start = null, end = null, from = null, to = null, line = true, dots = [] }) {
+function relationship(name, n, { style = "solid", start = null, end = null, line = true, dots = [] }) {
   const group = `archimate-rel-${n}`;
   let seed = 1000 + n * 37;
   const base = (type, id, x, y, width, height, extra) => ({
     id: `${group}-${id}`, type, x, y, width, height, angle: 0, strokeColor: ink, backgroundColor: "transparent",
-    fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid", roughness: 0, opacity: 100, groupIds: [group],
+    fillStyle: "solid", strokeWidth: 2, strokeStyle: "solid", roughness: 0, opacity: 100, groupIds: [],
     frameId: null, roundness: null, seed: seed++, version: 1, versionNonce: 0, isDeleted: false, boundElements: null,
     updated: 0, link: null, locked: false, ...extra,
   });
   const elements = [];
-  // A diamond at the start takes its first 24 pixels, a triangle at the
-  // end its last 14; the line runs between.
-  const x0 = from ? 24 : 0, x1 = to ? 146 : 160;
   if (line) {
-    elements.push(base("arrow", "line", x0, 0, x1 - x0, 0, {
-      strokeStyle: style, points: [[0, 0], [x1 - x0, 0]], lastCommittedPoint: null,
-      startBinding: null, endBinding: null, startArrowhead: start, endArrowhead: end,
-    }));
-  }
-  if (from) {
-    elements.push(base("diamond", "from", 0, -7, 24, 14, { backgroundColor: from === "filled" ? ink : "#ffffff" }));
-  }
-  if (to) {
-    elements.push(base("line", "to", x1, -8, 14, 16, {
-      backgroundColor: "#ffffff", points: [[0, 0], [14, 8], [0, 16], [0, 0]], lastCommittedPoint: null,
-      startBinding: null, endBinding: null, startArrowhead: null, endArrowhead: null,
+    elements.push(base("arrow", "line", 0, 0, 160, 0, {
+      strokeStyle: style, points: [[0, 0], [160, 0]], lastCommittedPoint: null,
+      startBinding: null, endBinding: null, startArrowhead: start, endArrowhead: end, elbowed: false,
     }));
   }
   for (const [i, filled] of dots.entries()) {
@@ -78,10 +66,10 @@ function relationship(name, n, { style = "solid", start = null, end = null, from
 // In the order of the ArchiMate 3.1 specification: structural, dependency,
 // dynamic and other relationships, then the junctions.
 const relationships = [
-  ["Composition", { from: "filled" }],
-  ["Aggregation", { from: "hollow" }],
-  ["Assignment", { start: "dot", end: "triangle" }],
-  ["Realization", { style: "dotted", to: "hollow" }],
+  ["Composition", { start: "diamond" }],
+  ["Aggregation", { start: "diamond_outline" }],
+  ["Assignment", { start: "circle", end: "triangle" }],
+  ["Realization", { style: "dotted", end: "triangle_outline" }],
   ["Serving", { end: "arrow" }],
   ["Access", { style: "dotted", end: "arrow" }],
   ["Influence", { style: "dashed", end: "arrow" }],
@@ -89,7 +77,7 @@ const relationships = [
   ["Association (directed)", { end: "arrow" }],
   ["Triggering", { end: "triangle" }],
   ["Flow", { style: "dashed", end: "triangle" }],
-  ["Specialization", { to: "hollow" }],
+  ["Specialization", { end: "triangle_outline" }],
   ["And junction", { line: false, dots: [true] }],
   ["Or junction", { line: false, dots: [false] }],
 ].map(([name, spec], i) => relationship(name, i + 1, spec));

@@ -34,22 +34,88 @@ The web UI embeds a bundle of these JavaScript packages, built from `internal/we
 | rope-sequence | 1.3.4 | MIT |
 | w3c-keyname | 2.2.8 | MIT |
 
-The drawing editor (ADR-0053) is a second bundle, `internal/web/static/vendor/excalidraw.js`, built from the same directory, with the files Excalidraw loads at run time in `excalidraw-assets/` (its fonts, a chunk of libraries and the German translation); `excalidraw.LICENSE.txt` ships next to it with the license texts and the notices of the libraries Excalidraw bundles itself (among them DOMPurify under Apache-2.0 or MPL-2.0, pica, js-yaml and regenerator-runtime under MIT):
+The drawing editor (ADR-0053, ADR-0126) is a second bundle, `internal/web/static/vendor/excalidraw.js` with its stylesheet `excalidraw.css`, built from the same directory, with the chunks it loads when needed in `excalidraw-assets/` (among them the German translation) and its fonts in `fonts/`. Excalidraw's import of Mermaid diagrams is left out of it. `excalidraw.LICENSE.txt` ships next to it with the license text of every package the bundle takes code from:
 
 | Package | Version | License |
 |---|---|---|
-| @excalidraw/excalidraw | 0.17.6 | MIT |
-| js-tokens | 4.0.0 | MIT |
-| loose-envify | 1.4.0 | MIT |
+| @babel/runtime | 7.29.10 | MIT |
+| @braintree/sanitize-url | 6.0.2 | MIT |
+| @excalidraw/excalidraw | 0.18.1 | MIT |
+| @excalidraw/laser-pointer | 1.3.1 | MIT |
+| @floating-ui/core | 1.8.0 | MIT |
+| @floating-ui/dom | 1.8.0 | MIT |
+| @floating-ui/react-dom | 2.1.9 | MIT |
+| @floating-ui/utils | 0.2.12 | MIT |
+| @radix-ui/primitive | 1.1.1 | MIT |
+| @radix-ui/react-arrow | 1.1.2 | MIT |
+| @radix-ui/react-collection | 1.0.1 | MIT |
+| @radix-ui/react-compose-refs | 1.1.1 | MIT |
+| @radix-ui/react-context | 1.1.1 | MIT |
+| @radix-ui/react-direction | 1.0.0 | MIT |
+| @radix-ui/react-dismissable-layer | 1.1.5 | MIT |
+| @radix-ui/react-focus-guards | 1.1.1 | MIT |
+| @radix-ui/react-focus-scope | 1.1.2 | MIT |
+| @radix-ui/react-id | 1.1.0 | MIT |
+| @radix-ui/react-popover | 1.1.6 | MIT |
+| @radix-ui/react-popper | 1.2.2 | MIT |
+| @radix-ui/react-portal | 1.1.4 | MIT |
+| @radix-ui/react-presence | 1.1.2 | MIT |
+| @radix-ui/react-primitive | 2.0.2 | MIT |
+| @radix-ui/react-roving-focus | 1.0.2 | MIT |
+| @radix-ui/react-slot | 1.1.2 | MIT |
+| @radix-ui/react-tabs | 1.0.2 | MIT |
+| @radix-ui/react-use-callback-ref | 1.1.0 | MIT |
+| @radix-ui/react-use-controllable-state | 1.1.0 | MIT |
+| @radix-ui/react-use-escape-keydown | 1.1.0 | MIT |
+| @radix-ui/react-use-layout-effect | 1.1.0 | MIT |
+| @radix-ui/react-use-size | 1.1.0 | MIT |
+| aria-hidden | 1.2.6 | MIT |
+| browser-fs-access | 0.29.1 | Apache-2.0 |
+| canvas-roundrect-polyfill | 0.0.1 | MIT |
+| clsx | 1.1.1 | MIT |
+| crc-32 | 0.3.0 | Apache-2.0 |
+| detect-node-es | 1.1.0 | MIT |
+| es6-promise-pool | 2.5.0 | MIT |
+| fractional-indexing | 3.2.0 | CC0-1.0 |
+| fuzzy | 0.1.3 | MIT |
+| get-nonce | 1.0.1 | MIT |
+| hachure-fill | 0.5.2 | MIT |
+| image-blob-reduce | 3.0.1 | MIT |
+| jotai | 2.11.0 | MIT |
+| jotai-scope | 0.7.2 | MIT |
+| lodash.debounce | 4.0.8 | MIT |
+| lodash.throttle | 4.1.1 | MIT |
+| nanoid | 3.3.3 | MIT |
+| open-color | 1.9.1 | MIT |
+| pako | 2.0.3 | (MIT AND Zlib) |
+| path-data-parser | 0.1.0 | MIT |
+| perfect-freehand | 1.2.0 | MIT |
+| pica | 7.1.1 | MIT |
+| png-chunk-text | 1.0.0 | MIT |
+| png-chunks-encode | 1.0.0 | MIT |
+| png-chunks-extract | 1.0.0 | MIT |
+| points-on-curve | 1.0.1 | MIT |
+| points-on-path | 0.2.1 | MIT |
 | react | 18.3.1 | MIT |
 | react-dom | 18.3.1 | MIT |
+| react-remove-scroll | 2.7.2 | MIT |
+| react-remove-scroll-bar | 2.3.8 | MIT |
+| react-style-singleton | 2.2.3 | MIT |
+| roughjs | 4.6.4 | MIT |
 | scheduler | 0.23.2 | MIT |
+| sliced | 1.0.1 | MIT |
+| tslib | 2.8.1 | 0BSD |
+| tunnel-rat | 0.1.2 | MIT |
+| use-callback-ref | 1.3.3 | MIT |
+| use-sidecar | 1.1.3 | MIT |
+| use-sync-external-store | 1.7.0 | MIT |
+| zustand | 4.5.7 | MIT |
 
 The palettes of the drawing editor (ADR-0117), in `internal/web/static/assets/palettes/`, are libraries of the Excalidraw library collection (github.com/excalidraw/excalidraw-libraries, commit 297a349e), which publishes every library under the MIT license (Copyright (c) 2020 Excalidraw): "Excalidraw Archimate Template" by Timothy Galvin, "bpmn" by Aoustin Frederic, "Computers" by EI d'AU, "Network topology icons" by dwelle, "Common Home Network Basics" by DDay987, "Network locations" by Jorge Godoy and "IT icons" by Mateusz Baran. `palettes.LICENSE.txt` ships next to them with the license text and which palette holds which library; `internal/web/vendor/palettes.mjs` builds them. The ArchiMate palette also holds relationships drawn for this project (ADR-0125). The Microsoft palette, `microsoft.json`, is made of the Fluent UI System Icons (github.com/microsoft/fluentui-system-icons, commit 82ecf7cb), which Microsoft publishes under the MIT license (Copyright (c) 2020 Microsoft Corporation), turned into shapes by `internal/web/vendor/fluent.mjs`; it holds no product logos.
 
-The fonts Virgil, Cascadia and Assistant, shipped with Excalidraw in `excalidraw-assets/`, are licensed under the SIL Open Font License 1.1.
+The fonts Excalifont, Virgil, Cascadia, Assistant, Liberation Sans, Lilita One and Nunito, shipped with Excalidraw in `internal/web/static/vendor/fonts/`, are licensed under the SIL Open Font License 1.1; Comic Shanns is licensed under the MIT license.
 
-The comic theme (ADR-0085) uses the font Comic Neue, Google Fonts release v9 (Copyright 2014 The Comic Neue Project Authors), from the package @fontsource/comic-neue 5.3.0, licensed under the SIL Open Font License 1.1; `internal/web/static/assets/fonts/comic-neue.LICENSE.txt` ships next to it. The sketch theme uses Virgil from the Excalidraw assets above.
+The comic theme (ADR-0085) uses the font Comic Neue, Google Fonts release v9 (Copyright 2014 The Comic Neue Project Authors), from the package @fontsource/comic-neue 5.3.0, licensed under the SIL Open Font License 1.1; `internal/web/static/assets/fonts/comic-neue.LICENSE.txt` ships next to it. The sketch theme uses Virgil from the Excalidraw fonts above.
 
 The Swiss theme (ADR-0120) follows the design system of the Swiss Confederation, github.com/swiss/designsystem (commit d26f6988, MIT License, Copyright (c) Schweizerische Eidgenossenschaft): its colour values, radii, shadows and the look of its buttons, fields, tables and bars are taken into `internal/site/themes/swiss.css`; no code of it is shipped. The theme uses the font Noto Sans (Copyright 2022 The Noto Project Authors), its Latin subset from the package @fontsource/noto-sans 5.3.0, licensed under the SIL Open Font License 1.1; `internal/web/static/assets/fonts/noto-sans.LICENSE.txt` ships next to it.
 
