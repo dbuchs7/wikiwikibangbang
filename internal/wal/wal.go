@@ -74,14 +74,43 @@ func Read(path string) (Scan, error) {
 	if err != nil {
 		return Scan{}, err
 	}
-	return scan(bufio.NewReader(f), st.Size())
+	return collect(bufio.NewReader(f), st.Size())
+}
+
+// Each passes the records of the log file at path to fn in order, one at a
+// time, without holding them all, and without changing the file; it stops
+// at the first error fn returns. A missing file has no records, and a torn
+// tail, an append still in progress, is not passed.
+func Each(path string, fn func(payload []byte) error) error {
+	f, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	_, err = scan(bufio.NewReader(f), st.Size(), fn)
+	return err
 }
 
 // ReadBytes reads a log held in memory, like Read: a copy taken while an
 // append was in progress ends in a torn tail, which Valid excludes.
-func ReadBytes(data []byte) (Scan, error) { return scan(bytes.NewReader(data), int64(len(data))) }
+func ReadBytes(data []byte) (Scan, error) { return collect(bytes.NewReader(data), int64(len(data))) }
 
-func scan(r io.Reader, size int64) (Scan, error) {
+func collect(r io.Reader, size int64) (Scan, error) {
+	var records [][]byte
+	sc, err := scan(r, size, func(p []byte) error { records = append(records, p); return nil })
+	sc.Records = records
+	return sc, err
+}
+
+// scan checks the records of a log and passes each complete one to each.
+func scan(r io.Reader, size int64, each func([]byte) error) (Scan, error) {
 	var sc Scan
 	if size == 0 {
 		return sc, nil
@@ -131,7 +160,9 @@ func scan(r io.Reader, size int64) (Scan, error) {
 			}
 			return sc, fmt.Errorf("%w: checksum mismatch in record at offset %d", ErrCorrupt, off)
 		}
-		sc.Records = append(sc.Records, payload)
+		if err := each(payload); err != nil {
+			return sc, err
+		}
 		off = end
 		sc.Valid = off
 	}

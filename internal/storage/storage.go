@@ -183,6 +183,7 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 	if db.Audit, err = audit.New(kept, func(b []byte) error { return db.audit.Append(b) }, o.Log, nil); err != nil {
 		return nil, Recovery{}, err
 	}
+	db.Audit.ReadJournal(func(each func([]byte) error) error { return wal.Each(filepath.Join(dir, AuditFile), each) })
 	sl, ssc, err := wal.OpenFile(dir, SiteFile)
 	if err != nil {
 		return nil, Recovery{}, err
