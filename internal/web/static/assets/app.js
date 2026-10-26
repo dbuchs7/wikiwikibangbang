@@ -4394,6 +4394,7 @@ async function adminView() {
 
   const albumSection = section("album", t("retention.title"), await retentionCard());
   const catalogSection = section("connectors", t("connector.title"), connectorsCard(spaces, users));
+  const enginesSection = section("engines", t("engine.title"), enginesCard());
   const designSection = section("design", t("design.title"), await designCard());
   const regulationsSection = section("regulations", t("dp.adminTitle"), await regulationsCard());
 
@@ -4477,7 +4478,7 @@ async function adminView() {
     h("div", { class: "admin-layout" },
       h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, ...tocLinks),
       h("div", { class: "admin-sections" },
-        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, albumSection, catalogSection, designSection, regulationsSection, importSection, auditSection)),
+        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, albumSection, catalogSection, enginesSection, designSection, regulationsSection, importSection, auditSection)),
   );
 }
 
@@ -4624,6 +4625,89 @@ function infoButton(help) {
     help.open = true;
     help.scrollIntoView({ block: "nearest", behavior: "smooth" });
   } }, infoIcon());
+}
+
+// enginesCard lists the process engines whose processes pages show in
+// their newest version, and sets one up (ADR-0126). The credential is an
+// environment variable; the card says which one and whether it is set,
+// and checks the engine by listing its processes.
+function enginesCard() {
+  const card = h("div", { id: "engines" }, h("p", { class: "muted", text: t("autobackup.loading") }));
+  let open = null;
+  const load = async () => {
+    let data;
+    try {
+      data = await get("/api/engines");
+    } catch (err) {
+      card.replaceChildren(errorBox(err));
+      return;
+    }
+    const chosen = open === "new" ? { id: "", name: "", kind: data.kinds[0], baseURL: "", operations: false, isNew: true } : data.engines.find((e) => e.id === open);
+    card.replaceChildren(
+      h("p", { class: "muted", text: t("engine.note") }),
+      data.engines.length ? h("table", { id: "engine-list" },
+        h("thead", {}, h("tr", {}, [t("engine.name"), t("engine.kind"), t("engine.baseURL"), t("engine.operations"), t("engine.credential"), ""].map((x) => h("th", { text: x })))),
+        h("tbody", {}, data.engines.map((e) => h("tr", { "data-engine": e.id },
+          h("td", {}, h("strong", { text: e.name }), h("br"), h("span", { class: "muted", text: e.id })),
+          h("td", { text: e.kind }),
+          h("td", { class: "muted", text: e.baseURL }),
+          h("td", { text: e.operations ? t("engine.operationsOn") : t("engine.operationsOff") }),
+          h("td", { class: e.credential ? "" : "error", text: e.credential ? t("engine.credentialSet") : t("engine.credentialUnset") }),
+          h("td", {}, h("button", { type: "button", class: "link", text: t("common.edit"), onclick: () => { open = e.id; load(); } })))))) : empty(t("engine.none")),
+      h("p", {}, h("button", { type: "button", id: "engine-new", text: t("engine.new"), onclick: () => { open = "new"; load(); } })),
+      chosen ? engineEditor(chosen, data.kinds, data.engines.map((x) => x.id), (id) => { open = id; load(); }) : "");
+  };
+  load();
+  return card;
+}
+
+// engineEditor sets up one process engine; taken are the IDs in use, which
+// a new one may not take over. reopen(id) shows the card again with id
+// open, or none.
+function engineEditor(e, kinds, taken, reopen) {
+  const checkStatus = h("div", { class: "status", id: "engine-check" });
+  const path = (id) => "/api/engines/" + encodeURIComponent(id);
+  return h("div", { class: "connector-editor", id: "engine-editor" },
+    h("h3", { text: e.isNew ? t("engine.newTitle") : e.name }),
+    form({ id: "engine-settings" }, [
+      field(t("engine.id"), h("input", { name: "id", value: e.id, required: true, readonly: !e.isNew, pattern: "[a-z0-9][a-z0-9.\\-]{0,39}", maxlength: 40 })),
+      e.isNew ? h("p", { class: "muted", text: t("engine.idHelp") }) : "",
+      field(t("engine.name"), h("input", { name: "name", value: e.name, required: true, maxlength: 80 })),
+      field(t("engine.kind"), h("select", { name: "kind" }, kinds.map((k) => h("option", { value: k, text: k, selected: k === e.kind })))),
+      field(t("engine.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: e.baseURL, placeholder: "https://atlas.example.org" })),
+      h("label", { class: "check" }, h("input", { type: "checkbox", name: "operations", checked: e.operations }), " ", t("engine.allowOperations")),
+      h("p", { class: "muted", text: t("engine.operationsHelp") }),
+      e.isNew ? h("p", { class: "muted", text: t("engine.credentialHelpNew") })
+        : h("p", { class: e.credential ? "muted" : "error", id: "engine-credential",
+          text: e.credential ? t("engine.credentialIs", { name: e.credentialVar }) : t("engine.credentialMissing", { name: e.credentialVar }) }),
+      e.isNew ? "" : envHelp("engine-env-help"),
+      h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", text: t("engine.save") }),
+        e.isNew ? h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => reopen(null) })
+          : h("button", { type: "button", class: "secondary", id: "engine-check-now", text: t("engine.check"), onclick: async () => {
+            checkStatus.replaceChildren(h("p", { class: "muted", text: t("autobackup.loading") }));
+            try {
+              const { processes } = await get(path(e.id) + "/processes");
+              checkStatus.replaceChildren(h("p", { class: "notice", text: t("engine.checkOk", { n: processes.length }) }));
+            } catch (err) {
+              checkStatus.replaceChildren(errorBox(err));
+            }
+          } }),
+        e.isNew ? "" : h("button", { type: "button", class: "link danger", id: "engine-delete", text: t("engine.remove"), onclick: async () => {
+          if (!confirm(t("engine.removeConfirm", { name: e.name }))) return;
+          try {
+            await del(path(e.id));
+            reopen(null);
+          } catch (err) {
+            checkStatus.replaceChildren(errorBox(err));
+          }
+        } })),
+    ], async (d) => {
+      const id = d.get("id").trim();
+      if (e.isNew && taken.includes(id)) throw new Error(t("engine.taken", { id }));
+      const kept = await put(path(id), { name: d.get("name").trim(), kind: d.get("kind"), baseURL: d.get("baseURL").trim(), operations: d.get("operations") === "on" });
+      reopen(kept.id);
+    }),
+    checkStatus);
 }
 
 // connectorsCard lists the connectors that keep catalog spaces in step

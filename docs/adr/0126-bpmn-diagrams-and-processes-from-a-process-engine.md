@@ -63,7 +63,7 @@ Chosen options: **1 and 4.**
 ### Processes from an engine (option 4): the block kind `process`
 
 - **Engines:** an administrator names each engine under *Administration → Process engines*: an ID that never changes, a name, the kind (`atlas`, the only one so far), the base address, and whether its operations may be shown. They are settings of the installation, kept in `site.wal`.
-- **The credential** is the environment variable `WWBB_ENGINE_<ID>` (the ID in capitals, other characters as `_`), sent as a bearer token. It is never written to a journal, logged or returned; the settings page says only whether it is set. On the engine, it belongs to an account that may read the processes meant to be shown; on atlas, a token of the scope `diagrams` reaches the three reads below and nothing else (pblumer/atlas, its ADR for that scope).
+- **The credential** is the environment variable `WWBB_ENGINE_<ID>_TOKEN` (the ID in capitals, other characters as `_`, as for connectors), sent as a bearer token. It is never written to a journal, logged or returned; the settings page says only whether it is set. On the engine, it belongs to an account that may read the processes meant to be shown; on atlas, a token of the scope `diagrams` reaches the three reads below and nothing else (pblumer/atlas, its ADR for that scope).
 - **A `process` block** names an engine (`Engine`) and a process by its BPMN process ID (`Process`), with a plain caption. It holds no copy of the model.
 - **Insert → Process from an engine** lists the engines, then their processes (name, ID, newest version).
 - **Reading** a process block asks the server, which reads the engine at that moment:

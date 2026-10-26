@@ -73,9 +73,61 @@ function ckanSource() {
   return server;
 }
 
+// processModel is a BPMN model of the process "order" whose task names the
+// version, so a reader can tell the versions apart.
+const processModel = (version) => `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="defs" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="order" name="Order to cash" isExecutable="true">
+    <bpmn:startEvent id="start" name="Order received"/>
+    <bpmn:task id="check" name="Check order v${version}"/>
+    <bpmn:endEvent id="end"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="check"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="check" targetRef="end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="dia"><bpmndi:BPMNPlane id="plane" bpmnElement="order">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="100" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="check_di" bpmnElement="check"><dc:Bounds x="200" y="78" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_di" bpmnElement="end"><dc:Bounds x="360" y="100" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="136" y="118"/><di:waypoint x="200" y="118"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="300" y="118"/><di:waypoint x="360" y="118"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
+// engineSource answers like an atlas engine (ADR-0126), for the credential
+// ENGINE_TOKEN, which the server under test holds as WWBB_ENGINE_ATLAS_TOKEN:
+// the versions of the process "order", their models and where the
+// newest's instances are. deploy() adds a version.
+function engineSource() {
+  let versions = 3;
+  const server = require("http").createServer((req, res) => {
+    if (req.headers.authorization !== "Bearer " + process.env.ENGINE_TOKEN) {
+      res.statusCode = 401;
+      return res.end();
+    }
+    res.setHeader("Content-Type", "application/json");
+    if (req.url === "/api/v1/processes") {
+      return res.end(JSON.stringify([...Array.from({ length: versions }, (_, i) => ({ key: 100 + i, processId: "order", name: "Order to cash", version: i + 1, deployedAt: 1761400000 + i })),
+        { key: 7, processId: "approve", name: "Approve leave", version: 1, deployedAt: 1761300000 }]));
+    }
+    const m = /^\/api\/v1\/processes\/(\d+)\/(xml|runtime)$/.exec(req.url);
+    if (m && m[2] === "xml") return res.end(processModel(Number(m[1]) - 99));
+    if (m) {
+      return res.end(JSON.stringify({ instances: 3, finished: 12, tokens: 3, incidentTotal: 1, incidentCountsExact: true,
+        elements: [{ elementId: "start", tokens: 0, visits: 15, incidents: 0, terminated: 0 }, { elementId: "check", tokens: 3, visits: 15, incidents: 1, terminated: 0 }],
+        incidents: [{ elementId: "check", processInstanceKey: 4711, message: "customer Paul Muster has no address" }] }));
+    }
+    res.statusCode = 404;
+    res.end("{}");
+  });
+  server.listen(0, "127.0.0.1");
+  server.deploy = () => { versions++; };
+  return server;
+}
+
 (async () => {
   const sink = mailSink(process.env.SMTP_SINK_PORT);
   const ckan = ckanSource();
+  const engine = engineSource();
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const page = await browser.newPage();
   const problems = [];
@@ -1773,6 +1825,90 @@ function ckanSource() {
     await page.waitForSelector("#tasks");
     check(await page.locator("#tasks tr:has-text('Luftqualität')").count() === 0, "a catalog entry is not in the task list");
 
+    step("BPMN: a diagram drawn in the modeler and a .bpmn file are files of the page, shown and drawn again (ADR-0126)");
+    const flow = await (await page.request.post(base + "/api/items", { data: { space: "PLAT", type: "task", title: "Order to cash", properties: { priority: "low" } } })).json();
+    await page.goto(base + "/#/item/" + flow.item.key);
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .ProseMirror");
+    await page.locator("#body .ProseMirror").click();
+    await page.selectOption("#body .pm-toolbar select:has(option[value=bpmnnew])", "bpmnnew");
+    await page.waitForSelector("dialog.bpmn-modeler[open] .djs-element[data-element-id^=StartEvent]"); // a new model starts with a start event
+    await page.click("dialog.bpmn-modeler .djs-palette .entry.bpmn-icon-task");
+    const canvasBox = await page.locator("dialog.bpmn-modeler .bpmn-modeler-canvas").boundingBox();
+    await page.mouse.click(canvasBox.x + canvasBox.width / 2 + 120, canvasBox.y + canvasBox.height / 2);
+    await page.waitForSelector("dialog.bpmn-modeler .djs-element[data-element-id^=Activity]");
+    await page.click("dialog.bpmn-modeler button:has-text('Save diagram')");
+    await page.waitForSelector("dialog.bpmn-modeler", { state: "detached" });
+    await page.waitForSelector("#body .pm-diagram .djs-element[data-element-id^=Activity]");
+    await page.setInputFiles("#body .pm-toolbar input[type=file][accept*=bpmn]", { name: "order.bpmn", mimeType: "application/octet-stream", buffer: Buffer.from(processModel(1)) });
+    await page.waitForFunction(() => document.querySelectorAll("#body .pm-diagram").length === 2);
+    await page.setInputFiles("#body .pm-toolbar input[type=file][accept*=bpmn]", { name: "chart.png", mimeType: "image/png", buffer: png });
+    await page.waitForSelector("#body .pm-toolbar :text('This file is no BPMN model')"); // a picture is no model
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    for (let i = 0; i < 2; i++) {
+      const d = page.locator("#body .pm-diagram").nth(i);
+      await d.scrollIntoViewIfNeeded(); // diagrams are drawn when they come into sight
+      await d.locator(".djs-element").first().waitFor();
+      check(await d.locator(".bjs-powered-by").isVisible(), "the bpmn.io watermark stays visible");
+    }
+    await page.waitForSelector("#body .pm-diagram :text('Check order v1')");
+    check(await page.locator("#attachments li:has-text('.bpmn')").count() === 2, "both models are files of the page");
+    check(await page.locator("#body.reading .pm-diagram-edit").count() === 0, "a diagram is drawn anew only while editing");
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .pm-diagram-edit");
+    await page.locator("#body .pm-diagram:has(:text('Check order v1')) .pm-diagram-edit").click();
+    await page.waitForSelector("dialog.bpmn-modeler[open] .djs-element[data-element-id=check]"); // the stored model opens
+    await page.click("dialog.bpmn-modeler button:has-text('Cancel')");
+    await page.waitForSelector("dialog.bpmn-modeler", { state: "detached" });
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+
+    if (process.env.ENGINE_TOKEN) {
+      step("BPMN: a process of an engine shows its newest version and, where allowed, its operations as counts only (ADR-0126)");
+      await page.goto(base + "/#/admin");
+      await page.waitForSelector("#engines >> text=No process engine is set up yet.");
+      await page.click("#engine-new");
+      await page.fill("#engine-settings [name=id]", "atlas");
+      await page.fill("#engine-settings [name=name]", "Atlas test");
+      await page.fill("#engine-settings [name=baseURL]", `http://127.0.0.1:${engine.address().port}`);
+      await page.click("#engine-settings button[type=submit]");
+      await page.waitForSelector("#engine-list tr[data-engine=atlas]");
+      await page.waitForSelector("#engine-credential >> text=WWBB_ENGINE_ATLAS_TOKEN; it is set");
+      await page.click("#engine-check-now");
+      await page.waitForSelector("#engine-check >> text=The engine answered with 2 processes.");
+      await page.goto(base + "/#/item/" + flow.item.key);
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .ProseMirror");
+      await page.locator("#body .ProseMirror").click();
+      await page.selectOption("#body .pm-toolbar select:has(option[value=process])", "process");
+      await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Order to cash')");
+      await page.waitForSelector("dialog.bpmn-pick", { state: "detached" });
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
+      const proc = page.locator("#body .pm-diagram:has(.pm-diagram-refresh)");
+      await proc.scrollIntoViewIfNeeded();
+      await proc.locator(".pm-diagram-info:has-text('Order to cash · version 3 · Atlas test')").waitFor();
+      await proc.locator(":text('Check order v3')").waitFor();
+      check(await proc.locator(".pm-diagram-operations").count() === 0, "operations are offered only where an administrator allowed them");
+      engine.deploy();
+      await proc.locator(".pm-diagram-refresh").click();
+      await proc.locator(":text('Check order v4')").waitFor(); // always the newest version
+      await page.goto(base + "/#/admin");
+      await page.click("#engine-list tr[data-engine=atlas] button:has-text('Edit')");
+      await page.check("#engine-settings [name=operations]");
+      await page.click("#engine-settings button[type=submit]");
+      await page.waitForSelector("#engine-list tr[data-engine=atlas] >> text=shown");
+      await page.goto(base + "/#/item/" + flow.item.key);
+      const live = page.locator("#body .pm-diagram:has(.pm-diagram-refresh)");
+      await live.scrollIntoViewIfNeeded();
+      await live.locator(".pm-diagram-operations input").check();
+      await live.locator(".pm-ops-badge.pm-ops-incidents").waitFor();
+      check((await live.locator(".pm-ops-badge").allTextContents()).join(" ") === "15 12 3 1", "passed, waiting and held tokens per element");
+      await live.locator(".pm-diagram-ops:has-text('Version 4 · running: 3 · finished: 12 · incidents: 1')").waitFor();
+      check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader");
+    }
+
     step("spaces: an administrator deletes a space into the trash, restores it, and deletes it for good");
     await page.goto(base + "/#/admin");
     await page.fill("#new-space [name=key]", "TMP");
@@ -1996,5 +2132,6 @@ function ckanSource() {
     await browser.close();
     sink.close();
     ckan.close();
+    engine.close();
   }
 })();

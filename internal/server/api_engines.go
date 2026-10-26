@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -23,7 +22,7 @@ func engineRoutes(d Deps) []Route {
 	}
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/engines", Summary: "The process engines whose processes pages show: ID, name and whether their operations may be shown; administrators also see the kind, the address and whether the credential is set (ADR-0126)", Handler: http.HandlerFunc(h.engines)},
-		{Method: http.MethodPut, Pattern: "/api/engines/{id}", Summary: "Add or change a process engine: name, kind, address and whether its operations may be shown; its credential is the environment variable WWBB_ENGINE_<ID> (administrators)", Handler: http.HandlerFunc(h.setEngine)},
+		{Method: http.MethodPut, Pattern: "/api/engines/{id}", Summary: "Add or change a process engine: name, kind, address and whether its operations may be shown; its credential is the environment variable WWBB_ENGINE_<ID>_TOKEN (administrators)", Handler: http.HandlerFunc(h.setEngine)},
 		{Method: http.MethodDelete, Pattern: "/api/engines/{id}", Summary: "Remove a process engine; the blocks that show its processes stay (administrators)", Handler: http.HandlerFunc(h.removeEngine)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes", Summary: "The newest version of each process the engine lets its credential read, read from the engine now", Handler: http.HandlerFunc(h.processes)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes/{process}", Summary: "The newest version of a process with its BPMN model, read from the engine now", Handler: http.HandlerFunc(h.process)},
@@ -135,16 +134,12 @@ func (h engineHandlers) engineOf(w http.ResponseWriter, r *http.Request) (site.E
 // engine and how; the credential is never part of the message.
 func (h engineHandlers) engineFailed(w http.ResponseWriter, e site.Engine, err error) {
 	msg := "engine " + e.ID + ": " + err.Error()
-	switch {
-	case errors.Is(err, engine.ErrNotFound):
+	if errors.Is(err, engine.ErrNotFound) {
 		writeError(w, http.StatusNotFound, msg)
-	case errors.Is(err, engine.ErrNoCredential), errors.Is(err, engine.ErrRefused), errors.Is(err, engine.ErrUnavailable), errors.Is(err, context.DeadlineExceeded):
-		h.log.Warn("process engine read failed", "engine", e.ID, "err", err)
-		writeError(w, http.StatusBadGateway, msg)
-	default:
-		h.log.Error("process engine read failed", "engine", e.ID, "err", err)
-		writeError(w, http.StatusBadGateway, msg)
+		return
 	}
+	h.log.Warn("process engine read failed", "engine", e.ID, "err", err)
+	writeError(w, http.StatusBadGateway, msg)
 }
 
 func (h engineHandlers) processes(w http.ResponseWriter, r *http.Request) {

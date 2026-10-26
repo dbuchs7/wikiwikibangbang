@@ -52,12 +52,12 @@ func fakeAtlas(t *testing.T) (*httptest.Server, *[]string) {
 
 func TestTheNewestVersionAndItsOperations(t *testing.T) {
 	srv, asked := fakeAtlas(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_PROD": "secret"}
+	env := map[string]string{"WWBB_ENGINE_ATLAS_PROD_TOKEN": "secret"}
 	r := NewReader(func(k string) string { return env[k] }, srv.Client())
 	e := site.Engine{ID: "atlas-prod", Name: "Atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}
 	ctx := context.Background()
 
-	if TokenVar("atlas-prod.v2") != "WWBB_ENGINE_ATLAS_PROD_V2" || !r.HasCredential("atlas-prod") || r.HasCredential("other") {
+	if TokenVar("atlas-prod.v2") != "WWBB_ENGINE_ATLAS_PROD_V2_TOKEN" || !r.HasCredential("atlas-prod") || r.HasCredential("other") {
 		t.Fatal("credential variables")
 	}
 	list, err := r.Processes(ctx, e)
@@ -94,15 +94,15 @@ func TestTheNewestVersionAndItsOperations(t *testing.T) {
 			t.Errorf("asked elsewhere: %v", *asked)
 		}
 	}
-	env["WWBB_ENGINE_ATLAS_PROD"] = "wrong"
+	env["WWBB_ENGINE_ATLAS_PROD_TOKEN"] = "wrong"
 	if _, err := r.Processes(ctx, e); !errors.Is(err, ErrRefused) || strings.Contains(err.Error(), "wrong") {
 		t.Errorf("a refused credential: %v", err)
 	}
-	delete(env, "WWBB_ENGINE_ATLAS_PROD")
-	if _, err := r.Processes(ctx, e); !errors.Is(err, ErrNoCredential) || !strings.Contains(err.Error(), "WWBB_ENGINE_ATLAS_PROD") {
+	delete(env, "WWBB_ENGINE_ATLAS_PROD_TOKEN")
+	if _, err := r.Processes(ctx, e); !errors.Is(err, ErrNoCredential) || !strings.Contains(err.Error(), "WWBB_ENGINE_ATLAS_PROD_TOKEN") {
 		t.Errorf("no credential: %v", err)
 	}
-	env["WWBB_ENGINE_ATLAS_PROD"] = "secret"
+	env["WWBB_ENGINE_ATLAS_PROD_TOKEN"] = "secret"
 	if _, err := r.Processes(ctx, site.Engine{ID: "atlas-prod", Kind: "other", BaseURL: e.BaseURL}); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("an unknown kind: %v", err)
 	}

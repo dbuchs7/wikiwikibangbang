@@ -42,7 +42,8 @@ var (
 const Timeout = 15 * time.Second
 
 // TokenVar names the environment variable that holds an engine's
-// credential: WWBB_ENGINE_ and the ID in capitals, other characters as _.
+// credential, e.g. WWBB_ENGINE_ATLAS_PROD_TOKEN: the ID in capitals, other
+// characters as _, named as a connector's (ADR-0077).
 func TokenVar(id string) string {
 	return "WWBB_ENGINE_" + strings.Map(func(r rune) rune {
 		switch {
@@ -52,7 +53,7 @@ func TokenVar(id string) string {
 			return r
 		}
 		return '_'
-	}, id)
+	}, id) + "_TOKEN"
 }
 
 // Reader reads engines.
