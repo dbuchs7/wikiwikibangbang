@@ -7,6 +7,7 @@ package audit
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -90,7 +91,7 @@ const (
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for
-// listing; the journal keeps all of them.
+// listing; the journal keeps all of them, and ListAll reaches them there.
 const Retained = 10_000
 
 // Trail is safe for concurrent use.
@@ -102,6 +103,10 @@ type Trail struct {
 	seq     int
 	recent  []Entry
 	failed  int
+	// trimmed is whether older entries than the in-memory ones are in the
+	// journal; read, if set, reads them (ListAll).
+	trimmed bool
+	read    func(each func([]byte) error) error
 }
 
 // New rebuilds a trail from its journal records. log, if not nil, also
@@ -186,7 +191,7 @@ func (t *Trail) Exclusive(fn func() (kept [][]byte, changed bool, err error)) er
 	if err != nil || !changed {
 		return err
 	}
-	t.recent = nil
+	t.recent, t.trimmed = nil, false
 	for i, r := range kept {
 		var e Entry
 		if err := json.Unmarshal(r, &e); err != nil {
@@ -201,6 +206,7 @@ func (t *Trail) keep(e Entry) {
 	t.recent = append(t.recent, e)
 	if len(t.recent) > Retained {
 		t.recent = slices.Clone(t.recent[len(t.recent)-Retained:])
+		t.trimmed = true
 	}
 }
 
@@ -245,6 +251,10 @@ func (t *Trail) List(before, limit int) []Entry { return t.ListWhere(before, lim
 func (t *Trail) ListWhere(before, limit int, keep func(Entry) bool) []Entry {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	return t.listRecent(before, limit, keep)
+}
+
+func (t *Trail) listRecent(before, limit int, keep func(Entry) bool) []Entry {
 	var out []Entry
 	for i := len(t.recent) - 1; i >= 0 && len(out) < limit; i-- {
 		if (before == 0 || t.recent[i].Seq < before) && (keep == nil || keep(t.recent[i])) {
@@ -252,4 +262,61 @@ func (t *Trail) ListWhere(before, limit int, keep func(Entry) bool) []Entry {
 		}
 	}
 	return out
+}
+
+// ReadJournal lets ListAll read the whole journal: read passes its records
+// to each in order and stops when each returns an error.
+func (t *Trail) ReadJournal(read func(each func([]byte) error) error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.read = read
+}
+
+// errOlder stops reading the journal at the first in-memory entry.
+var errOlder = errors.New("audit: reached the in-memory entries")
+
+// ListAll is ListWhere reaching past the in-memory window: when the window
+// holds fewer than limit entries that keep accepts and older entries exist,
+// the rest come from the journal (ADR-0122), so an entry stays listable for
+// as long as it is kept, however many came after it. Reading the journal
+// takes time in proportion to its size; it runs without holding the lock,
+// so entries are still recorded meanwhile.
+func (t *Trail) ListAll(before, limit int, keep func(Entry) bool) ([]Entry, error) {
+	t.mu.Lock()
+	out := t.listRecent(before, limit, keep)
+	read, trimmed, bound := t.read, t.trimmed, 0
+	if len(t.recent) > 0 {
+		bound = t.recent[0].Seq
+	}
+	t.mu.Unlock()
+	if len(out) >= limit || read == nil || !trimmed {
+		return out, nil
+	}
+	if before != 0 && before < bound {
+		bound = before
+	}
+	// The journal is in sequence order: keep the newest matches in a ring.
+	want := limit - len(out)
+	ring, n := make([]Entry, want), 0
+	err := read(func(p []byte) error {
+		var e Entry
+		if err := json.Unmarshal(p, &e); err != nil {
+			return err
+		}
+		if e.Seq >= bound {
+			return errOlder
+		}
+		if keep == nil || keep(e) {
+			ring[n%want] = e
+			n++
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errOlder) {
+		return nil, fmt.Errorf("audit: reading the journal: %w", err)
+	}
+	for i := n - 1; i >= 0 && i >= n-want; i-- {
+		out = append(out, ring[i%want])
+	}
+	return out, nil
 }

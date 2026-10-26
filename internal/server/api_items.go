@@ -465,7 +465,11 @@ func (h itemHandlers) listAudit(w http.ResponseWriter, r *http.Request) {
 			return item.HasWords(strings.Join(words, " "), text)
 		}
 	}
-	entries := h.d.DB.Audit.ListWhere(before, limit, keep)
+	entries, err := h.d.DB.Audit.ListAll(before, limit, keep)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
 	res := map[string]any{"entries": nonNilSlice(entries)}
 	if len(entries) == limit {
 		res["next"] = entries[len(entries)-1].Seq

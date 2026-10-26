@@ -324,3 +324,32 @@ func TestRewriteReplacesTheFileAtomically(t *testing.T) {
 		t.Fatal("a failed rewrite left its temporary file")
 	}
 }
+
+func TestEachPassesRecordsOneAtATime(t *testing.T) {
+	dir := t.TempDir()
+	data := write(t, dir, records(3))
+	path := filepath.Join(dir, FileName)
+	var got [][]byte
+	if err := Each(path, func(p []byte) error { got = append(got, p); return nil }); err != nil || len(got) != 3 || !bytes.Equal(got[2], records(3)[2]) {
+		t.Fatalf("%d records, %v", len(got), err)
+	}
+	stop := errors.New("stop")
+	n := 0
+	if err := Each(path, func([]byte) error { n++; return stop }); !errors.Is(err, stop) || n != 1 {
+		t.Fatalf("after %d records: %v", n, err)
+	}
+	// An append in progress is not passed.
+	if err := os.WriteFile(path, data[:len(data)-2], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	n = 0
+	if err := Each(path, func([]byte) error { n++; return nil }); err != nil || n != 2 {
+		t.Fatalf("torn tail: %d records, %v", n, err)
+	}
+	if err := Each(filepath.Join(dir, "missing"), func([]byte) error { t.Fatal("a missing file has records"); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := Each(dir, func([]byte) error { return nil }); err == nil {
+		t.Fatal("a directory read as a log")
+	}
+}

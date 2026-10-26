@@ -154,3 +154,67 @@ func TestExpiry(t *testing.T) {
 		t.Fatal("a damaged record was accepted")
 	}
 }
+
+// TestListAllReachesTheJournal covers ADR-0122: an entry pushed out of the
+// in-memory window by many later ones is still listed, from the journal.
+func TestListAllReachesTheJournal(t *testing.T) {
+	m := &mem{}
+	tr, _ := New(nil, m.append, nil, clock())
+	read := func(each func([]byte) error) error {
+		for _, r := range m.records {
+			if err := each(r); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	design := func(e Entry) bool { return e.Event == DesignChanged }
+	tr.Record(Entry{Event: DesignChanged, Detail: map[string]string{"theme": "swiss"}})
+	tr.Record(Entry{Event: DesignChanged})
+	tr.Record(Entry{Event: DesignChanged})
+	if got, err := tr.ListAll(0, 10, design); err != nil || len(got) != 3 {
+		t.Fatalf("within the window: %d, %v", len(got), err)
+	}
+	for range Retained {
+		tr.Record(Entry{Event: LoginFailed})
+	}
+	if got := tr.ListWhere(0, 10, design); len(got) != 0 {
+		t.Fatalf("the window still holds %d design entries", len(got))
+	}
+	if got, err := tr.ListAll(0, 10, design); err != nil || len(got) != 0 {
+		t.Fatalf("without a journal reader: %d, %v", len(got), err)
+	}
+	tr.ReadJournal(read)
+	got, err := tr.ListAll(0, 10, design)
+	if err != nil || len(got) != 3 || got[0].Seq != 3 || got[2].Seq != 1 || got[2].Detail["theme"] != "swiss" {
+		t.Fatalf("from the journal: %+v, %v", got, err)
+	}
+	page, _ := tr.ListAll(0, 2, design)
+	rest, _ := tr.ListAll(page[1].Seq, 2, design)
+	if len(page) != 2 || page[0].Seq != 3 || page[1].Seq != 2 || len(rest) != 1 || rest[0].Seq != 1 {
+		t.Fatalf("paged: %+v then %+v", page, rest)
+	}
+	// Unfiltered, the window's entries come first and the journal adds the rest.
+	all, _ := tr.ListAll(0, Retained+10, nil)
+	if len(all) != Retained+3 || all[0].Seq != Retained+3 || all[len(all)-1].Seq != 1 {
+		t.Fatalf("%d entries, newest %d, oldest %d", len(all), all[0].Seq, all[len(all)-1].Seq)
+	}
+	if got, _ := tr.ListAll(0, 5, nil); len(got) != 5 || got[0].Seq != Retained+3 {
+		t.Fatal("a full page from the window read the journal")
+	}
+	m.records[0] = []byte("{")
+	if _, err := tr.ListAll(0, 10, design); err == nil {
+		t.Fatal("a damaged journal listed")
+	}
+	tr.ReadJournal(func(func([]byte) error) error { return errors.New("disk gone") })
+	if _, err := tr.ListAll(0, 10, design); err == nil || !strings.Contains(err.Error(), "disk gone") {
+		t.Fatalf("a failed read: %v", err)
+	}
+	// After a rewrite that fits the window, nothing older is left to read.
+	if err := tr.Exclusive(func() ([][]byte, bool, error) { return m.records[len(m.records)-3:], true, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := tr.ListAll(0, 10, nil); err != nil || len(got) != 3 {
+		t.Fatalf("after the rewrite: %d, %v", len(got), err)
+	}
+}

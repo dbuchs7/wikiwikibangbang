@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
 )
 
 func openFast(t *testing.T, dir string) *DB {
@@ -130,5 +132,30 @@ func TestAuditEntriesExpireAfterTenYears(t *testing.T) {
 	defer db.Close()
 	if got := db.Audit.List(0, 10); len(got) != 2 || got[0].Seq != 4 || got[1].Event != audit.Expired {
 		t.Fatalf("after a rewrite and a restart: %+v", got)
+	}
+}
+
+// TestAuditListingReachesTheJournal covers ADR-0122: entries older than
+// the in-memory window are listed from audit.wal.
+func TestAuditListingReachesTheJournal(t *testing.T) {
+	dir := t.TempDir()
+	at := time.Now().UTC().Add(-time.Hour)
+	var recs [][]byte
+	for i := range audit.Retained + 2 {
+		e := audit.Entry{Seq: i + 1, At: at, Event: audit.LoginFailed}
+		if i == 0 {
+			e.Event = audit.DesignChanged
+		}
+		data, err := json.Marshal(e)
+		noErr(t, err)
+		recs = append(recs, data)
+	}
+	noErr(t, os.MkdirAll(dir, 0o700))
+	noErr(t, wal.Rewrite(dir, AuditFile, recs))
+	db := openFast(t, dir)
+	defer db.Close()
+	got, err := db.Audit.ListAll(0, 10, func(e audit.Entry) bool { return e.Event == audit.DesignChanged })
+	if err != nil || len(got) != 1 || got[0].Seq != 1 {
+		t.Fatalf("%+v, %v", got, err)
 	}
 }
