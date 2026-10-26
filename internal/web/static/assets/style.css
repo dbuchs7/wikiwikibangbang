@@ -609,7 +609,10 @@ dialog.bpmn-modeler .bpmn-modeler-canvas { flex: 1; position: relative; backgrou
 .pm-live-region.pm-live-drawn { background: #fff; color: #222; }
 .pm-live-canvas { position: absolute; inset: 0; display: block; }
 .pm-live-region:not(.pm-live-drawn) .pm-live-canvas { visibility: hidden; }
-.pm-live-canvas .bjs-powered-by { pointer-events: auto; }
+/* Over a drawing the watermark is drawn at the process's scale (ADR-0142),
+   about the region's corner, so its distance from the corner shrinks with
+   it. bpmn-js places it 15px from the corner; its code is unchanged. */
+.pm-live-canvas .bjs-powered-by { pointer-events: auto; transform: scale(var(--pm-mark, 1)); transform-origin: calc(100% + 15px) calc(100% + 15px); }
 /* The bar is small, as a region may be: the switch of the operations and,
    while pointed at or when the process cannot be shown, what it says. */
 .pm-live-bar { position: absolute; left: 3px; top: 3px; right: 3px; display: flex; gap: 4px; align-items: center; font-size: 11px; line-height: 16px; text-align: left; }

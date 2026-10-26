@@ -50,7 +50,7 @@ Chosen options: **1 and 4.**
 
 - **The library:** bpmn-js 18.31.0, the modeler and viewer of bpmn.io, bundled from `internal/web/vendor` like the editor (ADR-0032) into `static/vendor/bpmn-viewer.js` (the navigated viewer, about 200 KB) and `static/vendor/bpmn-modeler.js` (the modeler, about 600 KB), with its stylesheets and its icon font in `static/vendor/bpmn/`. A page loads the viewer only when it shows a diagram, and the modeler only when one is drawn.
 - **No exception to the policy:** bpmn-js draws with SVG attributes and sets styles through the DOM, which the policy allows; a test in Chromium under the UI's own policy recorded no violation, the watermark included.
-- **The watermark** stays as bpmn-js draws it, at the bottom right of every diagram, and nothing of the UI covers it. `bpmn.LICENSE.txt` carries the licence text.
+- **The watermark** stays as bpmn-js draws it, at the bottom right of every diagram, and nothing of the UI covers it. Over a drawing it is drawn at the scale of the process it marks (ADR-0142). `bpmn.LICENSE.txt` carries the licence text.
 
 ### Stored diagrams: the block kind `bpmn`
 

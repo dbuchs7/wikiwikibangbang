@@ -39,6 +39,11 @@ const processPath = (engine, process) => `/api/engines/${enc(engine)}/processes/
 // on and the page is in sight.
 const operationsEvery = 30_000;
 
+// minMark is the smallest share of its own size the bpmn.io watermark is
+// drawn at over a drawing, where it is drawn at the scale of the process
+// (ADR-0142): small enough for a small process, large enough to read.
+const minMark = 0.5;
+
 // markOperations marks the elements of a drawn process with the counts of
 // its operations o: how many tokens passed, wait there and are held there
 // by an incident (ADR-0129), as atlas does.
@@ -693,16 +698,22 @@ export function processRegion(r) {
   let gone = false;
 
   // fit lays the model out as its picture shows it: centred, with the
-  // drawing's margin around it, so the live view covers the picture.
+  // drawing's margin around it, so the live view covers the picture. The
+  // watermark is drawn at the process's scale, never larger than its own
+  // size and never smaller than minMark of it.
   const fit = () => {
     const c = viewer.get("canvas");
     c.resized();
     const inner = c.viewbox().inner;
     const [cw, ch] = [canvas.clientWidth, canvas.clientHeight];
-    if (!cw || !ch || !inner.width || !inner.height) return c.zoom("fit-viewport", "auto");
-    const scale = Math.min(cw / (inner.width + 2 * r.margin), ch / (inner.height + 2 * r.margin));
-    const [w, hh] = [cw / scale, ch / scale];
-    c.viewbox({ x: inner.x - (w - inner.width) / 2, y: inner.y - (hh - inner.height) / 2, width: w, height: hh });
+    if (!cw || !ch || !inner.width || !inner.height) c.zoom("fit-viewport", "auto");
+    else {
+      const scale = Math.min(cw / (inner.width + 2 * r.margin), ch / (inner.height + 2 * r.margin));
+      const [w, hh] = [cw / scale, ch / scale];
+      c.viewbox({ x: inner.x - (w - inner.width) / 2, y: inner.y - (hh - inner.height) / 2, width: w, height: hh });
+    }
+    const zoom = c.zoom();
+    canvas.style.setProperty("--pm-mark", String(Number.isFinite(zoom) ? Math.min(1, Math.max(minMark, zoom)) : 1));
   };
 
   const draw = async () => {

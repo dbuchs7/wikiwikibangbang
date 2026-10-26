@@ -3,8 +3,8 @@
 - **Status:** Proposed
 - **Implementation:** Partial
 - **Date:** 2026-10-26
-- **Deciders:** Project initiators (requested 2026-10-26: what a page offers for processes since ADR-0129, offered in a drawing too. A process can be drawn anew as a BPMN model, shown from an existing BPMN file, or taken from an atlas instance, with its moving operations view in the drawing); proposed for the maintainer's acceptance
-- **Open question:** A process in a drawing is pictured by bpmn-js's own SVG export (`saveSVG`), which carries no bpmn.io watermark. Where bpmn-js draws a process live over a drawing, the watermark shows, as ADR-0129 requires. This record assumes that the license's condition binds diagrams rendered by bpmn-js, not pictures exported from it, as bpmn.io's own demo exports SVG without the watermark. No statement by its authors was found. Does the maintainer accept that reading?
+- **Deciders:** Project initiators (requested 2026-10-26: what a page offers for processes since ADR-0129, offered in a drawing too. A process can be drawn anew as a BPMN model, shown from an existing BPMN file, or taken from an atlas instance, with its moving operations view in the drawing. On the same day they asked for the bpmn.io watermark over a drawing to be sized in proportion to the process it marks); proposed for the maintainer's acceptance
+- **Open question:** A process in a drawing is pictured by bpmn-js's own SVG export (`saveSVG`), which carries no bpmn.io watermark. Where bpmn-js draws a process live over a drawing, the watermark shows, as ADR-0129 requires. This record assumes that the license's condition binds diagrams rendered by bpmn-js, not pictures exported from it, as bpmn.io's own demo exports SVG without the watermark. Over a drawing, the watermark is drawn at the process's scale (see the revision below). This record also assumes that the condition, which forbids changing the code that displays the watermark and asks that it stay fully visible and not overlapped, sets no size, so a watermark scaled with the diagram it marks still keeps it. Neither reading has been confirmed by bpmn.io's authors. Does the maintainer accept both, or should bpmn.io be asked?
 - **Question checked:** 2026-10
 
 ## Context and problem statement
@@ -53,6 +53,12 @@ Chosen option: **1**. Only it keeps a drawing one picture that shows everywhere 
 > - **The switch.** It is styled as a link of its own measures, so neither the UI's nor a theme's button style can make it larger than a small region.
 >   - At rest it is a faint sign, green while the operations are on.
 >   - Pointed at or focused, it shows fully and names itself.
+> - **The watermark.** bpmn-js draws it 53 × 21 pixels whatever the size of the region, so over a small process it drew the eye from the process. At the project initiators' request it is drawn at the process's scale:
+>   - as large, relative to its own size, as the process is shown relative to its own;
+>   - never larger than its own size, and never smaller than half of it, so it stays legible;
+>   - scaled about the region's corner, so its distance from the corner shrinks with it.
+>
+>   The code that displays it is unchanged, and it stays wholly within the region, uncovered. Fading it was not considered: the condition asks for it fully visible. Whether scaling keeps the condition is part of the open question. A diagram in the text keeps the watermark as bpmn-js draws it.
 
 ### In the drawing editor
 
@@ -105,7 +111,7 @@ Chosen option: **1**. Only it keeps a drawing one picture that shows everywhere 
   - **Its layout.** The model is laid out as its picture shows it, centred, with the region's margin around it. The live view therefore covers the picture, and the *Operations* switch sits in the margin.
   - **The operations** are counts only, as in a process block (ADR-0129). They show at first when the drawing says so and the engine allows them, and the reader switches them with the region's *Operations* button. While on, they are read every 30 seconds while the page is in sight.
   - **A newer version.** When the counts belong to a newer version than the one drawn, the newer version is drawn first.
-- **The region does not pan or zoom.** The page scrolls over it, and clicks reach the picture, so while editing a click still selects the drawing. Its button and the bpmn.io watermark take clicks. The watermark stays visible.
+- **The region does not pan or zoom.** The page scrolls over it, and clicks reach the picture, so while editing a click still selects the drawing. Its button and the bpmn.io watermark take clicks. The watermark stays visible, at the process's scale.
 
 ### Consequences
 

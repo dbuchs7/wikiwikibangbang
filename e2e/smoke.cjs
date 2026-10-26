@@ -2516,6 +2516,15 @@ function gitSource() {
       await region.locator(".pm-ops-badge.pm-ops-incidents").waitFor(); // operations at first, as chosen
       check((await region.locator(".pm-ops-badge").allTextContents()).join(" ") === "15 12 3 1", "passed, waiting and held tokens over the drawing");
       check(await region.locator(".bjs-powered-by").isVisible(), "the bpmn.io watermark stays visible over the drawing");
+      // It is drawn at the process's scale, within bounds, and wholly
+      // within the region.
+      const logo = await region.evaluate((el) => {
+        const [r, a] = [el.getBoundingClientRect(), el.querySelector(".bjs-powered-by").getBoundingClientRect()];
+        const scale = Number(getComputedStyle(el.querySelector(".pm-live-canvas")).getPropertyValue("--pm-mark"));
+        return { scale, width: a.width, inside: a.left >= r.left && a.top >= r.top && a.right <= r.right && a.bottom <= r.bottom };
+      });
+      check(logo.scale >= 0.5 && logo.scale <= 1 && Math.abs(logo.width - 53 * logo.scale) < 1, "the watermark is drawn at the process's scale: " + JSON.stringify(logo));
+      check(logo.inside, "the watermark lies wholly within its region");
       // At rest the switch is a small sign; pointed at, it names itself.
       await page.mouse.move(0, 0);
       const pill = await region.locator(".pm-live-ops").boundingBox();
