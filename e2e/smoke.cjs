@@ -2366,6 +2366,53 @@ function gitSource() {
       check((await live.locator(".pm-ops-badge").allTextContents()).join(" ") === "15 12 3 1", "passed, waiting and held tokens per element");
       await live.locator(".pm-diagram-ops:has-text('Version 4 · running: 3 · finished: 12 · incidents: 1')").waitFor();
       check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader");
+
+      step("drawing: a model of its own and a process of an engine go into a drawing; the latter shows live over its picture, with its operations (ADR-0139)");
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .ProseMirror");
+      await page.locator("#body .ProseMirror").click();
+      await page.selectOption("#body .pm-toolbar select:has(option[value=drawing])", "drawing");
+      await page.waitForSelector("dialog.drawing[open] iframe");
+      const procFrame = page.frameLocator("dialog.drawing iframe");
+      await procFrame.locator("body[data-state=open] .excalidraw canvas").first().waitFor();
+      await procFrame.locator("select.process:visible").selectOption("edit");
+      await page.waitForSelector("dialog.drawing :text('Select one process in the drawing first.')"); // nothing to edit yet
+      await procFrame.locator("select.process:visible").selectOption("new");
+      await page.waitForSelector("dialog.bpmn-modeler[open] .djs-element[data-element-id^=StartEvent]");
+      await page.click("dialog.bpmn-modeler button:has-text('Save diagram')");
+      await page.waitForSelector("dialog.bpmn-modeler", { state: "detached" });
+      await procFrame.locator("body[data-elements='1']").waitFor(); // the model is a picture in the drawing
+      await procFrame.locator("select.process:visible").selectOption("file"); // a BPMN file of the page
+      await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('order.bpmn')");
+      await page.waitForSelector("dialog.bpmn-pick", { state: "detached" });
+      await procFrame.locator("body[data-elements='2']").waitFor();
+      await procFrame.locator("select.process:visible").selectOption("process");
+      await page.waitForSelector("dialog.bpmn-pick[open] .bpmn-pick-operations:visible"); // the engine allows its operations
+      await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Order to cash')");
+      await page.waitForSelector("dialog.bpmn-pick", { state: "detached" });
+      await procFrame.locator("body[data-elements='3']").waitFor();
+      // The process placed is selected; edited, it is read again in place.
+      await procFrame.locator("select.process:visible").selectOption("edit");
+      await page.waitForTimeout(500);
+      check(await procFrame.locator("body[data-elements='3']").count() === 1 && await page.locator("dialog.bpmn-pick, dialog.bpmn-modeler").count() === 0,
+        "an engine's process is read again in place, without a dialog");
+      await page.click("dialog.drawing button:has-text('Save drawing')");
+      await page.waitForSelector("dialog.drawing", { state: "detached" });
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
+      engine.deploy(); // the picture holds version 4; the page shows the newest
+      await page.reload();
+      const region = page.locator("#body .pm-image .pm-live-region");
+      await region.first().waitFor({ state: "attached" });
+      check(await region.count() === 1, "only the process of the engine is live; the model of its own is part of the picture");
+      await region.scrollIntoViewIfNeeded();
+      await region.locator(":text('Check order v5')").waitFor();
+      await region.locator(".pm-ops-badge.pm-ops-incidents").waitFor(); // operations at first, as chosen
+      check((await region.locator(".pm-ops-badge").allTextContents()).join(" ") === "15 12 3 1", "passed, waiting and held tokens over the drawing");
+      check(await region.locator(".bjs-powered-by").isVisible(), "the bpmn.io watermark stays visible over the drawing");
+      await region.locator(".pm-live-ops").click();
+      await page.waitForFunction(() => !document.querySelector("#body .pm-live-region .pm-ops-badge"));
+      check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader of a drawing");
     }
 
     step("connectors: an API description offers its lists; the one picked fills a JSON source's settings (ADR-0130)");

@@ -523,6 +523,10 @@ const filesOf = (item, attachments = []) => {
       return a;
     },
     isDrawing: (id) => isDrawing(known.get(id)?.name),
+    // list is the item's files known here, for choosing one, and knows
+    // whether a file is among them (ADR-0139).
+    list: () => [...known.values()],
+    knows: (id) => known.has(id),
     // origin says where a copy came from, and whether its original is
     // newer: {readable, item: {id, key, title}, newer}.
     origin: (id) => known.get(id)?.origin || null,
@@ -3929,7 +3933,8 @@ async function relocateForm(box, item, mode, spaces, status) {
 function bodySection(item, embeds, editing, threads, attachments, protect, edit, notes, onPresence) {
   const resolve = async (ref) => (await get("/api/items/" + encodeURIComponent(ref))).item;
   if (!editing) {
-    const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item),
+    // The files are known, so a drawing shows its processes live (ADR-0139).
+    const view = createEditor({ blocks: item.body, embeds, editable: false, resolve, childPages: childPagesOf(item), files: filesOf(item, attachments),
       extra: item.presence === "live" ? [threads.plugin, ...(notes ? [notes.plugin] : [])] : [], comment: item.presence === "live" ? threads.start : undefined,
       note: notes ? notes.start : undefined, protect: protect || undefined,
       actions: edit ? [edit] : [], embedContent: embedLoader([item.id]), tasks: taskTools(item, false) });
