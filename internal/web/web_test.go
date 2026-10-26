@@ -9,7 +9,7 @@ import (
 )
 
 func TestEmbeddedUIHasEntryPointAndAssets(t *testing.T) {
-	for _, name := range []string{"index.html", "assets/app.js", "assets/api.js", "assets/dom.js", "assets/editor.js", "assets/live.js", "assets/style.css",
+	for _, name := range []string{"index.html", "assets/app.js", "assets/api.js", "assets/dom.js", "assets/editor.js", "assets/markdown.js", "assets/live.js", "assets/style.css",
 		"assets/brand/logo-black.svg", "assets/brand/logo-white.svg", "favicon.ico", "assets/brand/favicon.svg", "assets/brand/apple-touch-icon.png",
 		"vendor/prosemirror.js", "vendor/prosemirror.LICENSE.txt", "draw.html", "assets/draw.js", "assets/draw-boot.js", "assets/draw.css",
 		"vendor/excalidraw.js", "vendor/excalidraw.css", "vendor/excalidraw.LICENSE.txt", "vendor/fonts/Excalifont/Excalifont-Regular-a88b72a24fb54c9f94e3b5fdaa7481c9.woff2", "vendor/fonts/Virgil/Virgil-Regular.woff2",
