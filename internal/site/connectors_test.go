@@ -124,3 +124,73 @@ func TestConnectorsAreChecked(t *testing.T) {
 		t.Errorf("changing one at the limit: %v", err)
 	}
 }
+
+func jsonConnector() Connector {
+	c := ConnectorTemplates()[1]
+	c.ID, c.JSON.URL = "feed", "https://feed.example/entries"
+	c.JSON.Values = map[string]string{"owner": "contact.name", "since": "published"}
+	return c
+}
+
+func TestJSONConnectorsAreChecked(t *testing.T) {
+	s, _ := New(nil, func([]byte) error { return nil })
+	c := jsonConnector()
+	c.Type, c.Fields = " api ", map[string]string{" since ": " since "}
+	c.JSON.Values[" spaced "] = " a.b "
+	kept, err := s.SetConnector("admin", c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kept.Type != "api" || kept.Fields["since"] != "since" || kept.JSON.Values["spaced"] != "a.b" ||
+		!slices.Equal(kept.Values(), []string{"owner", "since", "spaced"}) {
+		t.Fatalf("normalized %+v %+v", kept, kept.JSON)
+	}
+	got, _ := s.Connector("feed")
+	got.Fields["since"], got.JSON.Values["owner"] = "x", "x"
+	if again, _ := s.Connector("feed"); again.Fields["since"] != "since" || again.JSON.Values["owner"] != "contact.name" {
+		t.Fatal("a caller changed the settings")
+	}
+	if ckan := openDataTemplate(); !slices.Equal(ckan.Values(), CKANValues) || (Connector{Kind: KindJSON}).Values() != nil {
+		t.Error("the values a source gives")
+	}
+	for name, change := range map[string]func(*Connector){
+		"no JSON source":    func(c *Connector) { c.JSON = nil },
+		"the template's":    func(c *Connector) { c.JSON.URL = "https://" },
+		"no ID path":        func(c *Connector) { c.JSON.ID = "" },
+		"no title path":     func(c *Connector) { c.JSON.Title = "" },
+		"a bad path":        func(c *Connector) { c.JSON.Items = "result..items" },
+		"a bad value path":  func(c *Connector) { c.JSON.Values["x"] = "a b" },
+		"a bad value name":  func(c *Connector) { c.JSON.Values["<x>"] = "a" },
+		"a JSON language":   func(c *Connector) { c.JSON.Language = "rm" },
+		"a bad type":        func(c *Connector) { c.Type = "<api>" },
+		"a bad field":       func(c *Connector) { c.Fields = map[string]string{"<f>": "since"} },
+		"an unknown value":  func(c *Connector) { c.Fields = map[string]string{"owner": "nobody"} },
+		"a CKAN value here": func(c *Connector) { c.Fields = map[string]string{"owner": "publisher"} },
+		"too many values": func(c *Connector) {
+			for i := range 51 {
+				c.JSON.Values[fmt.Sprintf("v%d", i)] = "a"
+			}
+		},
+		"too many fields": func(c *Connector) {
+			c.Fields = map[string]string{}
+			for i := range 51 {
+				c.Fields[fmt.Sprintf("f%d", i)] = "since"
+			}
+		},
+	} {
+		bad := jsonConnector()
+		change(&bad)
+		if _, err := s.SetConnector("admin", bad); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	ckan := openDataTemplate()
+	ckan.Fields = map[string]string{"owner": "publisher"}
+	if _, err := s.SetConnector("admin", ckan); err != nil {
+		t.Errorf("a CKAN value mapped: %v", err)
+	}
+	ckan.Fields = map[string]string{"owner": "since"}
+	if _, err := s.SetConnector("admin", ckan); !errors.Is(err, ErrInvalid) {
+		t.Errorf("a value CKAN does not give: %v", err)
+	}
+}

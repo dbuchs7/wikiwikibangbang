@@ -7,7 +7,7 @@
     "build": "sh build.sh"
   },
   "dependencies": {
-    "@excalidraw/excalidraw": "0.17.6",
+    "@excalidraw/excalidraw": "0.18.1",
     "bpmn-js": "18.31.0",
     "prosemirror-commands": "1.7.2",
     "prosemirror-history": "1.5.1",

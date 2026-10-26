@@ -124,10 +124,23 @@ function engineSource() {
   return server;
 }
 
+// feedSource answers a list in the connectors' own feed format, with one
+// entry and two further values (ADR-0127).
+function feedSource() {
+  const server = require("http").createServer((req, res) => {
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ entries: [{ id: "svc-1", title: "Adressdienst", url: "https://registry.example.org/svc-1",
+      text: "Liefert die Adressen des Kantons.", owner: "Amt für Geoinformation", since: "2024-03-01" }], next: "" }));
+  });
+  server.listen(0, "127.0.0.1");
+  return server;
+}
+
 (async () => {
   const sink = mailSink(process.env.SMTP_SINK_PORT);
   const ckan = ckanSource();
   const engine = engineSource();
+  const feed = feedSource();
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
   const page = await browser.newPage();
   const problems = [];
@@ -1825,6 +1838,35 @@ function engineSource() {
     await page.waitForSelector("#tasks");
     check(await page.locator("#tasks tr:has-text('Luftqualität')").count() === 0, "a catalog entry is not in the task list");
 
+    step("connectors: a JSON source in the feed format fills items of a type of one's own, its values mapped to the type's fields (ADR-0127)");
+    check((await page.request.post(base + "/api/types", { data: { name: "service", body: true,
+      fields: [{ name: "owner", kind: "text", required: true }, { name: "since", kind: "date" }] } })).status() === 201, "a type of one's own");
+    await page.goto(base + "/#/admin");
+    await page.click("#connector-new-json");
+    await page.waitForSelector("#connector-settings [name=url]");
+    await page.fill("#connector-settings [name=id]", "registry");
+    await page.fill("#connector-settings [name=name]", "Registry");
+    await page.selectOption("#connector-settings [name=space]", "APIS");
+    await page.fill("#connector-settings [name=url]", `http://127.0.0.1:${feed.address().port}/entries`);
+    check(await page.inputValue("#connector-settings [name=items]") === "entries", "the paths read the feed format by default");
+    await page.fill("#connector-settings [name=values]", "owner = owner\nsince = since");
+    await page.dispatchEvent("#connector-settings [name=values]", "change");
+    await page.selectOption("#connector-type", "service");
+    await page.waitForSelector("#connector-fields select[data-field=owner] option[value=owner]", { state: "attached" });
+    await page.selectOption("#connector-fields select[data-field=owner]", "owner");
+    await page.selectOption("#connector-fields select[data-field=since]", "since");
+    await page.click("#connector-settings button[type=submit]");
+    await page.waitForSelector("#connector-list tr[data-connector='registry']");
+    check(await page.inputValue("#connector-type") === "service", "the type is kept");
+    check(await page.inputValue("#connector-fields select[data-field=owner]") === "owner", "the mapping is kept");
+    await page.click("#connector-run-now");
+    await page.waitForSelector("#connector-history .catalog-run:has-text('Sync'):has-text('1 new') a");
+    await page.click("#connector-history .catalog-run a");
+    await page.waitForSelector("#item-origin a[href='https://registry.example.org/svc-1']");
+    await page.waitForSelector("tr[data-field=owner] input");
+    check(await page.inputValue("tr[data-field=owner] input") === "Amt für Geoinformation", "the text field is filled from the source");
+    check(await page.inputValue("tr[data-field=since] input") === "2024-03-01", "the date field is filled from the source");
+    await page.waitForSelector(".item-main :text('Liefert die Adressen des Kantons.')");
     step("BPMN: a diagram drawn in the modeler and a .bpmn file are files of the page, shown and drawn again (ADR-0128)");
     const flow = await (await page.request.post(base + "/api/items", { data: { space: "PLAT", type: "task", title: "Order to cash", properties: { priority: "low" } } })).json();
     await page.goto(base + "/#/item/" + flow.item.key);
@@ -2133,5 +2175,6 @@ function engineSource() {
     sink.close();
     ckan.close();
     engine.close();
+    feed.close();
   }
 })();

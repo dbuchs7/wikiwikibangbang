@@ -1,11 +1,15 @@
 package connector
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
+	"math"
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,11 +25,18 @@ func Actor(c site.Connector) string { return "sync:" + c.ID }
 
 // instance names the source's installation in an item's origin.
 func instance(c site.Connector) string {
-	if c.CKAN != nil {
+	switch {
+	case c.CKAN != nil:
 		return c.CKAN.BaseURL
+	case c.JSON != nil:
+		return c.JSON.URL
 	}
 	return ""
 }
+
+// TargetType is the type of the items a connector writes: the one its
+// settings name, else page (ADR-0127).
+func TargetType(c site.Connector) string { return cmp.Or(c.Type, PageType) }
 
 // PageType is the type of the catalog's pages: an ordinary wiki page,
 // with a text and no fields or workflow (ADR-0093).
@@ -39,10 +50,16 @@ const LegacyType = "interface"
 // publishes; a page has no state to say so (ADR-0093).
 const WithdrawnLabel = "withdrawn"
 
-// pageExternalID is a page's ID in its source. It differs from the ID of
-// the entry it replaces, so that entry's erasure does not keep the page
-// from being written (ADR-0026, ADR-0093).
-func pageExternalID(sourceID string) string { return "page/" + sourceID }
+// prefix is what an entry's ID in its source is prefixed with in its
+// item's origin: "page/" for CKAN, which differs from the ID of the entry
+// a page replaces, so that entry's erasure does not keep the page from
+// being written (ADR-0026, ADR-0093); "entry/" for the kinds of ADR-0127.
+func prefix(c site.Connector) string {
+	if c.Kind == site.KindCKAN {
+		return "page/"
+	}
+	return "entry/"
+}
 
 // PageTypeDef is the type a connector defines when the site has no page
 // type yet.
@@ -108,45 +125,65 @@ func (r *Result) count(kind, key, title string) {
 // ErrNoSpace is a synchronisation into a space that does not exist.
 var ErrNoSpace = errors.New("connector: the catalog's space does not exist")
 
-// Apply brings the space in step with the entries: a page is written for
-// each new or changed data set, and a page whose data set the source no
-// longer publishes is marked withdrawn. Entries of before ADR-0093 are
-// erased, so their pages take their place. With dry, nothing is written.
+// ErrTypeChanged is a synchronisation whose type differs from the one of
+// the items it wrote before: an import does not change an item's type.
+var ErrTypeChanged = errors.New("connector: the connector wrote its items as another type")
+
+// Apply brings the space in step with the entries: an item of the
+// connector's type is written for each new or changed entry, its fields
+// filled as the connector maps them (ADR-0127), and an item whose entry
+// the source no longer publishes is marked withdrawn. Entries of before
+// ADR-0093 are erased, so their pages take their place. With dry,
+// nothing is written.
 func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Result, error) {
 	res := Result{Connector: cfg.ID, DryRun: dry, Entries: len(entries), Problems: []string{}, Examples: []Change{}}
 	ours := func(it item.Item) bool {
 		return it.Origin != nil && it.Origin.System == cfg.ID && it.Origin.Instance == instance(cfg)
 	}
+	target, pre := TargetType(cfg), prefix(cfg)
 	var existing map[string]item.Item
 	var legacy []item.Item
+	var td item.TypeDef
 	var typeErr error
-	hasSpace, hasType := false, false
+	hasSpace, other := false, ""
 	db.Read(func(s *item.Store) {
 		hasSpace = s.HasSpace(cfg.Space)
 		existing = map[string]item.Item{}
-		for _, it := range s.Find(item.Query{Space: cfg.Space, Type: PageType}) {
-			if id, ok := strings.CutPrefix(itemExternalID(it), "page/"); ok && ours(it) {
-				existing[id] = it
-			}
-		}
-		for _, it := range s.Find(item.Query{Space: cfg.Space, Type: LegacyType}) {
-			if ours(it) {
+		for _, it := range s.Find(item.Query{Space: cfg.Space}) {
+			id, ok := strings.CutPrefix(itemExternalID(it), pre)
+			switch {
+			case !ours(it):
+			case it.Type == LegacyType && cfg.Kind == site.KindCKAN:
 				legacy = append(legacy, it)
+			case !ok:
+			case it.Type == target:
+				existing[id] = it
+			default:
+				other = it.Type
 			}
 		}
-		if td := s.Type(PageType); td.Name != "" {
-			hasType, typeErr = true, fits(td)
+		if td = s.Type(target); td.Name != "" {
+			typeErr = Fits(td, cfg)
 		}
 	})
 	if !hasSpace {
 		return res, ErrNoSpace
 	}
+	if other != "" {
+		return res, fmt.Errorf("%w: its items in %s are of type %q, not %q; an import does not change an item's type", ErrTypeChanged, cfg.Space, other, target)
+	}
 	if typeErr != nil {
 		return res, typeErr
 	}
-	if !hasType && !dry {
-		if err := db.Write(func(s *item.Store) error { return s.DefineType(Actor(cfg), PageTypeDef()) }); err != nil {
-			return res, err
+	if td.Name == "" {
+		if target != PageType {
+			return res, fmt.Errorf("connector: the type %q does not exist", target)
+		}
+		td = PageTypeDef()
+		if !dry {
+			if err := db.Write(func(s *item.Store) error { return s.DefineType(Actor(cfg), td) }); err != nil {
+				return res, err
+			}
 		}
 	}
 
@@ -186,7 +223,10 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 	for _, e := range entries {
 		seen[e.SourceID] = true
 		old, had := existing[e.SourceID]
-		u := upsertFor(cfg, e, old, had)
+		u, bad := upsertFor(cfg, td, e, old, had)
+		for _, p := range bad {
+			res.problem("%s: %s", e.Title, p)
+		}
 		// The page is the source's: every run writes it anew, and only
 		// when it changed (ADR-0080).
 		body := item.Doc{Blocks: e.Body}
@@ -284,8 +324,11 @@ func without(labels []string, label string) []string {
 
 // language is the one a connector's pages are written in.
 func language(cfg site.Connector) string {
-	if cfg.CKAN != nil && cfg.CKAN.Language != "" {
+	switch {
+	case cfg.CKAN != nil && cfg.CKAN.Language != "":
 		return cfg.CKAN.Language
+	case cfg.JSON != nil && cfg.JSON.Language != "":
+		return cfg.JSON.Language
 	}
 	return "de"
 }
@@ -310,35 +353,118 @@ func sameBody(have, want item.Doc) bool {
 	return string(a) == string(b)
 }
 
-// fits checks that an existing page type takes what the synchronisation
-// writes: a text, and no field it would have to fill.
-func fits(td item.TypeDef) error {
+// Fits checks that a type takes what a connector writes (ADR-0127): a
+// text, every field it maps, of a kind a source's text converts to, and
+// every required field mapped, as a synchronisation cannot fill others.
+func Fits(td item.TypeDef, cfg site.Connector) error {
 	if !td.Body {
-		return fmt.Errorf("connector: type %q has no text", PageType)
+		return fmt.Errorf("connector: type %q has no text", td.Name)
 	}
+	kinds := map[string]item.FieldKind{}
 	for _, f := range td.Fields {
-		if f.Required {
-			return fmt.Errorf("connector: type %q requires the field %q, which a synchronisation cannot fill", PageType, f.Name)
+		kinds[f.Name] = f.Kind
+		if _, mapped := cfg.Fields[f.Name]; f.Required && !mapped {
+			return fmt.Errorf("connector: type %q requires the field %q, which the connector does not fill", td.Name, f.Name)
+		}
+	}
+	for _, name := range slices.Sorted(maps.Keys(cfg.Fields)) {
+		switch k, ok := kinds[name]; {
+		case !ok:
+			return fmt.Errorf("connector: type %q has no field %q", td.Name, name)
+		case k == item.KindUser:
+			return fmt.Errorf("connector: the field %q holds a user, which a source does not name", name)
 		}
 	}
 	return nil
 }
 
 // upsertFor is the import of an entry: the source's title and place,
-// the page's own fields, if its type has any, kept.
-func upsertFor(cfg site.Connector, e Entry, old item.Item, had bool) item.Upsert {
+// the fields the connector maps from its values, and the item's other
+// fields kept. A value that does not fit its field is left out, with
+// the reason.
+func upsertFor(cfg site.Connector, td item.TypeDef, e Entry, old item.Item, had bool) (item.Upsert, []string) {
 	u := item.Upsert{
-		Origin: item.Origin{System: cfg.ID, Instance: instance(cfg), ExternalID: pageExternalID(e.SourceID), ExternalKey: e.Dataset, URL: e.DatasetURL},
-		Space:  cfg.Space, Type: PageType, Title: e.Title,
+		Origin: item.Origin{System: cfg.ID, Instance: instance(cfg), ExternalID: prefix(cfg) + e.SourceID, ExternalKey: e.Dataset, URL: e.DatasetURL},
+		Space:  cfg.Space, Type: td.Name, Title: e.Title,
 	}
 	if had {
 		u.Parent = old.Parent
 		u.Properties = maps.Clone(old.Properties)
 	}
-	return u
+	var problems []string
+	for _, f := range td.Fields {
+		name, mapped := cfg.Fields[f.Name]
+		if !mapped {
+			continue
+		}
+		v, err := fieldValue(f, e.Values[name])
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("the field %s is left as it was: %v", f.Name, err))
+			continue
+		}
+		if u.Properties == nil {
+			u.Properties = item.Props{}
+		}
+		if v == nil {
+			delete(u.Properties, f.Name)
+		} else {
+			u.Properties[f.Name] = v
+		}
+	}
+	return u, problems
+}
+
+// fieldValue converts a source's text to a value of a field's kind; an
+// empty text is no value.
+func fieldValue(f item.FieldDef, s string) (any, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	switch f.Kind {
+	case item.KindText:
+		return s, nil
+	case item.KindNumber:
+		n, err := strconv.ParseFloat(s, 64)
+		if err != nil || math.IsNaN(n) || math.IsInf(n, 0) {
+			return nil, fmt.Errorf("%q is not a number", s)
+		}
+		return n, nil
+	case item.KindBool:
+		b, err := strconv.ParseBool(s)
+		if err != nil {
+			return nil, fmt.Errorf("%q is neither true nor false", s)
+		}
+		return b, nil
+	case item.KindDate:
+		if t := parseDate(s); !t.IsZero() {
+			return t, nil
+		}
+		return nil, fmt.Errorf("%q is not a date", s)
+	case item.KindEnum:
+		if slices.Contains(f.Values, s) {
+			return s, nil
+		}
+		return nil, fmt.Errorf("%q is not one of its values", s)
+	case item.KindURL:
+		if webLink(s) && item.SafeHref(s) {
+			return s, nil
+		}
+		return nil, fmt.Errorf("%q is not a web address", s)
+	}
+	return nil, fmt.Errorf("a %s field is not filled from a source", f.Kind)
 }
 
 // same reports whether an import would change nothing.
 func same(it item.Item, u item.Upsert) bool {
-	return it.Title == u.Title && it.Parent == u.Parent && it.Origin != nil && *it.Origin == u.Origin
+	return it.Title == u.Title && it.Parent == u.Parent && it.Origin != nil && *it.Origin == u.Origin &&
+		reflect.DeepEqual(nonEmpty(it.Properties), nonEmpty(u.Properties))
+}
+
+// nonEmpty treats no properties and an empty set of them alike.
+func nonEmpty(p item.Props) item.Props {
+	if len(p) == 0 {
+		return nil
+	}
+	return p
 }

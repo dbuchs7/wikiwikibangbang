@@ -4738,18 +4738,20 @@ function connectorsCard(spaces, users) {
       h("td", { text: c.status.running ? t("catalog.running") : last(c) ? `${when(last(c).started)} · ${last(c).error ? t("connector.failed") : t("connector.entries", { n: last(c).entries })}` : "—" }),
       h("td", { text: c.enabled ? t("connector.on") : t("connector.off") }),
       h("td", {}, h("button", { type: "button", class: "link", text: t("common.edit"), onclick: () => { open = c.id; load(); } }))));
-    const fresh = () => {
-      const tpl = structuredClone(data.templates[0]);
+    // A new connector starts from its kind's template (ADR-0127).
+    const fresh = (i) => {
+      const tpl = structuredClone(data.templates[i]);
       if (data.connectors.some((c) => c.id === tpl.id)) tpl.id = "";
       return { ...tpl, status: { running: false, history: [], credential: false, credentialVar: "" }, isNew: true };
     };
-    const chosen = open === "new" ? fresh() : data.connectors.find((c) => c.id === open);
+    const chosen = typeof open === "number" ? fresh(open) : data.connectors.find((c) => c.id === open);
     card.replaceChildren(
       h("p", { class: "muted", text: t("connector.note") }),
       data.connectors.length ? filtered(h("table", { id: "connector-list" },
         h("thead", {}, h("tr", {}, [t("connector.name"), t("connector.kind"), t("catalog.space"), t("connector.lastRun"), t("connector.schedule"), ""].map((x) => h("th", { text: x })))),
         h("tbody", {}, rows)), { id: "connectors", label: t("connector.title"), choices: [{ key: "state", label: t("connector.schedule") }] }) : empty(t("connector.none")),
-      h("p", {}, h("button", { type: "button", id: "connector-new", text: t("connector.new", { name: data.templates[0].name }), onclick: () => { open = "new"; load(); } })),
+      h("p", { class: "actions-row" }, data.templates.map((tpl, i) => h("button", { type: "button", class: i ? "secondary" : null, id: i ? "connector-new-" + tpl.kind : "connector-new",
+        text: t("connector.new", { name: tpl.name }), onclick: () => { open = i; load(); } }))),
       chosen ? connectorEditor(chosen, data, spaces, users, list, (id) => { open = id; load(); }) : "",
     );
     if (data.connectors.some((c) => c.status.running)) timer = setTimeout(load, 1500);
@@ -4758,11 +4760,14 @@ function connectorsCard(spaces, users) {
   return card;
 }
 
-// connectorEditor sets up one connector of the kind ckan, runs it and
-// shows its last runs; reopen(id) shows the card again with id open, or
-// none.
+// connectorEditor sets up one connector, runs it and shows its last
+// runs; reopen(id) shows the card again with id open, or none. Its source
+// is set up as its kind needs; what it writes, the type and which of its
+// fields take which of the source's values, alike for every kind
+// (ADR-0127).
 function connectorEditor(c, data, spaces, users, list, reopen) {
-  const k = c.ckan;
+  const k = c.ckan || { formats: [], organizations: [], baseURL: "", portalURL: "", language: "de" };
+  const j = c.json;
   const path = "/api/connectors/" + encodeURIComponent(c.id);
   const st = c.status;
   const runStatus = h("div", { class: "status", id: "connector-run-status" });
@@ -4795,6 +4800,59 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       formatsBox.replaceChildren(errorBox(err));
     }
   };
+  // The further values of a JSON source, one "name = path" a line.
+  const valuesInput = h("textarea", { name: "values", rows: 4, placeholder: "owner = contact.name",
+    value: Object.entries(j?.values || {}).map(([n, p]) => `${n} = ${p}`).join("\n") });
+  const parseValues = (v) => Object.fromEntries(v.split("\n").map((l) => l.split("=")).filter((p) => p.length > 1 && p[0].trim())
+    .map(([n, ...p]) => [n.trim(), p.join("=").trim()]));
+  const sourceValues = () => j ? Object.keys(parseValues(valuesInput.value)).sort() : data.ckanValues;
+  // The type the entries are written as: page, or another with a text.
+  const typeNames = [data.type, ...data.types.map((tp) => tp.name).filter((n) => n !== data.type)];
+  const typeSelect = h("select", { name: "type", id: "connector-type" }, typeNames.map((n) => h("option", { value: n === data.type ? "" : n, text: n,
+    selected: (c.type || "") === (n === data.type ? "" : n) })));
+  const mapping = h("div", { id: "connector-fields" });
+  const showFields = () => {
+    const tp = data.types.find((x) => x.name === (typeSelect.value || data.type));
+    const fields = (tp?.fields || []).filter((f) => f.kind !== "user");
+    const names = sourceValues();
+    const now = Object.fromEntries([...mapping.querySelectorAll("select[data-field]")].map((x) => [x.dataset.field, x.value]));
+    mapping.replaceChildren(fields.length ? h("table", { class: "connector-fields" },
+      h("thead", {}, h("tr", {}, [t("connector.field"), t("connector.value")].map((x) => h("th", { text: x })))),
+      h("tbody", {}, fields.map((f) => h("tr", {},
+        h("td", {}, f.name, " ", h("span", { class: "muted", text: `(${f.kind}${f.required ? ", " + t("connector.required") : ""})` })),
+        h("td", {}, h("select", { "data-field": f.name, "aria-label": f.name }, h("option", { value: "", text: "—" }),
+          names.map((n) => h("option", { value: n, text: n, selected: (now[f.name] ?? c.fields?.[f.name]) === n }))))))))
+      : h("p", { class: "muted", text: t("connector.noFields") }));
+  };
+  typeSelect.addEventListener("change", showFields);
+  valuesInput.addEventListener("change", showFields);
+  showFields();
+  const path_ = (name, label, value, required) => field(label, h("input", { name, value: value || "", required: !!required, maxlength: 200 }));
+  const ckanSource = () => [
+    field(t("catalog.formats"), formatsInput),
+    h("p", { class: "muted" }, t("catalog.formatsHelp", { defaults: data.templates[0].ckan.formats.join(", ") }), " ",
+      h("button", { type: "button", class: "link", id: "connector-source-formats", text: t("catalog.showFormats"), onclick: showFormats })),
+    formatsBox,
+    field(t("connector.language"), languageSelect(k.language)),
+    h("p", { class: "muted", text: t("connector.languageHelp") }),
+    field(t("catalog.organizations"), h("input", { name: "organizations", value: k.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
+    h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
+  ];
+  const jsonSource = () => [
+    field(t("json.url"), h("input", { name: "url", type: "url", required: true, value: j.url, maxlength: 512 })),
+    h("p", { class: "muted", text: t("json.urlHelp") }),
+    path_("items", t("json.items"), j.items),
+    path_("idPath", t("json.id"), j.id, true),
+    path_("titlePath", t("json.title"), j.title, true),
+    path_("link", t("json.link"), j.link),
+    path_("text", t("json.text"), j.text),
+    path_("next", t("json.next"), j.next),
+    h("p", { class: "muted", text: t("json.pathsHelp") }),
+    field(t("json.values"), valuesInput),
+    h("p", { class: "muted", text: t("json.valuesHelp") }),
+    field(t("connector.language"), languageSelect(j.language)),
+    h("p", { class: "muted", text: t("json.languageHelp") }),
+  ];
   const run = (dryRun, id, text) => h("button", { type: "button", class: dryRun ? "secondary" : "primary", id, disabled: st.running || !c.space, text, onclick: async () => {
     runStatus.replaceChildren();
     try {
@@ -4816,7 +4874,8 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       { id: "run-problems-" + Date.parse(r.started), label: t("catalog.problems") }) : "");
   editor.replaceChildren(
     h("h3", { text: c.isNew ? t("connector.newTitle") : c.name }),
-    h("p", { class: "muted", text: t("catalog.note") }),
+    h("p", { class: "muted", text: j ? t("json.note") : t("catalog.note") }),
+    h("p", { class: "muted", text: t("connector.publicOnly") }),
     form({ id: "connector-settings" }, [
       field(t("connector.id"), h("input", { name: "id", value: c.id, required: true, readonly: !c.isNew, pattern: "[a-z0-9][a-z0-9.\\-]{0,39}", maxlength: 40 })),
       c.isNew ? h("p", { class: "muted", text: t("connector.idHelp") }) : "",
@@ -4824,20 +4883,17 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: c.enabled }), " ", t("catalog.enabled")),
       field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
         spaces.map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === c.space })))),
-      field(t("catalog.formats"), formatsInput),
-      h("p", { class: "muted" }, t("catalog.formatsHelp", { defaults: data.templates[0].ckan.formats.join(", ") }), " ",
-        h("button", { type: "button", class: "link", id: "connector-source-formats", text: t("catalog.showFormats"), onclick: showFormats })),
-      formatsBox,
-      field(t("connector.language"), h("select", { name: "language" }, [["de", "Deutsch"], ["fr", "Français"], ["it", "Italiano"], ["en", "English"]]
-        .map(([v, text]) => h("option", { value: v, text, selected: v === (k.language || "de") })))),
-      h("p", { class: "muted", text: t("connector.languageHelp") }),
-      field(t("catalog.organizations"), h("input", { name: "organizations", value: k.organizations.join(", "), placeholder: "bundesamt-fur-statistik-bfs, …" })),
-      h("p", { class: "muted", text: t("catalog.organizationsHelp") }),
+      j ? jsonSource() : ckanSource(),
+      h("fieldset", { class: "connector-target" }, h("legend", { text: t("connector.target") }),
+        field(t("connector.type"), typeSelect),
+        h("p", { class: "muted", text: t("connector.targetHelp") }),
+        mapping,
+        h("p", { class: "muted", text: t("connector.fieldsHelp") })),
       field(t("catalog.steward"), h("select", { name: "steward" }, h("option", { value: "", text: "—" }),
         users.map((u) => h("option", { value: u.id, text: u.username, selected: u.id === c.steward })))),
       h("p", { class: "muted", text: t("catalog.stewardHelp") }),
       field(t("catalog.interval"), h("input", { name: "intervalHours", type: "number", min: 1, max: 744, required: true, value: c.intervalHours })),
-      h("details", {}, h("summary", { text: t("catalog.source") }),
+      j ? "" : h("details", {}, h("summary", { text: t("catalog.source") }),
         field(t("catalog.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: k.baseURL })),
         field(t("catalog.portalURL"), h("input", { name: "portalURL", type: "url", required: true, value: k.portalURL }))),
       c.isNew ? "" : h("p", { class: "muted", id: "connector-credential",
@@ -4854,11 +4910,17 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
             }
           } })),
     ], async (d) => {
+      const fields = Object.fromEntries([...mapping.querySelectorAll("select[data-field]")].filter((x) => x.value).map((x) => [x.dataset.field, x.value]));
       const body = {
         id: d.get("id").trim(), name: d.get("name").trim(), kind: c.kind, enabled: d.get("enabled") === "on", space: d.get("space"),
-        steward: d.get("steward"), intervalHours: Number(d.get("intervalHours")),
-        ckan: { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(), language: d.get("language") },
+        steward: d.get("steward"), intervalHours: Number(d.get("intervalHours")), type: d.get("type"), fields,
       };
+      if (j) {
+        body.json = { url: d.get("url").trim(), items: d.get("items").trim(), id: d.get("idPath").trim(), title: d.get("titlePath").trim(), link: d.get("link").trim(),
+          text: d.get("text").trim(), next: d.get("next").trim(), values: parseValues(d.get("values")), language: d.get("language") };
+      } else {
+        body.ckan = { formats: list(d.get("formats")), organizations: list(d.get("organizations")), baseURL: d.get("baseURL").trim(), portalURL: d.get("portalURL").trim(), language: d.get("language") };
+      }
       const kept = c.isNew ? await post("/api/connectors", body) : await put(path, body);
       reopen(kept.id);
     }),
@@ -4870,6 +4932,12 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       { id: "connector-runs", label: t("connector.lastRun"), choices: [{ key: "outcome", label: t("filter.kind") }] }) : h("p", { class: "muted", text: t("catalog.noRuns") }),
   );
   return editor;
+}
+
+// languageSelect chooses the language a connector writes its pages in.
+function languageSelect(value) {
+  return h("select", { name: "language" }, [["de", "Deutsch"], ["fr", "Français"], ["it", "Italiano"], ["en", "English"]]
+    .map(([v, text]) => h("option", { value: v, text, selected: v === (value || "de") })));
 }
 
 // autoBackupCard sets up automatic backups and shows how they went
