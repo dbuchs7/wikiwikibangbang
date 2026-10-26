@@ -145,6 +145,7 @@ func TestEachToolIsOneAPIRequest(t *testing.T) {
 		{"list_changes", `{"after":12,"limit":50}`, call{"GET", "/api/changes?after=12&limit=50", ""}},
 		{"find_items", `{"space":"PLAT","type":"task","limit":20,"after":"x1"}`, call{"GET", "/api/items?after=x1&limit=20&space=PLAT&type=task", ""}},
 		{"search_items", `{"q":"kernel patch"}`, call{"GET", "/api/search?q=kernel+patch", ""}},
+		{"query_items", `{"query":"type = task ORDER BY due","limit":5}`, call{"GET", "/api/items?limit=5&query=type+%3D+task+ORDER+BY+due", ""}},
 		{"get_item", `{"ref":"PLAT-1"}`, call{"GET", "/api/items/PLAT-1", ""}},
 		{"get_history", `{"ref":"PLAT-1"}`, call{"GET", "/api/items/PLAT-1/history", ""}},
 		{"get_relations", `{"ref":"PLAT-1","direction":"incoming"}`, call{"GET", "/api/items/PLAT-1/relations?direction=incoming", ""}},

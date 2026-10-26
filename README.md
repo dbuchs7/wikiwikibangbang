@@ -15,6 +15,8 @@ Pages export as PDF, Word and Markdown from their *Export* menu ([ADR-0071](docs
 
 Markdown written elsewhere goes into a page as formatted, editable text with Ctrl+V or *Insert… → Paste Markdown…*; the [Markdown guide](docs/guides/markdown.md) says what is converted, what is simplified and why ([ADR-0133](docs/adr/0133-markdown-is-pasted-into-the-editor-and-converted-in-the-browser.md)).
 
+Items are selected by their fields with a query language, under *Search → Query the fields*, through `GET /api/items?query=…` and with the MCP tool `query_items`, e.g. `type = task AND assignee = currentUser() AND finished = false ORDER BY due`; the [query guide](docs/guides/query-language.md) describes it ([ADR-0136](docs/adr/0136-a-query-language-selects-items-by-their-fields.md)).
+
 ## Run
 
 The product is one binary for Linux, macOS and Windows on amd64 and arm64, and 32-bit ARM Linux ([ADR-0024](docs/adr/0024-release-targets-and-container-image.md)). Download the archive for your platform from the releases page, unpack it and run:
@@ -47,7 +49,7 @@ A system that copies pages elsewhere stays in step through the change feed ([ADR
 
 A hosted assistant such as Claude connects with OAuth instead ([ADR-0068](docs/adr/0068-oauth-for-ai-assistants.md)): an administrator registers it under *AI access* and enters the three values shown there — the MCP address, the client ID and the secret — in the assistant's connector dialog; each person then approves it once and can withdraw the approval on the same page. Its tokens act as that person on `/mcp` only. `WWBB_OAUTH_DYNAMIC_REGISTRATION=on` lets applications register themselves (RFC 7591); they are marked as such on the consent page. The server names itself by `WWBB_PUBLIC_URL` in OAuth; without it, by the address a request arrived at, which behind a reverse proxy is `https` only when `WWBB_TRUSTED_PROXIES` is set.
 
-Resource budgets ([ADR-0015](docs/adr/0015-resource-budgets-and-paged-listings.md)) — request body size, the size of an attached file (25 MiB by default, [ADR-0045](docs/adr/0045-attachments-encrypted-files-beside-the-log.md)), page size, search query size, live editing sessions, tracked logins — have defaults in [`internal/budget`](internal/budget/budget.go) and are changed with `WWBB_BUDGET_<NAME>`, e.g. `WWBB_BUDGET_PAGE_ITEMS=200`. A value that is not a positive number is logged and ignored; the server starts with the default.
+Resource budgets ([ADR-0015](docs/adr/0015-resource-budgets-and-paged-listings.md)) — request body size, the size of an attached file (25 MiB by default, [ADR-0045](docs/adr/0045-attachments-encrypted-files-beside-the-log.md)), page size, search and query size, live editing sessions, tracked logins — have defaults in [`internal/budget`](internal/budget/budget.go) and are changed with `WWBB_BUDGET_<NAME>`, e.g. `WWBB_BUDGET_PAGE_ITEMS=200`. A value that is not a positive number is logged and ignored; the server starts with the default.
 
 The UI calls a space a *room* (German *Raum*); the API, the MCP tools and the code keep the name space ([ADR-0118](docs/adr/0118-spaces-are-called-rooms.md)). Items, types and spaces are managed through the item API ([ADR-0028](docs/adr/0028-item-api.md)); `GET /api/openapi.json` lists every operation:
 
