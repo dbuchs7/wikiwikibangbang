@@ -47,6 +47,15 @@ Chosen option: **1**, because the UI has its own markup and variables (ADR-0065)
 - **Page title:** the red mark under it stays, as the one accent.
 - **Typeface:** Noto Sans, its Latin subset from @fontsource/noto-sans 5.3.0 (about 13 KB per style: regular, bold, italic and bold italic), served from `assets/fonts` like the comic theme's font (ADR-0085).
 
+### Whom it is for
+
+The look tells readers that the site belongs to an authority. In the theme choice of the corporate design, the Swiss theme therefore carries a notice:
+
+- It is meant for bodies of the Swiss Confederation.
+- Other organisations should not use it, so that their site is not taken for an official one.
+
+The theme is not locked, as the installation cannot know who runs it.
+
 ### Dark scheme
 
 The design system has none. The theme derives one from the same slate scale (`#131b22` to `#596978`) and a lighter red (`#fc656b`) that keeps contrast. This is the theme's own extension.

@@ -882,6 +882,7 @@ export default {
   "design.theme.berryNote": "Violett und Magenta, Pillenformen. Hell und dunkel.",
   "design.theme.swiss": "Swiss",
   "design.theme.swissNote": "Das Designsystem der Schweizerischen Eidgenossenschaft: rote Links, schiefergraue Aktionen und Leisten, Noto Sans. Hell und dunkel.",
+  "design.theme.swissNotice": "Für Stellen der Schweizerischen Eidgenossenschaft. Andere Organisationen sollten es nicht verwenden, damit ihr Angebot nicht für ein amtliches gehalten wird.",
   "design.theme.night": "Nacht",
   "design.theme.nightNote": "Immer dunkel, mit cyanfarbenem Leuchten.",
   "design.theme.comic": "Comic",

@@ -1178,6 +1178,7 @@ a.requests-notice:hover { border-color: var(--accent); }
 .theme-choice input { position: absolute; opacity: 0; pointer-events: none; }
 .theme-choice:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .theme-choice .muted { font-size: 12px; }
+.theme-choice .theme-notice { font-size: 12px; padding: 4px 8px; border-left: 3px solid var(--warning); background: var(--warning-soft); color: var(--text); }
 .theme-preview { display: flex; height: 28px; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 4px; }
 .theme-preview span { flex: 1; }
 .theme-preview span:first-child { flex: 2; }

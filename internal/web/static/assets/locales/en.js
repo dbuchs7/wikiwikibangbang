@@ -884,6 +884,7 @@ export default {
   "design.theme.berryNote": "Violet and magenta, pill shapes. Light and dark.",
   "design.theme.swiss": "Swiss",
   "design.theme.swissNote": "The design system of the Swiss Confederation: red links, slate actions and bars, Noto Sans. Light and dark.",
+  "design.theme.swissNotice": "For bodies of the Swiss Confederation. Other organisations should not use it, so that their site is not taken for an official one.",
   "design.theme.night": "Night",
   "design.theme.nightNote": "Always dark, with a cyan glow.",
   "design.theme.comic": "Comic",

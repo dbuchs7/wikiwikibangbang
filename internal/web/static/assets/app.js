@@ -4952,7 +4952,9 @@ async function designCard() {
     forest: { name: t("design.theme.forest"), note: t("design.theme.forestNote"), colours: ["#24452b", "#f3f5ef", "#b9d98a"] },
     sunset: { name: t("design.theme.sunset"), note: t("design.theme.sunsetNote"), colours: ["#f97316", "#fff7f0", "#e11d48"] },
     berry: { name: t("design.theme.berry"), note: t("design.theme.berryNote"), colours: ["#ffffff", "#f7f3fb", "#7e22ce"] },
-    swiss: { name: t("design.theme.swiss"), note: t("design.theme.swissNote"), colours: ["#ffffff", "#2f4356", "#d8232a"] },
+    // The look of the Confederation's sites (ADR-0120) says the site is an
+    // authority's; the choice says so too.
+    swiss: { name: t("design.theme.swiss"), note: t("design.theme.swissNote"), notice: t("design.theme.swissNotice"), colours: ["#ffffff", "#2f4356", "#d8232a"] },
     night: { name: t("design.theme.night"), note: t("design.theme.nightNote"), colours: ["#070a10", "#121722", "#22d3ee"] },
     comic: { name: t("design.theme.comic"), note: t("design.theme.comicNote"), colours: ["#ffd23f", "#fff6d6", "#e3262f"] },
     sketch: { name: t("design.theme.sketch"), note: t("design.theme.sketchNote"), colours: ["#fffefa", "#2b2b2b", "#2856b6"] },
@@ -4966,7 +4968,8 @@ async function designCard() {
       }));
       return h("label", { class: "theme-choice theme-" + (id || "none") },
         h("input", { type: "radio", name: "theme", value: id, checked: (b.theme || "") === id }),
-        preview, h("strong", { text: themes[id].name }), h("span", { class: "muted", text: themes[id].note }));
+        preview, h("strong", { text: themes[id].name }), h("span", { class: "muted", text: themes[id].note }),
+        ...(themes[id].notice ? [h("span", { class: "theme-notice", text: themes[id].notice })] : []));
     }));
   const fontNames = { system: t("design.fontSystem"), humanist: t("design.fontHumanist"), serif: t("design.fontSerif"), rounded: t("design.fontRounded"), mono: t("design.fontMono") };
   const cssPicker = h("input", { type: "file", accept: ".css,text/css", "aria-label": t("design.cssFile") });
