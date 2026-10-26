@@ -245,7 +245,6 @@ table.history td { font-size: 13px; }
   padding: 8px 10px; cursor: grab;
 }
 .card-title { margin: 2px 0 4px; overflow-wrap: anywhere; }
-.card-actions { font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
 /* A kanban's board with the details of a card beside it, and its settings
    (ADR-0076). */
 .kanban-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
@@ -268,13 +267,14 @@ table.history td { font-size: 13px; }
 .kanban-columns-edit { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 .kanban-columns-edit li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .kanban-columns-edit input { width: 14rem; }
-/* A kanban's columns share the width and reach down to the longest, so
-   every column is a drop zone of its own; its head holds what it is, how
-   many cards it holds, a new card and folding it away (ADR-0132). */
-#kanban .board { align-items: stretch; }
-#kanban .board-column { flex: 1 1 250px; min-width: 220px; max-width: 400px; min-height: 320px; padding: 10px;
+/* The columns of a board of cards, a kanban's or a view's (ADR-0139),
+   share the width and reach down to the longest, so every column is a
+   drop zone of its own; its head holds what it is, how many cards it
+   holds, a new card and folding it away (ADR-0132). */
+.kanban-board .board { align-items: stretch; }
+.kanban-board .board-column { flex: 1 1 250px; min-width: 220px; max-width: 400px; min-height: 320px; padding: 10px;
   display: flex; flex-direction: column; position: relative; }
-#kanban .board-cards { flex: 1; }
+.kanban-board .board-cards { flex: 1; }
 .column-head { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; min-height: 28px; }
 .column-head h2 { display: block; margin: 0; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .column-count { flex: none; min-width: 22px; padding: 0 7px; border-radius: 6px; background: var(--border); color: var(--muted);
@@ -287,7 +287,7 @@ table.history td { font-size: 13px; }
 .column-head button.column-add, .column-head button.column-fold { margin-left: auto; }
 .column-head button.column-add + button.column-fold { margin-left: 0; }
 .column-fold svg { transition: transform .12s; }
-#kanban .board-column.folded { flex: 0 0 44px; min-width: 44px; padding: 8px 4px; }
+.kanban-board .board-column.folded { flex: 0 0 44px; min-width: 44px; padding: 8px 4px; }
 .board-column.folded .column-head { flex-direction: column; margin: 0; gap: 10px; }
 .board-column.folded .column-head button.column-fold { order: -1; margin: 0; }
 .board-column.folded .column-head h2 { writing-mode: vertical-rl; white-space: nowrap; overflow: visible; }
@@ -299,8 +299,8 @@ table.history td { font-size: 13px; }
 
 /* A kanban card (ADR-0132): the title first, the fields as chips, at the
    foot its key, what is behind it and the faces of its people. */
-#kanban .card-item.kanban-card { display: flex; flex-direction: column; gap: 6px; padding: 9px 11px; }
-#kanban .kanban-card .card-title { margin: 0; font-weight: 500; line-height: 1.35;
+.kanban-board .card-item.kanban-card { display: flex; flex-direction: column; gap: 6px; padding: 9px 11px; }
+.kanban-board .kanban-card .card-title { margin: 0; font-weight: 500; line-height: 1.35;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .card-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .card-chip { position: relative; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 0 7px; border: 1px solid var(--border);
@@ -333,7 +333,7 @@ table.history td { font-size: 13px; }
 .tone-purple { --tone: #8a4fd8; }
 .tone-teal { --tone: #0f9b9b; }
 .tone-gray { --tone: #7a8394; }
-#kanban .card-item.kanban-card.toned { background: color-mix(in srgb, var(--tone) 12%, var(--surface));
+.kanban-board .card-item.kanban-card.toned { background: color-mix(in srgb, var(--tone) 12%, var(--surface));
   border-color: color-mix(in srgb, var(--tone) 45%, var(--border)); }
 .tone-swatch { display: inline-block; flex: none; width: 12px; height: 12px; border-radius: 3px; background: var(--tone, var(--muted)); }
 .kanban-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 13px; }
@@ -348,15 +348,15 @@ table.history td { font-size: 13px; }
    asked for, unless a filter looks for them. */
 .card-day { list-style: none; margin: 6px 2px 0; font-size: 12px; font-weight: 600; color: var(--muted); }
 .card-day:first-child { margin-top: 0; }
-#kanban .board:not(.filtering) .board-column:not(.expanded) .card-more, #kanban .board.filtering .card-show-all,
-#kanban .board-column.expanded .card-show-all { display: none; }
+.kanban-board .board:not(.filtering) .board-column:not(.expanded) .card-more, .kanban-board .board.filtering .card-show-all,
+.kanban-board .board-column.expanded .card-show-all { display: none; }
 .card-show-all { list-style: none; text-align: center; font-size: 13px; }
 .kanban-columns-edit .column-limit { width: 6.5rem; }
 
 /* Swimlanes (ADR-0137): one grid, the column heads once above the lanes,
    a cell per column in each lane. The template of the columns is set by
    the view, folded columns narrow. */
-#kanban .board.board-lanes { display: grid; gap: 8px 14px; align-items: stretch; }
+.kanban-board .board.board-lanes { display: grid; gap: 8px 14px; align-items: stretch; }
 .board-lanes .lane-col-head { padding: 0 10px; min-width: 0; }
 .board-lanes .lane-col-head .column-head { margin: 0; }
 .board-lanes .lane-col-head.folded .column-head { flex-direction: column; gap: 10px; }
@@ -370,9 +370,9 @@ table.history td { font-size: 13px; }
   padding: 0; border-radius: 6px; color: var(--muted); }
 .board-lanes .lane-head .lane-fold svg { width: 16px; height: 16px; transition: transform .12s; }
 .board-lanes .lane-head.lane-folded .lane-fold svg { transform: rotate(-90deg); }
-#kanban .board-lanes .board-column.lane-cell { min-width: 0; max-width: none; min-height: 90px; padding: 8px; }
-#kanban .board-lanes .board-column.lane-cell.folded { padding: 8px 4px; }
-#kanban .board-lanes .lane-cell.lane-folded { display: none; }
+.kanban-board .board-lanes .board-column.lane-cell { min-width: 0; max-width: none; min-height: 90px; padding: 8px; }
+.kanban-board .board-lanes .board-column.lane-cell.folded { padding: 8px 4px; }
+.kanban-board .board-lanes .lane-cell.lane-folded { display: none; }
 .lane-cell .cell-add { position: absolute; top: 4px; right: 4px; display: inline-flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; margin: 0; padding: 0; border-radius: 6px; color: var(--muted); opacity: 0; }
 .lane-cell .cell-add svg { width: 16px; height: 16px; }
@@ -1359,7 +1359,13 @@ a.requests-notice:hover { border-color: var(--accent); }
 /* ---------- Kanban pictures and boards by label (ADR-0087) ---------- */
 .kanban-title { display: flex; align-items: center; gap: 12px; }
 .kanban-title h1 { margin: 0; }
-.labelboard-type + .labelboard-type { margin-top: 18px; }
+.board-section + .board-section { margin-top: 18px; }
+.board-section > h2 { margin: 0 0 8px; font-size: 15px; }
+/* The view of a board that keeps nothing: its space, the colour and the
+   lanes, in one row above it (ADR-0139). */
+.board-view { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0 14px; }
+.board-view .field { flex: 1 1 150px; max-width: 240px; min-width: 0; margin-bottom: 10px; }
+.board-view select { width: 100%; }
 
 /* ---------- An item's status, at the top of its details (ADR-0132) ----------
    The state is a badge; what can be done with it are ordinary buttons. */

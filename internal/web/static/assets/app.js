@@ -2212,69 +2212,101 @@ async function spaceView(key) {
 // boardMax bounds the cards one board loads; a larger board says so.
 const boardMax = 2000;
 
-// boardView shows the items of one type in a space as columns, one per
-// workflow state (ADR-0036). A card moves only by a workflow transition:
-// with the buttons on the card, or by dragging it to a column that exactly
-// one of its transitions leads to.
+// boardView shows the items of one type in a space as a board (ADR-0036),
+// with the cards, filter and details of a kanban (ADR-0139). It keeps
+// nothing: a card moves by the one transition that leads to its column,
+// and colour and lanes are chosen for the view, in its address.
 async function boardView(key, typeName) {
   const show = screen();
-  const { types } = await get("/api/types");
+  const [{ types }, { spaces }] = await Promise.all([get("/api/types"), get("/api/spaces")]);
   const type = types.find((ty) => ty.name === typeName);
   if (!type || !type.workflow) throw new Error(t("board.noWorkflow", { type: typeName }));
-  const base = `/api/items?space=${encodeURIComponent(key)}&type=${encodeURIComponent(typeName)}&limit=100`;
-  let page = await get(base);
-  const items = [...page.items];
-  while (page.next && items.length < boardMax) {
-    page = await get(`${base}&after=${encodeURIComponent(page.next)}`);
-    items.push(...page.items);
-  }
+  const found = await readAll(`/api/items?space=${encodeURIComponent(key)}&type=${encodeURIComponent(typeName)}&limit=100`);
+  const canEdit = mayEdit(spaces.find((sp) => sp.key === key)?.role);
   const status = h("div", { class: "status" });
+  const view = viewOptions([type]);
+  const layout = await cardBoard({
+    id: "board", status, label: "", mayEdit: () => canEdit, cardFields: viewCardFields,
+    sections: [viewSection(type, found.items, status, canEdit ? { space: key } : null, `board.${key}/${typeName}`)],
+    ...view.look,
+  });
   show(
     h("p", {}, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(key), key), " / " + t("board.crumb", { type: typeName })),
     h("div", { class: "page-head" }, h("h1", { text: `${key} · ${typeName}` }),
       h("p", { class: "actions" }, csvLink(`/api/items.csv?space=${encodeURIComponent(key)}&type=${encodeURIComponent(typeName)}`, "board-csv"))),
-    page.next ? h("p", { class: "notice warning", text: t("board.truncated", { n: items.length }) }) : null,
+    found.truncated ? h("p", { class: "notice warning", text: t("board.truncated", { n: found.items.length }) }) : null,
+    view.el,
     status,
-    boardOf(items, type, status),
+    layout,
   );
 }
 
-// boardOf lays items of a type with a workflow out in columns of its
-// states (ADR-0036); a card moves by a transition, by button or by
-// dragging it to another column. cardTail adds to each card.
-function boardOf(items, type, status, cardTail) {
-  const transitionsFrom = (state) => type.workflow.transitions.filter((tr) => tr.from.includes(state));
-  const perform = (it, name) => action(() => post(`/api/items/${it.id}/transitions`, { name }), status);
+// viewCardFields are the fields the cards of a board that keeps nothing
+// show (ADR-0139): who has them, their dates and their choices, as on a
+// new kanban (ADR-0132), and their labels.
+function viewCardFields(type) {
+  return [...type.fields.filter((f) => ["user", "date", "enum"].includes(f.kind)).map((f) => f.name).slice(0, 12), "labels"];
+}
 
-  const card = (it) => h("li", { class: "card-item", draggable: "true", "data-id": it.id,
-    ondragstart: (ev) => { ev.dataTransfer.setData("text/plain", it.id); ev.dataTransfer.effectAllowed = "move"; } },
-  link("#/item/" + encodeURIComponent(it.key), it.key),
-  h("div", { class: "card-title", text: it.title }),
-  h("div", { class: "card-actions" }, transitionsFrom(it.state).map((tr) =>
-    h("button", { class: "link", text: `${tr.name} → ${tr.to}`, onclick: () => perform(it, tr.name) }))),
-  cardTail ? cardTail(it) : null,
-  );
-
-  const byID = new Map(items.map((it) => [it.id, it]));
-  const column = (state) => {
-    const cards = items.filter((it) => it.state === state);
-    const col = h("section", { class: "board-column", "data-state": state,
-      ondragover: (ev) => { ev.preventDefault(); col.classList.add("drop"); },
-      ondragleave: () => col.classList.remove("drop"),
-      ondrop: (ev) => {
-        ev.preventDefault();
-        col.classList.remove("drop");
-        const it = byID.get(ev.dataTransfer.getData("text/plain"));
-        if (!it || it.state === state) return;
-        const to = transitionsFrom(it.state).filter((tr) => tr.to === state);
-        if (to.length === 1) return perform(it, to[0].name);
-        status.replaceChildren(h("p", { class: "error", text: t(to.length ? "board.several" : "board.none", { from: it.state, to: state }) }));
-      } },
-    h("h2", {}, state, h("span", { class: "muted", text: ` ${cards.length}` })),
-    h("ul", { class: "board-cards" }, cards.map(card)));
-    return col;
+// viewSection is the board of one type on a board that keeps nothing
+// (ADR-0036, ADR-0087, ADR-0139): a column per state, its cards in the
+// order of the listing. A card moves by the one transition that leads to
+// the column; where several do, one is chosen in its details. A card is
+// made in the first state, or in a state one transition away, and is
+// moved there by it. make names the space new cards are made in and the
+// label they carry; without it no card is made here. keep names where
+// the folded columns and lanes are kept.
+function viewSection(type, items, status, make, keep, heading) {
+  const wf = type.workflow;
+  const ways = (from, to) => wf.transitions.filter((tr) => tr.to === to && tr.from.includes(from));
+  const transition = (it, name) => post(`/api/items/${it.id}/transitions`, { name });
+  return {
+    type, items, heading, foldKey: `wwbb.${keep}.folded`, laneKey: `wwbb.${keep}.lanes`,
+    columns: wf.states.map((state) => ({ id: state, name: state, state, cards: items.filter((it) => it.state === state).map((it) => it.id) })),
+    place: (it, col) => {
+      const to = ways(it.state, col.state);
+      if (to.length === 1) return action(() => transition(it, to[0].name), status);
+      if (to.length) return status.replaceChildren(h("p", { class: "error", text: t("board.several", { from: it.state, to: col.state }) }));
+      moveRefused(status, new Error(t("board.none", { from: it.state, to: col.state })), type, it, col.state,
+        (now) => transition(it, now.workflow.transitions.find((tr) => tr.to === col.state && tr.from.includes(it.state)).name));
+    },
+    takes: (col) => Boolean(make) && (col.state === wf.initial || ways(wf.initial, col.state).length === 1),
+    create: async (col, title, properties) => {
+      const { item } = await post("/api/items", { space: make.space, type: type.name, title, properties });
+      if (make.label) await put(`/api/items/${item.id}/labels`, { labels: [make.label] });
+      const [way] = col.state === item.state ? [] : ways(item.state, col.state);
+      if (way) await transition(item, way.name);
+    },
   };
-  return h("div", { class: "board" }, type.workflow.states.map(column));
+}
+
+// viewOptions are the colour and the lanes of a board that keeps nothing
+// (ADR-0139): fields of the task chosen for the view and kept in its
+// address, like its filter, so a reload and a shared link show the same.
+// A field is offered by its name, for every type that has it; a colour
+// is the tone of its value's place. lead comes first in the row.
+function viewOptions(types, lead) {
+  const q = new URLSearchParams(location.hash.split("?")[1] || "");
+  const named = (kinds) => [...new Set(types.flatMap((ty) => ty.fields.filter((f) => kinds.includes(f.kind)).map((f) => f.name)))].sort();
+  const enums = named(["enum"]), laneFields = named(["user", "enum"]);
+  const colorField = enums.includes(q.get("color")) ? q.get("color") : "";
+  const laneField = laneFields.includes(q.get("lanes")) ? q.get("lanes") : "";
+  const colorValues = [...new Set(types.flatMap((ty) => ty.fields.find((f) => f.name === colorField && f.kind === "enum")?.values || []))];
+  const set = (key) => (ev) => {
+    const [at, query = ""] = location.hash.split("?");
+    const p = new URLSearchParams(query);
+    if (ev.target.value) p.set(key, ev.target.value); else p.delete(key);
+    const rest = p.toString();
+    history.replaceState(null, "", at + (rest ? "?" + rest : ""));
+    route();
+  };
+  const pick = (id, key, none, names, chosen) => h("select", { id, onchange: set(key) },
+    h("option", { value: "", text: none }), names.map((n) => h("option", { value: n, text: n, selected: n === chosen })));
+  const el = lead || enums.length || laneFields.length ? h("div", { class: "board-view", id: "board-view", role: "group", "aria-label": t("board.view"), title: t("board.viewHint") },
+    lead || null,
+    enums.length ? field(t("kanban.colors"), pick("board-color", "color", t("kanban.colorNone"), enums, colorField)) : null,
+    laneFields.length ? field(t("kanban.lanes"), pick("board-lanes", "lanes", t("kanban.lanesNone"), laneFields, laneField)) : null) : null;
+  return { el, look: { colorField, colorValues, laneField, toneOf: (v) => kanbanTones[Math.max(0, colorValues.indexOf(v)) % kanbanTones.length] } };
 }
 
 // --- tasks -------------------------------------------------------------------
@@ -2571,9 +2603,11 @@ function kanbanIcon(k, size) {
 }
 
 // labelBoardView shows every task that carries a label as a board, one
-// per type with a workflow, its columns the states (ADR-0087). Nothing is
-// made or kept: the board is the label, as the task list's filter is. A
-// card moves by a transition, as on the board of a type (ADR-0036).
+// per type with a workflow, its columns the states (ADR-0087), with the
+// cards, filter and details of a kanban (ADR-0139). Nothing is kept: the
+// board is the label, as the task list's filter is. A card moves by a
+// transition, as on the board of a type (ADR-0036). Where the board shows
+// one space one may edit, a card is made there with the label.
 async function labelBoardView(label, space) {
   const show = screen();
   const [{ types }, { spaces }, { kanbans }] = await Promise.all([get("/api/types"), get("/api/spaces"), get("/api/kanbans")]);
@@ -2589,21 +2623,33 @@ async function labelBoardView(label, space) {
         text: `${sp} ${spaces.find((x) => x.key === sp)?.name || ""}` }))))
     : null;
   const kept = kanbans.filter((k) => k.label === label && (!space || k.space === space));
+  const editable = new Set(spaces.filter((sp) => mayEdit(sp.role)).map((sp) => sp.key));
+  const home = space || (inSpaces.length === 1 ? inSpaces[0] : "");
+  const make = editable.has(home) ? { space: home, label } : null;
+  const view = viewOptions(flows, filter);
+  const layout = flows.length ? await cardBoard({
+    id: "labelboard", status, label, mayEdit: (it) => editable.has(it.space), cardFields: viewCardFields,
+    sections: flows.map((ty) => viewSection(ty, found.items.filter((it) => it.type === ty.name), status, make,
+      `labelboard.${label}/${ty.name}`, flows.length > 1 ? ty.name : "")),
+    // Taking the label off takes the card off the board; the item keeps
+    // its other labels, as on a kanban.
+    detailTail: (item, close) => (editable.has(item.space) ? h("button", { type: "button", class: "danger kanban-off", id: "kanban-detail-off",
+      text: t("labelboard.takeOff", { label }), onclick: () => {
+        close();
+        action(() => put(`/api/items/${item.id}/labels`, { labels: item.labels.filter((l) => l !== label) }), status);
+      } }) : ""),
+    ...view.look,
+  }) : null;
   show(
     h("p", {}, link("#/tasks", t("nav.tasks")), " / ", link("#/kanbans", t("kanban.tab")), " / " + label),
     h("div", { class: "page-head" }, h("h1", {}, t("labelboard.title") + " ", labelChip(label))),
     h("p", { class: "muted", text: t("labelboard.intro") }),
     kept.length ? h("p", { class: "muted" }, t("labelboard.kept") + " ",
       kept.map((k) => link(`#/kanban/${encodeURIComponent(k.space)}/${k.id}`, `${k.space} · ${k.name}`, "chip kanban-chip"))) : null,
-    filter,
+    view.el,
     found.truncated ? h("p", { class: "notice warning", text: t("board.truncated", { n: found.items.length }) }) : null,
     status,
-    flows.length
-      ? h("div", { id: "labelboard" }, flows.map((ty) => h("section", { class: "labelboard-type", "data-type": ty.name },
-        flows.length > 1 ? h("h2", { text: ty.name }) : null,
-        boardOf(found.items.filter((it) => it.type === ty.name), ty, status,
-          (it) => (space || inSpaces.length < 2 ? null : h("span", { class: "card-key", text: it.space }))))))
-      : empty(t("labelboard.none"), "labelboard-empty"),
+    layout || empty(t("labelboard.none"), "labelboard-empty"),
   );
 }
 
@@ -2709,42 +2755,117 @@ async function kanbanView(space, id) {
   const canEdit = mayEdit(spaces.find((sp) => sp.key === space)?.role);
   const base = `/api/items?space=${encodeURIComponent(space)}&type=${encodeURIComponent(k.type)}&limit=100`;
   const [cards, all] = await Promise.all([readAll(`${base}&label=${encodeURIComponent(k.label)}`), canEdit ? readAll(base) : { items: [] }]);
-  const byID = new Map(cards.items.map((it) => [it.id, it]));
-  const fieldOf = (name) => type.fields.find((f) => f.name === name);
-  await learnNames(cards.items.flatMap((it) => type.fields.filter((f) => f.kind === "user").map((f) => it.properties[f.name]).filter(Boolean)));
   const status = h("div", { class: "status" });
-  const params = new URLSearchParams(location.hash.split("?")[1] || "");
   const setLabels = (it, labels) => put(`/api/items/${it.id}/labels`, { labels });
   const elsewhere = all.items.filter((it) => !it.labels.includes(k.label));
+  const wf = type.workflow;
 
-  // A move the workflow lacks is reported; an administrator can add it to
-  // the type at once (ADR-0076).
-  const moveFailed = (err, it, col, missing) => {
-    status.replaceChildren(errorBox(err), missing && me.admin
-      ? h("p", {}, h("button", { type: "button", class: "secondary", id: "kanban-add-transition", text: t("kanban.addTransition", { from: it.state, to: col.state, type: k.type }),
-        onclick: () => action(async () => {
-          await post(`/api/types/${encodeURIComponent(k.type)}/transitions`, { from: it.state, to: col.state });
-          await post(kpath + "/place", { card: it.id, column: col.id });
-        }, status) }))
-      : missing ? h("p", { class: "muted", text: t("kanban.askAdmin") }) : "");
-  };
+  // A card moves into a column of its own, or by a transition into a
+  // state's column, and stands where it was dropped. A move the workflow
+  // lacks is reported; an administrator can add it at once (ADR-0076).
   const place = async (it, col, before) => {
-    if (col.state && col.state !== it.state && !type.workflow.transitions.some((tr) => tr.to === col.state && tr.from.includes(it.state))) {
-      moveFailed(new Error(t("kanban.noTransition", { type: k.type, from: it.state, to: col.state })), it, col, true);
+    const again = () => post(kpath + "/place", { card: it.id, column: col.id });
+    if (col.state && col.state !== it.state && !wf.transitions.some((tr) => tr.to === col.state && tr.from.includes(it.state))) {
+      moveRefused(status, new Error(t("kanban.noTransition", { type: k.type, from: it.state, to: col.state })), type, it, col.state, again);
       return;
     }
     try {
       await post(kpath + "/place", { card: it.id, column: col.id, before: before || "" });
       route();
     } catch (err) {
-      moveFailed(err, it, col, Boolean(col.state) && /no transition from/.test(err.message));
+      if (col.state && /no transition from/.test(err.message)) moveRefused(status, err, type, it, col.state, again);
+      else status.replaceChildren(errorBox(err));
     }
   };
+  // A new card is made in the column it is meant for: in its state, in
+  // a column of its own, or one transition away from where cards start.
+  // It carries the kanban's label and stands on top of its column.
+  const takes = (col) => canEdit && (!col.state || col.state === wf.initial || wf.transitions.some((tr) => tr.to === col.state && tr.from.includes(wf.initial)));
+  const create = async (col, title, properties) => {
+    const { item } = await post("/api/items", { space, type: k.type, title, properties });
+    await setLabels(item, [k.label]);
+    await post(kpath + "/place", { card: item.id, column: col.id, before: (col.cards || [])[0] || "" });
+  };
 
-  // A card says at a glance what it is, who has it and what is behind it
-  // (ADR-0132): its title first; the fields the kanban names as chips, a
-  // person as a face; at its foot its key, whether it has a text and how
-  // far its checklist is.
+  // The kanban's settings, its name and its removal wait behind one
+  // button, so the board starts right below its title (ADR-0132).
+  const settings = canEdit ? kanbanSettings(k, type, board.columns, kpath) : null;
+  const tools = canEdit && elsewhere.length ? h("div", { class: "kanban-tools" },
+    form({ id: "kanban-assign", class: "inline-form" }, [
+      h("select", { name: "item", "aria-label": t("kanban.assign") }, elsewhere.map((it) => h("option", { value: it.id, text: `${it.key} ${it.title}` }))),
+      h("button", { type: "submit", text: t("kanban.assign") }),
+    ], async (d) => {
+      const it = elsewhere.find((x) => x.id === d.get("item"));
+      await setLabels(it, [...it.labels, k.label]);
+      route();
+    })) : null;
+  // The colour of a card is a value of the task's own, in the tone the
+  // kanban gives it or that of its place among the values (ADR-0134).
+  const colorField = k.colorField ? type.fields.find((f) => f.name === k.colorField && f.kind === "enum") : null;
+  const layout = await cardBoard({
+    id: "kanban", status, label: k.label, mayEdit: () => canEdit,
+    sections: [{ type, items: cards.items, columns: board.columns, place, takes, create, ordered: true,
+      foldKey: `wwbb.kanban.folded.${space}/${id}`, laneKey: `wwbb.kanban.lanes.${space}/${id}` }],
+    cardFields: () => k.cardFields,
+    colorField: colorField ? colorField.name : "", colorValues: colorField ? colorField.values : [],
+    toneOf: (v) => k.colors?.[v] || kanbanTones[Math.max(0, colorField.values.indexOf(v)) % kanbanTones.length],
+    laneField: k.laneField || "",
+    // Taking a card off is done here, on the one card in view, not on
+    // every card of the board.
+    detailTail: (item, close) => (canEdit ? h("button", { type: "button", class: "danger kanban-off", id: "kanban-detail-off", text: t("kanban.takeOff"), onclick: () => {
+      close();
+      action(() => setLabels(item, item.labels.filter((l) => l !== k.label)), status);
+    } }) : ""),
+  });
+  show(
+    h("p", {}, link("#/tasks", t("nav.tasks")), " / ", link("#/kanbans", t("kanban.tab")), " / " + k.name),
+    h("div", { class: "page-head" }, h("div", { class: "kanban-title" }, kanbanIcon({ ...k, space }, 48), h("h1", { text: k.name })),
+      h("div", { class: "actions" }, h("span", { class: "muted", text: t("kanban.metaLong", { space, type: k.type, label: k.label }) }),
+        settings ? h("button", { type: "button", class: "secondary kanban-settings-open", id: "kanban-settings-open", onclick: () => settings.showModal() },
+          lineIcon("M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4"), t("kanban.settings")) : null)),
+    tools,
+    settings,
+    cards.truncated ? h("p", { class: "notice warning", text: t("board.truncated", { n: cards.items.length }) }) : null,
+    status,
+    layout,
+  );
+}
+
+// --- boards of cards (ADR-0132, ADR-0134, ADR-0137, ADR-0139) -----------------
+
+// cardBoard lays out cards in the columns of their workflow, for a kanban
+// and for the boards of a type and of a label, which keep nothing
+// (ADR-0139). All show the same cards, filter, legend, folded columns,
+// finished cards by day, lanes, and the details of a card beside the
+// board. What differs comes in o:
+//   id          the element id of the boards with their filter
+//   sections    a board per type: { type, items, columns, heading,
+//               place(it, col, before), takes(col), create(col, title,
+//               properties), ordered, foldKey, laneKey }; a column is
+//               { id, name, state, limit, cards }, its cards the IDs of
+//               its items; ordered tells that the cards keep the order
+//               they are dropped in
+//   cardFields  the fields a card of a type shows: cardFields(type)
+//   label       the label the board stands for, not repeated on its cards
+//   colorField, colorValues, toneOf, laneField  colour and lanes by a
+//               field of the task, named
+//   mayEdit     whether one may change an item: mayEdit(it)
+//   detailTail  what the details of an item end with: detailTail(item, close)
+//   status      where errors are said
+// It answers the layout, with the card the address names open.
+async function cardBoard(o) {
+  const { status } = o;
+  const sectionOf = new Map(o.sections.flatMap((s) => s.items.map((it) => [it.id, s])));
+  const byID = new Map(o.sections.flatMap((s) => s.items.map((it) => [it.id, it])));
+  const items = [...byID.values()];
+  const typeOf = (it) => sectionOf.get(it.id).type;
+  const fieldOf = (type, name, kinds) => type.fields.find((f) => f.name === name && (!kinds || kinds.includes(f.kind))) || null;
+  const namesOf = (type, kind) => type.fields.filter((f) => f.kind === kind).map((f) => f.name);
+  const peopleOf = (it) => namesOf(typeOf(it), "user").map((n) => it.properties[n]).filter(Boolean);
+  await learnNames(items.flatMap(peopleOf));
+  const params = new URLSearchParams(location.hash.split("?")[1] || "");
+  const byName = (a, b) => (a === me.user.id ? -1 : b === me.user.id ? 1 : person(a).localeCompare(person(b)));
+
   // The open card is one part of the address; the filter keeps its own.
   const setCard = (key) => {
     const [route, query = ""] = location.hash.split("?");
@@ -2759,29 +2880,33 @@ async function kanbanView(space, id) {
     layout.querySelector(`.card-item[data-id="${it.id}"]`)?.classList.add("selected");
     openDetail(it);
   };
-  // A card's colour is the value of the field the kanban colours by: the
-  // task's own, so it shows wherever the task does (ADR-0134).
-  const colorField = k.colorField && fieldOf(k.colorField)?.kind === "enum" ? fieldOf(k.colorField) : null;
-  const toneOf = (v) => k.colors?.[v] || kanbanTones[Math.max(0, colorField.values.indexOf(v)) % kanbanTones.length];
-  const dateFields = type.fields.filter((f) => f.kind === "date").map((f) => f.name);
-  const userFields = type.fields.filter((f) => f.kind === "user").map((f) => f.name);
   // dueOf sorts a card for the filter by its dates: overdue, within a
   // week, or without a date; a finished card is none of the first two.
   const dueOf = (it) => {
-    const days = dateFields.map((n) => it.properties[n]).filter(Boolean).map((v) => daysFromToday(String(v).slice(0, 10))).filter((d) => d !== null);
+    const type = typeOf(it);
+    const days = namesOf(type, "date").map((n) => it.properties[n]).filter(Boolean).map((v) => daysFromToday(String(v).slice(0, 10))).filter((d) => d !== null);
     if (!days.length) return "none";
     if (finished(type.workflow, it.state)) return "";
     if (days.some((d) => d < 0)) return "late";
     return days.some((d) => d <= 7) ? "week" : "";
   };
+  // A card's colour is the value of the field the board colours by: the
+  // task's own, so it shows wherever the task does (ADR-0134).
+  const colorOf = (it) => (fieldOf(typeOf(it), o.colorField, ["enum"]) ? it.properties[o.colorField] || "" : "");
+
+  // A card says at a glance what it is, who has it and what is behind it
+  // (ADR-0132): its title first; the fields the board names as chips, a
+  // person as a face; at its foot its key, whether it has a text and how
+  // far its checklist is.
   const cardEl = (it) => {
+    const type = typeOf(it);
     const chips = [], people = [];
-    for (const n of k.cardFields) {
+    for (const n of o.cardFields(type)) {
       if (n === "labels") {
-        chips.push(...it.labels.filter((l) => l !== k.label).map((l) => h("span", { class: "card-chip card-label", title: `${n}: ${l}`, text: l })));
+        chips.push(...it.labels.filter((l) => l !== o.label).map((l) => h("span", { class: "card-chip card-label", title: `${n}: ${l}`, text: l })));
         continue;
       }
-      const f = fieldOf(n), v = n === "state" ? it.state : it.properties[n];
+      const f = fieldOf(type, n), v = n === "state" ? it.state : it.properties[n];
       if (v === undefined || v === null || v === "" || v === false) continue;
       if (f?.kind === "user") {
         people.push(h("span", { class: "card-person", role: "img", title: `${n}: ${person(v)}`, "aria-label": `${n}: ${person(v)}` }, face(v, 24)));
@@ -2793,11 +2918,11 @@ async function kanbanView(space, id) {
     // it, says so first (ADR-0137).
     if (it.waitingOn) chips.unshift(h("span", { class: "card-chip late card-waiting", title: t("card.waitingHint", { n: it.waitingOn }) },
       lineIcon("M7 4h10M7 20h10M8 4c0 5 8 6 8 8s-8 3-8 8M16 4c0 5-8 6-8 8"), t("card.waiting", { n: it.waitingOn })));
-    const color = colorField ? it.properties[k.colorField] : "";
-    const who = userFields.map((n) => it.properties[n]).filter(Boolean);
-    const li = h("li", { class: "card-item kanban-card" + (color ? ` toned tone-${toneOf(color)}` : ""), draggable: canEdit ? "true" : "false", "data-id": it.id, tabindex: "0",
+    const color = colorOf(it);
+    const who = peopleOf(it);
+    const li = h("li", { class: "card-item kanban-card" + (color ? ` toned tone-${o.toneOf(color)}` : ""), draggable: o.mayEdit(it) ? "true" : "false", "data-id": it.id, tabindex: "0",
       "data-filter-text": [it.key, it.title, ...it.labels, ...who.map(person), ...type.fields.filter((f) => f.kind !== "user").map((f) => it.properties[f.name] ?? "")].join(" "),
-      "data-f-who": who.join("|"), "data-f-label": it.labels.filter((l) => l !== k.label).join("|"), "data-f-due": dueOf(it), "data-f-color": color || "", "data-f-waiting": it.waitingOn ? "yes" : "",
+      "data-f-who": who.join("|"), "data-f-label": it.labels.filter((l) => l !== o.label).join("|"), "data-f-due": dueOf(it), "data-f-color": color, "data-f-waiting": it.waitingOn ? "yes" : "",
       ondragstart: (ev) => { ev.dataTransfer.setData("text/plain", it.id); ev.dataTransfer.effectAllowed = "move"; },
       onclick: (ev) => { if (!ev.target.closest("a, button")) select(it); },
       onkeydown: (ev) => { if (ev.key === "Enter" && ev.target === li) select(it); } },
@@ -2808,106 +2933,190 @@ async function kanbanView(space, id) {
     return li;
   };
 
-  // A new card is made in the column it is meant for: in its state, in
-  // a column of its own, or one transition away from where cards start.
-  const wf = type.workflow;
-  const takes = (col) => canEdit && (!col.state || col.state === wf.initial || wf.transitions.some((tr) => tr.to === col.state && tr.from.includes(wf.initial)));
-  const addCard = (col, el, list, lane) => {
-    const open = el.querySelector(".card-new input");
-    if (open) return open.focus();
-    const input = h("input", { name: "title", required: true, placeholder: t("kanban.newCard"), "aria-label": t("kanban.newCardIn", { column: col.name }) });
-    const f = form({ class: "card-new" }, [input, h("button", { type: "submit", class: "primary", text: t("kanban.add") })], async (d) => {
-      // A card made in a lane takes the lane's value (ADR-0137).
-      const properties = lane ? { [k.laneField]: lane } : {};
-      const { item } = await post("/api/items", { space, type: k.type, title: d.get("title").trim(), properties });
-      await setLabels(item, [k.label]);
-      // On top of its column, where it was typed.
-      await post(kpath + "/place", { card: item.id, column: col.id, before: (col.cards || [])[0] || "" });
-      route();
-    });
-    input.addEventListener("keydown", (ev) => { if (ev.key === "Escape") f.remove(); });
-    el.insertBefore(f, list);
-    input.focus();
+  // Columns and lanes one folds away stay folded for them, in this
+  // browser only.
+  const kept = (key) => {
+    try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { return new Set(); }
   };
+  const keep = (key, set) => {
+    try { localStorage.setItem(key, JSON.stringify([...set])); } catch { /* kept for this view only */ }
+  };
+  let filteredBoard = null;
 
-  // Columns one folds away stay folded for them, in this browser only.
-  const foldKey = `wwbb.kanban.folded.${space}/${id}`;
-  let folded = new Set();
-  try { folded = new Set(JSON.parse(localStorage.getItem(foldKey) || "[]")); } catch { folded = new Set(); }
-  const fold = (col, el, button) => {
-    const shut = !folded.has(col.id);
-    if (shut) folded.add(col.id); else folded.delete(col.id);
-    try { localStorage.setItem(foldKey, JSON.stringify([...folded])); } catch { /* kept for this view only */ }
-    el.classList.toggle("folded", shut);
-    button.setAttribute("aria-expanded", String(!shut));
+  // sectionBoard is the board of one type: its columns, or its lanes.
+  const sectionBoard = (s) => {
+    const { type } = s, wf = type.workflow;
+    const folded = kept(s.foldKey), foldedLanes = kept(s.laneKey);
+    const takes = (col) => Boolean(s.takes?.(col));
+    const addCard = (col, el, list, lane) => {
+      const open = el.querySelector(".card-new input");
+      if (open) return open.focus();
+      const input = h("input", { name: "title", required: true, placeholder: t("kanban.newCard"), "aria-label": t("kanban.newCardIn", { column: col.name }) });
+      const f = form({ class: "card-new" }, [input, h("button", { type: "submit", class: "primary", text: t("kanban.add") })], async (d) => {
+        // A card made in a lane takes the lane's value (ADR-0137).
+        await s.create(col, d.get("title").trim(), lane ? { [laneField.name]: lane } : {});
+        route();
+      });
+      input.addEventListener("keydown", (ev) => { if (ev.key === "Escape") f.remove(); });
+      el.insertBefore(f, list);
+      input.focus();
+    };
+    const fold = (col, el, button) => {
+      const shut = !folded.has(col.id);
+      if (shut) folded.add(col.id); else folded.delete(col.id);
+      keep(s.foldKey, folded);
+      el.classList.toggle("folded", shut);
+      button.setAttribute("aria-expanded", String(!shut));
+    };
+    // A finished state's column lists its cards by the day they got
+    // there, the newest first, and the most recent only until asked for
+    // all (ADR-0134).
+    const cardsOf = (col, ids = col.cards || []) => {
+      const list = ids.map((cid) => byID.get(cid)).filter(Boolean);
+      if (!col.state || !finished(wf, col.state)) return list.map(cardEl);
+      list.sort((a, b) => (Date.parse(b.stateSince) || 0) - (Date.parse(a.stateSince) || 0));
+      const out = [];
+      let day = null;
+      list.forEach((it, i) => {
+        const more = i >= recentDone ? " card-more" : "";
+        const d = it.stateSince ? localDay(it.stateSince) : "";
+        if (d && d !== day) out.push(h("li", { class: "card-day" + more, "data-day": d, text: dayName(d) }));
+        day = d;
+        const el = cardEl(it);
+        if (more) el.classList.add("card-more");
+        out.push(el);
+      });
+      if (list.length > recentDone) {
+        out.push(h("li", { class: "card-show-all" }, h("button", { type: "button", class: "link", text: t("kanban.showAll", { n: list.length }),
+          onclick: (ev) => ev.target.closest(".board-column").classList.add("expanded") })));
+      }
+      return out;
+    };
+    // A column's count names its limit beside it, and says when the
+    // column holds as many cards or more (ADR-0134); a limit is a signal,
+    // the move is never refused for it.
+    const countOf = (col) => {
+      const n = (col.cards || []).length;
+      if (!col.limit) return h("span", { class: "column-count", text: String(n) });
+      return h("span", { class: "column-count" + (n > col.limit ? " over" : n === col.limit ? " full" : ""),
+        title: t("kanban.limitHint", { n, limit: col.limit }), text: `${n} / ${col.limit}` });
+    };
+    // Swimlanes (ADR-0137): rows by the value of a person or choice field
+    // of the task. The column heads stand once above them; each lane has
+    // a cell per column.
+    const laneField = fieldOf(type, o.laneField, ["user", "enum"]);
+    const editor = s.items.some((it) => o.mayEdit(it)) || s.columns.some(takes);
+    const lanes = !laneField ? [] : laneField.kind === "enum" ? [...laneField.values, ""]
+      : [...[...new Set([...s.items.map((it) => it.properties[laneField.name]).filter(Boolean), ...(editor ? [me.user.id] : [])])].sort(byName), ""];
+    const laneOf = (it) => {
+      const v = laneField ? it.properties[laneField.name] ?? "" : "";
+      return lanes.includes(v) ? v : "";
+    };
+    const laneName = (v) => (v === "" ? t("kanban.laneNone", { field: laneField.name }) : laneField.kind === "user" ? person(v) : v);
+    // A card moves into another lane only where it can move into the
+    // column, so a refused move leaves its value as it was.
+    const canMove = (it, col) => !col.state || col.state === it.state || wf.transitions.filter((tr) => tr.to === col.state && tr.from.includes(it.state)).length === 1;
+    const moveToLane = async (it, col, before, lane) => {
+      if (!canMove(it, col)) return s.place(it, col, before);
+      try {
+        await put(`/api/items/${it.id}/properties/${encodeURIComponent(laneField.name)}`, { value: lane === "" ? null : lane });
+      } catch (err) {
+        status.replaceChildren(errorBox(err));
+        return;
+      }
+      if (!s.ordered && col.state === it.state) return route();
+      await s.place(it, col, before);
+    };
+    // dropZone makes a column, or a column's cell in a lane, take cards
+    // of this type: dropped on a card, before it; elsewhere, last. Into
+    // another lane the card first takes the lane's value, a change of the
+    // item (ADR-0137). Where cards keep no order, a drop into their own
+    // column changes nothing.
+    const dropZone = (el, col, lane) => {
+      el.addEventListener("dragover", (ev) => { if (!editor) return; ev.preventDefault(); el.classList.add("drop"); });
+      el.addEventListener("dragleave", () => el.classList.remove("drop"));
+      el.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        el.classList.remove("drop");
+        const it = byID.get(ev.dataTransfer.getData("text/plain"));
+        if (!it || sectionOf.get(it.id) !== s || !o.mayEdit(it)) return;
+        const target = ev.target.closest(".card-item");
+        const before = target && target.dataset.id !== it.id ? target.dataset.id : "";
+        if (lane !== undefined && laneOf(it) !== lane) return moveToLane(it, col, before, lane);
+        if (!s.ordered && col.state === it.state) return;
+        s.place(it, col, before);
+      });
+      return el;
+    };
+    const columnEl = (col) => {
+      const list = h("ul", { class: "board-cards" }, cardsOf(col));
+      const shut = folded.has(col.id);
+      const el = dropZone(h("section", { class: "board-column" + (col.state ? "" : " own-column") + (shut ? " folded" : ""), "data-state": col.state || "", "data-column": col.id }), col);
+      const toggle = h("button", { type: "button", class: "link column-fold", "aria-expanded": String(!shut),
+        title: t("kanban.fold", { column: col.name }), "aria-label": t("kanban.fold", { column: col.name }), onclick: () => fold(col, el, toggle) }, lineIcon("M15 6l-6 6 6 6"));
+      // The state a column stands for is its tooltip; the name is what
+      // counts.
+      el.append(h("div", { class: "column-head" },
+        h("h2", { title: col.state ? t("kanban.stateColumnHint", { state: col.state }) : t("kanban.ownColumnHint"), text: col.name }),
+        countOf(col),
+        takes(col) ? h("button", { type: "button", class: "link column-add", title: t("kanban.newCardIn", { column: col.name }),
+          "aria-label": t("kanban.newCardIn", { column: col.name }), onclick: () => addCard(col, el, list) }, lineIcon("M12 5v14M5 12h14")) : "",
+        toggle),
+      list);
+      return el;
+    };
+    const boardEl = h("div", { class: "board" + (laneField ? " board-lanes" : ""), "data-type": type.name });
+    const laneBoard = () => {
+      const cols = s.columns;
+      boardEl.style.gridTemplateColumns = cols.map((c) => (folded.has(c.id) ? "44px" : "minmax(220px, 400px)")).join(" ");
+      const heads = cols.map((col) => {
+        const shut = folded.has(col.id);
+        const toggle = h("button", { type: "button", class: "link column-fold", "aria-expanded": String(!shut),
+          title: t("kanban.fold", { column: col.name }), "aria-label": t("kanban.fold", { column: col.name }), onclick: () => {
+            if (shut) folded.delete(col.id); else folded.add(col.id);
+            keep(s.foldKey, folded);
+            laneBoard();
+            filteredBoard?.applyFilter();
+          } }, lineIcon("M15 6l-6 6 6 6"));
+        return h("div", { class: "lane-col-head" + (shut ? " folded" : ""), "data-column": col.id, "data-state": col.state || "" },
+          h("div", { class: "column-head" },
+            h("h2", { title: col.state ? t("kanban.stateColumnHint", { state: col.state }) : t("kanban.ownColumnHint"), text: col.name }),
+            countOf(col), toggle));
+      });
+      const rows = lanes.flatMap((lane) => {
+        const mine = s.items.filter((it) => laneOf(it) === lane).map((it) => it.id);
+        const shut = foldedLanes.has(lane);
+        const toggle = h("button", { type: "button", class: "link lane-fold", "aria-expanded": String(!shut),
+          title: t("kanban.foldLane", { lane: laneName(lane) }), "aria-label": t("kanban.foldLane", { lane: laneName(lane) }), onclick: () => {
+            if (shut) foldedLanes.delete(lane); else foldedLanes.add(lane);
+            keep(s.laneKey, foldedLanes);
+            laneBoard();
+            filteredBoard?.applyFilter();
+          } }, lineIcon("M6 9l6 6 6-6"));
+        const head = h("div", { class: "lane-head" + (shut ? " lane-folded" : ""), "data-lane": lane },
+          toggle, laneField.kind === "user" && lane ? face(lane, 24) : null, h("h3", { text: laneName(lane) }),
+          h("span", { class: "column-count", text: String(mine.length) }));
+        const cells = cols.map((col) => {
+          const ids = (col.cards || []).filter((cid) => mine.includes(cid));
+          const list = h("ul", { class: "board-cards" }, cardsOf(col, ids));
+          const cell = dropZone(h("section", { class: "board-column lane-cell" + (col.state ? "" : " own-column") + (folded.has(col.id) ? " folded" : "") + (shut ? " lane-folded" : ""),
+            "data-column": col.id, "data-state": col.state || "", "data-lane": lane }), col, lane);
+          if (takes(col)) {
+            cell.append(h("button", { type: "button", class: "link cell-add", title: t("kanban.newCardInLane", { column: col.name, lane: laneName(lane) }),
+              "aria-label": t("kanban.newCardInLane", { column: col.name, lane: laneName(lane) }), onclick: () => addCard(col, cell, list, lane) }, lineIcon("M12 5v14M5 12h14")));
+          }
+          cell.append(list);
+          return cell;
+        });
+        return [head, ...cells];
+      });
+      boardEl.replaceChildren(...heads, ...rows);
+    };
+    if (laneField) laneBoard(); else boardEl.append(...s.columns.map(columnEl));
+    return boardEl;
   };
-  // A finished state's column lists its cards by the day they got there,
-  // the newest first, and the most recent only until asked for all
-  // (ADR-0134).
-  const cardsOf = (col, ids = col.cards || []) => {
-    const items = ids.map((cid) => byID.get(cid)).filter(Boolean);
-    if (!col.state || !finished(wf, col.state)) return items.map(cardEl);
-    items.sort((a, b) => (Date.parse(b.stateSince) || 0) - (Date.parse(a.stateSince) || 0));
-    const out = [];
-    let day = null;
-    items.forEach((it, i) => {
-      const more = i >= recentDone ? " card-more" : "";
-      const d = it.stateSince ? localDay(it.stateSince) : "";
-      if (d && d !== day) out.push(h("li", { class: "card-day" + more, "data-day": d, text: dayName(d) }));
-      day = d;
-      const el = cardEl(it);
-      if (more) el.classList.add("card-more");
-      out.push(el);
-    });
-    if (items.length > recentDone) {
-      out.push(h("li", { class: "card-show-all" }, h("button", { type: "button", class: "link", text: t("kanban.showAll", { n: items.length }),
-        onclick: (ev) => ev.target.closest(".board-column").classList.add("expanded") })));
-    }
-    return out;
-  };
-  // A column's count names its limit beside it, and says when the column
-  // holds as many cards or more (ADR-0134); a limit is a signal, the move
-  // is never refused for it.
-  const countOf = (col) => {
-    const n = (col.cards || []).length;
-    if (!col.limit) return h("span", { class: "column-count", text: String(n) });
-    return h("span", { class: "column-count" + (n > col.limit ? " over" : n === col.limit ? " full" : ""),
-      title: t("kanban.limitHint", { n, limit: col.limit }), text: `${n} / ${col.limit}` });
-  };
-  // dropZone makes a column, or a column's cell in a lane, take cards:
-  // dropped on a card, before it; elsewhere, last. Into another lane the
-  // card first takes the lane's value, a change of the item (ADR-0137).
-  const dropZone = (el, col, lane) => {
-    el.addEventListener("dragover", (ev) => { if (!canEdit) return; ev.preventDefault(); el.classList.add("drop"); });
-    el.addEventListener("dragleave", () => el.classList.remove("drop"));
-    el.addEventListener("drop", (ev) => {
-      ev.preventDefault();
-      el.classList.remove("drop");
-      const it = byID.get(ev.dataTransfer.getData("text/plain"));
-      if (!it) return;
-      const target = ev.target.closest(".card-item");
-      const before = target && target.dataset.id !== it.id ? target.dataset.id : "";
-      if (lane === undefined || laneOf(it) === lane) return place(it, col, before);
-      moveToLane(it, col, before, lane);
-    });
-    return el;
-  };
-  const columnEl = (col) => {
-    const list = h("ul", { class: "board-cards" }, cardsOf(col));
-    const shut = folded.has(col.id);
-    const el = dropZone(h("section", { class: "board-column" + (col.state ? "" : " own-column") + (shut ? " folded" : ""), "data-state": col.state || "", "data-column": col.id }), col);
-    const toggle = h("button", { type: "button", class: "link column-fold", "aria-expanded": String(!shut),
-      title: t("kanban.fold", { column: col.name }), "aria-label": t("kanban.fold", { column: col.name }), onclick: () => fold(col, el, toggle) }, lineIcon("M15 6l-6 6 6 6"));
-    // The state a column stands for is its tooltip; the name is what counts.
-    el.append(h("div", { class: "column-head" },
-      h("h2", { title: col.state ? t("kanban.stateColumnHint", { state: col.state }) : t("kanban.ownColumnHint"), text: col.name }),
-      countOf(col),
-      takes(col) ? h("button", { type: "button", class: "link column-add", title: t("kanban.newCardIn", { column: col.name }),
-        "aria-label": t("kanban.newCardIn", { column: col.name }), onclick: () => addCard(col, el, list) }, lineIcon("M12 5v14M5 12h14")) : "",
-      toggle),
-    list);
-    return el;
-  };
+  const boards = h("div", { class: "board-sections" }, o.sections.map((s) => h("section", { class: "board-section", "data-type": s.type.name },
+    s.heading ? h("h2", { text: s.heading }) : null, sectionBoard(s))));
 
   // The details of a card beside the board: its fields, state, labels and
   // text, as on its own page; changes are saved at once.
@@ -2919,6 +3128,7 @@ async function kanbanView(space, id) {
     setCard("");
   };
   const openDetail = async (it) => {
+    const type = typeOf(it);
     detail.hidden = false;
     detail.replaceChildren(h("p", { class: "muted", text: t("kanban.loading") }));
     let item, embeds, out, inc;
@@ -2930,7 +3140,7 @@ async function kanbanView(space, id) {
       return;
     }
     const path = "/api/items/" + item.id;
-    const editable = canEdit && !item.managed;
+    const editable = o.mayEdit(it) && !item.managed;
     const saved = h("span", { class: "save-mark", role: "status" });
     const props = h("table", { class: "props" }, type.fields.map((f) => {
       const input = propertyInput(f, item.properties[f.name]);
@@ -2950,12 +3160,6 @@ async function kanbanView(space, id) {
       return h("tr", { "data-field": f.name }, h("th", { text: f.name }), h("td", {}, input));
     }));
     const stateBar = statusBar(type.workflow, item.state, editable ? (tr) => action(() => post(path + "/transitions", { name: tr.name }), status) : null);
-    // Taking a card off is done here, on the one card in view, not on
-    // every card of the board.
-    const off = canEdit ? h("button", { type: "button", class: "danger kanban-off", id: "kanban-detail-off", text: t("kanban.takeOff"), onclick: () => {
-      closeDetail();
-      action(() => setLabels(item, item.labels.filter((l) => l !== k.label)), status);
-    } }) : "";
     detail.replaceChildren(
       h("div", { class: "kanban-detail-head" },
         h("span", { class: "muted", text: item.key }),
@@ -2968,148 +3172,63 @@ async function kanbanView(space, id) {
       type.body ? h("section", { class: "kanban-detail-body" }, item.body.length ? readOnlyBody(item, embeds) : h("p", { class: "muted", text: t("kanban.noText") })) : "",
       // What the card depends on, blocks or relates to (ADR-0137).
       await relationsSection("/api/items/" + item.id, out.relations, inc.relations, item.id, editable),
-      h("p", { class: "actions-row" }, link("#/item/" + encodeURIComponent(item.key), t("kanban.openItem"), "button"), off));
+      h("p", { class: "actions-row" }, link("#/item/" + encodeURIComponent(item.key), t("kanban.openItem"), "button"), o.detailTail ? o.detailTail(item, closeDetail) : ""));
   };
 
-  // The kanban's settings, its name and its removal wait behind one
-  // button, so the board starts right below its title (ADR-0132).
-  const settings = canEdit ? kanbanSettings(k, type, board.columns, kpath) : null;
-  const tools = canEdit && elsewhere.length ? h("div", { class: "kanban-tools" },
-    form({ id: "kanban-assign", class: "inline-form" }, [
-      h("select", { name: "item", "aria-label": t("kanban.assign") }, elsewhere.map((it) => h("option", { value: it.id, text: `${it.key} ${it.title}` }))),
-      h("button", { type: "submit", text: t("kanban.assign") }),
-    ], async (d) => {
-      const it = elsewhere.find((x) => x.id === d.get("item"));
-      await setLabels(it, [...it.labels, k.label]);
-      route();
-    })) : null;
-  // Swimlanes (ADR-0137): rows by the value of a person or choice field of
-  // the task. The column heads stand once above them; each lane has a
-  // cell per column. Folded lanes, like folded columns, stay folded for
-  // this browser only.
-  const laneField = k.laneField && ["user", "enum"].includes(fieldOf(k.laneField)?.kind) ? fieldOf(k.laneField) : null;
-  const lanes = !laneField ? [] : laneField.kind === "enum" ? [...laneField.values, ""]
-    : [...[...new Set([...cards.items.map((it) => it.properties[k.laneField]).filter(Boolean), ...(canEdit ? [me.user.id] : [])])]
-      .sort((a, b) => (a === me.user.id ? -1 : b === me.user.id ? 1 : person(a).localeCompare(person(b)))), ""];
-  const laneOf = (it) => {
-    const v = laneField ? it.properties[k.laneField] ?? "" : "";
-    return lanes.includes(v) ? v : "";
-  };
-  const laneName = (v) => (v === "" ? t("kanban.laneNone", { field: k.laneField }) : laneField.kind === "user" ? person(v) : v);
-  const canMove = (it, col) => !col.state || col.state === it.state || type.workflow.transitions.some((tr) => tr.to === col.state && tr.from.includes(it.state));
-  const moveToLane = async (it, col, before, lane) => {
-    if (!canMove(it, col)) return place(it, col, before);
-    try {
-      await put(`/api/items/${it.id}/properties/${encodeURIComponent(k.laneField)}`, { value: lane === "" ? null : lane });
-    } catch (err) {
-      status.replaceChildren(errorBox(err));
-      return;
-    }
-    await place(it, col, before);
-  };
-  const laneKey = `wwbb.kanban.lanes.${space}/${id}`;
-  let foldedLanes = new Set();
-  try { foldedLanes = new Set(JSON.parse(localStorage.getItem(laneKey) || "[]")); } catch { foldedLanes = new Set(); }
-  const boardEl = h("div", { class: "board" + (laneField ? " board-lanes" : "") });
-  const laneBoard = () => {
-    const cols = board.columns;
-    boardEl.style.gridTemplateColumns = cols.map((c) => (folded.has(c.id) ? "44px" : "minmax(220px, 400px)")).join(" ");
-    const heads = cols.map((col) => {
-      const shut = folded.has(col.id);
-      const toggle = h("button", { type: "button", class: "link column-fold", "aria-expanded": String(!shut),
-        title: t("kanban.fold", { column: col.name }), "aria-label": t("kanban.fold", { column: col.name }), onclick: () => {
-          if (shut) folded.delete(col.id); else folded.add(col.id);
-          try { localStorage.setItem(foldKey, JSON.stringify([...folded])); } catch { /* kept for this view only */ }
-          laneBoard();
-          filteredBoard?.applyFilter();
-        } }, lineIcon("M15 6l-6 6 6 6"));
-      return h("div", { class: "lane-col-head" + (shut ? " folded" : ""), "data-column": col.id, "data-state": col.state || "" },
-        h("div", { class: "column-head" },
-          h("h2", { title: col.state ? t("kanban.stateColumnHint", { state: col.state }) : t("kanban.ownColumnHint"), text: col.name }),
-          countOf(col), toggle));
-    });
-    const rows = lanes.flatMap((lane) => {
-      const mine = cards.items.filter((it) => laneOf(it) === lane).map((it) => it.id);
-      const shut = foldedLanes.has(lane);
-      const toggle = h("button", { type: "button", class: "link lane-fold", "aria-expanded": String(!shut),
-        title: t("kanban.foldLane", { lane: laneName(lane) }), "aria-label": t("kanban.foldLane", { lane: laneName(lane) }), onclick: () => {
-          if (shut) foldedLanes.delete(lane); else foldedLanes.add(lane);
-          try { localStorage.setItem(laneKey, JSON.stringify([...foldedLanes])); } catch { /* kept for this view only */ }
-          laneBoard();
-          filteredBoard?.applyFilter();
-        } }, lineIcon("M6 9l6 6 6-6"));
-      const head = h("div", { class: "lane-head" + (shut ? " lane-folded" : ""), "data-lane": lane },
-        toggle, laneField.kind === "user" && lane ? face(lane, 24) : null, h("h3", { text: laneName(lane) }),
-        h("span", { class: "column-count", text: String(mine.length) }));
-      const cells = cols.map((col) => {
-        const ids = (col.cards || []).filter((cid) => mine.includes(cid));
-        const list = h("ul", { class: "board-cards" }, cardsOf(col, ids));
-        const cell = dropZone(h("section", { class: "board-column lane-cell" + (col.state ? "" : " own-column") + (folded.has(col.id) ? " folded" : "") + (shut ? " lane-folded" : ""),
-          "data-column": col.id, "data-state": col.state || "", "data-lane": lane }), col, lane);
-        if (takes(col)) {
-          cell.append(h("button", { type: "button", class: "link cell-add", title: t("kanban.newCardInLane", { column: col.name, lane: laneName(lane) }),
-            "aria-label": t("kanban.newCardInLane", { column: col.name, lane: laneName(lane) }), onclick: () => addCard(col, cell, list, lane) }, lineIcon("M12 5v14M5 12h14")));
-        }
-        cell.append(list);
-        return cell;
-      });
-      return [head, ...cells];
-    });
-    boardEl.replaceChildren(...heads, ...rows);
-  };
-  if (laneField) laneBoard(); else boardEl.append(...board.columns.map(columnEl));
   // The filter of the board (ADR-0098, ADR-0134): by text, person, label,
   // due date and colour, kept in the address.
-  const people = [...new Set(cards.items.flatMap((it) => userFields.map((n) => it.properties[n]).filter(Boolean)))]
-    .sort((a, b) => (a === me.user.id ? -1 : b === me.user.id ? 1 : person(a).localeCompare(person(b))));
   const choices = [
-    userFields.length ? { key: "who", label: t("kanban.who"), options: people.map((v) => [v, person(v)]) } : null,
+    o.sections.some((s) => namesOf(s.type, "user").length)
+      ? { key: "who", label: t("kanban.who"), options: [...new Set(items.flatMap(peopleOf))].sort(byName).map((v) => [v, person(v)]) } : null,
     { key: "label", label: t("kanban.label") },
-    dateFields.length ? { key: "due", label: t("kanban.due"), options: [["late", t("kanban.dueLate")], ["week", t("kanban.dueWeek")], ["none", t("kanban.dueNone")]] } : null,
-    colorField ? { key: "color", label: k.colorField, options: colorField.values.map((v) => [v, v]) } : null,
-    cards.items.some((it) => it.waitingOn) ? { key: "waiting", label: t("kanban.waiting"), options: [["yes", t("kanban.waitingYes")]] } : null,
+    o.sections.some((s) => namesOf(s.type, "date").length)
+      ? { key: "due", label: t("kanban.due"), options: [["late", t("kanban.dueLate")], ["week", t("kanban.dueWeek")], ["none", t("kanban.dueNone")]] } : null,
+    o.colorValues.length ? { key: "color", label: o.colorField, options: o.colorValues.map((v) => [v, v]) } : null,
+    items.some((it) => it.waitingOn) ? { key: "waiting", label: t("kanban.waiting"), options: [["yes", t("kanban.waitingYes")]] } : null,
   ].filter(Boolean);
-  let filteredBoard = null;
   // The legend says what a colour stands for; a click shows only its cards.
-  const legend = colorField ? h("div", { class: "kanban-legend", id: "kanban-legend", role: "group", "aria-label": k.colorField },
-    h("span", { class: "muted", text: k.colorField }),
-    colorField.values.map((v) => h("button", { type: "button", class: `legend-chip tone-${toneOf(v)}`, "data-value": v, "aria-pressed": "false", title: t("kanban.legendShow", { value: v }),
+  const legend = o.colorValues.length ? h("div", { class: "kanban-legend", id: "kanban-legend", role: "group", "aria-label": o.colorField },
+    h("span", { class: "muted", text: o.colorField }),
+    o.colorValues.map((v) => h("button", { type: "button", class: `legend-chip tone-${o.toneOf(v)}`, "data-value": v, "aria-pressed": "false", title: t("kanban.legendShow", { value: v }),
       onclick: () => {
         const sel = filteredBoard.querySelector("select[data-choice=color]");
         sel.value = sel.value === v ? "" : v;
         sel.dispatchEvent(new Event("change"));
       } }, h("span", { class: "tone-swatch" }), v))) : null;
-  filteredBoard = filtered(boardEl, { id: "cards", label: t("kanban.cardList"), choices, rows: () => [...boardEl.querySelectorAll(".card-item")],
+  filteredBoard = filtered(boards, { id: "cards", label: t("kanban.cardList"), choices, rows: () => [...boards.querySelectorAll(".card-item")],
     onApply: () => {
       // A day without a card shown hides its heading; a filter shows every
       // card it finds, also the older ones of a finished column.
-      for (const head of boardEl.querySelectorAll(".card-day")) {
+      for (const head of boards.querySelectorAll(".card-day")) {
         let next = head.nextElementSibling;
         while (next && !next.classList.contains("card-day") && !(next.classList.contains("card-item") && !next.hidden)) next = next.nextElementSibling;
         head.hidden = !next || next.classList.contains("card-day");
       }
-      boardEl.classList.toggle("filtering", Boolean(filteredBoard && !filteredBoard.querySelector(".filter-reset").hidden));
+      const on = Boolean(filteredBoard && !filteredBoard.querySelector(".filter-reset").hidden);
+      boards.querySelectorAll(".board").forEach((b) => b.classList.toggle("filtering", on));
       const shown = filteredBoard?.querySelector("select[data-choice=color]")?.value;
       legend?.querySelectorAll(".legend-chip").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.value === shown)));
     } });
   filteredBoard.applyFilter();
   const layout = h("div", { class: "kanban-layout" },
-    h("div", { id: "kanban" }, legend, filteredBoard),
+    h("div", { id: o.id, class: "kanban-board" }, legend, filteredBoard),
     detail);
-  show(
-    h("p", {}, link("#/tasks", t("nav.tasks")), " / ", link("#/kanbans", t("kanban.tab")), " / " + k.name),
-    h("div", { class: "page-head" }, h("div", { class: "kanban-title" }, kanbanIcon({ ...k, space }, 48), h("h1", { text: k.name })),
-      h("div", { class: "actions" }, h("span", { class: "muted", text: t("kanban.metaLong", { space, type: k.type, label: k.label }) }),
-        settings ? h("button", { type: "button", class: "secondary kanban-settings-open", id: "kanban-settings-open", onclick: () => settings.showModal() },
-          lineIcon("M4 7h9M17 7h3M4 17h3M11 17h9M15 5v4M9 15v4"), t("kanban.settings")) : null)),
-    tools,
-    settings,
-    cards.truncated ? h("p", { class: "notice warning", text: t("board.truncated", { n: cards.items.length }) }) : null,
-    status,
-    layout,
-  );
-  const chosen = params.get("card") && cards.items.find((it) => it.key === params.get("card"));
+  const chosen = params.get("card") && items.find((it) => it.key === params.get("card"));
   if (chosen) select(chosen);
+  return layout;
+}
+
+// moveRefused says that the workflow lacks a move. An administrator adds
+// it to the type at once and move() makes it (ADR-0076); others are told
+// to ask one.
+function moveRefused(status, err, type, it, state, move) {
+  status.replaceChildren(errorBox(err), me.admin
+    ? h("p", {}, h("button", { type: "button", class: "secondary", id: "kanban-add-transition", text: t("kanban.addTransition", { from: it.state, to: state, type: type.name }),
+      onclick: () => action(async () => {
+        const { type: now } = await post(`/api/types/${encodeURIComponent(type.name)}/transitions`, { from: it.state, to: state });
+        await move(now);
+      }, status) }))
+    : h("p", { class: "muted", text: t("kanban.askAdmin") }));
 }
 
 // cardChip shows one field of a kanban card without its name, which is

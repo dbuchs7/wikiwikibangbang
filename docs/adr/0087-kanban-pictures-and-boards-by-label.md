@@ -70,6 +70,7 @@ Strongest form: cards could be told apart at a glance.
 
 ## Links
 
+- amended by [ADR-0139](0139-the-boards-of-a-type-and-a-label-show-the-cards-of-a-kanban.md) (the cards, filter and details of a kanban; new cards with the label)
 - amended by [ADR-0110](0110-the-kanbans-page-in-three-columns.md) (the boards by label as the left column of the kanbans page)
 - amended by [ADR-0092](0092-labels-in-search-and-task-counts-on-label-boards.md) (counting tasks only on the Kanbans page)
 - amends [ADR-0060](0060-kanbans-are-topics-whose-cards-carry-their-label.md) (kanbans) and [ADR-0076](0076-kanban-columns-card-fields-and-free-moves.md) (kanban settings)
