@@ -669,6 +669,34 @@ function gitSource() {
     await page.dragAndDrop(`${column("open")} .card-item:has-text('PLAT-2')`, column("done"));
     await page.waitForSelector(`${column("done")} .card-item:has-text('PLAT-2')`);
     check(await page.locator(`${column("open")} .card-item`).count() === 0, "the open column is empty");
+    // The board of a type has the cards of a kanban (ADR-0139): their
+    // details open beside it, and colour and lanes are chosen for the view
+    // and kept in its address.
+    await page.click(`${column("done")} .card-item:has-text('PLAT-2') .card-title`);
+    await page.waitForSelector("#kanban-detail:not([hidden]) .state-bar");
+    check(page.url().includes("card=PLAT-2"), "the open card is in the address: " + page.url());
+    await page.click("#kanban-detail-close");
+    await page.selectOption("#board-color", "priority");
+    await page.waitForSelector("#board .card-item.toned:has-text('PLAT-2')");
+    await page.waitForSelector("#kanban-legend .legend-chip[data-value=high]");
+    await page.selectOption("#board-lanes", "priority");
+    await page.waitForSelector("#board .board-lanes .lane-head[data-lane=low]");
+    check(page.url().includes("color=priority") && page.url().includes("lanes=priority"), "the view is in the address: " + page.url());
+    await page.reload();
+    await page.waitForSelector("#board .board-lanes .lane-cell .card-item.toned:has-text('PLAT-2')");
+    // A card dropped into another lane of its column takes the lane's value.
+    const plat2 = (await (await page.request.get(base + "/api/items/PLAT-2")).json()).item;
+    const otherLane = plat2.properties.priority === "high" ? "low" : "high";
+    await page.evaluate(([id, lane]) => {
+      const cell = document.querySelector(`#board .lane-cell[data-lane=${lane}][data-state=done]`);
+      const dt = new DataTransfer();
+      dt.setData("text/plain", id);
+      cell.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    }, [plat2.id, otherLane]);
+    await page.waitForSelector(`#board .lane-cell[data-lane=${otherLane}][data-state=done] .card-item:has-text('PLAT-2')`);
+    check((await (await page.request.get(base + "/api/items/PLAT-2")).json()).item.properties.priority === otherLane, "the lane set the task's priority");
+    await page.selectOption("#board-lanes", "");
+    await page.waitForSelector("#board .board:not(.board-lanes)");
 
     step("page tree: child pages, reordered by button and by dragging");
     await page.click("a.brand");
@@ -1683,6 +1711,23 @@ function gitSource() {
     await page.waitForSelector("#labelboard .board-column[data-state=closed] .card-item:has-text('Hero image')");
     await page.dragAndDrop("#labelboard .card-item:has-text('Hero image')", "#labelboard .board-column[data-state=open]");
     await page.waitForSelector("#labelboard .board-column[data-state=open] .card-item:has-text('Hero image')");
+    // A board by label has the cards of a kanban (ADR-0139): the label is
+    // not repeated on them, a card is made in the one space it shows,
+    // with the label, and its details take the label off again.
+    check(await page.locator("#labelboard .card-item:has-text('Hero image') .card-label:has-text('website-relaunch')").count() === 0,
+      "the board's own label is not repeated on its cards");
+    await page.waitForSelector("#labelboard .card-item:has-text('Hero image') .card-waiting");
+    await page.click("#labelboard .board-column[data-state=open] .column-add");
+    await page.fill("#labelboard .board-column[data-state=open] .card-new [name=title]", "Press kit");
+    await page.click("#labelboard .board-column[data-state=open] .card-new button[type=submit]");
+    await page.waitForSelector("#labelboard .board-column[data-state=open] .card-item:has-text('Press kit')");
+    await page.click("#labelboard .card-item:has-text('Press kit') .card-title");
+    await page.waitForSelector("#kanban-detail:not([hidden]) #kanban-detail-off:has-text('Remove the label')");
+    await page.click("#kanban-detail-off");
+    await page.waitForSelector("#labelboard .card-item:has-text('Press kit')", { state: "detached" });
+    await page.selectOption("#board-lanes", "priority");
+    await page.waitForSelector("#labelboard .lane-cell[data-lane=low] .card-item:has-text('Hero image')");
+    check(page.url().includes("lanes=priority"), "the lanes are in the address: " + page.url());
     await page.goto(base + "/#/labelboard/no-such-label");
     await page.waitForSelector("#labelboard-empty");
     // Labelling suggests the labels in use while typing.
@@ -2574,7 +2619,7 @@ function gitSource() {
     await phone.fill("#login [name=password]", adminPassword);
     await phone.press("#login [name=password]", "Enter");
     await phone.waitForSelector("#account-button");
-    for (const view of ["#/", "#/space/PLAT", "#/item/PLAT-2", "#/item/" + plan.key, "#/item/" + plan.key + "?edit", "#/tasks/all", "#/kanbans", "#/governance", "#/governance/PLAT", "#/mcp", "#/admin", "#/search/runbook"]) {
+    for (const view of ["#/", "#/space/PLAT", "#/item/PLAT-2", "#/item/" + plan.key, "#/item/" + plan.key + "?edit", "#/tasks/all", "#/kanbans", "#/board/PLAT/task?lanes=priority", "#/labelboard/website-relaunch", "#/governance", "#/governance/PLAT", "#/mcp", "#/admin", "#/search/runbook"]) {
       await phone.goto(base + "/" + view);
       await phone.waitForSelector("main h1, main .welcome, #body");
       await phone.waitForTimeout(400);
