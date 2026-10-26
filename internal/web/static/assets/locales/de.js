@@ -881,7 +881,7 @@ export default {
   "design.theme.berry": "Beere",
   "design.theme.berryNote": "Violett und Magenta, Pillenformen. Hell und dunkel.",
   "design.theme.swiss": "Swiss",
-  "design.theme.swissNote": "Rot, Schwarz und Weiss, eckig, klare Linien. Hell und dunkel.",
+  "design.theme.swissNote": "Das Designsystem der Schweizerischen Eidgenossenschaft: rote Links, schiefergraue Aktionen und Leisten, Noto Sans. Hell und dunkel.",
   "design.theme.night": "Nacht",
   "design.theme.nightNote": "Immer dunkel, mit cyanfarbenem Leuchten.",
   "design.theme.comic": "Comic",

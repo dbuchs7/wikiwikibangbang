@@ -883,7 +883,7 @@ export default {
   "design.theme.berry": "Berry",
   "design.theme.berryNote": "Violet and magenta, pill shapes. Light and dark.",
   "design.theme.swiss": "Swiss",
-  "design.theme.swissNote": "Red, black and white, square corners, clear lines. Light and dark.",
+  "design.theme.swissNote": "The design system of the Swiss Confederation: red links, slate actions and bars, Noto Sans. Light and dark.",
   "design.theme.night": "Night",
   "design.theme.nightNote": "Always dark, with a cyan glow.",
   "design.theme.comic": "Comic",
