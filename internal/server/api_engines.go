@@ -12,9 +12,10 @@ import (
 )
 
 // engineRoutes name the process engines whose processes pages show, and
-// read those processes from them when a page is shown (ADR-0129). Every
-// signed-in principal reads; which processes it reads is decided by the
-// engine's account behind the credential.
+// read those processes from them when a page is shown (ADR-0129), and
+// their forms and decisions (ADR-0144). Every signed-in principal reads;
+// which processes, forms and decisions it reads is decided by the engine's
+// account behind the credential.
 func engineRoutes(d Deps) []Route {
 	h := engineHandlers{authHandlers: authHandlers{d: d}, log: d.Log}
 	if h.log == nil {
@@ -27,6 +28,10 @@ func engineRoutes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes", Summary: "The newest version of each process the engine lets its credential read, read from the engine now", Handler: http.HandlerFunc(h.processes)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes/{process}", Summary: "The newest version of a process with its BPMN model, read from the engine now", Handler: http.HandlerFunc(h.process)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes/{process}/operations", Summary: "Where the instances of a process's newest version are: counts per element, when the engine's operations may be shown", Handler: http.HandlerFunc(h.operations)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/forms", Summary: "The forms the engine lets its credential see, as they are saved, read from the engine now (ADR-0144)", Handler: http.HandlerFunc(h.forms)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/forms/{form}", Summary: "A form as it is saved, with its form-js schema, read from the engine now", Handler: http.HandlerFunc(h.form)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/decisions", Summary: "The newest deployed version of each decision the engine lets its credential read, read from the engine now (ADR-0144)", Handler: http.HandlerFunc(h.decisions)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/decisions/{decision}", Summary: "The newest deployed version of a decision with the DMN model it is deployed in, read from the engine now", Handler: http.HandlerFunc(h.decision)},
 	}
 }
 
@@ -187,4 +192,61 @@ func (h engineHandlers) operations(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"operations": ops})
+}
+
+func (h engineHandlers) forms(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	list, err := h.d.Engines.Forms(r.Context(), e)
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "forms": list})
+}
+
+// form answers the schema as a field of JSON, as process answers a model.
+func (h engineHandlers) form(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	f, err := h.d.Engines.Form(r.Context(), e, r.PathValue("form"))
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "form": f})
+}
+
+func (h engineHandlers) decisions(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	list, err := h.d.Engines.Decisions(r.Context(), e)
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "decisions": list})
+}
+
+// decision answers the DMN model as a field of JSON, so that it is never a
+// document of this site.
+func (h engineHandlers) decision(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	d, err := h.d.Engines.DecisionModel(r.Context(), e, r.PathValue("decision"))
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "decision": d})
 }

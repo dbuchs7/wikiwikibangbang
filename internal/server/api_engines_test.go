@@ -24,6 +24,17 @@ func fakeEngine(t *testing.T) *httptest.Server {
 				{"key":12,"processId":"order","name":"Order to cash","version":2,"deployedAt":1761480000}]`))
 		case "/api/v1/processes/12/xml":
 			_, _ = w.Write([]byte(`<?xml version="1.0"?><bpmn:definitions id="v2"/>`))
+		case "/api/v1/forms":
+			_, _ = w.Write([]byte(`[{"id":"travel","name":"Travel request","savedAt":1791795101},{"id":"a/b","name":"Slashed","savedAt":1791795000}]`))
+		case "/api/v1/forms/travel":
+			_, _ = w.Write([]byte(`{"id":"travel","name":"Travel request","savedAt":1791795101,"schema":{"type":"default","components":[{"key":"to","type":"textfield"}]}}`))
+		case "/api/v1/forms/a/b":
+			_, _ = w.Write([]byte(`{"id":"a/b","schema":{"components":[]}}`))
+		case "/api/v1/decision-deployments":
+			_, _ = w.Write([]byte(`[{"key":21,"decisionId":"Decision 1","version":3,"modelName":"Credit","deployedAt":1790367024},
+				{"key":20,"decisionId":"Decision 1","version":2,"modelName":"Credit","deployedAt":1790235601}]`))
+		case "/api/v1/decision-deployments/21/xml":
+			_, _ = w.Write([]byte(`<?xml version="1.0"?><definitions id="credit-v3"/>`))
 		case "/api/v1/processes/12/runtime":
 			_, _ = w.Write([]byte(`{"instances":2,"finished":5,"tokens":2,"incidentTotal":1,"incidentCountsExact":true,
 				"elements":[{"elementId":"check","tokens":2,"visits":7,"incidents":1,"terminated":0}],
@@ -112,5 +123,53 @@ func TestProcessesFromAnEngine(t *testing.T) {
 	}
 	if changes != 4 {
 		t.Fatalf("%d engine changes audited, want 4", changes)
+	}
+}
+
+// TestFormsAndDecisionsFromAnEngine covers ADR-0144 through the API: every
+// signed-in person lists an engine's forms and decisions and reads a form's
+// schema and a decision's newest deployed model; IDs with spaces and
+// slashes are one path segment; the key of a deployment stays on the
+// server.
+func TestFormsAndDecisionsFromAnEngine(t *testing.T) {
+	srv := fakeEngine(t)
+	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	w := newWorld(t, func(d *Deps) { d.Engines = engine.NewReader(func(k string) string { return env[k] }, srv.Client()) })
+	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusCreated)
+
+	forms := w.vera.expect("GET", "/api/engines/atlas/forms", "", http.StatusOK)["forms"].([]any)
+	if len(forms) != 2 || forms[0].(map[string]any)["form"] != "a/b" || forms[1].(map[string]any)["name"] != "Travel request" {
+		t.Fatalf("forms %v", forms)
+	}
+	rec := w.carla.do("GET", "/api/engines/atlas/forms/travel", "")
+	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("form: %d %v", rec.Code, rec.Header())
+	}
+	f := field(decodeBody(t, rec), "form").(map[string]any)
+	if f["form"] != "travel" || f["schema"].(map[string]any)["type"] != "default" {
+		t.Fatalf("form %v", f)
+	}
+	if f := field(w.vera.expect("GET", "/api/engines/atlas/forms/a%2Fb", "", http.StatusOK), "form").(map[string]any); f["form"] != "a/b" {
+		t.Fatalf("a form with a slash: %v", f)
+	}
+	w.vera.expect("GET", "/api/engines/atlas/forms/nothing", "", http.StatusNotFound)
+
+	decisions := w.vera.expect("GET", "/api/engines/atlas/decisions", "", http.StatusOK)["decisions"].([]any)
+	if len(decisions) != 1 || decisions[0].(map[string]any)["decision"] != "Decision 1" || decisions[0].(map[string]any)["version"] != float64(3) || decisions[0].(map[string]any)["key"] != nil {
+		t.Fatalf("decisions %v", decisions)
+	}
+	d := field(w.vera.expect("GET", "/api/engines/atlas/decisions/Decision%201", "", http.StatusOK), "decision").(map[string]any)
+	if d["xml"] != `<?xml version="1.0"?><definitions id="credit-v3"/>` || d["model"] != "Credit" || d["version"] != float64(3) {
+		t.Fatalf("decision %v", d)
+	}
+	w.vera.expect("GET", "/api/engines/atlas/decisions/nothing", "", http.StatusNotFound)
+	w.vera.expect("GET", "/api/engines/gone/forms", "", http.StatusNotFound)
+	w.vera.expect("GET", "/api/engines/gone/decisions/x", "", http.StatusNotFound)
+
+	env["WWBB_ENGINE_ATLAS_TOKEN"] = "wrong"
+	for _, path := range []string{"/api/engines/atlas/forms", "/api/engines/atlas/forms/travel", "/api/engines/atlas/decisions", "/api/engines/atlas/decisions/Decision%201"} {
+		if r := w.vera.do("GET", path, ""); r.Code != http.StatusBadGateway || strings.Contains(r.Body.String(), "wrong") {
+			t.Errorf("%s with a refused credential: %d %s", path, r.Code, r.Body)
+		}
 	}
 }

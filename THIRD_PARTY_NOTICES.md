@@ -149,6 +149,87 @@ The BPMN viewer and modeler (ADR-0129) are two more bundles, `internal/web/stati
 | saxen | 11.2.0 | MIT |
 | tiny-svg | 4.1.4 | MIT |
 
+The form viewer and the DMN viewer (ADR-0144) are two more bundles, `internal/web/static/vendor/form-viewer.js` and `dmn-viewer.js`, built from the same directory, with form-js's stylesheet in `form/` and dmn-js's stylesheets and icon font in `dmn/`; `form.LICENSE.txt` and `dmn.LICENSE.txt` ship next to them with every license text and notice. @bpmn-io/form-js-viewer (Copyright (c) 2021-present Camunda Services GmbH) and dmn-js with its parts dmn-js-boxed-expression, dmn-js-decision-table, dmn-js-drd, dmn-js-literal-expression and dmn-js-shared (Copyright (c) 2014-present Camunda Services GmbH) are under the bpmn.io license, as bpmn-js is: the MIT terms, with the condition that the code displaying the bpmn.io watermark in rendered forms and diagrams is not removed or changed and that the watermark stays fully visible and is not overlapped; the UI keeps it so. DOMPurify is offered under the Mozilla Public License 2.0 or the Apache License 2.0; this project takes it under the Apache License 2.0. inherits-browser is under the ISC license. path-intersection carries the notice for the code it derives from Snap.svg named above.
+
+| Package | Version | License |
+|---|---|---|
+| @bpmn-io/feelin | 6.1.1 | MIT |
+| @bpmn-io/feelin | 7.0.0 | MIT |
+| @bpmn-io/form-js-viewer | 1.26.1 | SEE LICENSE IN LICENSE |
+| @bpmn-io/lezer-feel | 2.5.0 | MIT |
+| @bpmn-io/lezer-feel | 3.0.1 | MIT |
+| @bpmn-io/lezer-feelers | 1.0.0 | MIT |
+| @lezer/common | 1.5.4 | MIT |
+| @lezer/highlight | 1.2.5 | MIT |
+| @lezer/lr | 1.4.11 | MIT |
+| big.js | 7.0.1 | MIT |
+| classnames | 2.5.1 | MIT |
+| didi | 11.0.1 | MIT |
+| dompurify | 3.4.17 | (MPL-2.0 OR Apache-2.0) |
+| feelers | 3.2.0 | MIT |
+| flatpickr | 4.6.13 | MIT |
+| ids | 3.0.2 | MIT |
+| lodash | 4.18.1 | MIT |
+| luxon | 3.7.2 | MIT |
+| marked | 18.1.2 | MIT |
+| min-dash | 5.1.0 | MIT |
+| preact | 10.29.8 | MIT |
+| temporal-polyfill | 1.0.6 | MIT |
+| temporal-utils | 1.0.3 | MIT |
+
+| Package | Version | License |
+|---|---|---|
+| @bpmn-io/cm-theme | 0.2.2 | MIT |
+| @bpmn-io/dmn-variable-resolver | 0.7.1 | MIT |
+| @bpmn-io/feel-analyzer | 0.5.1 | MIT |
+| @bpmn-io/feel-editor | 2.8.0 | MIT |
+| @bpmn-io/feel-lint | 3.2.0 | MIT |
+| @bpmn-io/lang-feel | 4.0.2 | MIT |
+| @bpmn-io/lezer-feel | 3.0.1 | MIT |
+| @bpmn-io/semver-compat | 0.1.0 | MIT |
+| @camunda/feel-builtins | 1.5.0 | MIT |
+| @codemirror/autocomplete | 6.20.4 | MIT |
+| @codemirror/commands | 6.11.1 | MIT |
+| @codemirror/language | 6.13.1 | MIT |
+| @codemirror/lint | 6.9.7 | MIT |
+| @codemirror/state | 6.7.6 | MIT |
+| @codemirror/streamparser | 6.0.0 | MIT |
+| @codemirror/view | 6.43.15 | MIT |
+| @lezer/common | 1.5.4 | MIT |
+| @lezer/highlight | 1.2.5 | MIT |
+| @lezer/lr | 1.4.11 | MIT |
+| @marijn/find-cluster-break | 1.0.4 | MIT |
+| crelt | 1.0.7 | MIT |
+| diagram-js | 15.28.1 | MIT |
+| didi | 11.0.1 | MIT |
+| didi | 12.0.0 | MIT |
+| dmn-js | 17.13.0 | SEE LICENSE IN LICENSE |
+| dmn-js-boxed-expression | 17.13.0 | SEE LICENSE IN LICENSE |
+| dmn-js-decision-table | 17.13.0 | SEE LICENSE IN LICENSE |
+| dmn-js-drd | 17.13.0 | SEE LICENSE IN LICENSE |
+| dmn-js-literal-expression | 17.13.0 | SEE LICENSE IN LICENSE |
+| dmn-js-shared | 17.13.0 | SEE LICENSE IN LICENSE |
+| dmn-moddle | 12.2.1 | MIT |
+| domify | 3.0.0 | MIT |
+| escape-html | 1.0.3 | MIT |
+| ids | 3.0.2 | MIT |
+| inferno | 5.6.3 | MIT |
+| inherits-browser | 0.1.0 | ISC |
+| min-dash | 5.1.0 | MIT |
+| min-dom | 5.3.0 | MIT |
+| mitt | 3.0.1 | MIT |
+| moddle | 8.2.1 | MIT |
+| moddle-xml | 12.3.1 | MIT |
+| object-refs | 0.4.0 | MIT |
+| path-intersection | 4.2.1 | MIT |
+| saxen | 11.2.0 | MIT |
+| selection-ranges | 4.1.1 | MIT |
+| selection-update | 1.1.1 | MIT |
+| style-mod | 4.1.4 | MIT |
+| table-js | 9.4.0 | MIT |
+| tiny-svg | 4.1.4 | MIT |
+| w3c-keyname | 2.2.8 | MIT |
+
 The palettes of the drawing editor (ADR-0117), in `internal/web/static/assets/palettes/`, are libraries of the Excalidraw library collection (github.com/excalidraw/excalidraw-libraries, commit 297a349e), which publishes every library under the MIT license (Copyright (c) 2020 Excalidraw): "Excalidraw Archimate Template" by Timothy Galvin, "bpmn" by Aoustin Frederic, "Computers" by EI d'AU, "Network topology icons" by dwelle, "Common Home Network Basics" by DDay987, "Network locations" by Jorge Godoy and "IT icons" by Mateusz Baran. `palettes.LICENSE.txt` ships next to them with the license text and which palette holds which library; `internal/web/vendor/palettes.mjs` builds them. The ArchiMate palette also holds relationships drawn for this project (ADR-0125). The Microsoft palette, `microsoft.json`, is made of the Fluent UI System Icons (github.com/microsoft/fluentui-system-icons, commit 82ecf7cb), which Microsoft publishes under the MIT license (Copyright (c) 2020 Microsoft Corporation), turned into shapes by `internal/web/vendor/fluent.mjs`; it holds no product logos.
 
 The fonts Excalifont, Virgil, Cascadia, Assistant, Liberation Sans, Lilita One and Nunito, shipped with Excalidraw in `internal/web/static/vendor/fonts/`, are licensed under the SIL Open Font License 1.1; Comic Shanns is licensed under the MIT license.

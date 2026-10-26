@@ -91,6 +91,14 @@ const (
 	// the process's BPMN ID and Text the caption. The body holds no copy of
 	// the model (ADR-0129).
 	Process BlockKind = "process"
+	// Form shows a form a process engine keeps, as it is saved there:
+	// Engine names the engine, Form is the form's ID there and Text the
+	// caption. Decision shows the newest deployed version of a decision of
+	// a process engine: Engine names the engine, Decision is the decision's
+	// ID there and Text the caption. The body holds no copy of either
+	// (ADR-0144).
+	Form     BlockKind = "form"
+	Decision BlockKind = "decision"
 )
 
 // BPMNTypes are the types a BPMN model's file has, as read from its bytes:
@@ -170,6 +178,10 @@ type Block struct {
 	// its diagram and its description (ViewBoth), or its description only
 	// (ViewText) (ADR-0143).
 	View string `json:",omitempty"`
+	// Form and Decision name what a form or a decision block shows: the
+	// form's or the decision's ID at the engine (ADR-0144).
+	Form     string `json:",omitempty"`
+	Decision string `json:",omitempty"`
 }
 
 // The views of a bpmn or a process block besides its diagram alone

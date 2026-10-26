@@ -54,7 +54,7 @@ func TestEveryVendoredPackageIsNoticed(t *testing.T) {
 		t.Fatal(err)
 	}
 	line := regexp.MustCompile(`^(\S+) (\S+) (.+)$`)
-	for _, bundle := range []string{"prosemirror", "excalidraw", "bpmn"} {
+	for _, bundle := range []string{"prosemirror", "excalidraw", "bpmn", "form", "dmn"} {
 		data, err := os.ReadFile("../../internal/web/static/vendor/" + bundle + ".LICENSE.txt")
 		if err != nil {
 			t.Fatal(err)

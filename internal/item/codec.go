@@ -87,7 +87,9 @@ import (
 //     still read.
 //   - 32: a bpmn or a process block may carry View (ADR-0143). Versions 1
 //     to 31 are still read.
-const CodecVersion = 32
+//   - 33: the block kinds form and decision, and the block fields Form and
+//     Decision (ADR-0144). Versions 1 to 32 are still read.
+const CodecVersion = 33
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

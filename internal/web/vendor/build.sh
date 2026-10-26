@@ -3,7 +3,9 @@
 # prosemirror.js, the editor (ADR-0032), excalidraw.js with its stylesheet,
 # chunks and fonts, the drawing editor (ADR-0053, ADR-0126), and
 # bpmn-viewer.js and bpmn-modeler.js with their stylesheets and icon font in
-# bpmn/, the BPMN viewer and modeler (ADR-0129).
+# bpmn/, the BPMN viewer and modeler (ADR-0129), and form-viewer.js and
+# dmn-viewer.js with their stylesheets in form/ and dmn/, the viewers of
+# forms and decisions (ADR-0144).
 # Their license files name the packages each bundle takes code from
 # (bundled.mjs). Run after changing a version in package.json:
 #
@@ -103,3 +105,49 @@ cp "$bpmn/bpmn-font/font/bpmn.woff2" "$bpmn/bpmn-font/font/bpmn.woff" "$out/bpmn
   cat node_modules/path-intersection/NOTICE
 } > "$out/bpmn.LICENSE.txt"
 rm bpmn-meta.json
+
+# The form viewer and the DMN viewer (ADR-0144): form-viewer.js, form-js's
+# viewer, with its stylesheet in form/, and dmn-viewer.js, dmn-js's
+# navigated viewer, with its stylesheets and icon font in dmn/, copied as
+# published. As for bpmn-js, the watermark code is part of the bundles,
+# unchanged, as the bpmn.io license requires.
+npx esbuild form-entry.js --bundle --format=esm --target=es2020 --minify \
+  --legal-comments=none --define:process.env.NODE_ENV='"production"' \
+  --metafile=form-meta.json --outfile="$out/form-viewer.js"
+rm -rf "$out/form"
+mkdir -p "$out/form"
+cp node_modules/@bpmn-io/form-js-viewer/dist/assets/form-js.css "$out/form/"
+{
+  echo "The bundle form-viewer.js and the file in form/ contain code of these"
+  echo "packages, each under the license named; their license texts follow."
+  echo "@bpmn-io/form-js-viewer is under the bpmn.io license: the MIT terms with the"
+  echo "condition that the code displaying the bpmn.io watermark in rendered forms is"
+  echo "neither removed nor changed, and that the watermark stays fully visible."
+  echo
+  node bundled.mjs form-meta.json --texts
+} > "$out/form.LICENSE.txt"
+rm form-meta.json
+
+npx esbuild dmn-entry.js --bundle --format=esm --target=es2020 --minify \
+  --legal-comments=none --define:process.env.NODE_ENV='"production"' \
+  --metafile=dmn-meta.json --outfile="$out/dmn-viewer.js"
+dmn=node_modules/dmn-js/dist/assets
+rm -rf "$out/dmn"
+mkdir -p "$out/dmn/dmn-font/css" "$out/dmn/dmn-font/font"
+cp "$dmn/diagram-js.css" "$dmn/dmn-js-shared.css" "$dmn/dmn-js-drd.css" "$dmn/dmn-js-decision-table.css" \
+  "$dmn/dmn-js-literal-expression.css" "$dmn/dmn-js-boxed-expression.css" "$out/dmn/"
+cp "$dmn/dmn-font/css/dmn.css" "$out/dmn/dmn-font/css/"
+cp "$dmn/dmn-font/font/dmn.woff2" "$dmn/dmn-font/font/dmn.woff" "$out/dmn/dmn-font/font/"
+{
+  echo "The bundle dmn-viewer.js and the files in dmn/ contain code of these packages,"
+  echo "each under the license named; their license texts follow. dmn-js is under the"
+  echo "bpmn.io license: the MIT terms with the condition that the code displaying the"
+  echo "bpmn.io watermark in rendered diagrams is neither removed nor changed, and that"
+  echo "the watermark stays fully visible. path-intersection carries a notice for"
+  echo "the code it derives from Snap.svg, at the end."
+  echo
+  node bundled.mjs dmn-meta.json --texts
+  echo; echo "== path-intersection (NOTICE)"; echo
+  cat node_modules/path-intersection/NOTICE
+} > "$out/dmn.LICENSE.txt"
+rm dmn-meta.json
