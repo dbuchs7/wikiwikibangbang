@@ -2609,11 +2609,15 @@ async function kanbanView(space, id) {
         chips.push(cardChip(n, f, v, finished(type.workflow, it.state)));
       }
     }
+    // A card that waits on unfinished work it depends on, or that blocks
+    // it, says so first (ADR-0135).
+    if (it.waitingOn) chips.unshift(h("span", { class: "card-chip late card-waiting", title: t("card.waitingHint", { n: it.waitingOn }) },
+      lineIcon("M7 4h10M7 20h10M8 4c0 5 8 6 8 8s-8 3-8 8M16 4c0 5-8 6-8 8"), t("card.waiting", { n: it.waitingOn })));
     const color = colorField ? it.properties[k.colorField] : "";
     const who = userFields.map((n) => it.properties[n]).filter(Boolean);
     const li = h("li", { class: "card-item kanban-card" + (color ? ` toned tone-${toneOf(color)}` : ""), draggable: canEdit ? "true" : "false", "data-id": it.id, tabindex: "0",
       "data-filter-text": [it.key, it.title, ...it.labels, ...who.map(person), ...type.fields.filter((f) => f.kind !== "user").map((f) => it.properties[f.name] ?? "")].join(" "),
-      "data-f-who": who.join("|"), "data-f-label": it.labels.filter((l) => l !== k.label).join("|"), "data-f-due": dueOf(it), "data-f-color": color || "",
+      "data-f-who": who.join("|"), "data-f-label": it.labels.filter((l) => l !== k.label).join("|"), "data-f-due": dueOf(it), "data-f-color": color || "", "data-f-waiting": it.waitingOn ? "yes" : "",
       ondragstart: (ev) => { ev.dataTransfer.setData("text/plain", it.id); ev.dataTransfer.effectAllowed = "move"; },
       onclick: (ev) => { if (!ev.target.closest("a, button")) select(it); },
       onkeydown: (ev) => { if (ev.key === "Enter" && ev.target === li) select(it); } },
@@ -2628,12 +2632,14 @@ async function kanbanView(space, id) {
   // a column of its own, or one transition away from where cards start.
   const wf = type.workflow;
   const takes = (col) => canEdit && (!col.state || col.state === wf.initial || wf.transitions.some((tr) => tr.to === col.state && tr.from.includes(wf.initial)));
-  const addCard = (col, el, list) => {
+  const addCard = (col, el, list, lane) => {
     const open = el.querySelector(".card-new input");
     if (open) return open.focus();
     const input = h("input", { name: "title", required: true, placeholder: t("kanban.newCard"), "aria-label": t("kanban.newCardIn", { column: col.name }) });
     const f = form({ class: "card-new" }, [input, h("button", { type: "submit", class: "primary", text: t("kanban.add") })], async (d) => {
-      const { item } = await post("/api/items", { space, type: k.type, title: d.get("title").trim() });
+      // A card made in a lane takes the lane's value (ADR-0135).
+      const properties = lane ? { [k.laneField]: lane } : {};
+      const { item } = await post("/api/items", { space, type: k.type, title: d.get("title").trim(), properties });
       await setLabels(item, [k.label]);
       // On top of its column, where it was typed.
       await post(kpath + "/place", { card: item.id, column: col.id, before: (col.cards || [])[0] || "" });
@@ -2658,8 +2664,8 @@ async function kanbanView(space, id) {
   // A finished state's column lists its cards by the day they got there,
   // the newest first, and the most recent only until asked for all
   // (ADR-0134).
-  const cardsOf = (col) => {
-    const items = (col.cards || []).map((cid) => byID.get(cid)).filter(Boolean);
+  const cardsOf = (col, ids = col.cards || []) => {
+    const items = ids.map((cid) => byID.get(cid)).filter(Boolean);
     if (!col.state || !finished(wf, col.state)) return items.map(cardEl);
     items.sort((a, b) => (Date.parse(b.stateSince) || 0) - (Date.parse(a.stateSince) || 0));
     const out = [];
@@ -2688,22 +2694,28 @@ async function kanbanView(space, id) {
     return h("span", { class: "column-count" + (n > col.limit ? " over" : n === col.limit ? " full" : ""),
       title: t("kanban.limitHint", { n, limit: col.limit }), text: `${n} / ${col.limit}` });
   };
+  // dropZone makes a column, or a column's cell in a lane, take cards:
+  // dropped on a card, before it; elsewhere, last. Into another lane the
+  // card first takes the lane's value, a change of the item (ADR-0135).
+  const dropZone = (el, col, lane) => {
+    el.addEventListener("dragover", (ev) => { if (!canEdit) return; ev.preventDefault(); el.classList.add("drop"); });
+    el.addEventListener("dragleave", () => el.classList.remove("drop"));
+    el.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      el.classList.remove("drop");
+      const it = byID.get(ev.dataTransfer.getData("text/plain"));
+      if (!it) return;
+      const target = ev.target.closest(".card-item");
+      const before = target && target.dataset.id !== it.id ? target.dataset.id : "";
+      if (lane === undefined || laneOf(it) === lane) return place(it, col, before);
+      moveToLane(it, col, before, lane);
+    });
+    return el;
+  };
   const columnEl = (col) => {
     const list = h("ul", { class: "board-cards" }, cardsOf(col));
     const shut = folded.has(col.id);
-    const el = h("section", { class: "board-column" + (col.state ? "" : " own-column") + (shut ? " folded" : ""), "data-state": col.state || "", "data-column": col.id,
-      ondragover: (ev) => { if (!canEdit) return; ev.preventDefault(); el.classList.add("drop"); },
-      ondragleave: () => el.classList.remove("drop"),
-      ondrop: (ev) => {
-        ev.preventDefault();
-        el.classList.remove("drop");
-        const it = byID.get(ev.dataTransfer.getData("text/plain"));
-        if (!it) return;
-        // Dropped on a card: before it; elsewhere in the column: last.
-        const target = ev.target.closest(".card-item");
-        const before = target && target.dataset.id !== it.id ? target.dataset.id : "";
-        place(it, col, before);
-      } });
+    const el = dropZone(h("section", { class: "board-column" + (col.state ? "" : " own-column") + (shut ? " folded" : ""), "data-state": col.state || "", "data-column": col.id }), col);
     const toggle = h("button", { type: "button", class: "link column-fold", "aria-expanded": String(!shut),
       title: t("kanban.fold", { column: col.name }), "aria-label": t("kanban.fold", { column: col.name }), onclick: () => fold(col, el, toggle) }, lineIcon("M15 6l-6 6 6 6"));
     // The state a column stands for is its tooltip; the name is what counts.
@@ -2729,9 +2741,10 @@ async function kanbanView(space, id) {
   const openDetail = async (it) => {
     detail.hidden = false;
     detail.replaceChildren(h("p", { class: "muted", text: t("kanban.loading") }));
-    let item, embeds;
+    let item, embeds, out, inc;
     try {
-      [{ item }, { embeds }] = await Promise.all([get("/api/items/" + it.id), get(`/api/items/${it.id}/embeds`)]);
+      [{ item }, { embeds }, out, inc] = await Promise.all([get("/api/items/" + it.id), get(`/api/items/${it.id}/embeds`),
+        get(`/api/items/${it.id}/relations?direction=outgoing`), get(`/api/items/${it.id}/relations?direction=incoming`)]);
     } catch (err) {
       detail.replaceChildren(errorBox(err));
       return;
@@ -2773,6 +2786,8 @@ async function kanbanView(space, id) {
       type.fields.length ? props : "",
       labelsLine(path, item, editable),
       type.body ? h("section", { class: "kanban-detail-body" }, item.body.length ? readOnlyBody(item, embeds) : h("p", { class: "muted", text: t("kanban.noText") })) : "",
+      // What the card depends on, blocks or relates to (ADR-0135).
+      await relationsSection("/api/items/" + item.id, out.relations, inc.relations, item.id, editable),
       h("p", { class: "actions-row" }, link("#/item/" + encodeURIComponent(item.key), t("kanban.openItem"), "button"), off));
   };
 
@@ -2788,9 +2803,83 @@ async function kanbanView(space, id) {
       await setLabels(it, [...it.labels, k.label]);
       route();
     })) : null;
+  // Swimlanes (ADR-0135): rows by the value of a person or choice field of
+  // the task. The column heads stand once above them; each lane has a
+  // cell per column. Folded lanes, like folded columns, stay folded for
+  // this browser only.
+  const laneField = k.laneField && ["user", "enum"].includes(fieldOf(k.laneField)?.kind) ? fieldOf(k.laneField) : null;
+  const lanes = !laneField ? [] : laneField.kind === "enum" ? [...laneField.values, ""]
+    : [...[...new Set([...cards.items.map((it) => it.properties[k.laneField]).filter(Boolean), ...(canEdit ? [me.user.id] : [])])]
+      .sort((a, b) => (a === me.user.id ? -1 : b === me.user.id ? 1 : person(a).localeCompare(person(b)))), ""];
+  const laneOf = (it) => {
+    const v = laneField ? it.properties[k.laneField] ?? "" : "";
+    return lanes.includes(v) ? v : "";
+  };
+  const laneName = (v) => (v === "" ? t("kanban.laneNone", { field: k.laneField }) : laneField.kind === "user" ? person(v) : v);
+  const canMove = (it, col) => !col.state || col.state === it.state || type.workflow.transitions.some((tr) => tr.to === col.state && tr.from.includes(it.state));
+  const moveToLane = async (it, col, before, lane) => {
+    if (!canMove(it, col)) return place(it, col, before);
+    try {
+      await put(`/api/items/${it.id}/properties/${encodeURIComponent(k.laneField)}`, { value: lane === "" ? null : lane });
+    } catch (err) {
+      status.replaceChildren(errorBox(err));
+      return;
+    }
+    await place(it, col, before);
+  };
+  const laneKey = `wwbb.kanban.lanes.${space}/${id}`;
+  let foldedLanes = new Set();
+  try { foldedLanes = new Set(JSON.parse(localStorage.getItem(laneKey) || "[]")); } catch { foldedLanes = new Set(); }
+  const boardEl = h("div", { class: "board" + (laneField ? " board-lanes" : "") });
+  const laneBoard = () => {
+    const cols = board.columns;
+    boardEl.style.gridTemplateColumns = cols.map((c) => (folded.has(c.id) ? "44px" : "minmax(220px, 400px)")).join(" ");
+    const heads = cols.map((col) => {
+      const shut = folded.has(col.id);
+      const toggle = h("button", { type: "button", class: "link column-fold", "aria-expanded": String(!shut),
+        title: t("kanban.fold", { column: col.name }), "aria-label": t("kanban.fold", { column: col.name }), onclick: () => {
+          if (shut) folded.delete(col.id); else folded.add(col.id);
+          try { localStorage.setItem(foldKey, JSON.stringify([...folded])); } catch { /* kept for this view only */ }
+          laneBoard();
+          filteredBoard?.applyFilter();
+        } }, lineIcon("M15 6l-6 6 6 6"));
+      return h("div", { class: "lane-col-head" + (shut ? " folded" : ""), "data-column": col.id, "data-state": col.state || "" },
+        h("div", { class: "column-head" },
+          h("h2", { title: col.state ? t("kanban.stateColumnHint", { state: col.state }) : t("kanban.ownColumnHint"), text: col.name }),
+          countOf(col), toggle));
+    });
+    const rows = lanes.flatMap((lane) => {
+      const mine = cards.items.filter((it) => laneOf(it) === lane).map((it) => it.id);
+      const shut = foldedLanes.has(lane);
+      const toggle = h("button", { type: "button", class: "link lane-fold", "aria-expanded": String(!shut),
+        title: t("kanban.foldLane", { lane: laneName(lane) }), "aria-label": t("kanban.foldLane", { lane: laneName(lane) }), onclick: () => {
+          if (shut) foldedLanes.delete(lane); else foldedLanes.add(lane);
+          try { localStorage.setItem(laneKey, JSON.stringify([...foldedLanes])); } catch { /* kept for this view only */ }
+          laneBoard();
+          filteredBoard?.applyFilter();
+        } }, lineIcon("M6 9l6 6 6-6"));
+      const head = h("div", { class: "lane-head" + (shut ? " lane-folded" : ""), "data-lane": lane },
+        toggle, laneField.kind === "user" && lane ? face(lane, 24) : null, h("h3", { text: laneName(lane) }),
+        h("span", { class: "column-count", text: String(mine.length) }));
+      const cells = cols.map((col) => {
+        const ids = (col.cards || []).filter((cid) => mine.includes(cid));
+        const list = h("ul", { class: "board-cards" }, cardsOf(col, ids));
+        const cell = dropZone(h("section", { class: "board-column lane-cell" + (col.state ? "" : " own-column") + (folded.has(col.id) ? " folded" : "") + (shut ? " lane-folded" : ""),
+          "data-column": col.id, "data-state": col.state || "", "data-lane": lane }), col, lane);
+        if (takes(col)) {
+          cell.append(h("button", { type: "button", class: "link cell-add", title: t("kanban.newCardInLane", { column: col.name, lane: laneName(lane) }),
+            "aria-label": t("kanban.newCardInLane", { column: col.name, lane: laneName(lane) }), onclick: () => addCard(col, cell, list, lane) }, lineIcon("M12 5v14M5 12h14")));
+        }
+        cell.append(list);
+        return cell;
+      });
+      return [head, ...cells];
+    });
+    boardEl.replaceChildren(...heads, ...rows);
+  };
+  if (laneField) laneBoard(); else boardEl.append(...board.columns.map(columnEl));
   // The filter of the board (ADR-0098, ADR-0134): by text, person, label,
   // due date and colour, kept in the address.
-  const boardEl = h("div", { class: "board" }, board.columns.map(columnEl));
   const people = [...new Set(cards.items.flatMap((it) => userFields.map((n) => it.properties[n]).filter(Boolean)))]
     .sort((a, b) => (a === me.user.id ? -1 : b === me.user.id ? 1 : person(a).localeCompare(person(b))));
   const choices = [
@@ -2798,6 +2887,7 @@ async function kanbanView(space, id) {
     { key: "label", label: t("kanban.label") },
     dateFields.length ? { key: "due", label: t("kanban.due"), options: [["late", t("kanban.dueLate")], ["week", t("kanban.dueWeek")], ["none", t("kanban.dueNone")]] } : null,
     colorField ? { key: "color", label: k.colorField, options: colorField.values.map((v) => [v, v]) } : null,
+    cards.items.some((it) => it.waitingOn) ? { key: "waiting", label: t("kanban.waiting"), options: [["yes", t("kanban.waitingYes")]] } : null,
   ].filter(Boolean);
   let filteredBoard = null;
   // The legend says what a colour stands for; a click shows only its cards.
@@ -2910,9 +3000,9 @@ const toneNames = () => ({ blue: t("tone.blue"), green: t("tone.green"), yellow:
 // for all of them (ADR-0134).
 const recentDone = 20;
 
-// cardSigns tell what is behind a card (ADR-0132, ADR-0134): a text, how
-// far its checklist is, which are the task items of its text, and how
-// many comments and files it has.
+// cardSigns tell what is behind a card (ADR-0132, ADR-0134, ADR-0135): a
+// text, how far its checklist is, which are the task items of its text,
+// and how many comments, relations and files it has.
 function cardSigns(it) {
   const blocks = it.body || [];
   const checks = blocks.filter((b) => b.kind === "task");
@@ -2927,6 +3017,9 @@ function cardSigns(it) {
     it.commentCount ? h("span", { class: "card-sign card-comments", title: t("card.comments", { n: it.commentCount }) },
       lineIcon("M5 5h14v10H10l-5 4z"), h("span", { class: "visually-hidden", text: t("card.comments", { n: it.commentCount }) }),
       h("span", { "aria-hidden": "true", text: String(it.commentCount) })) : null,
+    it.relationCount ? h("span", { class: "card-sign card-relations", title: t("card.relations", { n: it.relationCount }) },
+      lineIcon("M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"), h("span", { class: "visually-hidden", text: t("card.relations", { n: it.relationCount }) }),
+      h("span", { "aria-hidden": "true", text: String(it.relationCount) })) : null,
     it.fileCount ? h("span", { class: "card-sign card-files", title: t("card.files", { n: it.fileCount }) },
       lineIcon("M15 7l-6 6a2 2 0 0 0 3 3l6-6a4 4 0 0 0-6-6l-6 6a6 6 0 0 0 8 8l5-5"), h("span", { class: "visually-hidden", text: t("card.files", { n: it.fileCount }) }),
       h("span", { "aria-hidden": "true", text: String(it.fileCount) })) : null,
@@ -2981,6 +3074,10 @@ function kanbanSettings(k, type, columns, kpath) {
   };
   colorField.addEventListener("change", fillTones);
   fillTones();
+  // Swimlanes by a person or choice field of the task (ADR-0135).
+  const laneChoices = type.fields.filter((f) => f.kind === "user" || f.kind === "enum");
+  const laneField = h("select", { id: "kanban-lane-field", "aria-label": t("kanban.lanes") },
+    h("option", { value: "", text: t("kanban.lanesNone") }), laneChoices.map((f) => h("option", { value: f.name, text: f.name, selected: f.name === k.laneField })));
   const picker = h("input", { type: "file", id: "kanban-icon-file", accept: "image/png,image/jpeg,image/gif,image/webp,image/svg+xml", "aria-label": t("kanban.iconChoose") });
   picker.addEventListener("change", () => action(async () => {
     const file = picker.files[0];
@@ -3005,6 +3102,9 @@ function kanbanSettings(k, type, columns, kpath) {
     h("h3", { text: t("kanban.colors") }),
     h("p", { class: "muted", text: t("kanban.colorsHelp") }),
     enums.length ? h("div", {}, colorField, toneRows) : h("p", { class: "muted", text: t("kanban.colorsNoField", { type: type.name }) }),
+    h("h3", { text: t("kanban.lanes") }),
+    h("p", { class: "muted", text: t("kanban.lanesHelp") }),
+    laneChoices.length ? laneField : h("p", { class: "muted", text: t("kanban.lanesNoField", { type: type.name }) }),
     h("h3", { text: t("kanban.columns") }),
     h("p", { class: "muted", text: t("kanban.columnsHelp") + " " + t("kanban.limitHelp") }),
     rows,
@@ -3019,7 +3119,7 @@ function kanbanSettings(k, type, columns, kpath) {
       h("button", { type: "button", class: "primary", id: "kanban-settings-save", text: t("common.save"), onclick: () => action(() => put(kpath, {
         name: name.value.trim(), cardFields: boxes.filter((b) => b.checked).map((b) => b.value),
         columns: cols.map((c) => ({ id: c.state ? "" : c.id || "", name: c.name.trim(), state: c.state, limit: c.limit || 0 })),
-        colorField: colorField.value, colors: colorField.value ? toneOf : {},
+        colorField: colorField.value, colors: colorField.value ? toneOf : {}, laneField: laneField.value,
       }), status) }),
       h("button", { type: "button", text: t("common.cancel"), onclick: () => dialog.close() })),
     h("section", { class: "kanban-settings-remove" },

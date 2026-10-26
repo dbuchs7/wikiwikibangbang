@@ -134,3 +134,4 @@ Strongest form: only a refusal stops people from starting new work while the col
 
 - amends [ADR-0076](0076-kanban-columns-card-fields-and-free-moves.md) (limits of columns, colours), [ADR-0098](0098-every-list-can-be-filtered.md) (a board is filtered too) and [ADR-0132](0132-kanban-cards-columns-and-the-status-at-a-glance.md) (answers its open question)
 - relates to ADR-0025 (the event log), ADR-0035 (comments), ADR-0045 (attachments), ADR-0082 (finished states)
+- amended by [ADR-0135](0135-kanban-swimlanes-by-a-task-field-and-relations-on-cards.md) (swimlanes; relations and waiting on the cards)

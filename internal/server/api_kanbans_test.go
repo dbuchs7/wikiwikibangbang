@@ -124,3 +124,42 @@ func TestKanbanLimitsColoursAndCardSigns(t *testing.T) {
 		t.Fatalf("a listed card %s", jsonOf(listed))
 	}
 }
+
+// TestKanbanLanesAndRelationSigns: a kanban's lane field goes through the
+// API and is kept when a change leaves it out; a listed card counts its
+// relations and the open work it waits on (ADR-0135).
+func TestKanbanLanesAndRelationSigns(t *testing.T) {
+	w := newWorld(t)
+	k := w.bert.expect("POST", "/api/spaces/PLAT/kanbans", `{"name":"Web","type":"task"}`, http.StatusCreated)
+	path := "/api/spaces/PLAT/kanbans/" + field(k, "kanban", "id").(string)
+	if s := jsonOf(w.bert.expect("PUT", path, `{"name":"Web","laneField":"priority"}`, http.StatusOK)); !strings.Contains(s, `"laneField":"priority"`) {
+		t.Fatalf("lanes %s", s)
+	}
+	if s := jsonOf(w.bert.expect("PUT", path, `{"name":"Website"}`, http.StatusOK)); !strings.Contains(s, `"laneField":"priority"`) {
+		t.Fatalf("a rename keeps the lanes: %s", s)
+	}
+	w.bert.expect("PUT", path, `{"name":"Website","laneField":"estimate"}`, http.StatusBadRequest)
+	if s := jsonOf(w.bert.expect("PUT", path, `{"name":"Website","laneField":""}`, http.StatusOK)); strings.Contains(s, "laneField") {
+		t.Fatalf("lanes off %s", s)
+	}
+
+	mk := func(title string) string {
+		it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"`+title+`","properties":{"priority":"low"}}`, http.StatusCreated)
+		return field(it, "item", "id").(string)
+	}
+	card, dep := mk("Card"), mk("Dependency")
+	w.bert.expect("POST", "/api/relations", `{"type":"depends-on","from":"`+card+`","to":"`+dep+`"}`, http.StatusCreated)
+	for _, raw := range field(w.vera.expect("GET", "/api/items?space=PLAT&type=task", "", http.StatusOK), "items").([]any) {
+		it := raw.(map[string]any)
+		switch it["id"] {
+		case card:
+			if it["relationCount"] != float64(1) || it["waitingOn"] != float64(1) {
+				t.Fatalf("the card %s", jsonOf(it))
+			}
+		case dep:
+			if it["relationCount"] != float64(1) || it["waitingOn"] != nil {
+				t.Fatalf("the dependency waits on nothing: %s", jsonOf(it))
+			}
+		}
+	}
+}
