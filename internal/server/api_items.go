@@ -535,8 +535,16 @@ func (h itemHandlers) findItems(w http.ResponseWriter, r *http.Request) {
 			res["next"] = next
 		}
 		out := make([]itemJSON, len(page))
+		ids := make([]item.ID, len(page))
+		for i, it := range page {
+			ids[i] = it.ID
+		}
+		// What each item is related to, as far as the caller may read it
+		// (ADR-0137, D10).
+		related := x.RelationSummaries(ids)
 		for i, it := range page {
 			out[i] = toItemJSON(it)
+			out[i].RelationCount, out[i].WaitingOn = related[it.ID][0], related[it.ID][1]
 		}
 		res["items"] = out
 		return res, nil

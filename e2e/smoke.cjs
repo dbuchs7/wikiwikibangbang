@@ -1602,6 +1602,33 @@ function atlassianSource() {
     await page.click("#kanban-detail:not([hidden]) #kanban-detail-off");
     await page.waitForSelector("#kanban .card-item:has-text('Second card')", { state: "detached" });
 
+    step("kanban swimlanes and relations (ADR-0137): lanes by a field of the task, a move to another lane sets it, a card that waits on another says so");
+    await page.click("#kanban-settings-open");
+    await page.selectOption("#kanban-lane-field", "priority");
+    await page.click("#kanban-settings-save");
+    for (const lane of ["low", "high", ""]) await page.waitForSelector(`#kanban .lane-head[data-lane='${lane}']`);
+    await page.waitForSelector("#kanban .lane-cell[data-lane=high] .card-item:has-text('Hero image')");
+    // A card dropped into another lane takes the lane's value.
+    await page.evaluate(() => {
+      const card = [...document.querySelectorAll("#kanban .card-item")].find((c) => c.textContent.includes("Hero image"));
+      const cell = document.querySelector("#kanban .lane-cell[data-lane=low][data-state=open]");
+      const dt = new DataTransfer();
+      dt.setData("text/plain", card.dataset.id);
+      cell.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    });
+    await page.waitForSelector("#kanban .lane-cell[data-lane=low][data-state=open] .card-item:has-text('Hero image')");
+    check((await (await page.request.get(base + `/api/items/${heroKey}`)).json()).item.properties.priority === "low", "the lane set the task's priority");
+    // A card that depends on unfinished work waits on it.
+    const tidyItem = (await (await page.request.get(base + "/api/items?space=PLAT&q=Tidy")).json()).items[0];
+    const heroItem = (await (await page.request.get(base + `/api/items/${heroKey}`)).json()).item;
+    check((await page.request.post(base + "/api/relations", { data: { type: "depends-on", from: heroItem.id, to: tidyItem.id } })).status() === 201, "the card depends on another");
+    await page.reload();
+    await page.waitForSelector("#kanban .card-item:has-text('Hero image') .card-waiting");
+    await page.waitForSelector("#kanban .card-item:has-text('Hero image') .card-relations");
+    await page.click("#kanban .card-item:has-text('Hero image') .card-title");
+    await page.waitForSelector("#kanban-detail:not([hidden]) #relations li:has-text('depends-on'):has-text('Tidy the wiki')");
+    await page.click("#kanban-detail-close");
+
     step("kanban picture and boards by label: a kanban shows its logo; every label is a board without making one (ADR-0087)");
     if (!(await page.$("#kanban-settings[open]"))) await page.click("#kanban-settings-open");
     await page.setInputFiles("#kanban-icon-file", { name: "logo.png", mimeType: "image/png",

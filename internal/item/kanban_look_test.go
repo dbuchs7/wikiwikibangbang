@@ -63,3 +63,33 @@ func TestKanbanLimitsAndColoursAreChecked(t *testing.T) {
 		}
 	}
 }
+
+// TestKanbanLanes: a kanban may lay its cards out in lanes by a person or
+// an enumeration field of its type (ADR-0137); other fields are refused.
+func TestKanbanLanes(t *testing.T) {
+	_, anna, k, _ := columnsBoard(t)
+	k.LaneField = "assignee"
+	k, err := anna.SetKanban("PLAT", k)
+	noErr(t, err)
+	if k.LaneField != "assignee" {
+		t.Fatalf("lanes %+v", k)
+	}
+	k.LaneField = "priority"
+	k, err = anna.SetKanban("PLAT", k)
+	noErr(t, err)
+	if k.LaneField != "priority" {
+		t.Fatalf("lanes %+v", k)
+	}
+	for _, bad := range []string{"estimate", "labels", "state", "nowhere"} {
+		k.LaneField = bad
+		if _, err := anna.SetKanban("PLAT", k); !errors.Is(err, ErrValidation) {
+			t.Errorf("lanes by %s: %v", bad, err)
+		}
+	}
+	k.LaneField = ""
+	k, err = anna.SetKanban("PLAT", k)
+	noErr(t, err)
+	if k.LaneField != "" {
+		t.Fatalf("no lanes %+v", k)
+	}
+}
