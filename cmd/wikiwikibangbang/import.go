@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"slices"
 	"strings"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
@@ -102,7 +101,7 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		return 1
 	}
 
-	snap, problems, err := readCloud(ctx, *site, email, token, spaceKeys, projectKeys)
+	snap, problems, err := migrate.ReadCloud(ctx, *site, email, token, nil, spaceKeys, projectKeys)
 	if err != nil {
 		fmt.Fprintln(stderr, "import:", err)
 		return 1
@@ -131,34 +130,6 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintf(stdout, "  %s: %s\n", p.Source, p.Message)
 	}
 	return 0
-}
-
-// readCloud reads the spaces and projects into one snapshot.
-func readCloud(ctx context.Context, site, email, token string, spaces, projects []string) (migrate.Snapshot, []migrate.Problem, error) {
-	var snap migrate.Snapshot
-	var problems []migrate.Problem
-	if len(spaces) > 0 {
-		var err error
-		snap, problems, err = migrate.ConfluenceCloud{Site: site, Email: email, Token: token}.Read(ctx, spaces)
-		if err != nil {
-			return snap, problems, err
-		}
-	}
-	if len(projects) > 0 {
-		jira, more, err := migrate.JiraCloud{Site: site, Email: email, Token: token}.Read(ctx, projects)
-		problems = append(problems, more...)
-		if err != nil {
-			return snap, problems, err
-		}
-		snap.Instance = jira.Instance
-		snap.Projects, snap.IssueTypes, snap.Issues = jira.Projects, jira.IssueTypes, jira.Issues
-		for _, u := range jira.Users {
-			if !slices.ContainsFunc(snap.Users, func(v migrate.SrcUser) bool { return v.ID == u.ID }) {
-				snap.Users = append(snap.Users, u)
-			}
-		}
-	}
-	return snap, problems, nil
 }
 
 func keyList(s string) []string {
@@ -220,19 +191,19 @@ func readAccountMap(path string) (map[string]string, error) {
 // the principals the store knows, user IDs. A username without an account is
 // an error: mapping it to a placeholder would silently lock its owner out.
 func localPrincipals(accounts *auth.Accounts, byName map[string]string) (map[string]string, error) {
-	ids := map[string]auth.UserID{}
+	return migrate.LocalAccounts(byName, idOf(accounts))
+}
+
+// idOf finds a username's user ID, ignoring case.
+func idOf(accounts *auth.Accounts) func(string) (string, bool) {
+	ids := map[string]string{}
 	for _, u := range accounts.Users() {
-		ids[strings.ToLower(u.Username)] = u.ID
+		ids[strings.ToLower(u.Username)] = string(u.ID)
 	}
-	out := make(map[string]string, len(byName))
-	for src, name := range byName {
+	return func(name string) (string, bool) {
 		id, ok := ids[strings.ToLower(name)]
-		if !ok {
-			return nil, fmt.Errorf("no local account %q (named for %s); create it first or correct the name", name, src)
-		}
-		out[src] = string(id)
+		return id, ok
 	}
-	return out, nil
 }
 
 // grantFlags collects -grant values.
@@ -241,42 +212,17 @@ type grantFlags []string
 func (g *grantFlags) String() string { return strings.Join(*g, ",") }
 
 func (g *grantFlags) Set(v string) error {
-	who, role, ok := strings.Cut(v, "=")
-	if !ok || strings.TrimSpace(who) == "" {
-		return fmt.Errorf(`want "username=role" or "@group=role", got %q`, v)
-	}
-	if _, ok := roleNames[role]; !ok {
-		return fmt.Errorf("unknown role %q; use viewer, editor or space-admin", role)
+	if _, _, err := migrate.ParseGrant(v); err != nil {
+		return err
 	}
 	*g = append(*g, v)
 	return nil
 }
 
-var roleNames = map[string]item.Role{"viewer": item.Viewer, "editor": item.Editor, "space-admin": item.SpaceAdmin}
-
 // resolve turns usernames into the user IDs the store knows; a group is
 // kept as it is. A username without an account is an error.
 func (g grantFlags) resolve(accounts *auth.Accounts) ([]migrate.Grant, error) {
-	byName := map[string]string{}
-	for _, v := range g {
-		who, _, _ := strings.Cut(v, "=")
-		if !strings.HasPrefix(who, "@") {
-			byName[who] = who
-		}
-	}
-	ids, err := localPrincipals(accounts, byName)
-	if err != nil {
-		return nil, err
-	}
-	var out []migrate.Grant
-	for _, v := range g {
-		who, role, _ := strings.Cut(v, "=")
-		if id, ok := ids[who]; ok {
-			who = id
-		}
-		out = append(out, migrate.Grant{Principal: who, Role: roleNames[role]})
-	}
-	return out, nil
+	return migrate.LocalGrants(g, idOf(accounts))
 }
 
 // readGroupMap reads "source group @local-group" lines; a source group's

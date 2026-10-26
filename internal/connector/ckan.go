@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
 
 // maxAnswer bounds what is read of one answer of the CKAN API: a page of
@@ -570,6 +571,9 @@ func (c Client) get(ctx context.Context, path string, v any) error {
 // what to report of how it went. apply is false when the run must not
 // change the catalog, e.g. when no format was found to read.
 type reading struct {
+	// write, if set, writes what was read itself, as the Atlassian import
+	// does (ADR-0128); otherwise apply says to apply the entries.
+	write    func(db *storage.DB, dry bool) (Result, error)
 	apply    bool
 	datasets int
 	formats  []string
