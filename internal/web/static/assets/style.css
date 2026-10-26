@@ -253,9 +253,6 @@ table.history td { font-size: 13px; }
 .card-item.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .card-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .card-key { font-size: 11px; color: var(--muted); }
-.card-facts { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; margin: 4px 0; font-size: 12px; }
-.card-facts dt { color: var(--muted); }
-.card-facts dd { margin: 0; overflow-wrap: anywhere; }
 .board-column.own-column { border-style: dashed; }
 .kanban-columns-edit { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 .kanban-columns-edit li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
