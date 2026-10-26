@@ -768,7 +768,7 @@ function renderFooter() {
 // admin marks the modules only administrators see. The notifications are
 // reached through the bell in the header, not here.
 const modules = [
-  { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "label"], icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
+  { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "query", "label"], icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
   { id: "new", name: "nav.new", href: "#/new", match: ["new"], icon: "M12 8v8M8 12h8M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" },
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban"], icon: "M9 11l3 3 8-8M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11" },
   { id: "comments", name: "nav.comments", href: "#/comments", match: ["comments"], icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
@@ -1331,6 +1331,7 @@ async function route() {
       case "comments": return await commentsView(arg);
       case "album": return albumView();
       case "search": return await searchView(arg || "");
+      case "query": return await queryView(params);
       case "account": return await accountView();
       case "mcp": return await mcpView();
       case "oauth": return await oauthView(params);
@@ -1570,9 +1571,12 @@ async function searchView(q) {
     if (typed) location.hash = "#/search/" + encodeURIComponent(typed);
   } }, clearable(h("input", { name: "q", type: "search", value: q, placeholder: t("nav.search"), "aria-label": t("nav.search") })),
   h("button", { type: "submit", class: "primary", text: t("search.go") }));
+  // The words lead on to a query of the fields (ADR-0136).
+  const toQuery = h("p", { class: "search-to-query" }, link("#/query?" + new URLSearchParams({ q: q.trim() ? `text ~ "${q.trim().replace(/["\\]/g, "\\$&")}"` : "" }),
+    t("search.toQuery"), null, "search-to-query"));
   if (!/[\p{L}\p{N}]/u.test(q)) {
     show(h("div", { class: "page-head" }, h("h1", { text: t("search.title") })), box,
-      h("p", { class: "muted", id: "search-hint", text: q.trim() ? t("search.needsTerm") : t("search.prompt") }));
+      h("p", { class: "muted", id: "search-hint", text: q.trim() ? t("search.needsTerm") : t("search.prompt") }), toQuery);
     box.querySelector("input").focus();
     return;
   }
@@ -1636,6 +1640,7 @@ async function searchView(q) {
     h("div", { class: "page-head" }, h("h1", { text: t("search.title") }),
       first.total.value ? h("p", { class: "actions" }, csvLink("/api/search.csv?q=" + encodeURIComponent(q), "search-csv")) : null),
     box,
+    toQuery,
     labels.length ? h("p", { class: "search-labels", id: "search-labels" }, h("span", { class: "muted", text: t("search.labels") + " " }),
       labels.slice(0, 12).map((l) => link("#/label/" + encodeURIComponent(l.label), `${l.label} (${l.count})`, "chip"))) : null,
     filter.el,
@@ -1644,6 +1649,121 @@ async function searchView(q) {
     more,
   );
   emptyNow(first.total.value);
+}
+
+// --- query (ADR-0136) ----------------------------------------------------------
+
+// queryExamples are queries to start from; a click puts one in the field.
+// The query language is the same in every language of the UI.
+const queryExamples = [
+  "type = task AND assignee = currentUser() AND finished = false ORDER BY due",
+  "updated >= -7d ORDER BY updated DESC",
+  'text ~ "release" AND label IN (web, security)',
+];
+
+// queryFields are the fields every item has.
+const queryFields = ["key", "title", "type", "space", "state", "label", "text", "body", "comment", "parent", "ancestor",
+  "created", "updated", "creator", "finished"];
+
+// queryView selects items with the query language (ADR-0136): conditions
+// on their fields, and an order. The query is kept in the address, so it
+// survives a reload and can be bookmarked and shared (ADR-0098).
+async function queryView(params) {
+  const show = screen();
+  const q = params.get("q") || "";
+  const input = h("textarea", { name: "q", id: "query-text", class: "query-text", rows: 3, spellcheck: "false", autocomplete: "off",
+    "aria-label": t("query.label"), placeholder: queryExamples[0] });
+  input.value = q;
+  const box = h("form", { class: "query-form", id: "query-form", onsubmit: (ev) => {
+    ev.preventDefault();
+    const next = "#/query?" + new URLSearchParams({ q: input.value.trim() });
+    if (location.hash === next) route();
+    else location.hash = next;
+  } }, input, h("p", { class: "actions" },
+    h("button", { type: "submit", class: "primary", id: "query-run", text: t("query.run") }),
+    h("span", { class: "muted", text: t("query.keys") })));
+  // Ctrl+Enter runs the query, as Enter starts a new line.
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) {
+      ev.preventDefault();
+      box.requestSubmit();
+    }
+  });
+  // insert puts a field's name where the cursor is, quoted where it must be.
+  const insert = (name) => {
+    const text = /^[\p{L}\p{N}_.-]+$/u.test(name) ? name : `"${name.replace(/["\\]/g, "\\$&")}"`;
+    input.setRangeText(text, input.selectionStart, input.selectionEnd, "end");
+    input.focus();
+  };
+  const { types } = await get("/api/types");
+  const own = [...new Set(types.flatMap((ty) => ty.fields.map((f) => f.name)))].sort((a, b) => a.localeCompare(b));
+  const chip = (name, quoted) => h("button", { type: "button", class: "chip query-field", text: name, onclick: () => insert(quoted ? `"${name}"` : name) });
+  const help = h("details", { class: "query-help", id: "query-help" },
+    h("summary", { text: t("query.help") }),
+    h("ul", {}, ["query.helpCombine", "query.helpCompare", "query.helpEmpty", "query.helpTime", "query.helpUser", "query.helpOrder"].map((k) => h("li", { text: t(k) }))),
+    h("p", { class: "query-fields" }, h("span", { class: "muted", text: t("query.builtins") + " " }), queryFields.map((f) => chip(f))),
+    own.length ? h("p", { class: "query-fields", id: "query-own-fields" }, h("span", { class: "muted", text: t("query.fieldsOfTypes") + " " }),
+      // A property named like a field of every item is reached quoted.
+      own.map((f) => chip(f, queryFields.includes(f.toLowerCase())))) : null,
+    h("p", { class: "muted", text: t("query.examples") }),
+    h("ul", { class: "query-examples" }, queryExamples.map((ex) => h("li", {},
+      h("button", { type: "button", class: "link", text: ex, onclick: () => { input.value = ex; input.focus(); } })))));
+  const head = h("div", { class: "page-head" }, h("h1", { text: t("query.title") }));
+  const lead = h("p", { class: "muted", text: t("query.lead") });
+  if (!q.trim()) {
+    help.open = true;
+    show(head, lead, box, help);
+    input.focus();
+    return;
+  }
+  const url = (after) => {
+    const p = new URLSearchParams({ query: q, limit: 100 });
+    if (after) p.set("after", after);
+    return "/api/items?" + p;
+  };
+  let first;
+  try {
+    first = await get(url());
+  } catch (err) {
+    if (!(err instanceof ApiError) || err.status !== 400) throw err;
+    help.open = true;
+    show(head, lead, box, h("p", { class: "error", role: "alert", id: "query-error", text: err.message }), help);
+    // The cursor goes to the mistake. The server counts characters, the
+    // field UTF-16 units.
+    if (typeof err.at === "number") {
+      const at = [...input.value].slice(0, err.at).join("").length;
+      input.focus();
+      input.setSelectionRange(at, at + 1);
+    }
+    return;
+  }
+  const rows = h("tbody");
+  const more = h("div");
+  const addRows = (page) => {
+    for (const it of page.items) {
+      rows.append(h("tr", {},
+        h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key, "key")),
+        h("td", { text: it.title }),
+        h("td", { text: it.type }),
+        h("td", { text: it.state || "" }),
+        h("td", { text: it.space }),
+        h("td", {}, (it.labels || []).map((l) => labelChip(l)))));
+    }
+    more.replaceChildren();
+    if (page.next) more.append(h("button", { text: t("common.more"), onclick: async () => addRows(await get(url(page.next))) }));
+  };
+  addRows(first);
+  const n = first.total.value;
+  show(
+    h("div", { class: "page-head" }, h("h1", { text: t("query.title") }),
+      n ? h("p", { class: "actions" }, csvLink("/api/items.csv?" + new URLSearchParams({ query: q }), "query-csv")) : null),
+    lead, box, help,
+    h("p", { class: "muted", id: "query-total", role: "status", text: t("query.results", { n }) }),
+    n ? h("table", { id: "query-results" }, h("thead", {}, h("tr", {},
+      [t("col.key"), t("col.title"), t("col.type"), t("col.state"), t("col.space"), t("tasks.labels")].map((c) => h("th", { text: c })))), rows)
+      : empty(t("query.none"), "query-none"),
+    more,
+  );
 }
 
 // myNotesView lists one's personal notes on every item one may still

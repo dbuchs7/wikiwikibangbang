@@ -538,6 +538,27 @@ function atlassianSource() {
     check(await page.locator(".hits li").count() > 0 && (await page.textContent(".hits li a")) === "PLAT-2", "the search results stay");
     await page.unroute("**/api/items/PLAT-1");
 
+    step("query: the search's words lead to a query of the fields; a mistake says where it is (ADR-0136)");
+    await page.click("#search-to-query");
+    await page.waitForSelector("#query-results tbody tr");
+    check(await page.inputValue("#query-text") === 'text ~ "alert body"', "the search's words become a condition: " + await page.inputValue("#query-text"));
+    check((await page.locator("#query-results tbody tr a.key").allTextContents()).includes("PLAT-2"), "the runbook is selected");
+    await page.fill("#query-text", "key = PLAT-2 ORDER BY");
+    expectedConsole = /status of 400/; // the mistake is refused
+    await page.click("#query-run");
+    await page.waitForSelector("#query-error");
+    expectedConsole = null;
+    check((await page.textContent("#query-error")).startsWith("at character 22:"), "the mistake names its place: " + await page.textContent("#query-error"));
+    check(await page.evaluate(() => document.getElementById("query-text").selectionStart) === 21, "the cursor stands at the mistake");
+    await page.fill("#query-text", "key IN (PLAT-1, PLAT-2) ORDER BY key DESC");
+    await page.press("#query-text", "Control+Enter");
+    await page.waitForFunction(() => document.querySelectorAll("#query-results tbody tr").length === 2);
+    check((await page.locator("#query-results tbody tr a.key").allTextContents()).join(",") === "PLAT-2,PLAT-1", "ordered by key, the newest first");
+    check((await page.getAttribute("#query-csv", "href")).startsWith("/api/items.csv?query="), "the query exports as CSV");
+    await page.reload();
+    await page.waitForFunction(() => document.querySelectorAll("#query-results tbody tr").length === 2);
+    check(await page.inputValue("#query-text") === "key IN (PLAT-1, PLAT-2) ORDER BY key DESC", "the query survives a reload in the address");
+
     step("app switcher: nine dots open the modules; Tasks lists open work across spaces");
     await page.click("#app-switcher");
     await page.waitForSelector("#drawer:not([hidden])");

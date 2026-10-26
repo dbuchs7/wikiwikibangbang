@@ -2,9 +2,11 @@
 // cookie; bodies are always JSON, which is also the CSRF defence (ADR-0027).
 
 export class ApiError extends Error {
-  constructor(status, message) {
+  // at is where a mistake in a query is, in characters from 0 (ADR-0136).
+  constructor(status, message, at) {
     super(message);
     this.status = status;
+    this.at = at;
   }
 }
 
@@ -26,7 +28,7 @@ export async function api(method, path, body) {
       }
     }
   }
-  if (!res.ok) throw new ApiError(res.status, (data && data.error) || res.statusText);
+  if (!res.ok) throw new ApiError(res.status, (data && data.error) || res.statusText, data?.at);
   return data;
 }
 
