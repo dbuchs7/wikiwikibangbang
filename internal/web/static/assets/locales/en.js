@@ -961,6 +961,8 @@ export default {
   "design.darkOff": "The dark scheme is off: the theme or the own stylesheet defines no @media (prefers-color-scheme: dark) { … } rules, so everyone sees the light look. Choose a theme with a dark scheme, or add such rules to offer a dark look of your own.",
   "export.pdfHandbook": "PDF with subpages (handbook)",
   "export.docxHandbook": "Word with subpages (handbook)",
+  "export.markdown": "Markdown with pictures (.zip)",
+  "export.markdownHandbook": "Markdown with subpages (handbook, .zip)",
   "export.open": "Export",
   "export.pdf": "PDF (print)",
   "export.docx": "Word (.docx)",

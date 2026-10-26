@@ -30,7 +30,7 @@ func gitea(t *testing.T) *httptest.Server {
 }
 
 // A Markdown file in a text becomes a page below the item, which its
-// editors update or pin (ADR-0131).
+// editors update or pin (ADR-0132).
 func TestMarkdownFilesThroughTheAPI(t *testing.T) {
 	t.Setenv("WWBB_CONNECTOR_ALLOW_PRIVATE", "on") // the fake host is on the loopback address
 	t.Setenv("WWBB_GIT_FILES", "on")

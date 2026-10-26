@@ -119,9 +119,10 @@ function printExport(path, children) {
   document.body.append(frame);
 }
 
-// exportMenu offers a page as PDF and as a Word document, both with what
-// it embeds, and each of its tables as CSV; a page with subpages also as a
-// handbook with them.
+// exportMenu offers a page as PDF, as a Word document and as Markdown in a
+// ZIP archive with its pictures (ADR-0131), all with what it embeds, and
+// each of its tables as CSV; a page with subpages also as a handbook with
+// them.
 function exportMenu(item) {
   const path = "/api/items/" + encodeURIComponent(item.id);
   const tables = (item.body || []).filter((b) => b.kind === "table");
@@ -132,6 +133,7 @@ function exportMenu(item) {
     h("div", { class: "export-list" },
       h("button", { type: "button", class: "link", id: "export-pdf", text: t("export.pdf"), onclick: (ev) => { close(ev); printExport(path, false); } }),
       h("a", { href: path + "/export/docx", id: "export-docx", download: "", text: t("export.docx") }),
+      h("a", { href: path + "/export/md.zip", id: "export-md", download: "", text: t("export.markdown") }),
       handbook,
       tables.map((b, i) => h("a", { href: `${path}/tables/${i + 1}`, class: "export-table", download: "",
         text: t("export.table", { n: i + 1, head: (b.text || "").split("\n")[0].split("\t").slice(0, 3).join(", ") }) }))));
@@ -144,7 +146,8 @@ function exportMenu(item) {
     const kids = await childPagesOf(item)().catch(() => []);
     if (kids.length) handbook.append(
       h("button", { type: "button", class: "link", id: "export-pdf-handbook", text: t("export.pdfHandbook"), onclick: (ev) => { close(ev); printExport(path, true); } }),
-      h("a", { href: path + "/export/docx?children=true", id: "export-docx-handbook", download: "", text: t("export.docxHandbook") }));
+      h("a", { href: path + "/export/docx?children=true", id: "export-docx-handbook", download: "", text: t("export.docxHandbook") }),
+      h("a", { href: path + "/export/md.zip?children=true", id: "export-md-handbook", download: "", text: t("export.markdownHandbook") }));
   });
   return menu;
 }
@@ -598,7 +601,7 @@ function formDialog(title, id, fields, submit, ok = t("common.create")) {
 }
 
 // markdownTools make a page below the item from a Markdown file of a
-// repository, which the text then shows whole (ADR-0131): insert(address)
+// repository, which the text then shows whole (ADR-0132): insert(address)
 // asks for the address and the version and answers the page, or null.
 function markdownTools(item) {
   const insert = (address) => {
@@ -619,7 +622,7 @@ function markdownTools(item) {
 }
 
 // fileSource says where a page made from a Markdown file comes from and
-// which version it shows (ADR-0131), in the reader's language.
+// which version it shows (ADR-0132), in the reader's language.
 function fileSource(origin) {
   const file = origin.externalId.slice(origin.externalId.indexOf("/") + 1);
   const repo = origin.instance.replace(/^https?:\/\//, "");
@@ -4958,7 +4961,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
     field(t("connector.language"), languageSelect(j.language)),
     h("p", { class: "muted", text: t("json.languageHelp") }),
   ];
-  // A folder or file of a Git repository (ADR-0131).
+  // A folder or file of a Git repository (ADR-0132).
   const gitSource = () => [
     field(t("git.url"), h("input", { name: "url", type: "url", required: true, value: g.url, maxlength: 512, placeholder: "https://github.com/owner/repository/tree/main/docs" })),
     h("p", { class: "muted", text: t("git.urlHelp") }),

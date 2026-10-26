@@ -3,6 +3,7 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -167,5 +168,76 @@ func TestExportListsTheTasksOfALabel(t *testing.T) {
 	}
 	if r := w.bert.do("GET", "/api/items/"+plan+"/export/docx", ""); r.Code != http.StatusOK || !bytes.Contains(r.Body.Bytes(), []byte("PK")) {
 		t.Fatalf("docx %d", r.Code)
+	}
+}
+
+// TestMarkdownExport: a page as Markdown text, for the API and for agents,
+// and as a ZIP archive with its pictures, for people (ADR-0131); read
+// through the reader's session like every export (D10).
+func TestMarkdownExport(t *testing.T) {
+	w := newWorld(t)
+	created := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Plan Ä","properties":{"priority":"high"}}`, http.StatusCreated)
+	key := field(created, "item", "key").(string)
+	id := field(created, "item", "id").(string)
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{7}, 100)...)
+	up := w.bert.upload("/api/items/"+key+"/attachments?name=Flow%20chart.png", "application/octet-stream", png)
+	var att struct{ Attachment attachmentJSON }
+	if err := json.Unmarshal(up.Body.Bytes(), &att); err != nil || up.Code != http.StatusCreated {
+		t.Fatalf("upload: %d %s", up.Code, up.Body)
+	}
+	pic := string(att.Attachment.ID)
+	w.bert.expect("PUT", "/api/items/"+key+"/body", `{"blocks":[{"kind":"heading","level":1,"text":"Overview"},`+
+		`{"kind":"paragraph","text":"Pay Paul Muster on Friday.","marks":[{"type":"bold","start":0,"end":3}]},`+
+		`{"kind":"table","text":"Name\tCost\nTea | Cake\t5"},{"kind":"image","ref":"`+pic+`","text":"Flow chart"}]}`, http.StatusOK)
+	w.bert.expect("POST", "/api/items/"+key+"/secrets", `{"block":1,"start":4,"end":15}`, http.StatusOK)
+
+	// The text, with its pictures linked to the server.
+	rec := w.bert.do("GET", "/api/items/"+key+"/export/md", "")
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/markdown; charset=utf-8" ||
+		!strings.Contains(rec.Header().Get("Content-Disposition"), ".md") {
+		t.Fatalf("md: %d %v", rec.Code, rec.Header())
+	}
+	for _, want := range []string{"# Plan Ä\n", "- **Key:** " + key, "- **priority:** high", "## Overview",
+		"**Pay** Paul Muster on Friday.", "| Name | Cost |\n| --- | --- |\n| Tea \\| Cake | 5 |",
+		"![Flow chart](/api/items/" + id + "/attachments/" + pic + ")"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("the Markdown lacks %q:\n%s", want, rec.Body)
+		}
+	}
+	// A protected passage stays veiled for a reader who may not read it
+	// (ADR-0088); someone who may not read the item gets nothing (D10).
+	if rec := w.vera.do("GET", "/api/items/"+key+"/export/md", ""); rec.Code != http.StatusOK ||
+		strings.Contains(rec.Body.String(), "Muster") || !strings.Contains(rec.Body.String(), "▒") {
+		t.Errorf("vera reads %d: %s", rec.Code, rec.Body)
+	}
+	w.carla.expect("GET", "/api/items/"+key+"/export/md", "", http.StatusNotFound)
+	w.carla.expect("GET", "/api/items/"+key+"/export/md.zip", "", http.StatusNotFound)
+
+	// The archive, with the picture beside the text.
+	rec = w.bert.do("GET", "/api/items/"+key+"/export/md.zip", "")
+	if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "application/zip" ||
+		!strings.Contains(rec.Header().Get("Content-Disposition"), ".zip") {
+		t.Fatalf("md.zip: %d %v", rec.Code, rec.Header())
+	}
+	z, err := zip.NewReader(bytes.NewReader(rec.Body.Bytes()), int64(rec.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{}
+	for _, f := range z.File {
+		r, _ := f.Open()
+		data, _ := io.ReadAll(r)
+		r.Close()
+		files[f.Name] = string(data)
+	}
+	if md := files[key+" Plan Ä.md"]; !strings.Contains(md, "![Flow chart](media/01-Flow-chart.png)") || files["media/01-Flow-chart.png"] != string(png) {
+		t.Errorf("archive: %v", files)
+	}
+
+	// With children=true, a handbook with the pages below.
+	w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Step one","parent":"`+id+`","properties":{"priority":"low"}}`, http.StatusCreated)
+	book := w.bert.do("GET", "/api/items/"+key+"/export/md?children=true", "").Body.String()
+	if !strings.Contains(book, "- Step one") || !strings.Contains(book, "\n## Step one\n") {
+		t.Errorf("handbook:\n%s", book)
 	}
 }

@@ -188,7 +188,7 @@ func marks(b item.Block) map[string]item.Mark {
 
 // A folder becomes a tree of pages: folders with Markdown files and the
 // files, the folder's index file as its text; links between the files
-// become mentions, pictures attachments (ADR-0131).
+// become mentions, pictures attachments (ADR-0132).
 func TestAFolderBecomesAPageTree(t *testing.T) {
 	f, src, base := gitSetup(t, "docs")
 	ctx := context.Background()
@@ -368,7 +368,7 @@ func TestGitSourceErrors(t *testing.T) {
 }
 
 // The pictures of a page are read up to their budget together; the ones
-// beyond it stay links (ADR-0131).
+// beyond it stay links (ADR-0132).
 func TestPicturesKeepToTheirBudget(t *testing.T) {
 	b := budget.Default()
 	b.MarkdownPictureBytes = int64(len(png)) - 1

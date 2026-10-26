@@ -18,7 +18,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
 
-// A Markdown file in a text (ADR-0131): an editor names a file of a
+// A Markdown file in a text (ADR-0132): an editor names a file of a
 // repository; the server reads it and makes it a page below the edited
 // item, which the text shows whole. A page that follows a branch or tag is
 // read again every hour; one pinned to a commit is not.
@@ -50,7 +50,7 @@ var ErrNotMirrored = errors.New("connector: the page is not made from a file of 
 // FilesOn reports whether editors may have the server read files.
 func (r *Runner) FilesOn() bool { return r.getenv(FilesVar) == "on" }
 
-// files reads without a credential: public repositories only (ADR-0131).
+// files reads without a credential: public repositories only (ADR-0132).
 func (r *Runner) files() gitrepo.Client { return gitrepo.Client{HTTP: r.httpClient()} }
 
 // Pinned reports whether a page made from a file shows it at a fixed
@@ -171,7 +171,7 @@ func (w pageWriter) get(s *item.Store, id item.ID) (item.Item, error) {
 	return s.As(w.who).Get(id)
 }
 
-// maxPictures bounds how many pictures one page keeps (ADR-0131).
+// maxPictures bounds how many pictures one page keeps (ADR-0132).
 const maxPictures = 50
 
 // pictureTypes are the kinds of picture a page keeps: the ones a page
