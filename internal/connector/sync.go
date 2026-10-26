@@ -1,23 +1,18 @@
 package connector
 
 import (
-	"bytes"
 	"cmp"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
 	"math"
-	"net/http"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/gitrepo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
@@ -594,16 +589,8 @@ func mentions(blocks []item.Block, links map[string]string, ids map[string]item.
 	return out, all
 }
 
-// maxPictures bounds how many pictures one page keeps (ADR-0128).
-const maxPictures = 50
-
-// pictureTypes are the kinds of picture a page keeps: the ones a page
-// shows inline (ADR-0045). An SVG can carry script and stays a link.
-var pictureTypes = []string{"image/png", "image/jpeg", "image/gif", "image/webp"}
-
-// writeEntry writes an entry's page: the import, its labels, the
-// pictures it shows as attachments, and its body. A picture already
-// attached with the same content is not stored again.
+// writeEntry writes an entry's page: the import, its labels, and, when
+// it changed, the pictures it shows and its body.
 func writeEntry(db *storage.DB, cfg site.Connector, u item.Upsert, labels []string, newLabels bool, body item.Doc, newBody bool, pictures []Picture) (item.Item, error) {
 	var it item.Item
 	err := db.Write(func(s *item.Store) error {
@@ -619,48 +606,5 @@ func writeEntry(db *storage.DB, cfg site.Connector, u item.Upsert, labels []stri
 	if err != nil || !newBody {
 		return it, err
 	}
-	body.Blocks = slices.Clone(body.Blocks)
-	var added []item.Attachment
-	for n, p := range pictures {
-		if n == maxPictures || !slices.Contains(pictureTypes, http.DetectContentType(p.Data)) || int64(len(p.Data)) > budget.Get().AttachmentBytes {
-			continue
-		}
-		sum := sha256.Sum256(p.Data)
-		var ref item.ID
-		for _, a := range it.Attachments {
-			if !a.Deleted && a.SHA256 == hex.EncodeToString(sum[:]) {
-				ref = a.ID
-			}
-		}
-		if ref == "" {
-			a, err := db.StoreAttachment(it.ID, bytes.NewReader(p.Data), budget.Get().AttachmentBytes)
-			if err != nil {
-				return it, err
-			}
-			a.Name = p.Name
-			added = append(added, a)
-			ref = a.ID
-		}
-		body.Blocks[p.Block] = item.Block{Kind: item.Image, Ref: ref, Text: p.Caption}
-	}
-	recorded := 0
-	err = db.Write(func(s *item.Store) error {
-		for _, a := range added {
-			if _, err := s.AddAttachment(Actor(cfg), it.ID, a); err != nil {
-				return err
-			}
-			recorded++
-		}
-		if err := s.CommitBody(Actor(cfg), it.ID, body); err != nil {
-			return err
-		}
-		it, _ = s.Get(it.ID)
-		return nil
-	})
-	// A stored file that was never recorded goes at once; the next start
-	// would remove it too.
-	for _, a := range added[recorded:] {
-		db.DiscardAttachment(it.ID, a.ID)
-	}
-	return it, err
+	return writeBody(db, pageWriter{actor: Actor(cfg)}, it, body, pictures)
 }

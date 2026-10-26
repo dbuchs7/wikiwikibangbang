@@ -45,11 +45,11 @@ Chosen option: **1**, because the content is the wiki's own — searchable, chec
   - a table's cells are plain text;
   - a code block loses its language;
   - footnotes and formulas stay as their text.
-- **HTML in the Markdown** never becomes markup. Comments are dropped, `<br>` is a line break, `<img>` a picture. Of other tags only the text between them stays.
+- **HTML in the Markdown** never becomes markup. Comments, scripts and styles are dropped, `<br>` is a line break, `<img>` a picture. Of other tags only the text between them stays.
 - **Title.** The `title` of a front matter, else a leading heading of level 1, which then leaves the text, else the file's name without its extension. The front matter itself is not shown.
 - **Links.** A relative link is resolved against the file's place in the repository, at the version read. Within a mirrored folder, it becomes a mention of the page written from the target file (D2); otherwise a link to the file at the host.
 - **Pictures.** A picture is read and kept as an attachment of the page (ADR-0045), within the attachment budget. Only PNG, JPEG, GIF and WebP are kept, as these are what a page shows inline. An SVG can carry script, so it becomes a link with its alternative text, as does a picture that cannot be read. A picture already attached with the same content is not stored again.
-- **Size.** A Markdown file of more than 2 MB is left out and reported. A page keeps at most 50 pictures.
+- **Size.** A Markdown file of more than 2 MB is left out and reported. A page keeps at most 50 pictures, read up to `WWBB_BUDGET_MARKDOWN_PICTURE_BYTES` together (50 MB by default, ADR-0015); the pictures beyond stay links.
 
 ### The hosts
 
@@ -57,6 +57,7 @@ Chosen option: **1**, because the content is the wiki's own — searchable, chec
 - **Recognised from the address** of a file or folder as the host shows it in the browser:
   - known names: github.com, gitlab.com, bitbucket.org, codeberg.org;
   - for other names, the path's shape: `/-/blob/` and `/-/tree/` for GitLab, `/projects/…/repos/…/browse/` for Bitbucket Data Center, `/src/branch/`, `/src/tag/` and `/src/commit/` for Gitea and Forgejo, `/blob/` and `/tree/` for GitHub Enterprise Server.
+  - A self-managed GitLab is taken to be installed at the root of its host, as its address does not tell where an installation below a path ends and the project's path begins.
 - **What is read:** each host's public API, for three things: the commit a branch or tag points to, the files below a folder, and a file at a commit. A branch or tag name holding a `/` is found by trying the longer names in turn.
 - **Credentials.** A connector sends its credential `WWBB_CONNECTOR_<ID>_TOKEN` if the operator sets one, as every connector does (ADR-0127). It raises the host's rate limit; it also reads what the token may read, which is the operator's choice. A file in a text never sends a credential, so it reads public repositories only.
 - **Addresses.** Every request keeps to public addresses, redirects included, unless `WWBB_CONNECTOR_ALLOW_PRIVATE=on` (ADR-0127). That is needed for a self-hosted instance in the organisation's own network.
@@ -75,7 +76,7 @@ Chosen option: **1**, because the content is the wiki's own — searchable, chec
   - The Markdown read is kept in the item's origin (`Origin.Raw`, sealed content, ADR-0026). The commit it was read at is kept as the origin's version.
   - A page is written only when its Markdown changed. Text edited by hand stays until the source changes; the next change replaces it, and the history keeps it. ADR-0080 replaces such text at every run; this kind compares the source instead.
   - Where the host's listing names each file's content (its Git blob), a file whose content is unchanged is not read at all.
-  - A run whose source points to the same commit as the last run, with the same settings, ends after one request. A run started by hand always reads everything.
+  - A run whose source points to the same commit as the last run, with the same settings, ends after one request. A run started by hand always reads everything, and so does the next run after one that could not read or write an entry for a reason that may pass.
 - **Place:** a new page goes below its folder's page. People may move pages; a run does not move them back, as for every connector.
 - **Withdrawal** is that of every connector: a page whose file is gone is labelled and keeps what was added here.
 
@@ -87,14 +88,15 @@ Chosen option: **1**, because the content is the wiki's own — searchable, chec
 - **What is made:**
   - A page below the edited item, in its space, through the caller's session (D10). The caller must be allowed to add a page there.
   - The text gets an embed of that page, which shows it whole (ADR-0106).
-  - Inserting the same file in the same item again embeds the page made before.
+  - Inserting the same file in the same item again updates the page made before, wherever it was moved since.
+  - The page holds the file's text alone. Where it comes from and which version it shows, the page and the embed say in each reader's language, from the origin.
 - **Origin:**
-  - the system `git`, the repository's address as its instance, and the parent and the path as its ID;
-  - the file's address at the followed branch or tag, or at the pinned commit;
+  - the system `git:file`, which no connector's ID can be, the repository's address as its instance, and the parent and the path as its ID;
+  - the branch or tag to follow as its key, and the file's address at that branch or tag, or at the pinned commit;
   - the commit read as its version, and the Markdown as its raw content.
 - **Updating:**
-  - Every hour the server reads each page that follows a branch or tag. When the Markdown changed, it writes the page as `sync:git`.
-  - The page says where it comes from and which version it shows. Whoever may edit it can update it now, pin the version it shows, or follow the branch or tag again.
+  - Every hour the server reads each page that follows a branch or tag, at that branch or tag. When the Markdown changed, it asks the host for the commit and writes the page as `sync:git`.
+  - Whoever may edit the page can update it now, pin the version it shows, or follow the branch or tag again.
   - A pinned page is not read again.
 - **Off unless the operator wants it:** `WWBB_GIT_FILES=on` lets editors have the server read files. Any other value leaves the function off, and the server says so when asked. This follows ADR-0039: here editors, not administrators, make the server call out.
 
@@ -109,7 +111,7 @@ Chosen option: **1**, because the content is the wiki's own — searchable, chec
   - A dependency: goldmark, about 14 000 lines of Go we depend on and do not own, at a pinned version.
   - The Markdown is kept twice, as the page and in its origin, so a later conversion needs no source.
   - A better converter reaches a page only when its source changes.
-  - Without a credential, github.com answers 60 API requests an hour per server address. A connector needs one or two requests per run while its branch stands still, and a file in a text none, as files are read without the API there.
+  - Without a credential, github.com answers 60 API requests an hour per server address. A connector needs one request per run while its branch stands still, two when it moved. A file in a text needs none while it is unchanged, as files are read without the API there, and one when it changed.
   - Bitbucket's listings do not name a file's content, so a run after a new commit reads every Markdown file of the folder.
 - **Follow-ups / risks to watch:**
   - private repositories (the open question);

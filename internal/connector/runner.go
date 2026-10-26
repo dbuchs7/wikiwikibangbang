@@ -47,6 +47,9 @@ type Runner struct {
 
 	mu    sync.Mutex
 	state map[string]*state
+	// filesRun is when the pages made from files in a text were last
+	// read (ADR-0128).
+	filesRun time.Time
 }
 
 type state struct {
@@ -102,6 +105,7 @@ func (r *Runner) Loop(ctx context.Context) {
 	defer t.Stop()
 	for {
 		r.Tick(ctx)
+		r.TickFiles(ctx)
 		select {
 		case <-ctx.Done():
 			return

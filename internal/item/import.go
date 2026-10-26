@@ -162,6 +162,51 @@ func (s *Store) FindByOrigin(system, instance, externalID string) (Item, bool) {
 	return s.items[id].clone(), true
 }
 
+// FindBySystem returns the live items whose origin names a system, in the
+// order they were made, e.g. the pages that mirror files of Git
+// repositories (ADR-0128).
+func (s *Store) FindBySystem(system string) []Item {
+	var out []Item
+	for key, id := range s.bySource {
+		if it := s.items[id]; strings.HasPrefix(key, system+"\x00") && it.Presence == Live {
+			out = append(out, it.clone())
+		}
+	}
+	slices.SortFunc(out, func(a, b Item) int { return a.created - b.created })
+	return out
+}
+
+// Mirror makes or updates, as the principal, a page that mirrors a file
+// of another system (ADR-0128), matched by its origin as an import is. It
+// counts as making a page below an item the principal may edit; a page
+// made before must be one the principal may edit, and stays where it is.
+func (x *Session) Mirror(u Upsert) (Item, error) {
+	if u.Parent == "" {
+		return Item{}, invalid("a mirrored page is made below an item")
+	}
+	id, had := x.s.bySource[u.Origin.key()]
+	if had {
+		it, err := x.editable(id)
+		if err != nil {
+			return Item{}, err
+		}
+		u.Space, u.Parent = it.Space, it.Parent
+	} else {
+		p, err := x.editable(u.Parent)
+		if err != nil {
+			return Item{}, err
+		}
+		u.Space = p.Space
+	}
+	u.Managed, u.Key, u.ID, u.State = "", "", "", ""
+	it, _, err := x.s.Upsert(x.who, u)
+	if err != nil || had {
+		return it, err
+	}
+	// A person watches what they make (ADR-0046).
+	return it, x.Watch(it.ID, true)
+}
+
 // Release ends a one-way sync for a space (cut-over, ADR-0023): items managed
 // by the tag become ordinary items that sessions may change.
 func (s *Store) Release(actor, managed, space string) error {

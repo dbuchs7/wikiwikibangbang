@@ -651,8 +651,10 @@ function imageView(node, view, getPos, files) {
 // an inline comment on the selected text (anchors.js, ADR-0047); note(anchor)
 // a personal note on it (notes.js, ADR-0107).
 // embedContent(ref), if given, returns the content of an embedded item,
-// shown in its block (ADR-0106).
-export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, note, actions = [], embedContent, tasks }) {
+// shown in its block (ADR-0106). markdown.insert(address), if given, makes
+// a page from a Markdown file of a repository below the item and returns
+// it, or null when cancelled (ADR-0128).
+export function createEditor({ blocks, embeds, editable, resolve, childPages, files, extra = [], viewProps = {}, comment, protect, note, actions = [], embedContent, tasks, markdown }) {
   const mount = h("div", { class: "pm-editor" });
   const tocs = new Set();
   const tocPlugin = new Plugin({ view: () => ({ update: (v, prev) => { if (!v.state.doc.eq(prev.doc)) tocs.forEach((f) => f()); } }) });
@@ -660,8 +662,10 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   // one's own or another's in a live session (ADR-0059).
   let onUpdate = () => {};
   const statePlugin = new Plugin({ view: () => ({ update: (v) => onUpdate(v.state) }) });
-  // Links, "@" and embedding as in a word processor (ADR-0096).
-  const aids = assist(schema, isSafeLink);
+  // Links, "@" and embedding as in a word processor (ADR-0096); a link to
+  // a Markdown file offers to show the file instead (ADR-0128).
+  let showFile = null;
+  const aids = assist(schema, isSafeLink, { showFile: markdown ? (href) => showFile(href) : null });
   const aidKeys = keymap({ "Mod-k": (state, dispatch, v) => { aids.openLink(v); return true; } });
   // Pictures pasted into the text (ADR-0108): one copied in the album
   // becomes a copy of its original file, any other image an upload.
@@ -714,8 +718,9 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind === "embed") embed();
     else if (kind === "newtask") newTask();
     else if (kind === "tasklist") taskList();
+    else if (kind === "markdown") markdownFile("");
     else if (kind) insertBlock(schema.nodes[kind].create());
-  } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], tasks?.create ? ["newtask", t("editor.newTask")] : null, tasks?.pickLabel ? ["tasklist", t("editor.taskList")] : null, ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["figures", t("editor.figures")], ["tables", t("editor.tables")], ["children", t("editor.children")],
+  } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], markdown ? ["markdown", t("editor.markdownFile")] : null, tasks?.create ? ["newtask", t("editor.newTask")] : null, tasks?.pickLabel ? ["tasklist", t("editor.taskList")] : null, ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["figures", t("editor.figures")], ["tables", t("editor.tables")], ["children", t("editor.children")],
     files ? ["image", t("editor.image")] : null, files ? ["video", t("editor.video")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null, files ? ["clip", t("editor.copiedPicture")] : null].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
@@ -843,6 +848,34 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       status.textContent = err.message;
     }
   };
+  // A Markdown file of a repository becomes a page below this item, which
+  // the text shows whole (ADR-0128). From a link's bubble, it takes the
+  // place of a paragraph that holds the link alone.
+  const markdownFile = async (address) => {
+    status.textContent = "";
+    try {
+      const it = await markdown.insert(address);
+      if (!it) return view.focus();
+      const node = schema.nodes.embed.create({ ref: it.id, label: `${it.key} ${it.title}`, href: "#/item/" + encodeURIComponent(it.key) });
+      const { $from } = view.state.selection;
+      const block = $from.depth >= 1 ? $from.node(1) : null;
+      // The paragraph holds the link alone when all its text but spaces
+      // is the link.
+      let alone = Boolean(address && block?.isTextblock && block.childCount);
+      block?.forEach((n) => {
+        if (!n.isText || (n.text.trim() && !n.marks.some((m) => m.type === schema.marks.link && m.attrs.href === address))) alone = false;
+      });
+      if (alone) {
+        view.dispatch(view.state.tr.replaceWith($from.before(1), $from.after(1), node));
+        view.focus();
+      } else {
+        insertBlock(node);
+      }
+    } catch (err) {
+      status.textContent = err.message;
+    }
+  };
+  showFile = markdownFile;
   // A list of the tasks that carry a label (ADR-0114).
   const taskList = async () => {
     status.textContent = "";

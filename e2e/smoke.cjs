@@ -1932,6 +1932,37 @@ function gitSource() {
     await page.fill("#body section.pm-tasklist .filter-text", "notes");
     await page.waitForFunction((sel) => [...document.querySelectorAll(sel)].filter((r) => !r.hidden).length === 1, rows);
 
+    step("a Markdown file in a text: a pasted link offers its content, a page below the item shown whole, following its branch; pinned and read again from its page (ADR-0128)");
+    const notesHost = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ space: "PLAT", type: "page", title: "Release notes" }) })).json()).item);
+    await page.goto(base + "/#/item/" + notesHost.key + "?edit");
+    await page.waitForSelector(".ProseMirror[contenteditable=true]");
+    await page.click(".ProseMirror");
+    const fileURL = `http://127.0.0.1:${repo.address().port}/o/r/src/branch/main/docs/a.md`;
+    await page.keyboard.type(fileURL + " ");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    // A bubble of an editor left before may still be in the page, hidden.
+    await page.click("#pm-link-bubble:not([hidden]) #pm-link-show-file:not([hidden])");
+    await page.waitForSelector("#markdown-dialog");
+    check(await page.inputValue("#markdown-url") === fileURL, "the link's address is offered");
+    await page.click("#markdown-dialog-ok");
+    await page.waitForSelector("#markdown-dialog", { state: "detached" });
+    await page.waitForSelector(".ProseMirror .pm-embed .pm-embed-title:has-text('First page')");
+    await page.waitForSelector(".ProseMirror .pm-embed .pm-embed-source:has-text('follows main')");
+    check(await page.locator(`.ProseMirror[contenteditable=true] > p a[href='${fileURL}']`).count() === 0, "the page takes the place of the link");
+    await page.click("#details h2");
+    await page.waitForSelector(".live[data-pending='0']");
+    const mirrored = await page.evaluate(async (k) => (await (await fetch(`/api/spaces/PLAT/tree?parent=${k}`)).json()).items, notesHost.key);
+    check(mirrored.length === 1 && mirrored[0].title === "First page", "the file is a page below the item");
+    await page.goto(base + "/#/item/" + mirrored[0].key);
+    await page.waitForSelector("#item-origin:has-text('follows main, at commit 11111111')");
+    await page.waitForSelector(".item-main em:text('repository')");
+    await page.click("#gitfile-pin");
+    await page.waitForSelector("#item-origin:has-text('at commit 11111111') #gitfile-follow");
+    await page.click("#gitfile-update");
+    await page.waitForSelector("text=The file is unchanged.");
+
     step("phones: no view is wider than the screen; the drawing editor fills it and closes again (ADR-0116)");
     const phoneCtx = await browser.newContext({ viewport: { width: 375, height: 700 }, isMobile: true, hasTouch: true });
     const phone = await phoneCtx.newPage();

@@ -122,7 +122,15 @@ Paste something that looks like a password (`password: Test1234!`), a card numbe
 - Does the governance view show the finding masked, and can an administrator lift the restriction?
 - **Report** every harmless text that was flagged, and every secret that was not.
 
-### 10. Everything else
+### 10. Markdown from Git repositories (ADR-0128)
+
+Under *Administration → Connectors*, start *New connector (Git)*, give it a space and the address of a folder of a public repository as its host shows it, e.g. `https://github.com/owner/repository/tree/main/docs`, and run it. With `WWBB_GIT_FILES=on`, edit a page, paste the address of a Markdown file and choose *Show the file's content* in the link's bubble, or use *Insert… → Markdown file…*.
+
+- Do the pages read as the files do at the host? Report what looks different and how it looks there.
+- Do links between the files lead to their pages, and are the pictures there?
+- Does a page follow its branch after a change at the host (within an hour, or at once with *Update now*), and does a pinned one stay?
+
+### 11. Everything else
 
 Search, item history, relations, mentions (toolbar: *Mention*), formatting, the API at `/api/openapi.json`. Anything that surprises you is worth a report.
 

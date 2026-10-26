@@ -75,6 +75,10 @@ type Budgets struct {
 	// ChangesWaiting bounds the requests of the change feed held waiting
 	// at once; beyond it, a request is answered without waiting.
 	ChangesWaiting int
+	// MarkdownPictureBytes bounds the pictures one page written from a
+	// Markdown file of a repository reads and holds, together (ADR-0128);
+	// the pictures beyond it stay links.
+	MarkdownPictureBytes int64
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
@@ -99,6 +103,8 @@ func Default() Budgets {
 		ChangesPage:      1000,
 		ChangesWait:      30,
 		ChangesWaiting:   1000,
+
+		MarkdownPictureBytes: 50 << 20,
 	}
 }
 

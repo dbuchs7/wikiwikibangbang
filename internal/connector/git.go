@@ -245,21 +245,26 @@ func (t *gitTree) read(file, name, addr string) (Content, error) {
 	d := markdown.Convert(data, markdown.Source{Name: name, Link: t.linkFrom(file), Picture: t.pictureFrom(file)})
 	c := Content{Title: d.Title, Raw: strings.ToValidUTF8(string(data), "�"), Links: t.links}
 	c.Body = append([]item.Block{t.heading(addr, t.repoPath(file))}, d.Blocks...)
+	// The pictures of a page are read up to their budget together; the
+	// ones beyond it stay links.
+	left := budget.Get().MarkdownPictureBytes
 	for _, p := range d.Pictures {
-		if len(c.Pictures) == maxPictures {
+		if len(c.Pictures) == maxPictures || left <= 0 {
 			break
 		}
-		if pic, ok := t.picture(p); ok {
+		if pic, ok := t.picture(p, min(left, budget.Get().AttachmentBytes)); ok {
 			pic.Block++
+			left -= int64(len(pic.Data))
 			c.Pictures = append(c.Pictures, pic)
 		}
 	}
 	return c, nil
 }
 
-// picture reads a picture a page shows, if it is one a page keeps.
-func (t *gitTree) picture(p markdown.Picture) (Picture, bool) {
-	data, err := t.client.Get(t.ctx, t.a, p.Src, budget.Get().AttachmentBytes)
+// picture reads a picture a page shows of at most limit bytes, if it is
+// one a page keeps.
+func (t *gitTree) picture(p markdown.Picture, limit int64) (Picture, bool) {
+	data, err := t.client.Get(t.ctx, t.a, p.Src, limit)
 	if err != nil || !slices.Contains(pictureTypes, http.DetectContentType(data)) {
 		return Picture{}, false
 	}

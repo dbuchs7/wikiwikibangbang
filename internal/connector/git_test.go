@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/gitrepo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
@@ -25,6 +26,7 @@ var png = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x0
 type forge struct {
 	mu      sync.Mutex
 	files   map[string]string
+	history map[string]map[string]string // the files at each commit
 	commit  string
 	n       int
 	reads   []string // the files read
@@ -52,6 +54,18 @@ func newForge() *forge {
 func (f *forge) bump() {
 	f.n++
 	f.commit = fmt.Sprintf("%040d", f.n)
+	if f.history == nil {
+		f.history = map[string]map[string]string{}
+	}
+	f.history[f.commit] = maps.Clone(f.files)
+}
+
+// at is the files at a ref: main, or a commit.
+func (f *forge) at(ref string) map[string]string {
+	if ref == "main" {
+		return f.files
+	}
+	return f.history[ref]
 }
 
 func (f *forge) set(p, content string) {
@@ -83,11 +97,14 @@ func (f *forge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case p == api+"/commits":
 		f.commits++
-		if r.URL.Query().Get("sha") != "main" {
+		switch sha := r.URL.Query().Get("sha"); {
+		case sha == "main":
+			fmt.Fprintf(w, `[{"sha":%q}]`, f.commit)
+		case f.history[sha] != nil:
+			fmt.Fprintf(w, `[{"sha":%q}]`, sha)
+		default:
 			fmt.Fprint(w, "[]")
-			return
 		}
-		fmt.Fprintf(w, `[{"sha":%q}]`, f.commit)
 	case p == api+"/git/trees/"+f.commit:
 		f.trees++
 		var tree []map[string]string
@@ -95,17 +112,18 @@ func (f *forge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			tree = append(tree, map[string]string{"path": name, "type": "blob", "sha": gitrepo.BlobID([]byte(served(f.files[name], r)), f.commit)})
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"tree": tree, "total_count": len(tree)})
-	case strings.HasPrefix(p, api+"/raw/") && r.URL.Query().Get("ref") == f.commit:
+	case strings.HasPrefix(p, api+"/raw/") && f.at(r.URL.Query().Get("ref")) != nil:
 		name := strings.TrimPrefix(p, api+"/raw/")
 		f.reads = append(f.reads, name)
-		content, ok := f.files[name]
+		content, ok := f.at(r.URL.Query().Get("ref"))[name]
 		if !ok {
 			http.NotFound(w, r)
 			return
 		}
 		fmt.Fprint(w, served(content, r))
-	case strings.HasPrefix(p, "/o/r/raw/commit/"+f.commit+"/"):
-		content, ok := f.files[strings.TrimPrefix(p, "/o/r/raw/commit/"+f.commit+"/")]
+	case strings.HasPrefix(p, "/o/r/raw/commit/"):
+		commit, name, _ := strings.Cut(strings.TrimPrefix(p, "/o/r/raw/commit/"), "/")
+		content, ok := f.at(commit)[name]
 		if !ok {
 			http.NotFound(w, r)
 			return
@@ -341,5 +359,22 @@ func TestGitSourceErrors(t *testing.T) {
 	}
 	if p, ok := within("docs/a.md", "/README.md"); !ok || p != "README.md" {
 		t.Error("a link from the root")
+	}
+}
+
+// The pictures of a page are read up to their budget together; the ones
+// beyond it stay links (ADR-0128).
+func TestPicturesKeepToTheirBudget(t *testing.T) {
+	b := budget.Default()
+	b.MarkdownPictureBytes = int64(len(png)) - 1
+	budget.Set(b)
+	defer budget.Set(budget.Default())
+	f, _, _ := gitSetup(t, "docs")
+	if _, err := f.r.Run(context.Background(), "docs", false, ""); err != nil {
+		t.Fatal(err)
+	}
+	a := f.pages(t)["docs/a.md"]
+	if len(a.Attachments) != 0 || a.Body.Blocks[2].Kind != item.Paragraph || marks(a.Body.Blocks[2])["Diagram"].Href == "" {
+		t.Errorf("a picture beyond the budget: %+v", a.Body.Blocks[2])
 	}
 }

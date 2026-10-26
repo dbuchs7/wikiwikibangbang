@@ -135,7 +135,7 @@ func (github) web(a Address, ref, file string, folder bool) string {
 
 func (github) raw(a Address, commit, file string) string {
 	if a.Base == "https://github.com" {
-		return "https://raw.githubusercontent.com/" + escapeJoin(strings.Split(a.Repo, "/")) + "/" + url.PathEscape(commit) + "/" + pathEscape(file)
+		return "https://raw.githubusercontent.com/" + escapeJoin(strings.Split(a.Repo, "/")) + "/" + pathEscape(commit) + "/" + pathEscape(file)
 	}
 	return a.RepoURL() + "/raw/" + url.PathEscape(commit) + "/" + pathEscape(file)
 }

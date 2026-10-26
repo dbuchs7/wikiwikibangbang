@@ -431,3 +431,19 @@ func TestBlobID(t *testing.T) {
 		t.Errorf("sha256 %s", got)
 	}
 }
+
+func TestReadAtARef(t *testing.T) {
+	client := Client{HTTP: fake(t)}
+	a, _ := Parse("https://github.com/o/r/blob/main/README.md")
+	a = a.At("main", "docs/index.md")
+	if a.Folder || a.Path != "docs/index.md" || a.Ref != "main" {
+		t.Fatalf("%#v", a)
+	}
+	a, commit, err := client.Locate(context.Background(), a)
+	if err != nil || commit != main1 {
+		t.Fatal(err)
+	}
+	if r := a.RawURL("feature/x", "a b.md"); r != "https://raw.githubusercontent.com/o/r/feature/x/a%20b.md" {
+		t.Errorf("a ref with a slash keeps it: %s", r)
+	}
+}

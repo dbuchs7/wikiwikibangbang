@@ -250,6 +250,14 @@ func (c Client) Locate(ctx context.Context, a Address) (Address, string, error) 
 	return a, commit, err
 }
 
+// At is the address of a file of the same repository at a ref, e.g. a
+// file followed at its branch.
+func (a Address) At(ref, file string) Address {
+	a.Ref, a.Path, a.rest, a.shape = ref, strings.Trim(file, "/"), nil, "file"
+	a.Folder = false
+	return a
+}
+
 // Files lists the Markdown files at or below the address's path at a
 // commit, with their paths in the repository; a file's address lists
 // itself.
@@ -278,7 +286,8 @@ func within(p, dir string) bool {
 // ErrTooLarge is a file larger than a read allows.
 var ErrTooLarge = errors.New("gitrepo: the file is too large")
 
-// Read reads a file of the repository at a commit, at most limit bytes.
+// Read reads a file of the repository at a commit or a ref, at most
+// limit bytes.
 func (c Client) Read(ctx context.Context, a Address, commit, file string, limit int64) ([]byte, error) {
 	h := hostOf(a)
 	req, err := h.read(a, commit, file)
