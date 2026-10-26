@@ -479,6 +479,7 @@ export default {
   "draw.paletteBpmn": "BPMN",
   "draw.paletteNetwork": "Netzwerk und Geräte",
   "draw.paletteIt": "IT-Symbole",
+  "draw.paletteMicrosoft": "Microsoft (Fluent-Symbole)",
   "att.copyOf": "Kopie aus",
   "att.copyOfUnknown": "Kopie aus einer Datei, die Sie nicht lesen dürfen",
   "att.originChanged": "Original geändert",

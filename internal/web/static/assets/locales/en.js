@@ -481,6 +481,7 @@ export default {
   "draw.paletteBpmn": "BPMN",
   "draw.paletteNetwork": "Network and devices",
   "draw.paletteIt": "IT symbols",
+  "draw.paletteMicrosoft": "Microsoft (Fluent icons)",
   "att.copyOf": "copy of",
   "att.copyOfUnknown": "copy of a file you may not read",
   "att.originChanged": "original changed",

@@ -97,3 +97,4 @@ Strongest form: hundreds of libraries, with nothing to maintain here.
 ## Links
 
 - relates to [ADR-0053](0053-drawings-with-excalidraw-on-a-page-of-their-own.md) (the drawing editor) and [ADR-0116](0116-every-view-fits-a-phone.md) (phones)
+- amended by [ADR-0125](0125-archimate-relationships-and-a-microsoft-palette.md) (ArchiMate relationships and a Microsoft palette)
