@@ -75,8 +75,22 @@ var (
 // spaces, roles, groups, users and backups; and everything about
 // credentials. An agent with an administrator's token still cannot reach
 // them through this adapter.
+//
+// Of the change feed and the own-roles query (ADR-0121), the reads are
+// offered: list_changes without its wait, as a tool call answers at once,
+// and get_own_roles. Watching and unwatching are not offered: they are
+// the caller's own subscription, which an agent does not take out or end
+// on a person's behalf.
 var tools = []tool{
 	{Name: "list_spaces", Description: "List the spaces the caller holds a role in.", Method: "GET", Path: "/api/spaces"},
+	{Name: "get_own_roles", Description: "The caller's own roles: the system roles held, and every space role granted to the caller, directly or through a group (via), one entry per grant.",
+		Method: "GET", Path: "/api/me/roles"},
+	{Name: "list_changes", Description: "The change feed: what happened, oldest first, to the items the caller watches (and their ancestors and watched spaces) after the event after, " +
+		"and to the caller's own roles. An entry's item is empty when the caller may not read the item now. Continue from last; without after, the answer is the newest event to start from.",
+		Method: "GET", Path: "/api/changes", Params: []param{
+			{"after", integer, inQuery, false, "The last of the previous answer; absent to start from now."},
+			{"limit", integer, inQuery, false, "Entries per page, 1 to the server's budget; 100 if absent."},
+		}},
 	{Name: "list_types", Description: "List the item types with their fields and workflows; read it before creating an item or setting a property.",
 		Method: "GET", Path: "/api/types"},
 	{Name: "find_items", Description: "Find readable items by space, type, state, parent, label or a property's value, paged. The answer's total says whether it is exact. " +

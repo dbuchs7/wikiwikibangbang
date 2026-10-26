@@ -135,7 +135,7 @@ func TestAuditEntriesExpireAfterTenYears(t *testing.T) {
 	}
 }
 
-// TestAuditListingReachesTheJournal covers ADR-0121: entries older than
+// TestAuditListingReachesTheJournal covers ADR-0122: entries older than
 // the in-memory window are listed from audit.wal.
 func TestAuditListingReachesTheJournal(t *testing.T) {
 	dir := t.TempDir()

@@ -277,7 +277,7 @@ var errOlder = errors.New("audit: reached the in-memory entries")
 
 // ListAll is ListWhere reaching past the in-memory window: when the window
 // holds fewer than limit entries that keep accepts and older entries exist,
-// the rest come from the journal (ADR-0121), so an entry stays listable for
+// the rest come from the journal (ADR-0122), so an entry stays listable for
 // as long as it is kept, however many came after it. Reading the journal
 // takes time in proportion to its size; it runs without holding the lock,
 // so entries are still recorded meanwhile.

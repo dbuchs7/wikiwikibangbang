@@ -62,3 +62,4 @@ Chosen option: **1**.
 
 - ADR-0008 (the log), ADR-0022 (permissions), ADR-0026 (erasure), ADR-0027 (accounts), ADR-0035 (comments)
 - amended by [ADR-0084](0084-a-mention-in-a-comment-is-a-notification.md) (a comment that mentions one is a notification)
+- extended by [ADR-0121](0121-a-change-feed-own-roles-and-watching-with-read-tokens.md), proposed: a change feed of every event on what one watches, and watching with tokens of scope read

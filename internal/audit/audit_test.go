@@ -155,7 +155,7 @@ func TestExpiry(t *testing.T) {
 	}
 }
 
-// TestListAllReachesTheJournal covers ADR-0121: an entry pushed out of the
+// TestListAllReachesTheJournal covers ADR-0122: an entry pushed out of the
 // in-memory window by many later ones is still listed, from the journal.
 func TestListAllReachesTheJournal(t *testing.T) {
 	m := &mem{}

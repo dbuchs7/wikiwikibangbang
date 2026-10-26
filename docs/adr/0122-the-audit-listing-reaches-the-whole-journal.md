@@ -1,4 +1,4 @@
-# ADR-0121: The audit listing reaches the whole journal
+# ADR-0122: The audit listing reaches the whole journal
 
 - **Status:** Accepted
 - **Implementation:** Landed

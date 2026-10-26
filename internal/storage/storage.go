@@ -63,6 +63,11 @@ type DB struct {
 	site     *wal.Log
 	notes    *wal.Log
 	dir      string
+
+	// changed is closed, and replaced, after every command, so that
+	// requests waiting for a change wake without holding mu (ADR-0121).
+	changedMu sync.Mutex
+	changed   chan struct{}
 }
 
 // Read runs fn with the item store while no command runs; reads run side
@@ -94,8 +99,32 @@ const warmPart = 200
 // are applied one at a time, in the order of the log.
 func (db *DB) Write(fn func(*item.Store) error) error {
 	db.mu.Lock()
-	defer db.mu.Unlock()
-	return fn(db.Store)
+	before := db.Store.Seq()
+	err := fn(db.Store)
+	grown := db.Store.Seq() != before
+	db.mu.Unlock()
+	if grown {
+		db.changedMu.Lock()
+		if db.changed != nil {
+			close(db.changed)
+			db.changed = nil
+		}
+		db.changedMu.Unlock()
+	}
+	return err
+}
+
+// Changed returns a channel that is closed once a command after this call
+// has added to the event log. A caller that waits for a change takes the
+// channel first, then reads, then waits on it, so no change between the
+// read and the wait is missed (ADR-0121).
+func (db *DB) Changed() <-chan struct{} {
+	db.changedMu.Lock()
+	defer db.changedMu.Unlock()
+	if db.changed == nil {
+		db.changed = make(chan struct{})
+	}
+	return db.changed
 }
 
 // Recovery reports what opening the data directory found.
