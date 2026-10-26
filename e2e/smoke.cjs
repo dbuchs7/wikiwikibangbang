@@ -2516,8 +2516,14 @@ function gitSource() {
       await region.locator(".pm-ops-badge.pm-ops-incidents").waitFor(); // operations at first, as chosen
       check((await region.locator(".pm-ops-badge").allTextContents()).join(" ") === "15 12 3 1", "passed, waiting and held tokens over the drawing");
       check(await region.locator(".bjs-powered-by").isVisible(), "the bpmn.io watermark stays visible over the drawing");
+      // At rest the switch is a small sign; pointed at, it names itself.
+      await page.mouse.move(0, 0);
       const pill = await region.locator(".pm-live-ops").boundingBox();
-      check(pill.height <= 20, "the operations switch stays small over a drawing");
+      check(pill.height <= 20 && pill.width <= 24, "the operations switch stays small over a drawing");
+      check(!(await region.locator(".pm-live-ops-label").isVisible()), "the switch's name shows only when pointed at");
+      check(await region.locator(".pm-live-ops").getAttribute("aria-label") === "Operations", "the switch is named for assistive technology");
+      await region.locator(".pm-live-ops").hover();
+      await region.locator(".pm-live-ops-label").waitFor();
       await region.locator(".pm-live-ops").click();
       await page.waitForFunction(() => !document.querySelector("#body .pm-live-region .pm-ops-badge"));
       check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader of a drawing");

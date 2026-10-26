@@ -51,6 +51,8 @@ Chosen option: **1**. Only it keeps a drawing one picture that shows everywhere 
 > - **Pictures saved before.** They are still read. When opened for editing they lose the old chunk, so their scene is found, and saving writes the new one.
 > - **Margin.** A process is pictured with room around it, and the live view keeps the same room. Without it, the region's *Operations* switch lay over the process.
 > - **The switch.** It is styled as a link of its own measures, so neither the UI's nor a theme's button style can make it larger than a small region.
+>   - At rest it is a faint sign, green while the operations are on.
+>   - Pointed at or focused, it shows fully and names itself.
 
 ### In the drawing editor
 

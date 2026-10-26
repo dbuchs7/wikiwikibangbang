@@ -659,6 +659,17 @@ export function drawingProcesses(files) {
   };
 }
 
+// pulseIcon is the operations switch's sign: a line that beats.
+function pulseIcon() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 16 16", width: "11", height: "11", "aria-hidden": "true" })) svg.setAttribute(k, v);
+  const line = document.createElementNS(ns, "polyline");
+  for (const [k, v] of Object.entries({ points: "1,9 5,9 7,3 10,13 12,8 15,8", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" })) line.setAttribute(k, v);
+  svg.append(line);
+  return svg;
+}
+
 // processRegion shows the newest version of a process of an engine over
 // its picture in a drawing (ADR-0142), and its operations while they are
 // on: at first when the drawing says so and the engine allows them, then
@@ -667,8 +678,11 @@ export function drawingProcesses(files) {
 // The region does not pan or zoom; the page scrolls over it.
 export function processRegion(r) {
   const canvas = h("span", { class: "pm-live-canvas" });
-  // A link, so no theme's button style makes it larger than the region.
-  const toggle = h("button", { type: "button", class: "link pm-live-ops", hidden: true, "aria-pressed": "false", text: t("bpmn.operations") });
+  // A link, so no theme's button style makes it larger than the region;
+  // a small sign that names itself when pointed at, so it keeps out of
+  // the picture's way.
+  const toggle = h("button", { type: "button", class: "link pm-live-ops", hidden: true, "aria-pressed": "false", "aria-label": t("bpmn.operations"), title: t("bpmn.operations") },
+    pulseIcon(), h("span", { class: "pm-live-ops-label", text: t("bpmn.operations") }));
   const state = h("span", { class: "pm-live-state", role: "status" });
   const dom = h("span", { class: "pm-live-region", title: r.name }, canvas, h("span", { class: "pm-live-bar" }, toggle, state));
   for (const [k, v] of [["left", r.x], ["top", r.y], ["width", r.w], ["height", r.h]]) dom.style[k] = `${v * 100}%`;
