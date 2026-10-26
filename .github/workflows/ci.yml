@@ -117,7 +117,7 @@ jobs:
           # (ADR-0127), the Atlassian one with the account of the smoke
           # test's fake site (ADR-0128), and the process engine is the smoke
           # test's own (ADR-0129); editors may have the server read Markdown
-          # files of repositories (ADR-0132).
+          # files of repositories (ADR-0133).
           mkdir -p "$RUNNER_TEMP/autobackup"
           WWBB_ADMIN_PASSWORD=e2e-admin-password WWBB_PUBLIC_URL=http://127.0.0.1:8080 \
             WWBB_SMTP_HOST=127.0.0.1 WWBB_SMTP_PORT=2525 WWBB_SMTP_SECURITY=none WWBB_SMTP_FROM=wiki@example.org \

@@ -41,12 +41,12 @@ function linkRange(state, pos, type) {
 }
 
 // markdownFileRE is the address of a Markdown file as a repository's host
-// shows it (ADR-0132).
+// shows it (ADR-0133).
 const markdownFileRE = /^https?:\/\/[^\s]+\/(blob|raw|src|browse|-\/blob|-\/raw)\/[^\s]*\.(md|markdown)([?#][^\s]*)?$|^https:\/\/raw\.githubusercontent\.com\/[^\s]+\.(md|markdown)$/i;
 
 // assist makes the aids for a schema; isSafe decides which link targets
 // the model keeps (ADR-0014). showFile(href), if given, shows a Markdown
-// file a link leads to instead of the link (ADR-0132).
+// file a link leads to instead of the link (ADR-0133).
 export function assist(schema, isSafe, { showFile } = {}) {
   const link = schema.marks.link;
 

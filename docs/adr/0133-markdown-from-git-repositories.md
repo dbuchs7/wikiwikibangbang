@@ -1,4 +1,4 @@
-# ADR-0132: Markdown from Git repositories: folders as page trees, files in a text
+# ADR-0133: Markdown from Git repositories: folders as page trees, files in a text
 
 - **Status:** Proposed
 - **Implementation:** Partial

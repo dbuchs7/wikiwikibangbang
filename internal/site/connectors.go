@@ -68,7 +68,7 @@ type Atlassian struct {
 }
 
 // GitSource is a folder (or a file) of a Git repository whose Markdown
-// files become a tree of pages (ADR-0132): its address as the host shows
+// files become a tree of pages (ADR-0133): its address as the host shows
 // it in the browser, at a branch, tag or commit.
 type GitSource struct {
 	URL string `json:"url"`
@@ -254,7 +254,7 @@ var CKANValues = []string{"dataset", "publisher", "contact", "url", "formats"}
 
 // GitValues are the values a Git source gives of each page: the file's
 // path in the repository, its address there and the commit it was read
-// at (ADR-0132).
+// at (ADR-0133).
 var GitValues = []string{"commit", "path", "url"}
 
 // Values are the names of the values the connector's source gives of

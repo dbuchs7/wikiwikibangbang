@@ -1,5 +1,5 @@
 // Package gitrepo reads Markdown files from Git repositories through the
-// public APIs of their hosts (ADR-0132): GitHub and GitHub Enterprise
+// public APIs of their hosts (ADR-0133): GitHub and GitHub Enterprise
 // Server, GitLab, Bitbucket Cloud and Data Center, and Gitea and Forgejo.
 // An address is what the host shows in the browser for a file or a
 // folder; from it a client finds the commit a branch or tag points to, the
@@ -204,7 +204,7 @@ type File struct {
 }
 
 // Client reads from hosts. Token, if set, is sent as the host expects a
-// credential; a file in a text is read without one (ADR-0132).
+// credential; a file in a text is read without one (ADR-0133).
 type Client struct {
 	HTTP  *http.Client
 	Token string

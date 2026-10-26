@@ -11,7 +11,7 @@ func fileOrigin(host ID, path string) Origin {
 }
 
 // A person makes a page that mirrors a file below an item they may edit,
-// and updates it later; who may not edit the item may not (ADR-0132).
+// and updates it later; who may not edit the item may not (ADR-0133).
 func TestMirrorAsAPerson(t *testing.T) {
 	s := setup(t)
 	noErr(t, s.GrantRole("admin", "PLAT", "anna", Editor))

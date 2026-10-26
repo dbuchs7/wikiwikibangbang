@@ -177,7 +177,7 @@ function atlassianSource() {
 }
 
 // gitSource answers as a Gitea instance holding one repository, o/r,
-// whose folder docs has an index file and one page (ADR-0132).
+// whose folder docs has an index file and one page (ADR-0133).
 function gitSource() {
   const commit = "1".repeat(40);
   const files = { "docs/index.md": "# Handbook\n\nRead [the first page](a.md).", "docs/a.md": "# First page\n\nWritten in the *repository*." };
@@ -347,12 +347,13 @@ function gitSource() {
     await page.waitForSelector("tr[data-field=estimate] .saved");
     await page.reload();
     await page.waitForSelector("text=version 2");
-    // The status leads the details: the states in a row, the current one
-    // marked, the next ones buttons that perform their transition.
-    await page.waitForSelector("#item-status .state-step.current:text-is('open')");
+    // The status leads the details: the state as a badge, each transition
+    // from it a button named by it with its target (ADR-0132).
+    await page.waitForSelector("#item-status .state-now:text-is('open')");
+    await page.waitForSelector("#item-status button[data-transition=finish] .state-move-to:text-is('→ done')");
     await page.click("#item-status button[data-transition=finish]");
     await page.waitForSelector("text=state: done");
-    await page.waitForSelector("#item-status .state-step.current.finished:text-is('done')");
+    await page.waitForSelector("#item-status .state-now.finished:text-is('done')");
 
     step("comments: add one with markup, which shows as text, then edit it");
     await page.fill("#add-comment [name=text]", hostile);
@@ -1278,8 +1279,10 @@ function gitSource() {
     await page.selectOption("#new-kanban [name=type]", "ticket");
     await page.click("#new-kanban button[type=submit]");
     await page.waitForSelector("h1:has-text('Website relaunch')");
-    await page.fill("#kanban-add [name=title]", "Hero image");
-    await page.click("#kanban-add button[type=submit]");
+    // A new card is made in its column, with the "+" in the column's head (ADR-0132).
+    await page.click("#kanban .board-column[data-state=open] .column-add");
+    await page.fill("#kanban .board-column[data-state=open] .card-new [name=title]", "Hero image");
+    await page.press("#kanban .board-column[data-state=open] .card-new [name=title]", "Enter");
     await page.waitForSelector("#kanban .board-column[data-state=open] .card-item:has-text('Hero image')");
     await page.selectOption("#kanban-assign [name=item]", { label: (await page.locator("#kanban-assign option:has-text('Tidy the wiki')").textContent()).trim() });
     await page.click("#kanban-assign button[type=submit]");
@@ -1296,7 +1299,10 @@ function gitSource() {
     await page.waitForSelector("#kanbans .space-tile:has-text('Website relaunch'):has-text('2 cards')");
     await page.waitForSelector("#kanbans .space-tile:has-text('Operations'):has-text('1 card')");
     await page.click("#kanbans .space-tile:has-text('Website relaunch')");
-    await page.click("#kanban .card-item:has-text('Tidy the wiki') .kanban-off");
+    // Taking a card off is offered in its details, not on every card.
+    check(await page.locator("#kanban .card-item .kanban-off").count() === 0, "no card carries a take-off link");
+    await page.click("#kanban .card-item:has-text('Tidy the wiki') .card-title");
+    await page.click("#kanban-detail:not([hidden]) #kanban-detail-off");
     await page.waitForSelector("#kanban .card-item:has-text('Tidy the wiki')", { state: "detached" });
     await page.goto(base + "/#/kanbans");
     await page.waitForSelector("#kanbans .space-tile:has-text('Operations'):has-text('1 card')"); // still on the other kanban
@@ -1306,7 +1312,11 @@ function gitSource() {
     await page.click("#kanban .card-item:has-text('Hero image') .card-title");
     await page.waitForSelector("#kanban-detail:not([hidden]) h2:has-text('Hero image')");
     check(/[?&]card=/.test(page.url()), "the open card is in the address");
-    await page.click("#kanban-settings summary");
+    await page.click("#kanban-settings-open");
+    await page.waitForSelector("dialog#kanban-settings[open]");
+    // A kanban made here shows who has a card, its dates and its choices.
+    check(await page.isChecked("#kanban-card-fields input[value=assignee]") && await page.isChecked("#kanban-card-fields input[value=due]"),
+      "a new kanban's cards show its people and dates");
     await page.check("#kanban-card-fields input[value=priority]");
     await page.fill("#kanban-new-column", "Blocked");
     await page.click("#kanban-add-column");
@@ -1314,7 +1324,7 @@ function gitSource() {
     await page.waitForSelector("#kanban .own-column h2:has-text('Blocked')");
     await page.waitForSelector("#kanban-detail:not([hidden]) tr[data-field=priority] select"); // still open after the redraw
     await page.selectOption("#kanban-detail tr[data-field=priority] select", "high");
-    await page.waitForSelector("#kanban .card-item:has-text('Hero image') .card-facts dd:text-is('high')");
+    await page.waitForSelector("#kanban .card-item:has-text('Hero image') .card-chip:has-text('priority: high')");
     await page.dragAndDrop("#kanban .card-item:has-text('Hero image')", "#kanban .own-column");
     await page.waitForSelector("#kanban .own-column .card-item:has-text('Hero image')");
     await page.dragAndDrop("#kanban .card-item:has-text('Hero image')", "#kanban .board-column[data-state=closed]");
@@ -1324,8 +1334,38 @@ function gitSource() {
     await page.click("#kanban-add-transition");
     await page.waitForSelector("#kanban .board-column[data-state=open] .card-item:has-text('Hero image')");
 
+    step("kanban cards and columns (ADR-0132): dates and people on a card; a column folds away and stays folded; a card made in a later column");
+    await page.selectOption("#kanban-assign [name=item]", { label: (await page.locator("#kanban-assign option:has-text('Renew the certificate')").textContent()).trim() });
+    await page.click("#kanban-assign button[type=submit]");
+    const renew = "#kanban .card-item:has-text('Renew the certificate')";
+    // Closed, so its date is only a date; open again, it is overdue.
+    await page.waitForSelector(`#kanban .board-column[data-state=closed] ${renew.slice(8)} .card-chip.card-date:not(.late)`);
+    await page.waitForSelector(`${renew} .card-person .avatar`);
+    await page.dragAndDrop(renew, "#kanban .board-column[data-state=open]");
+    await page.waitForSelector(`${renew} .card-chip.late:has-text('overdue')`);
+    await page.click("#kanban .board-column[data-state=closed] .column-fold");
+    await page.waitForSelector("#kanban .board-column.folded[data-state=closed]");
+    await page.reload();
+    await page.waitForSelector("#kanban .board-column.folded[data-state=closed]");
+    await page.click("#kanban .board-column[data-state=closed] .column-fold");
+    await page.waitForSelector("#kanban .board-column[data-state=closed]:not(.folded) .column-add");
+    await page.click("#kanban .board-column[data-state=closed] .column-add");
+    await page.fill("#kanban .board-column[data-state=closed] .card-new [name=title]", "Archive old pages");
+    await page.press("#kanban .board-column[data-state=closed] .card-new [name=title]", "Enter");
+    await page.waitForSelector("#kanban .board-column[data-state=closed] .board-cards > .card-item:first-child:has-text('Archive old pages')");
+    // The status in the details: the state as a badge, the way on as a button.
+    await page.click(`${renew} .card-title`);
+    await page.waitForSelector("#kanban-detail:not([hidden]) #item-status .state-now:text-is('open')");
+    await page.click("#kanban-detail #item-status button[data-transition=close]");
+    await page.waitForSelector(`#kanban .board-column[data-state=closed] ${renew.slice(8)}`);
+    for (const title of ["Renew the certificate", "Archive old pages"]) {
+      await page.click(`#kanban .card-item:has-text('${title}') .card-title`);
+      await page.click("#kanban-detail:not([hidden]) #kanban-detail-off");
+      await page.waitForSelector(`#kanban .card-item:has-text('${title}')`, { state: "detached" });
+    }
+
     step("kanban picture and boards by label: a kanban shows its logo; every label is a board without making one (ADR-0087)");
-    if (!(await page.$("#kanban-settings[open]"))) await page.click("#kanban-settings summary");
+    if (!(await page.$("#kanban-settings[open]"))) await page.click("#kanban-settings-open");
     await page.setInputFiles("#kanban-icon-file", { name: "logo.png", mimeType: "image/png",
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64") });
     await page.waitForSelector(".kanban-title img.kanban-icon[src*='/icon?v=']");
@@ -2093,7 +2133,7 @@ function gitSource() {
     await page.goto(base + "/#/item/" + handbook.key);
     await page.waitForSelector("#edit");
 
-    step("connectors: a folder of a Git repository becomes a tree of pages, its index file the folder's text, links between its files mentions (ADR-0132)");
+    step("connectors: a folder of a Git repository becomes a tree of pages, its index file the folder's text, links between its files mentions (ADR-0133)");
     await page.goto(base + "/#/admin");
     await page.click("#connector-new-git");
     await page.waitForSelector("#connector-settings [name=url]");
@@ -2183,7 +2223,7 @@ function gitSource() {
     await page.fill("#body section.pm-tasklist .filter-text", "notes");
     await page.waitForFunction((sel) => [...document.querySelectorAll(sel)].filter((r) => !r.hidden).length === 1, rows);
 
-    step("a Markdown file in a text: a pasted link offers its content, a page below the item shown whole, following its branch; pinned and read again from its page (ADR-0132)");
+    step("a Markdown file in a text: a pasted link offers its content, a page below the item shown whole, following its branch; pinned and read again from its page (ADR-0133)");
     const notesHost = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ space: "PLAT", type: "page", title: "Release notes" }) })).json()).item);
     await page.goto(base + "/#/item/" + notesHost.key + "?edit");

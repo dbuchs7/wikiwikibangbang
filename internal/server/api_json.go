@@ -170,7 +170,7 @@ type originJSON struct {
 	URL         string `json:"url,omitempty"`
 	// Version is the source's version the item was read at, e.g. a
 	// commit; Pinned is set when a page made from a file shows it at a
-	// fixed commit (ADR-0132).
+	// fixed commit (ADR-0133).
 	Version string `json:"version,omitempty"`
 	Pinned  bool   `json:"pinned,omitempty"`
 }

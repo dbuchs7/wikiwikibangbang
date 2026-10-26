@@ -253,18 +253,81 @@ table.history td { font-size: 13px; }
 .card-item.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .card-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .card-key { font-size: 11px; color: var(--muted); }
-.card-facts { display: grid; grid-template-columns: auto 1fr; gap: 1px 8px; margin: 4px 0; font-size: 12px; }
-.card-facts dt { color: var(--muted); }
-.card-facts dd { margin: 0; overflow-wrap: anywhere; }
 .board-column.own-column { border-style: dashed; }
-.kanban-settings { margin: 8px 0 14px; }
-.kanban-settings summary { cursor: pointer; font-weight: 600; }
 .kanban-columns-edit { padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 .kanban-columns-edit li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .kanban-columns-edit input { width: 14rem; }
+/* A kanban's columns share the width and reach down to the longest, so
+   every column is a drop zone of its own; its head holds what it is, how
+   many cards it holds, a new card and folding it away (ADR-0132). */
+#kanban .board { align-items: stretch; }
+#kanban .board-column { flex: 1 1 250px; min-width: 220px; max-width: 400px; min-height: 320px; padding: 10px;
+  display: flex; flex-direction: column; }
+#kanban .board-cards { flex: 1; }
+.column-head { display: flex; align-items: center; gap: 6px; margin: 0 0 10px; min-height: 28px; }
+.column-head h2 { display: block; margin: 0; font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.column-count { flex: none; min-width: 22px; padding: 0 7px; border-radius: 6px; background: var(--border); color: var(--muted);
+  font-size: 12px; font-weight: 600; line-height: 20px; text-align: center; }
+.column-head button.link { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 28px; height: 28px;
+  margin: 0; padding: 0; border-radius: 6px; color: var(--muted); }
+.column-head button.link:hover { background: var(--row-hover); color: var(--text); text-decoration: none; }
+.column-head button.link svg { width: 16px; height: 16px; }
+.column-head .column-add svg { width: 18px; height: 18px; }
+.column-head button.column-add, .column-head button.column-fold { margin-left: auto; }
+.column-head button.column-add + button.column-fold { margin-left: 0; }
+.column-fold svg { transition: transform .12s; }
+#kanban .board-column.folded { flex: 0 0 44px; min-width: 44px; padding: 8px 4px; }
+.board-column.folded .column-head { flex-direction: column; margin: 0; gap: 10px; }
+.board-column.folded .column-head button.column-fold { order: -1; margin: 0; }
+.board-column.folded .column-head h2 { writing-mode: vertical-rl; white-space: nowrap; overflow: visible; }
+.board-column.folded .column-fold svg { transform: rotate(180deg); }
+.board-column.folded .column-add, .board-column.folded .board-cards, .board-column.folded .card-new { display: none; }
+.card-new { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; }
+.card-new input { width: 100%; }
+.card-new button { align-self: flex-start; margin: 0; min-height: 30px; padding: 4px 12px; font-size: 13px; }
+
+/* A kanban card (ADR-0132): the title first, the fields as chips, at the
+   foot its key, what is behind it and the faces of its people. */
+#kanban .card-item.kanban-card { display: flex; flex-direction: column; gap: 6px; padding: 9px 11px; }
+#kanban .kanban-card .card-title { margin: 0; font-weight: 500; line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.card-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.card-chip { position: relative; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 0 7px; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface-2); color: var(--text); font-size: 12px; line-height: 20px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card-chip svg { width: 12px; height: 12px; flex: none; }
+.card-chip-name { color: var(--muted); }
+/* Said by a screen reader, not shown: a chip's field name. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.card-chip.card-label { border-color: transparent; background: var(--accent-soft); color: var(--accent); }
+.card-chip.late { border-color: color-mix(in srgb, var(--danger) 30%, transparent); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.card-chip.near { border-color: color-mix(in srgb, var(--warning) 30%, transparent); background: var(--warning-soft); color: var(--warning); font-weight: 600; }
+.card-foot { display: flex; align-items: center; gap: 10px; min-height: 24px; font-size: 12px; color: var(--muted); }
+.card-sign { display: inline-flex; align-items: center; gap: 3px; }
+.card-sign svg { width: 14px; height: 14px; }
+.card-sign.complete { color: var(--success); }
+.card-people { display: inline-flex; margin-left: auto; }
+.card-person + .card-person { margin-left: -6px; }
+.card-person .avatar { box-shadow: 0 0 0 2px var(--surface); }
+
+/* The settings of a kanban, behind one button (ADR-0132). */
+.kanban-settings-open { display: inline-flex; align-items: center; gap: 6px; }
+.kanban-settings-open svg { width: 16px; height: 16px; }
+dialog.kanban-settings { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; padding: 20px 22px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: inherit; box-shadow: var(--shadow-lg); }
+dialog.kanban-settings::backdrop { background: rgba(20, 22, 26, .45); }
+.kanban-settings-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.kanban-settings-head h2 { margin: 0; }
+.kanban-settings-head button { font-size: 22px; line-height: 1; }
+.kanban-settings h3 { margin: 18px 0 6px; font-size: 14px; }
+.kanban-settings .field input { width: 100%; }
+.kanban-settings-remove { margin-top: 18px; padding-top: 4px; border-top: 1px solid var(--border); }
+
+/* On a narrow screen the details of a card cover the board, rather than
+   following it far below. */
 @media (max-width: 900px) {
   .kanban-layout:has(.kanban-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr); }
-  .kanban-detail { position: static; max-height: none; }
+  .kanban-detail:not([hidden]) { position: fixed; inset: 0; z-index: 40; max-height: none; border-radius: 0; }
 }
 
 /* ---------- Governance (ADR-0040) ---------- */
@@ -805,8 +868,6 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .kanban-tools { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin: 6px 0 12px; }
 .kanban-tools .inline-form { display: flex; gap: 6px; align-items: center; }
 .kanban-tools .inline-form input { min-width: 16rem; }
-.kanban-admin { margin-left: auto; font-size: 13px; }
-.kanban-off { font-size: 12px; color: var(--muted); }
 #new-kanban .form-row { display: flex; flex-wrap: wrap; gap: 10px; }
 #new-kanban .form-row .field { flex: 1 1 200px; }
 /* The kanbans page (ADR-0110): boards by label on the left, the kanbans
@@ -1225,19 +1286,20 @@ a.requests-notice:hover { border-color: var(--accent); }
 .kanban-title h1 { margin: 0; }
 .labelboard-type + .labelboard-type { margin-top: 18px; }
 
-/* ---------- An item's status, at the top of its details ---------- */
-.state-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; padding: 12px 14px;
+/* ---------- An item's status, at the top of its details (ADR-0132) ----------
+   The state is a badge; what can be done with it are ordinary buttons. */
+.state-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 0 0 14px; padding: 8px 12px;
   background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
-.state-label { font-weight: 600; color: var(--muted); text-transform: uppercase; font-size: 12px; letter-spacing: .04em; }
-.state-steps { display: flex; flex-wrap: wrap; gap: 6px; }
-.state-step { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-height: 36px; padding: 4px 14px;
-  border: 1px dashed var(--border-strong); border-radius: 999px; color: var(--muted); background: transparent; font-weight: 500; line-height: 1.2; margin: 0; }
-.state-step.current { border: 2px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 700; font-size: 15px; }
-.state-step.current.finished { border-color: var(--success); background: var(--success); color: #fff; }
-button.state-step.move { border: 1px solid var(--accent); color: var(--accent); background: var(--surface); cursor: pointer; }
-button.state-step.move:hover { background: var(--accent-soft); }
-button.state-step.move.finished { border-color: var(--success); color: var(--success); }
-.state-step small { font-size: 11px; font-weight: 400; opacity: .8; }
+.state-label { font-weight: 600; color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: .04em; }
+.state-now { display: inline-flex; align-items: center; gap: 7px; padding: 3px 10px; border-radius: 6px;
+  background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 13px; line-height: 20px; }
+.state-now::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.state-now.finished { background: var(--success-soft); color: var(--success); }
+.state-moves { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.state-moves button.state-move { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; margin: 0; padding: 4px 10px; font-size: 13px; }
+.state-move-to { color: var(--muted); font-weight: 500; }
+.state-moves button.state-move.finished { color: var(--success); border-color: color-mix(in srgb, var(--success) 40%, var(--border-strong)); }
+.state-moves button.state-move.finished:hover { background: var(--success-soft); color: var(--success); }
 
 /* ---------- Protected passages (ADR-0088) ---------- */
 .pm-secret { border-radius: 3px; cursor: pointer; }
@@ -1350,14 +1412,6 @@ main ul#watches li { padding: 4px 0; break-inside: avoid; }
 .pm-readbar .button { min-height: 30px; margin: 0; padding: 4px 12px; font-size: 13px; line-height: 20px; align-self: center; }
 /* An item without a text keeps the bar on its own, framed like a text's. */
 #body.no-body .pm-readbar { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); }
-
-/* An item's status: slimmer steps, so the bar informs without dominating. */
-.state-bar { gap: 6px 12px; padding: 8px 12px; }
-.state-label { font-size: 11px; }
-.state-steps { gap: 4px; }
-.state-step { min-height: 28px; padding: 2px 11px; font-size: 13px; }
-.state-step.current { font-size: 13px; border-width: 1px; }
-.state-step small { font-size: 10px; }
 
 /* Writing aids of the editor (ADR-0096): the link dialog, the item search,
    the bubble on a link and the "@" list. */
