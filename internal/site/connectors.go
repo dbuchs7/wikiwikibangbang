@@ -109,6 +109,42 @@ type JSONSource struct {
 	// Paging, if set, reads the list page by page by a parameter of its
 	// address, instead of following Next (ADR-0135).
 	Paging *Paging `json:"paging,omitempty"`
+	// Since, if set, reads only the entries changed since the last run,
+	// with a full run now and then (ADR-0140).
+	Since *Since `json:"since,omitempty"`
+}
+
+// The formats of the time a source is asked for what changed since.
+const (
+	SinceRFC3339 = "rfc3339" // 2026-10-26T13:00:00Z
+	SinceDate    = "date"    // 2026-10-26
+	SinceUnix    = "unix"    // seconds since 1970
+	SinceUnixMS  = "unixms"  // milliseconds since 1970
+)
+
+// SinceFormats are the formats of the time a source is asked for.
+var SinceFormats = []string{SinceRFC3339, SinceDate, SinceUnix, SinceUnixMS}
+
+// Since reads only what changed (ADR-0140): Param, a parameter of the
+// list's address, asks the source for the entries changed since a time,
+// written as Format. As such a run cannot see what the source deleted,
+// it withdraws nothing; a full run at least every FullDays days does.
+type Since struct {
+	Param    string `json:"param"`
+	Format   string `json:"format"`
+	FullDays int    `json:"fullDays"`
+}
+
+func (s Since) validate() error {
+	switch {
+	case !queryRE.MatchString(s.Param):
+		return fmt.Errorf("%w: %q is not the name of a parameter", ErrInvalid, s.Param)
+	case !slices.Contains(SinceFormats, s.Format):
+		return fmt.Errorf("%w: %q is not a format of a time (%s)", ErrInvalid, s.Format, strings.Join(SinceFormats, ", "))
+	case s.FullDays < 1 || s.FullDays > 90:
+		return fmt.Errorf("%w: a full run is due every 1 to 90 days", ErrInvalid)
+	}
+	return nil
 }
 
 // The kinds of paging by a parameter of a list's address.
@@ -354,6 +390,14 @@ func (j JSONSource) validate() error {
 			return err
 		}
 	}
+	if j.Since != nil {
+		if err := j.Since.validate(); err != nil {
+			return err
+		}
+		if j.Paging != nil && (j.Since.Param == j.Paging.Param || j.Since.Param == j.Paging.SizeParam) {
+			return fmt.Errorf("%w: %q asks both for a page and for what changed", ErrInvalid, j.Since.Param)
+		}
+	}
 	for _, p := range []string{j.Items, j.ID, j.Title, j.Link, j.Text, j.Next} {
 		if p != "" && !pathRE.MatchString(p) {
 			return fmt.Errorf("%w: %q is not a path, e.g. result.items or id", ErrInvalid, p)
@@ -482,6 +526,14 @@ func (c Connector) Normalize() Connector {
 			p.Kind, p.Param, p.SizeParam, p.Total = strings.TrimSpace(p.Kind), strings.TrimSpace(p.Param), strings.TrimSpace(p.SizeParam), strings.TrimSpace(p.Total)
 			j.Paging = &p
 		}
+		if j.Since != nil {
+			s := *j.Since
+			s.Param, s.Format = strings.TrimSpace(s.Param), cmp.Or(strings.TrimSpace(s.Format), SinceRFC3339)
+			if s.FullDays == 0 {
+				s.FullDays = 7
+			}
+			j.Since = &s
+		}
 		c.JSON = &j
 	}
 	if c.Git != nil {
@@ -553,6 +605,10 @@ func (c Connector) clone() Connector {
 		if j.Paging != nil {
 			p := *j.Paging
 			j.Paging = &p
+		}
+		if j.Since != nil {
+			s := *j.Since
+			j.Since = &s
 		}
 		c.JSON = &j
 	}

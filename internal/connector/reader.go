@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 )
@@ -24,6 +25,9 @@ type Env struct {
 	// Email is the account's e-mail address an Atlassian site is signed in
 	// to with Token (ADR-0128).
 	Email string
+	// Since, if set, asks a source that can say so for what changed since
+	// then only (ADR-0140).
+	Since time.Time
 	HTTP  *http.Client
 	// Seen is what the last run that applied its reading without a
 	// problem remembered of the source (reading.seen), and Force asks for

@@ -220,6 +220,7 @@ paths:
         - {in: query, name: page, required: true, schema: {type: integer, minimum: 0}}
         - {in: query, name: per_page, schema: {type: integer, default: 30, maximum: 5000}}
         - {in: query, name: from, schema: {type: string, format: date}}
+        - {in: query, name: updatedSince, schema: {type: string, format: date-time}}
       responses:
         200:
           content:
@@ -232,6 +233,7 @@ paths:
   /skipped:
     get:
       parameters:
+        - {in: query, name: modified_after, schema: {type: integer}}
         - {in: query, name: $skip, schema: {type: integer}}
         - {in: query, name: $top, schema: {type: integer, default: 25}}
       responses:
@@ -257,6 +259,15 @@ paths:
 	}
 	if p := byOp["GET /pages"].Paging; p == nil || *p != (site.Paging{Kind: site.PagingPage, Param: "page", Start: 0, SizeParam: "per_page", Size: 1000, Total: "meta.totalCount"}) {
 		t.Errorf("by page %+v", p)
+	}
+	if s := byOp["GET /pages"].Since; s == nil || *s != (site.Since{Param: "updatedSince", Format: site.SinceRFC3339, FullDays: 7}) {
+		t.Errorf("what changed by a time %+v", s)
+	}
+	if s := byOp["GET /skipped"].Since; s == nil || *s != (site.Since{Param: "modified_after", Format: site.SinceUnix, FullDays: 7}) {
+		t.Errorf("what changed by seconds %+v", s)
+	}
+	if s := byOp["GET /linked"].Since; s != nil {
+		t.Errorf("a list without %+v", s)
 	}
 	if s := byOp["GET /pages"]; s.URL != "https://api.example/pages" {
 		t.Errorf("the address keeps the page parameters out %s", s.URL)

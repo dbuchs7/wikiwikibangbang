@@ -103,6 +103,9 @@ type Result struct {
 	// retry is set when an entry could not be read or written for a
 	// reason that may pass, so the next run reads the source again.
 	retry bool
+	// Since, if set, is the time the run asked for what changed since;
+	// such a run withdraws nothing (ADR-0140).
+	Since time.Time `json:"since,omitzero"`
 }
 
 // examplesShown and problemsShown bound the lists of a result.
@@ -147,6 +150,12 @@ var ErrTypeChanged = errors.New("connector: the connector wrote its items as ano
 // ADR-0093 are erased, so their pages take their place. With dry,
 // nothing is written.
 func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Result, error) {
+	return apply(db, cfg, entries, dry, false)
+}
+
+// apply is Apply; with partial, the entries are only those that changed,
+// and none is withdrawn for missing (ADR-0140).
+func apply(db *storage.DB, cfg site.Connector, entries []Entry, dry, partial bool) (Result, error) {
 	res := Result{Connector: cfg.ID, DryRun: dry, Entries: len(entries), Problems: []string{}, Examples: []Change{}}
 	ours := func(it item.Item) bool {
 		return it.Origin != nil && it.Origin.System == cfg.ID && it.Origin.Instance == instance(cfg)
@@ -316,6 +325,9 @@ func Apply(db *storage.DB, cfg site.Connector, entries []Entry, dry bool) (Resul
 		}
 	}
 
+	if partial {
+		return res, nil
+	}
 	// A page the source no longer publishes is marked, not deleted: its
 	// history and what was added here stay. A source that answers far
 	// fewer entries than the catalog holds marks nothing, as that is more
