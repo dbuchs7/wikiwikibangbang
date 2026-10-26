@@ -822,6 +822,16 @@ function ckanSource() {
     await drawFrame.locator("select.palette:visible").selectOption("bpmn");
     await drawFrame.locator("body[data-palette=bpmn]").waitFor();
     check(await drawFrame.locator(".library-unit").count() === 34, "the BPMN palette is in the library");
+    // The ArchiMate palette ends with its relationships, and the Microsoft
+    // palette holds Fluent icons as shapes (ADR-0125).
+    await drawFrame.locator("select.palette:visible").selectOption("archimate");
+    await drawFrame.locator("body[data-palette=archimate]").waitFor();
+    check(await drawFrame.locator(".library-unit").count() === 52, "the ArchiMate palette holds its elements and relationships");
+    await drawFrame.locator("select.palette:visible").selectOption("microsoft");
+    await drawFrame.locator("body[data-palette=microsoft]").waitFor();
+    check(await drawFrame.locator(".library-unit").count() === 67, "the Microsoft palette is in the library");
+    await drawFrame.locator("select.palette:visible").selectOption("bpmn");
+    await drawFrame.locator("body[data-palette=bpmn]").waitFor();
     await drawFrame.locator(".library-unit").nth(4).click(); // the start event
     await drawFrame.locator("body[data-elements='2']").waitFor();
     await page.click("dialog.drawing button:has-text('Cancel')");
@@ -1824,11 +1834,13 @@ function ckanSource() {
     await page.goto(base + "/#/item/" + plan.key);
     const rows = "#body section.pm-tasklist tbody tr";
     await page.waitForSelector(rows + " >> nth=1");
+    // Each click redraws the list; the check waits for the order it asks for.
     await page.click("#body section.pm-tasklist th button[data-sort=title]");
+    await page.waitForSelector("#body section.pm-tasklist th[aria-sort=ascending]:has(button[data-sort=title])");
     check((await page.locator(rows + " td:nth-child(2)").allTextContents()).join("|") === "Tag the build|Write the release notes", "sorted by title");
     await page.click("#body section.pm-tasklist th button[data-sort=title]");
-    check(await page.getAttribute("#body section.pm-tasklist th:has(button[data-sort=title])", "aria-sort") === "descending" &&
-      (await page.locator(rows + " td:nth-child(2)").first().textContent()) === "Write the release notes", "and the other way round");
+    await page.waitForSelector("#body section.pm-tasklist th[aria-sort=descending]:has(button[data-sort=title])");
+    check((await page.locator(rows + " td:nth-child(2)").first().textContent()) === "Write the release notes", "and the other way round");
     await page.fill("#body section.pm-tasklist .filter-text", "notes");
     await page.waitForFunction((sel) => [...document.querySelectorAll(sel)].filter((r) => !r.hidden).length === 1, rows);
 
