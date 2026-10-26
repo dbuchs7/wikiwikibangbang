@@ -22,15 +22,20 @@ const importActor = "import"
 
 // importCmd imports Confluence spaces and Jira projects of an Atlassian
 // Cloud site into a data directory (ADR-0023), in one run, so page links to
-// issues resolve. It opens the data directory itself, so the server must be
-// stopped; a re-run updates what changed and creates nothing twice. The
-// source credentials come from the environment, never from flags, which
-// would show in the process list and the shell history.
+// issues resolve; or it restores spaces from a backup (ADR-0124). It opens
+// the data directory itself, so the server must be stopped; a re-run
+// updates what changed and creates nothing twice. The source credentials
+// and the backup passphrase come from the environment or a file, never
+// from flags, which would show in the process list and the shell history.
 func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := newFlags("import", stderr)
-	from := fs.String("from", "", `the source; only "atlassian-cloud" so far`)
+	from := fs.String("from", "", `the source: "atlassian-cloud", or "backup" to restore spaces from a backup`)
 	site := fs.String("site", "", "the source site, e.g. https://example.atlassian.net")
-	spaces := fs.String("spaces", "", "comma-separated keys of the Confluence spaces to import")
+	spaces := fs.String("spaces", "", "comma-separated keys of the Confluence spaces to import, or with -from backup of the spaces to restore")
+	var backups fileFlags
+	fs.Var(&backups, "backup", "with -from backup: a backup file, repeated for a full backup and the incremental ones after it, or a directory or remote destination of automatic backups")
+	at := fs.String("at", "", "with -from backup and -backup a directory or destination: the backup to restore from, by file name (default: the newest)")
+	passFile := fs.String("passphrase-file", "", "with -from backup: file whose first line is the passphrase (default: $WWBB_BACKUP_PASSPHRASE)")
 	projects := fs.String("projects", "", "comma-separated keys of the Jira projects to import")
 	dataDir := fs.String("data-dir", defaultDataDir, "directory holding the event log; the server must be stopped")
 	usersFile := fs.String("users", "", `file mapping source account IDs to local usernames, one "accountId username" per line`)
@@ -41,8 +46,11 @@ func importCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	if err := fs.Parse(args); err != nil {
 		return parseFailed(err)
 	}
+	if *from == "backup" {
+		return restoreSpaces(backups, *at, *passFile, keyList(*spaces), *dataDir, grants, *dryRun, stdout, stderr)
+	}
 	if *from != "atlassian-cloud" {
-		fmt.Fprintln(stderr, `import: -from must be "atlassian-cloud"`)
+		fmt.Fprintln(stderr, `import: -from must be "atlassian-cloud" or "backup"`)
 		return 2
 	}
 	spaceKeys, projectKeys := keyList(*spaces), keyList(*projects)

@@ -189,3 +189,4 @@ Strongest form: specialised vendors already handle Atlassian's formats and edge 
 - builds on [ADR-0001](0001-unified-item-data-model.md) (types as data, keys, relations), [ADR-0014](0014-closed-renderer-for-user-content.md) (no raw HTML), [ADR-0020](0020-embedding-and-containment-are-independent.md) (embeds), [ADR-0022](0022-permission-model.md) (permissions, sessions)
 - relates to [ADR-0008](0008-event-sourced-persistence.md) (imported events, crypto-shredding), [ADR-0011](0011-http-api-route-table-and-access-classes.md) (redirects from old URLs)
 - ADR-0001 named "import" as a follow-up record; this is it
+- extended by [ADR-0124](0124-restoring-spaces-from-a-backup.md) (a backup as a source: restoring spaces)

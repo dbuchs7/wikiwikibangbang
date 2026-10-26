@@ -94,7 +94,10 @@ const (
 	// ChainBroken is written at a start that finds the chain broken
 	// (ADR-0123).
 	ChainBroken = "audit.chain.broken"
-	OAuthFailed = "oauth.token.failed"
+	// PartialRestore is a restore of spaces from a backup into a running
+	// installation's data (ADR-0124).
+	PartialRestore = "restore.partial"
+	OAuthFailed    = "oauth.token.failed"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for

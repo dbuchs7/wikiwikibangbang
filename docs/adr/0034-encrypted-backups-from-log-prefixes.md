@@ -67,3 +67,4 @@ Strongest form: the letter of ADR-0016 — secrets never leave the server.
 ## Links
 
 - refines [ADR-0016](0016-metrics-and-backup.md); relies on [ADR-0025](0025-event-log-file-and-in-memory-state.md); limits [ADR-0026](0026-crypto-shredding-of-item-content.md) as described; audited per [ADR-0029](0029-persisted-security-audit-trail.md)
+- extended by [ADR-0124](0124-restoring-spaces-from-a-backup.md) (restoring single spaces from a backup)
