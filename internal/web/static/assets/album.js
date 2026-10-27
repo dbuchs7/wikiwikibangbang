@@ -373,7 +373,8 @@ export function albumBrowser({ pick } = {}) {
   label.addEventListener("change", () => { clearTimeout(timer); load(false); });
   space.addEventListener("change", () => { clearTimeout(timer); loadFolders(); load(false); });
   more.addEventListener("click", () => load(true));
-  get("/api/spaces").then(({ spaces }) => space.append(...spaces.map((s) => h("option", { value: s.key, text: `${s.key} ${s.name}` })))).catch(() => {});
+  // One's favourite spaces first, as everywhere a space is chosen (ADR-0145).
+  get("/api/spaces").then(({ spaces }) => space.append(...[...spaces.filter((s) => s.favourite), ...spaces.filter((s) => !s.favourite)].map((s) => h("option", { value: s.key, text: `${s.key} ${s.name}` })))).catch(() => {});
   loadLabels().catch(() => {});
   open();
   return h("div", { class: "album" }, h("div", { class: "album-filters filter-bar", role: "search", "aria-label": t("album.title") }, search, kind, space, label, reset), options,

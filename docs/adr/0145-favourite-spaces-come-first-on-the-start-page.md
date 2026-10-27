@@ -39,7 +39,7 @@ Chosen option: **1**.
   - The favourites are one more thing kept per account. A backup and a restore keep them with the accounts; the export of a space does not carry them.
   - Favourites come first in the usual order among themselves, not in an order of one's own.
 - **Follow-ups / risks to watch:**
-  - favourites in the space switcher of the top bar and in the room selections of forms;
+  - favourites in the space switcher of the top bar and in the choices of a space (the latter done by ADR-0147);
   - an order of one's own among favourites, if people ask for it.
 
 ## Pros and cons of the options
@@ -60,5 +60,6 @@ Strongest form: each person arranges the spaces exactly as they like.
 
 ## Links
 
+- amended by [ADR-0147](0147-favourite-spaces-come-first-in-every-choice-of-a-space.md) (favourites first in every choice of a space)
 - amends [ADR-0062](0062-spaces-carry-an-icon-and-show-as-tiles-or-a-list.md) (favourites first, as tiles and in the list)
 - relates to ADR-0017 and ADR-0061 (preferences kept with the account), ADR-0098 (the filter), ADR-0141 (a view kept in the browser)
