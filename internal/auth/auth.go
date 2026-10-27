@@ -139,6 +139,9 @@ type user struct {
 	// delivered is the sequence number of the newest item event a digest
 	// of notifications was sent for (ADR-0064).
 	delivered int
+	// favourites are the keys of the spaces the user marked as favourites,
+	// in the order they were marked (ADR-0145).
+	favourites []string
 }
 
 type token struct {
@@ -216,6 +219,8 @@ type event struct {
 	Reason  string `json:"reason,omitempty"`
 	// OAuth names the application of an OAuth event (ADR-0068).
 	OAuth *oauthRecord `json:"oauth,omitempty"`
+	// Spaces are the keys of a FavouritesSet, the whole list (ADR-0145).
+	Spaces []string `json:"spaces,omitempty"`
 }
 
 const (
@@ -246,6 +251,9 @@ const (
 	// digestSent records how far notifications were sent to a user's
 	// channels (ADR-0064).
 	digestSent = "DigestSent"
+	// favouritesSet records the spaces a user marked as favourites, the
+	// whole list (ADR-0145).
+	favouritesSet = "FavouritesSet"
 )
 
 // apply is the only code that changes accounts; it runs live and on load.
@@ -299,6 +307,12 @@ func (a *Accounts) apply(e event) error {
 			return fmt.Errorf("contacts of unknown user %s", e.User)
 		}
 		u.contacts = *e.Contacts
+	case favouritesSet:
+		u, ok := a.users[e.User]
+		if !ok {
+			return fmt.Errorf("favourites of unknown user %s", e.User)
+		}
+		u.favourites = slices.Clone(e.Spaces)
 	case digestSent:
 		u, ok := a.users[e.User]
 		if !ok {
