@@ -102,7 +102,7 @@ const (
 	// (ADR-0129).
 	EngineChanged = "engine.change"
 	// EngineStarted records a process started through a public start link
-	// of an engine for a signed-in person (ADR-0147), which the engine
+	// of an engine for a signed-in person (ADR-0148), which the engine
 	// records without an initiator.
 	EngineStarted = "engine.start"
 )

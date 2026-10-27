@@ -1320,7 +1320,7 @@ func architectureLog(t *testing.T) []Event {
 // startFormLog shows a form of a process's step with the list of its
 // fields, and a public start link's form that fills in two fields
 // beforehand, so the golden files pin a form's view and process, and the
-// block kind startform (ADR-0147).
+// block kind startform (ADR-0148).
 func startFormLog(t *testing.T) []Event {
 	s := setup(t)
 	noErr(t, s.GrantRole("admin", "PLAT", "anna", Editor))

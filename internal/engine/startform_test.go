@@ -122,7 +122,7 @@ func fakePublicAtlas(t *testing.T) (*httptest.Server, *[]string) {
 
 // TestTheFormsOfAProcess: the steps of a process's newest version that
 // name a form, in the order of its model, whether it holds a public
-// wizard, and a form read as the form of a step (ADR-0147).
+// wizard, and a form read as the form of a step (ADR-0148).
 func TestTheFormsOfAProcess(t *testing.T) {
 	srv, _ := fakePublicAtlas(t)
 	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
@@ -185,7 +185,7 @@ func TestTheFormsOfAProcess(t *testing.T) {
 // TestPublicStartLinks: the start links listed with the credential, a
 // link's form read and its process started through the public routes,
 // without the credential and with the person's address, and how the
-// engine's refusals are told (ADR-0147).
+// engine's refusals are told (ADR-0148).
 func TestPublicStartLinks(t *testing.T) {
 	srv, seen := fakePublicAtlas(t)
 	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}

@@ -82,12 +82,12 @@ export const schema = new Schema({
     // of a decision of a process engine (ADR-0144); with a plain caption.
     // A form may name the process whose steps name it, and its view is ""
     // the form, "both" the form and its fields, "text" the fields only
-    // (ADR-0147).
+    // (ADR-0148).
     form: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, form: {}, process: { default: "" }, view: { default: "" }, text: { default: "" } },
       toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     // The form of a public start link of a process engine, which starts
     // the link's process; prefill names the fields filled in beforehand
-    // (ADR-0147). With a plain caption.
+    // (ADR-0148). With a plain caption.
     startform: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, link: {}, process: { default: "" }, prefill: { default: [] }, text: { default: "" } },
       toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     decision: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, decision: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
@@ -938,7 +938,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     const p = await pickFromEngine(kind === "form" ? "forms" : "decisions");
     if (p) insertBlock(schema.nodes[kind].create({ engine: p.engine, [kind]: p.id, ...(p.process ? { process: p.process } : {}), text: p.name || "" }));
   };
-  // A start form (ADR-0147) names a public start link; what it fills in
+  // A start form (ADR-0148) names a public start link; what it fills in
   // beforehand is chosen when it is placed, from what its fields hint at.
   const pickedStartLink = async () => {
     status.textContent = "";

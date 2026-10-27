@@ -67,7 +67,7 @@ func fakeStartEngine(t *testing.T) (*httptest.Server, *[]string) {
 	return srv, &seen
 }
 
-// TestStartFormsThroughTheAPI covers ADR-0147 through the API: every
+// TestStartFormsThroughTheAPI covers ADR-0148 through the API: every
 // signed-in person reads the forms a process's steps name and a start
 // link's form, and starts its process through the engine's public route,
 // without the credential and with the person's address; only those who
@@ -157,7 +157,7 @@ func TestStartFormsThroughTheAPI(t *testing.T) {
 
 // TestStartFormBlocksThroughTheAPI: a body holds a form of a process's
 // step with its view, and a start form with its link and the fields it
-// fills in beforehand, through the API as through the store (ADR-0147).
+// fills in beforehand, through the API as through the store (ADR-0148).
 func TestStartFormBlocksThroughTheAPI(t *testing.T) {
 	w := newWorld(t)
 	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Incidents","properties":{"priority":"low"}}`, http.StatusCreated)

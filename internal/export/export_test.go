@@ -250,7 +250,7 @@ func documentXML(t *testing.T, file []byte) string {
 // architecture sketch is named by its caption, which the picker fills with
 // the application's name, since the block holds only the application's ID
 // (ADR-0146). A start form is named by the process it starts, or by its
-// caption when it names none, and its link is never written (ADR-0147).
+// caption when it names none, and its link is never written (ADR-0148).
 func TestDiagramsAreNamedInDocuments(t *testing.T) {
 	link := strings.Repeat("ab", 32)
 	page := Page{ID: "p", Title: "Order to cash", Body: []item.Block{

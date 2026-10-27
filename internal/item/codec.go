@@ -92,7 +92,7 @@ import (
 //   - 34: the block kind architecture, and the block fields Application,
 //     Release and Layers (ADR-0146). Versions 1 to 33 are still read.
 //   - 35: the block kind startform, the block fields Link and Prefill, and
-//     a form block's View and Process (ADR-0147). Versions 1 to 34 are
+//     a form block's View and Process (ADR-0148). Versions 1 to 34 are
 //     still read.
 const CodecVersion = 35
 

@@ -112,12 +112,12 @@ const (
 	// names the engine, Link is the link's token there, Process the BPMN
 	// ID of the process it starts when known, Prefill the fields filled in
 	// beforehand with what this site knows of the reader, and Text the
-	// caption. The body holds no copy of the form (ADR-0147).
+	// caption. The body holds no copy of the form (ADR-0148).
 	StartForm BlockKind = "startform"
 )
 
 // PrefillSources are what a start form's field may be filled in with
-// beforehand (ADR-0147): the reader's username, the reader's own mail
+// beforehand (ADR-0148): the reader's username, the reader's own mail
 // address, and the title and the address of the item the block is on.
 var PrefillSources = []string{"username", "email", "page", "url"}
 
@@ -213,7 +213,7 @@ type Block struct {
 	// View is what a bpmn or a process block shows: its diagram (empty),
 	// its diagram and its description (ViewBoth), or its description only
 	// (ViewText) (ADR-0143). A form block shows its form, its form and the
-	// list of its fields, or the list alone, alike (ADR-0147); there,
+	// list of its fields, or the list alone, alike (ADR-0148); there,
 	// Process names the process whose steps name the form, or is empty.
 	View string `json:",omitempty"`
 	// Form and Decision name what a form or a decision block shows: the
@@ -230,7 +230,7 @@ type Block struct {
 	Layers      []string `json:",omitempty"`
 	// Link and Prefill name what a start form block shows and fills in:
 	// the token of the public start link at the engine and the fields
-	// filled in beforehand, in the editor's order (ADR-0147).
+	// filled in beforehand, in the editor's order (ADR-0148).
 	Link    string    `json:",omitempty"`
 	Prefill []Prefill `json:",omitempty"`
 }
@@ -238,7 +238,7 @@ type Block struct {
 // The views of a bpmn or a process block besides its diagram alone
 // (ADR-0143): the description lists the process's tasks and decisions,
 // read from its model. A form block's description lists the form's fields
-// (ADR-0147).
+// (ADR-0148).
 const (
 	ViewBoth = "both"
 	ViewText = "text"

@@ -129,7 +129,7 @@ type blockJSON struct {
 	Release     int      `json:"release,omitempty"`
 	Layers      []string `json:"layers,omitempty"`
 	// Link and Prefill name a start form and what it fills in beforehand
-	// (ADR-0147).
+	// (ADR-0148).
 	Link    string        `json:"link,omitempty"`
 	Prefill []prefillJSON `json:"prefill,omitempty"`
 }

@@ -35,7 +35,7 @@ type Document struct {
 
 // diagramName names what a bpmn, process, form, decision, architecture or
 // start form block shows, for documents that do not draw it (ADR-0129,
-// ADR-0144, ADR-0146, ADR-0147): "BPMN:" and the file, or the process,
+// ADR-0144, ADR-0146, ADR-0148): "BPMN:" and the file, or the process,
 // form or decision and its engine. An architecture sketch holds only its
 // application's ID, so it is named by its caption, which the picker fills
 // with the application's name, and its release or "newest release". A
@@ -312,7 +312,7 @@ func (b *docxBuilder) block(bl item.Block, p Page, base, listNum int) string {
 		// A document does not draw a diagram, a form, a decision or a
 		// sketch; it names the file, the process, the form, the decision,
 		// the sketch or the start form (ADR-0129, ADR-0144, ADR-0146,
-		// ADR-0147).
+		// ADR-0148).
 		out := para("", "", run("["+diagramName(bl, p.Images)+"]", ""))
 		if strings.TrimSpace(bl.Text) != "" && !namedByCaption(bl) {
 			out += para("Caption", "", run(bl.Text, ""))

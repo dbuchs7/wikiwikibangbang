@@ -167,7 +167,7 @@ func (h *htmlBuilder) block(bl item.Block, p Page, base int) {
 		// A printed page does not draw a diagram, a form, a decision or a
 		// sketch; it names the file, the process, the form, the decision,
 		// the sketch or the start form (ADR-0129, ADR-0144, ADR-0146,
-		// ADR-0147).
+		// ADR-0148).
 		h.printf(`<figure class="diagram"><p>[%s]</p>`, html.EscapeString(diagramName(bl, p.Images)))
 		if strings.TrimSpace(bl.Text) != "" && !namedByCaption(bl) {
 			h.printf("<figcaption>%s</figcaption>", html.EscapeString(bl.Text))

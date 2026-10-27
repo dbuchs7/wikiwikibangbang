@@ -647,7 +647,7 @@ dialog.drawing.bpmn-settings .drawing-bar button + button { margin-left: 0; }
    height of a diagram. */
 .pm-form-canvas { background: #fff; color: #222; padding: 4px 8px; }
 /* The fields of a form below it or alone, and a start form's button with
-   what it says (ADR-0147). */
+   what it says (ADR-0148). */
 .pm-form-canvas[hidden] + .pm-form-doc { border-top: 0; }
 .pm-form-fields .pm-form-group { margin-top: 4px; }
 .pm-start-after { padding: 8px 14px 12px; border-top: 1px solid var(--border); }

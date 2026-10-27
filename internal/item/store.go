@@ -1229,7 +1229,7 @@ func validIDAtEngine(id string) bool {
 	return !strings.ContainsFunc(id, unicode.IsControl)
 }
 
-// startLink is the form of a public start link's token (ADR-0147): atlas
+// startLink is the form of a public start link's token (ADR-0148): atlas
 // makes it of 32 random bytes in lower-case hexadecimal; 32 to 128 digits
 // leave room for an engine that makes it otherwise, and nothing else
 // reaches the engine's path.
@@ -1240,7 +1240,7 @@ var startLink = regexp.MustCompile(`^[0-9a-f]{32,128}$`)
 func ValidStartLink(link string) bool { return startLink.MatchString(link) }
 
 // validPrefill reports whether prefill can be what a start form fills in
-// beforehand (ADR-0147): none, or at most MaxPrefill fields, each named by
+// beforehand (ADR-0148): none, or at most MaxPrefill fields, each named by
 // its key at the engine once and filled in from one of PrefillSources. An
 // empty list that is not none is refused, as for layers.
 func validPrefill(prefill []Prefill) bool {
