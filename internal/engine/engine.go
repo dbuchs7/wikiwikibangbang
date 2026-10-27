@@ -4,7 +4,7 @@
 // (ADR-0144): each form as it is saved, with its form-js schema, and the
 // newest deployed version of each decision, with its DMN model; and the
 // architecture sketches of the releases of their applications, as SVG
-// pictures (ADR-0145). It speaks the API of atlas (github.com/pblumer/atlas).
+// pictures (ADR-0146). It speaks the API of atlas (github.com/pblumer/atlas).
 // The credential comes from the environment and is sent to the engine only.
 package engine
 
@@ -378,7 +378,7 @@ func (r *Reader) DecisionModel(ctx context.Context, e site.Engine, id string) (D
 }
 
 // Application is an application of the engine with the releases of it
-// whose architecture sketch the credential may read (ADR-0145).
+// whose architecture sketch the credential may read (ADR-0146).
 type Application struct {
 	// ID is the application's ID, which an architecture block names.
 	ID   string `json:"application"`
@@ -514,7 +514,7 @@ func (r *Reader) ArchitectureSketch(ctx context.Context, e site.Engine, applicat
 // not a fragment of the picture itself, and a stylesheet named by a
 // processing instruction. It is a defence in depth: the sketch is shown as
 // an image and served with a policy that runs nothing, and atlas draws
-// none of these (ADR-0145).
+// none of these (ADR-0146).
 func unsafeSVG(data []byte) string {
 	lower := bytes.ToLower(data)
 	for _, el := range []string{"script", "foreignobject"} {

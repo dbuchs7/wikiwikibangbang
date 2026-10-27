@@ -18,7 +18,7 @@ import (
 // engineRoutes name the process engines whose processes pages show, and
 // read those processes from them when a page is shown (ADR-0129), their
 // forms and decisions (ADR-0144) and the architecture sketches of their
-// applications' releases (ADR-0145). Every signed-in principal reads;
+// applications' releases (ADR-0146). Every signed-in principal reads;
 // which processes, forms, decisions and sketches it reads is decided by
 // the engine's account behind the credential.
 func engineRoutes(d Deps) []Route {
@@ -37,7 +37,7 @@ func engineRoutes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/forms/{form}", Summary: "A form as it is saved, with its form-js schema, read from the engine now", Handler: http.HandlerFunc(h.form)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/decisions", Summary: "The newest deployed version of each decision the engine lets its credential read, read from the engine now (ADR-0144)", Handler: http.HandlerFunc(h.decisions)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/decisions/{decision}", Summary: "The newest deployed version of a decision with the DMN model it is deployed in, read from the engine now", Handler: http.HandlerFunc(h.decision)},
-		{Method: http.MethodGet, Pattern: "/api/engines/{id}/architectures", Summary: "The applications whose releases carry an architecture sketch the engine lets its credential read, each with those releases, newest first: version, when published, when the sketch was taken and the layers it records, read from the engine now (ADR-0145)", Handler: http.HandlerFunc(h.architectures)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/architectures", Summary: "The applications whose releases carry an architecture sketch the engine lets its credential read, each with those releases, newest first: version, when published, when the sketch was taken and the layers it records, read from the engine now (ADR-0146)", Handler: http.HandlerFunc(h.architectures)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/architectures/{application}/{release}", Summary: "The architecture sketch of a release as an image/svg+xml picture, in the view the engine answers every caller alike, read from the engine now: release is newest, followed on every read, or a version, a positive number; the query parameter layers names some of strategy, business, application, data, technology, separated by commas, or none for the engine's default; X-Release-Version and X-Release-Taken-At name the release read", Handler: http.HandlerFunc(h.architecture)},
 	}
 }
@@ -273,7 +273,7 @@ func (h engineHandlers) architectures(w http.ResponseWriter, r *http.Request) {
 
 // sketchPolicy is the content security policy of an architecture sketch,
 // that of the engine's answer: the picture's own styles, nothing that
-// runs, nothing loaded (ADR-0145).
+// runs, nothing loaded (ADR-0146).
 const sketchPolicy = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
 
 // architecture answers a sketch as a picture of this site, which the UI

@@ -142,7 +142,7 @@ const sketchPicture = (version, layers) => `<?xml version="1.0" encoding="UTF-8"
 // forms and the deployed versions of its decisions (ADR-0144); decide()
 // deploys the decisions anew. And it lists the releases of the application
 // Bestellwesen with their architecture sketches and answers each sketch
-// (ADR-0145); release() records a new release, and reach(false) makes the
+// (ADR-0146); release() records a new release, and reach(false) makes the
 // token reach no application, as a token minted without a reach.
 function engineSource() {
   let versions = 3;
@@ -2676,7 +2676,7 @@ function gitSource() {
       await decisionBlock.locator("select.pm-dmn-views").selectOption({ label: "Kreditentscheid" });
       await decisionBlock.locator(".dmn-decision-table-container :text('granted')").waitFor();
 
-      step("architecture: a release's sketch is a picture of this site; the newest release is followed, a fixed one stays, and a token that reaches nothing says so (ADR-0145)");
+      step("architecture: a release's sketch is a picture of this site; the newest release is followed, a fixed one stays, and a token that reaches nothing says so (ADR-0146)");
       await page.click("#edit");
       await page.waitForSelector("#body.editing .ProseMirror");
       await page.locator("#body .ProseMirror").click();

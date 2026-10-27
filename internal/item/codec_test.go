@@ -1254,7 +1254,7 @@ func formsLog(t *testing.T) []Event {
 
 // architectureLog shows the architecture sketch of an engine's release in
 // a text, following the newest release and fixed to one with chosen
-// layers, so the golden files pin the block kind architecture (ADR-0145).
+// layers, so the golden files pin the block kind architecture (ADR-0146).
 func architectureLog(t *testing.T) []Event {
 	s := setup(t)
 	noErr(t, s.GrantRole("admin", "PLAT", "anna", Editor))

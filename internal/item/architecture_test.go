@@ -10,7 +10,7 @@ import (
 // application there, a release (0 for the newest with a sketch) and the
 // layers it shows, in the engine's order, or none for the engine's
 // default; and nothing else. No other block carries these fields
-// (ADR-0145).
+// (ADR-0146).
 func TestArchitectureSketches(t *testing.T) {
 	s := permFixture(t)
 	anna := s.As("anna")

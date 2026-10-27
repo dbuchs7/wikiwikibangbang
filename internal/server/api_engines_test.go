@@ -185,7 +185,7 @@ func TestFormsAndDecisionsFromAnEngine(t *testing.T) {
 	}
 }
 
-// TestArchitectureSketchesFromAnEngine covers ADR-0145 through the API:
+// TestArchitectureSketchesFromAnEngine covers ADR-0146 through the API:
 // every signed-in person and token lists the applications whose releases
 // carry a sketch and reads a sketch as an image of this site, the newest
 // release or a fixed one, with the layers asked; what is no release, no
@@ -264,7 +264,7 @@ func TestArchitectureSketchesFromAnEngine(t *testing.T) {
 
 // TestArchitectureBlocksThroughTheAPI: a body names an architecture sketch
 // by its engine, application, release and layers; an empty list of layers
-// is the engine's default, written as none (ADR-0145).
+// is the engine's default, written as none (ADR-0146).
 func TestArchitectureBlocksThroughTheAPI(t *testing.T) {
 	w := newWorld(t)
 	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Ordering","properties":{"priority":"low"}}`, http.StatusCreated)

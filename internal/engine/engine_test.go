@@ -248,7 +248,7 @@ func TestFormsAndDecisions(t *testing.T) {
 // TestArchitectureSketches: the applications whose releases carry an
 // architecture sketch, newest release first, and a release's sketch, read
 // after the application and the release are found in that list; release 0
-// is the newest (ADR-0145).
+// is the newest (ADR-0146).
 func TestArchitectureSketches(t *testing.T) {
 	srv, asked := fakeAtlas(t)
 	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
@@ -343,7 +343,7 @@ func TestArchitectureSketches(t *testing.T) {
 
 // TestUnsafeSketchesAreRefused: as defence in depth, a sketch is shown only
 // when it holds no script, no embedded document, no event attribute and no
-// reference outside itself (ADR-0145); the engine's own content security
+// reference outside itself (ADR-0146); the engine's own content security
 // policy forbids them too.
 func TestUnsafeSketchesAreRefused(t *testing.T) {
 	if what := unsafeSVG([]byte(fmt.Sprintf(sketch, "application,technology"))); what != "" {

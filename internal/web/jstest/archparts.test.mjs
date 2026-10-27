@@ -1,4 +1,4 @@
-// Unit tests of architecture sketches in a text (archparts.js, ADR-0145):
+// Unit tests of architecture sketches in a text (archparts.js, ADR-0146):
 // the layers a block names and the picker checks, the address of a sketch,
 // and which release a block shows. They run in Node.js without a browser
 // and without dependencies:

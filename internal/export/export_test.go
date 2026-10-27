@@ -249,7 +249,7 @@ func documentXML(t *testing.T, file []byte) string {
 // with their captions in both exports, not drawn (ADR-0129). An
 // architecture sketch is named by its caption, which the picker fills with
 // the application's name, since the block holds only the application's ID
-// (ADR-0145).
+// (ADR-0146).
 func TestDiagramsAreNamedInDocuments(t *testing.T) {
 	page := Page{ID: "p", Title: "Order to cash", Body: []item.Block{
 		{Kind: item.BPMN, Ref: "m", Text: "As <drawn>"},

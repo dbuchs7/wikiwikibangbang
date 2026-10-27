@@ -664,7 +664,7 @@ dialog.drawing.bpmn-settings .drawing-bar button + button { margin-left: 0; }
 .bjs-powered-by-lightbox .notice { position: absolute; left: 50%; top: 40%; transform: translate(-50%); width: 260px; padding: 10px; display: flex; line-height: 1.3;
   background: #fff; color: #222; box-shadow: 0 1px 4px rgb(0 0 0 / 30%); font: 14px Helvetica, Arial, sans-serif; }
 .bjs-powered-by-lightbox .notice > a:first-child { margin: 15px 20px 15px 10px; align-self: center; }
-/* Architecture sketches of releases (ADR-0145), drawn light in either
+/* Architecture sketches of releases (ADR-0146), drawn light in either
    scheme as diagrams are and scaled to the text column; a click opens the
    picture on its own in a new tab. */
 .pm-arch-canvas { background: #fff; color: #222; }

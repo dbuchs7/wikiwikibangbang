@@ -104,12 +104,12 @@ const (
 	// Application is the application's ID there, Release the release's
 	// version (0 for the newest release with a sketch, followed on every
 	// read), Layers the layers shown (none for the engine's default) and
-	// Text the caption. The body holds no copy of the sketch (ADR-0145).
+	// Text the caption. The body holds no copy of the sketch (ADR-0146).
 	Architecture BlockKind = "architecture"
 )
 
 // ArchitectureLayers are the layers an architecture sketch may show, in
-// the order the engine draws them from top to bottom (ADR-0145). A block
+// the order the engine draws them from top to bottom (ADR-0146). A block
 // names them in this order.
 var ArchitectureLayers = []string{"strategy", "business", "application", "data", "technology"}
 
@@ -198,7 +198,7 @@ type Block struct {
 	// shows: the application's ID at the engine, the release's version, 0
 	// for the newest release with a sketch, and the layers shown, in the
 	// order of ArchitectureLayers, none for the engine's default
-	// (ADR-0145).
+	// (ADR-0146).
 	Application string   `json:",omitempty"`
 	Release     int      `json:",omitempty"`
 	Layers      []string `json:",omitempty"`

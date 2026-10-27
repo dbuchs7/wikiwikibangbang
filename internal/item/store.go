@@ -1230,7 +1230,7 @@ func validIDAtEngine(id string) bool {
 }
 
 // validLayers reports whether layers can be what an architecture block
-// shows (ADR-0145): none, for the engine's default, or some of
+// shows (ADR-0146): none, for the engine's default, or some of
 // ArchitectureLayers, each once and in their order. An empty list that is
 // not none is refused, so that a body decoded from the log, where it reads
 // as none, holds what the live one held.

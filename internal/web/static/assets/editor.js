@@ -83,7 +83,7 @@ export const schema = new Schema({
     form: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, form: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     decision: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, decision: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     // The architecture sketch of a release of an engine's application
-    // (ADR-0145): release 0 follows the newest, layers none is the
+    // (ADR-0146): release 0 follows the newest, layers none is the
     // engine's default; with a plain caption.
     architecture: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, application: {}, release: { default: 0 }, layers: { default: [] }, text: { default: "" } },
       toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
@@ -916,7 +916,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     const p = await pickFromEngine(kind === "form" ? "forms" : "decisions");
     if (p) insertBlock(schema.nodes[kind].create({ engine: p.engine, [kind]: p.id, text: p.name || "" }));
   };
-  // The architecture sketch of a release (ADR-0145) is named, and read
+  // The architecture sketch of a release (ADR-0146) is named, and read
   // from the engine when shown.
   const pickedArchitecture = async () => {
     status.textContent = "";

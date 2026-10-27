@@ -121,7 +121,7 @@ type blockJSON struct {
 	Form     string         `json:"form,omitempty"`
 	Decision string         `json:"decision,omitempty"`
 	// Application, Release and Layers name an architecture sketch
-	// (ADR-0145).
+	// (ADR-0146).
 	Application string   `json:"application,omitempty"`
 	Release     int      `json:"release,omitempty"`
 	Layers      []string `json:"layers,omitempty"`
