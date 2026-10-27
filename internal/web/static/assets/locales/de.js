@@ -88,6 +88,11 @@ export default {
   "spaces.none": "Sie haben noch in keinem Raum eine Rolle. Wenden Sie sich an eine Administratorin oder einen Administrator.",
   "spaces.noneAdmin": "Noch keine Räume. Erstellen Sie unten den ersten.",
   "spaces.title": "Räume",
+  "spaces.favourite": "Als Favorit markieren",
+  "spaces.unfavourite": "Nicht mehr Favorit",
+  "spaces.favouriteCol": "Favorit",
+  "spaces.favouriteYes": "Favorit",
+  "spaces.favouriteNo": "Kein Favorit",
 
   "space.board": "Board: {type}",
   "space.items": { "one": "{n} Eintrag", "other": "{n} Einträge" },
