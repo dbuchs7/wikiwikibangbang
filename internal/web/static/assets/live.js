@@ -294,7 +294,11 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     if (["toc", "figures", "tables", "children", "divider"].includes(b.kind)) return { kind: b.kind };
     if (b.kind === "bpmn") return { kind: "bpmn", text: b.text ?? "", ref: b.ref, ...(b.view ? { view: b.view } : {}) };
     if (b.kind === "process") return { kind: "process", text: b.text ?? "", engine: b.engine, process: b.process, ...(b.view ? { view: b.view } : {}) };
-    if (b.kind === "form") return { kind: "form", text: b.text ?? "", engine: b.engine, form: b.form };
+    if (b.kind === "form") return { kind: "form", text: b.text ?? "", engine: b.engine, form: b.form, ...(b.process ? { process: b.process } : {}), ...(b.view ? { view: b.view } : {}) };
+    if (b.kind === "startform") {
+      return { kind: "startform", text: b.text ?? "", engine: b.engine, link: b.link, ...(b.process ? { process: b.process } : {}),
+        ...(b.prefill?.length ? { prefill: b.prefill.map((p) => ({ field: p.field, from: p.from })) } : {}) };
+    }
     if (b.kind === "decision") return { kind: "decision", text: b.text ?? "", engine: b.engine, decision: b.decision };
     if (b.kind === "architecture") {
       return { kind: "architecture", text: b.text ?? "", engine: b.engine, application: b.application, ...(b.release ? { release: b.release } : {}), ...(b.layers?.length ? { layers: b.layers } : {}) };
