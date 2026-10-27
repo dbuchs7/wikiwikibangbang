@@ -158,3 +158,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0143](0143-a-diagram-describes-its-tasks-and-decisions.md) | A diagram describes its tasks and decisions below it, or in its place | Proposed | Partial |
 | [0144](0144-forms-and-decisions-from-a-process-engine.md) | Forms and decisions from a process engine in the text | Proposed | Partial |
 | [0145](0145-favourite-spaces-come-first-on-the-start-page.md) | Favourite spaces come first on the start page | Accepted | Landed |
+| [0146](0146-architecture-sketches-of-releases-from-an-engine.md) | Architecture sketches of releases from an engine in the text | Proposed | Partial |

@@ -1,10 +1,11 @@
 // Package engine reads processes from process engines for the pages that
 // show them (ADR-0129): the newest version of each process, its BPMN model,
-// and counts of where its instances are; and their forms and decisions
+// and counts of where its instances are; their forms and decisions
 // (ADR-0144): each form as it is saved, with its form-js schema, and the
-// newest deployed version of each decision, with its DMN model. It speaks
-// the API of atlas (github.com/pblumer/atlas). The credential comes from
-// the environment and is sent to the engine only.
+// newest deployed version of each decision, with its DMN model; and the
+// architecture sketches of the releases of their applications, as SVG
+// pictures (ADR-0146). It speaks the API of atlas (github.com/pblumer/atlas).
+// The credential comes from the environment and is sent to the engine only.
 package engine
 
 import (
@@ -12,9 +13,11 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -36,8 +39,8 @@ var (
 	ErrNoCredential = errors.New("the engine's credential is not set")
 	// ErrRefused: the engine refused the credential.
 	ErrRefused = errors.New("the engine refused the credential")
-	// ErrNotFound: the engine has no such process, form or decision for
-	// the credential.
+	// ErrNotFound: the engine has no such process, form, decision,
+	// application or release for the credential.
 	ErrNotFound = errors.New("not found at the engine")
 	// ErrUnavailable: the engine did not answer, or not as expected.
 	ErrUnavailable = errors.New("the engine is not available")
@@ -374,9 +377,210 @@ func (r *Reader) DecisionModel(ctx context.Context, e site.Engine, id string) (D
 	return DecisionModel{Decision: all[i], XML: xml.String()}, err
 }
 
+// Application is an application of the engine with the releases of it
+// whose architecture sketch the credential may read (ADR-0146).
+type Application struct {
+	// ID is the application's ID, which an architecture block names.
+	ID   string `json:"application"`
+	Name string `json:"name"`
+	// Releases are newest first; an application is listed only with one.
+	Releases []Release `json:"releases"`
+}
+
+// Release is a release of an application that carries an architecture
+// sketch: when it was published, when its sketch was taken and the layers
+// the sketch records, in the engine's order. A release never changes.
+type Release struct {
+	Version     int32     `json:"version"`
+	PublishedAt time.Time `json:"publishedAt"`
+	TakenAt     time.Time `json:"takenAt"`
+	Recorded    []string  `json:"recorded"`
+}
+
+// SketchRelease names the release a sketch was read from: the application
+// by its ID and name, the release's version and when its sketch was taken.
+type SketchRelease struct {
+	Application string
+	Name        string
+	Version     int32
+	TakenAt     time.Time
+}
+
+// Architectures returns the applications whose releases carry an
+// architecture sketch the credential may read, by name, each with those
+// releases, newest first. On atlas, which applications a token sees is its
+// reach: a token minted without one lists none. Nothing about people is
+// passed on, nor the engine's own ID of a release.
+func (r *Reader) Architectures(ctx context.Context, e site.Engine) ([]Application, error) {
+	var got struct {
+		Applications []struct {
+			ApplicationID string `json:"applicationId"`
+			Application   string `json:"application"`
+			Releases      []struct {
+				Version     int32    `json:"version"`
+				PublishedAt int64    `json:"publishedAt"`
+				TakenAt     int64    `json:"takenAt"`
+				Recorded    []string `json:"recorded"`
+			} `json:"releases"`
+		} `json:"applications"`
+	}
+	if err := r.get(ctx, e, "/api/v1/architectures", func(body io.Reader) error { return json.NewDecoder(body).Decode(&got) }); err != nil {
+		return nil, err
+	}
+	out := []Application{}
+	for _, a := range got.Applications {
+		app := Application{ID: a.ApplicationID, Name: a.Application, Releases: []Release{}}
+		for _, rel := range a.Releases {
+			if rel.Version > 0 {
+				app.Releases = append(app.Releases, Release{Version: rel.Version, PublishedAt: time.Unix(rel.PublishedAt, 0).UTC(), TakenAt: time.Unix(rel.TakenAt, 0).UTC(),
+					Recorded: append([]string{}, rel.Recorded...)})
+			}
+		}
+		if app.ID != "" && len(app.Releases) > 0 {
+			slices.SortFunc(app.Releases, func(a, b Release) int { return cmp.Compare(b.Version, a.Version) })
+			out = append(out, app)
+		}
+	}
+	slices.SortFunc(out, func(a, b Application) int {
+		return cmp.Or(strings.Compare(strings.ToLower(cmp.Or(a.Name, a.ID)), strings.ToLower(cmp.Or(b.Name, b.ID))), strings.Compare(a.ID, b.ID))
+	})
+	return out, nil
+}
+
+// ArchitectureSketch returns the architecture sketch of a release of an
+// application, an SVG picture in the view the engine answers every caller
+// alike, and the release it was read from: release 0 is the newest release
+// with a sketch, read anew each time. layers name the layers shown, none
+// the engine's default. The application and the release are first looked
+// up in the list, so that a block shows only what the picker offers, and
+// the picture is shown only when it holds nothing that runs or reaches
+// outside it.
+func (r *Reader) ArchitectureSketch(ctx context.Context, e site.Engine, application string, release int32, layers []string) ([]byte, SketchRelease, error) {
+	all, err := r.Architectures(ctx, e)
+	if err != nil {
+		return nil, SketchRelease{}, err
+	}
+	if len(all) == 0 {
+		return nil, SketchRelease{}, fmt.Errorf("%w: application %s; the credential lists no application with an architecture sketch, so check the token's reach: on atlas a token sees only the applications its reach names", ErrNotFound, application)
+	}
+	i := slices.IndexFunc(all, func(a Application) bool { return a.ID == application })
+	if i < 0 {
+		return nil, SketchRelease{}, fmt.Errorf("%w: application %s", ErrNotFound, application)
+	}
+	app := all[i]
+	rel := app.Releases[0]
+	if release != 0 {
+		j := slices.IndexFunc(app.Releases, func(r Release) bool { return r.Version == release })
+		if j < 0 {
+			return nil, SketchRelease{}, fmt.Errorf("%w: release %d of %s has no architecture sketch", ErrNotFound, release, cmp.Or(app.Name, app.ID))
+		}
+		rel = app.Releases[j]
+	}
+	out := SketchRelease{Application: app.ID, Name: app.Name, Version: rel.Version, TakenAt: rel.TakenAt}
+	path := "/api/v1/applications/" + url.PathEscape(app.ID) + "/releases/" + strconv.Itoa(int(rel.Version)) + "/architecture.embed.svg"
+	if len(layers) > 0 {
+		path += "?layers=" + url.QueryEscape(strings.Join(layers, ","))
+	}
+	var svg []byte
+	err = r.fetch(ctx, e, path, "image/svg+xml", func(contentType string, body io.Reader) error {
+		if t, _, err := mime.ParseMediaType(contentType); err != nil || t != "image/svg+xml" {
+			return fmt.Errorf("it answered %q, not an SVG picture", contentType)
+		}
+		var err error
+		svg, err = io.ReadAll(body)
+		return err
+	})
+	name := cmp.Or(app.Name, app.ID)
+	switch {
+	case errors.Is(err, ErrNotFound):
+		asked := "the engine's default layers"
+		if len(layers) > 0 {
+			asked = "the layers " + strings.Join(layers, ", ")
+		}
+		return nil, out, fmt.Errorf("%w: release %d of %s records none of %s", ErrNotFound, rel.Version, name, asked)
+	case err != nil:
+		return nil, out, err
+	}
+	if what := unsafeSVG(svg); what != "" {
+		return nil, out, fmt.Errorf("%w: the sketch of %s v%d holds %s; a sketch is shown only without scripts, embedded documents, event attributes and references outside it", ErrUnavailable, name, rel.Version, what)
+	}
+	return svg, out, nil
+}
+
+// unsafeSVG says what in an SVG picture is not shown, or "" when nothing
+// is: anything but well-formed XML with an svg element at its root, a
+// script, a foreignObject (which embeds a document), an event attribute,
+// an animation of an event attribute or a reference, a reference that is
+// not a fragment of the picture itself, and a stylesheet named by a
+// processing instruction. It is a defence in depth: the sketch is shown as
+// an image and served with a policy that runs nothing, and atlas draws
+// none of these (ADR-0146).
+func unsafeSVG(data []byte) string {
+	lower := bytes.ToLower(data)
+	for _, el := range []string{"script", "foreignobject"} {
+		if bytes.Contains(lower, []byte("<"+el)) {
+			return "<" + el + ">"
+		}
+	}
+	d := xml.NewDecoder(bytes.NewReader(data))
+	d.Strict = true
+	root := true
+	for {
+		tok, err := d.Token()
+		if err == io.EOF {
+			if root {
+				return "no SVG picture"
+			}
+			return ""
+		}
+		if err != nil {
+			if root {
+				return "no SVG picture"
+			}
+			return "no well-formed XML"
+		}
+		switch tok := tok.(type) {
+		case xml.ProcInst:
+			if strings.EqualFold(tok.Target, "xml-stylesheet") {
+				return "a stylesheet outside the sketch"
+			}
+		case xml.StartElement:
+			name := strings.ToLower(tok.Name.Local)
+			if root && name != "svg" {
+				return "no SVG picture"
+			}
+			root = false
+			if name == "script" || name == "foreignobject" {
+				return "<" + name + ">"
+			}
+			for _, a := range tok.Attr {
+				attr := strings.ToLower(a.Name.Local)
+				switch {
+				case strings.HasPrefix(attr, "on"):
+					return "an event attribute (" + attr + ")"
+				case attr == "href" && !strings.HasPrefix(a.Value, "#"):
+					return "a reference outside the sketch"
+				case attr == "attributename":
+					target := strings.ToLower(strings.TrimSpace(a.Value))
+					if _, local, _ := strings.Cut(target, ":"); strings.HasPrefix(target, "on") || target == "href" || local == "href" {
+						return "an animation of " + target
+					}
+				}
+			}
+		}
+	}
+}
+
 // get reads path of the engine and hands the answer to read, at most
 // budget EngineResponseBytes of it.
 func (r *Reader) get(ctx context.Context, e site.Engine, path string, read func(io.Reader) error) error {
+	return r.fetch(ctx, e, path, "application/json, application/xml", func(_ string, body io.Reader) error { return read(body) })
+}
+
+// fetch reads path of the engine, asking for the types accept names, and
+// hands the answer's type and body to read, at most budget
+// EngineResponseBytes of it.
+func (r *Reader) fetch(ctx context.Context, e site.Engine, path, accept string, read func(contentType string, body io.Reader) error) error {
 	if e.Kind != site.EngineAtlas {
 		return fmt.Errorf("%w: kind %q is not read", ErrUnavailable, e.Kind)
 	}
@@ -393,7 +597,7 @@ func (r *Reader) get(ctx context.Context, e site.Engine, path string, read func(
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json, application/xml")
+	req.Header.Set("Accept", accept)
 	res, err := r.http.Do(req)
 	if errors.Is(err, connector.ErrPrivateAddress) {
 		return fmt.Errorf("%w: %s is not on the public internet; set %s=on to allow engines in the server's own network", ErrUnavailable, u.Host, AllowPrivateVar)
@@ -412,7 +616,7 @@ func (r *Reader) get(ctx context.Context, e site.Engine, path string, read func(
 	}
 	limit := budget.Get().EngineResponseBytes
 	body := &capped{r: io.LimitReader(res.Body, limit+1), left: limit}
-	if err := read(body); err != nil {
+	if err := read(res.Header.Get("Content-Type"), body); err != nil {
 		if body.over {
 			return fmt.Errorf("%w: its answer is larger than %d bytes", ErrUnavailable, limit)
 		}

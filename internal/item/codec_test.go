@@ -75,7 +75,7 @@ func TestAChangeThatIsNotPersistedDoesNotHappen(t *testing.T) {
 
 func TestDecodeRejectsWhatItCannotReadExactly(t *testing.T) {
 	cases := map[string]string{
-		"newer format":       `[{"v":34,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
+		"newer format":       `[{"v":35,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"no format version":  `[{"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated"}]`,
 		"unknown field":      `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"SpaceCreated","colour":"red"}]`,
 		"unknown role":       `[{"v":1,"seq":1,"at":"2026-01-01T00:00:00Z","kind":"RoleGranted","role":"owner"}]`,
@@ -162,8 +162,9 @@ func TestPersistedFormatIsStable(t *testing.T) {
 	lanes := kanbanLanesLog(t)
 	views := bpmnViewLog(t)
 	engines := formsLog(t)
+	sketches := architectureLog(t)
 	kinds := map[EventKind]bool{}
-	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline, access, provenance, sizes, holds, layout, kanbans, spaces, catalog, columns, names, secrets, erasure, album, removal, video, retention, tasklist, lists, diagrams, look, lanes, views, engines) {
+	for _, e := range slices.Concat(log, rich, comments, tree, blocks, labels, files, watches, inline, access, provenance, sizes, holds, layout, kanbans, spaces, catalog, columns, names, secrets, erasure, album, removal, video, retention, tasklist, lists, diagrams, look, lanes, views, engines, sketches) {
 		kinds[e.Kind] = true
 	}
 	for _, k := range allEventKinds {
@@ -176,51 +177,53 @@ func TestPersistedFormatIsStable(t *testing.T) {
 		sl   Sealer
 		log  []Event
 	}{
-		{"events.v33.golden.jsonl", nil, log},
-		{"events.v33.sealed.golden.jsonl", fakeSealer{}, log},
-		{"events.v33.richtext.golden.jsonl", fakeSealer{}, rich},
-		{"events.v33.comments.golden.jsonl", fakeSealer{}, comments},
-		{"events.v33.tree.golden.jsonl", fakeSealer{}, tree},
-		{"events.v33.blocks.golden.jsonl", fakeSealer{}, blocks},
-		{"events.v33.labels.golden.jsonl", fakeSealer{}, labels},
-		{"events.v33.attachments.golden.jsonl", fakeSealer{}, files},
-		{"events.v33.attachments.plain.golden.jsonl", nil, files},
-		{"events.v33.watches.golden.jsonl", fakeSealer{}, watches},
-		{"events.v33.inline.golden.jsonl", fakeSealer{}, inline},
-		{"events.v33.revocations.golden.jsonl", nil, access},
-		{"events.v33.provenance.golden.jsonl", fakeSealer{}, provenance},
-		{"events.v33.imagesize.golden.jsonl", fakeSealer{}, sizes},
-		{"events.v33.dataprotection.golden.jsonl", fakeSealer{}, holds},
-		{"events.v33.dataprotection.plain.golden.jsonl", nil, holds},
-		{"events.v33.layout.golden.jsonl", fakeSealer{}, layout},
-		{"events.v33.kanbans.golden.jsonl", nil, kanbans},
-		{"events.v33.spaces.golden.jsonl", nil, spaces},
-		{"events.v33.catalog.golden.jsonl", nil, catalog},
-		{"events.v33.kanbancolumns.golden.jsonl", nil, columns},
-		{"events.v33.spacenames.golden.jsonl", nil, names},
-		{"events.v33.secrets.golden.jsonl", fakeSealer{}, secrets},
-		{"events.v33.secrets.plain.golden.jsonl", nil, secrets},
-		{"events.v33.secreterasure.golden.jsonl", fakeSealer{}, erasure},
-		{"events.v33.secreterasure.plain.golden.jsonl", nil, erasure},
-		{"events.v33.album.golden.jsonl", fakeSealer{}, album},
-		{"events.v33.album.plain.golden.jsonl", nil, album},
-		{"events.v33.typeremoval.golden.jsonl", nil, removal},
-		{"events.v33.video.golden.jsonl", fakeSealer{}, video},
-		{"events.v33.video.plain.golden.jsonl", nil, video},
-		{"events.v33.retention.golden.jsonl", fakeSealer{}, retention},
-		{"events.v33.retention.plain.golden.jsonl", nil, retention},
-		{"events.v33.tasklist.golden.jsonl", fakeSealer{}, tasklist},
-		{"events.v33.tasklist.plain.golden.jsonl", nil, tasklist},
-		{"events.v33.lists.golden.jsonl", fakeSealer{}, lists},
-		{"events.v33.lists.plain.golden.jsonl", nil, lists},
-		{"events.v33.bpmn.golden.jsonl", fakeSealer{}, diagrams},
-		{"events.v33.bpmn.plain.golden.jsonl", nil, diagrams},
-		{"events.v33.kanbanlook.golden.jsonl", nil, look},
-		{"events.v33.kanbanlanes.golden.jsonl", nil, lanes},
-		{"events.v33.bpmnview.golden.jsonl", fakeSealer{}, views},
-		{"events.v33.bpmnview.plain.golden.jsonl", nil, views},
-		{"events.v33.forms.golden.jsonl", fakeSealer{}, engines},
-		{"events.v33.forms.plain.golden.jsonl", nil, engines},
+		{"events.v34.golden.jsonl", nil, log},
+		{"events.v34.sealed.golden.jsonl", fakeSealer{}, log},
+		{"events.v34.richtext.golden.jsonl", fakeSealer{}, rich},
+		{"events.v34.comments.golden.jsonl", fakeSealer{}, comments},
+		{"events.v34.tree.golden.jsonl", fakeSealer{}, tree},
+		{"events.v34.blocks.golden.jsonl", fakeSealer{}, blocks},
+		{"events.v34.labels.golden.jsonl", fakeSealer{}, labels},
+		{"events.v34.attachments.golden.jsonl", fakeSealer{}, files},
+		{"events.v34.attachments.plain.golden.jsonl", nil, files},
+		{"events.v34.watches.golden.jsonl", fakeSealer{}, watches},
+		{"events.v34.inline.golden.jsonl", fakeSealer{}, inline},
+		{"events.v34.revocations.golden.jsonl", nil, access},
+		{"events.v34.provenance.golden.jsonl", fakeSealer{}, provenance},
+		{"events.v34.imagesize.golden.jsonl", fakeSealer{}, sizes},
+		{"events.v34.dataprotection.golden.jsonl", fakeSealer{}, holds},
+		{"events.v34.dataprotection.plain.golden.jsonl", nil, holds},
+		{"events.v34.layout.golden.jsonl", fakeSealer{}, layout},
+		{"events.v34.kanbans.golden.jsonl", nil, kanbans},
+		{"events.v34.spaces.golden.jsonl", nil, spaces},
+		{"events.v34.catalog.golden.jsonl", nil, catalog},
+		{"events.v34.kanbancolumns.golden.jsonl", nil, columns},
+		{"events.v34.spacenames.golden.jsonl", nil, names},
+		{"events.v34.secrets.golden.jsonl", fakeSealer{}, secrets},
+		{"events.v34.secrets.plain.golden.jsonl", nil, secrets},
+		{"events.v34.secreterasure.golden.jsonl", fakeSealer{}, erasure},
+		{"events.v34.secreterasure.plain.golden.jsonl", nil, erasure},
+		{"events.v34.album.golden.jsonl", fakeSealer{}, album},
+		{"events.v34.album.plain.golden.jsonl", nil, album},
+		{"events.v34.typeremoval.golden.jsonl", nil, removal},
+		{"events.v34.video.golden.jsonl", fakeSealer{}, video},
+		{"events.v34.video.plain.golden.jsonl", nil, video},
+		{"events.v34.retention.golden.jsonl", fakeSealer{}, retention},
+		{"events.v34.retention.plain.golden.jsonl", nil, retention},
+		{"events.v34.tasklist.golden.jsonl", fakeSealer{}, tasklist},
+		{"events.v34.tasklist.plain.golden.jsonl", nil, tasklist},
+		{"events.v34.lists.golden.jsonl", fakeSealer{}, lists},
+		{"events.v34.lists.plain.golden.jsonl", nil, lists},
+		{"events.v34.bpmn.golden.jsonl", fakeSealer{}, diagrams},
+		{"events.v34.bpmn.plain.golden.jsonl", nil, diagrams},
+		{"events.v34.kanbanlook.golden.jsonl", nil, look},
+		{"events.v34.kanbanlanes.golden.jsonl", nil, lanes},
+		{"events.v34.bpmnview.golden.jsonl", fakeSealer{}, views},
+		{"events.v34.bpmnview.plain.golden.jsonl", nil, views},
+		{"events.v34.forms.golden.jsonl", fakeSealer{}, engines},
+		{"events.v34.forms.plain.golden.jsonl", nil, engines},
+		{"events.v34.architecture.golden.jsonl", fakeSealer{}, sketches},
+		{"events.v34.architecture.plain.golden.jsonl", nil, sketches},
 	}
 	for _, c := range cases {
 		name, sl, log := c.name, c.sl, c.log
@@ -253,7 +256,7 @@ func TestPersistedFormatIsStable(t *testing.T) {
 // TestOlderVersionsStillReplay: data directories written by earlier codec
 // versions — 1 (plaintext, nothing erased), 2 (sealed, erased), 3 (rich
 // text), 4 (comments), 5 (sibling order), 6 (block kinds), 7 (labels), 8
-// (attachments), 9 (watches), 10 (inline comments), 11 (revocations), 12 (provenance), 13 (image sizes), 14 (data protection), 15 (layout), 16 (kanbans), 17 (spaces), 18 (catalogs), 19 (kanban columns), 20 (space names), 21 (protected passages), 22 (erased passages), 23 (picture labels), 24 (type removal), 25 (videos), 26 (picture retention), 27 (task lists), 28 (lists of figures and tables), 29 (BPMN diagrams), 30 (kanban limits and colours), 31 (kanban lanes), 32 (diagram views) — still open and rebuild the same state and history as today's log
+// (attachments), 9 (watches), 10 (inline comments), 11 (revocations), 12 (provenance), 13 (image sizes), 14 (data protection), 15 (layout), 16 (kanbans), 17 (spaces), 18 (catalogs), 19 (kanban columns), 20 (space names), 21 (protected passages), 22 (erased passages), 23 (picture labels), 24 (type removal), 25 (videos), 26 (picture retention), 27 (task lists), 28 (lists of figures and tables), 29 (BPMN diagrams), 30 (kanban limits and colours), 31 (kanban lanes), 32 (diagram views), 33 (forms and decisions) — still open and rebuild the same state and history as today's log
 // of the same commands, including the content erased by the purges they
 // contain.
 func TestOlderVersionsStillReplay(t *testing.T) {
@@ -893,6 +896,51 @@ func TestOlderVersionsStillReplay(t *testing.T) {
 	assertRebuilds(t, filepath.Join("testdata", "events.v32.kanbanlanes.golden.jsonl"), nil, kanbanLanesLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v32.bpmnview.golden.jsonl"), fakeSealer{}, bpmnViewLog(t))
 	assertRebuilds(t, filepath.Join("testdata", "events.v32.bpmnview.plain.golden.jsonl"), nil, bpmnViewLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.golden.jsonl"), nil, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.sealed.golden.jsonl"), fakeSealer{}, log)
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.richtext.golden.jsonl"), fakeSealer{}, richTextLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.comments.golden.jsonl"), fakeSealer{}, commentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.tree.golden.jsonl"), fakeSealer{}, treeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.blocks.golden.jsonl"), fakeSealer{}, blockKindsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.labels.golden.jsonl"), fakeSealer{}, labelLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.attachments.golden.jsonl"), fakeSealer{}, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.attachments.plain.golden.jsonl"), nil, attachmentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.watches.golden.jsonl"), fakeSealer{}, watchLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.inline.golden.jsonl"), fakeSealer{}, inlineCommentLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.revocations.golden.jsonl"), nil, revocationLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.provenance.golden.jsonl"), fakeSealer{}, provenanceLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.imagesize.golden.jsonl"), fakeSealer{}, imageSizeLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.dataprotection.golden.jsonl"), fakeSealer{}, holdLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.dataprotection.plain.golden.jsonl"), nil, holdLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.layout.golden.jsonl"), fakeSealer{}, layoutLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.kanbans.golden.jsonl"), nil, kanbanLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.spaces.golden.jsonl"), nil, spaceLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.catalog.golden.jsonl"), nil, catalogLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.kanbancolumns.golden.jsonl"), nil, kanbanColumnsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.spacenames.golden.jsonl"), nil, spaceNameLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.secrets.golden.jsonl"), fakeSealer{}, secretLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.secrets.plain.golden.jsonl"), nil, secretLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.secreterasure.golden.jsonl"), fakeSealer{}, secretErasureLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.secreterasure.plain.golden.jsonl"), nil, secretErasureLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.album.golden.jsonl"), fakeSealer{}, albumLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.album.plain.golden.jsonl"), nil, albumLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.typeremoval.golden.jsonl"), nil, typeRemovalLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.video.golden.jsonl"), fakeSealer{}, videoLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.video.plain.golden.jsonl"), nil, videoLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.retention.golden.jsonl"), fakeSealer{}, retentionLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.retention.plain.golden.jsonl"), nil, retentionLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.tasklist.golden.jsonl"), fakeSealer{}, taskListLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.tasklist.plain.golden.jsonl"), nil, taskListLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.lists.golden.jsonl"), fakeSealer{}, listsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.lists.plain.golden.jsonl"), nil, listsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.bpmn.golden.jsonl"), fakeSealer{}, bpmnLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.bpmn.plain.golden.jsonl"), nil, bpmnLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.kanbanlook.golden.jsonl"), nil, kanbanLookLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.kanbanlanes.golden.jsonl"), nil, kanbanLanesLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.bpmnview.golden.jsonl"), fakeSealer{}, bpmnViewLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.bpmnview.plain.golden.jsonl"), nil, bpmnViewLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.forms.golden.jsonl"), fakeSealer{}, formsLog(t))
+	assertRebuilds(t, filepath.Join("testdata", "events.v33.forms.plain.golden.jsonl"), nil, formsLog(t))
 }
 
 // provenanceLog copies a file to another item, makes a new version of the
@@ -1200,6 +1248,21 @@ func formsLog(t *testing.T) []Event {
 	noErr(t, anna.CommitBody(page.ID, Doc{Blocks: []Block{
 		{Kind: Form, Engine: "atlas-prod", Form: "reise-antrag", Text: "What a traveller fills in"},
 		{Kind: Decision, Engine: "atlas-prod", Decision: "Decision 1", Text: "Who needs a visa"},
+	}}))
+	return s.Log()
+}
+
+// architectureLog shows the architecture sketch of an engine's release in
+// a text, following the newest release and fixed to one with chosen
+// layers, so the golden files pin the block kind architecture (ADR-0146).
+func architectureLog(t *testing.T) []Event {
+	s := setup(t)
+	noErr(t, s.GrantRole("admin", "PLAT", "anna", Editor))
+	anna := s.As("anna")
+	page := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: "Ordering"}))
+	noErr(t, anna.CommitBody(page.ID, Doc{Blocks: []Block{
+		{Kind: Architecture, Engine: "atlas-prod", Application: "c46e0d6f-1b2a", Text: "Bestellwesen"},
+		{Kind: Architecture, Engine: "atlas-prod", Application: "c46e0d6f-1b2a", Release: 3, Layers: []string{"business", "application", "data"}, Text: "Bestellwesen v3"},
 	}}))
 	return s.Log()
 }

@@ -4,18 +4,23 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 )
 
 // engineRoutes name the process engines whose processes pages show, and
-// read those processes from them when a page is shown (ADR-0129), and
-// their forms and decisions (ADR-0144). Every signed-in principal reads;
-// which processes, forms and decisions it reads is decided by the engine's
-// account behind the credential.
+// read those processes from them when a page is shown (ADR-0129), their
+// forms and decisions (ADR-0144) and the architecture sketches of their
+// applications' releases (ADR-0146). Every signed-in principal reads;
+// which processes, forms, decisions and sketches it reads is decided by
+// the engine's account behind the credential.
 func engineRoutes(d Deps) []Route {
 	h := engineHandlers{authHandlers: authHandlers{d: d}, log: d.Log}
 	if h.log == nil {
@@ -32,6 +37,8 @@ func engineRoutes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/forms/{form}", Summary: "A form as it is saved, with its form-js schema, read from the engine now", Handler: http.HandlerFunc(h.form)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/decisions", Summary: "The newest deployed version of each decision the engine lets its credential read, read from the engine now (ADR-0144)", Handler: http.HandlerFunc(h.decisions)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/decisions/{decision}", Summary: "The newest deployed version of a decision with the DMN model it is deployed in, read from the engine now", Handler: http.HandlerFunc(h.decision)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/architectures", Summary: "The applications whose releases carry an architecture sketch the engine lets its credential read, each with those releases, newest first: version, when published, when the sketch was taken and the layers it records, read from the engine now (ADR-0146)", Handler: http.HandlerFunc(h.architectures)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/architectures/{application}/{release}", Summary: "The architecture sketch of a release as an image/svg+xml picture, in the view the engine answers every caller alike, read from the engine now: release is newest, followed on every read, or a version, a positive number; the query parameter layers names some of strategy, business, application, data, technology, separated by commas, or none for the engine's default; X-Release-Version and X-Release-Taken-At name the release read", Handler: http.HandlerFunc(h.architecture)},
 	}
 }
 
@@ -249,4 +256,71 @@ func (h engineHandlers) decision(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "decision": d})
+}
+
+func (h engineHandlers) architectures(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	list, err := h.d.Engines.Architectures(r.Context(), e)
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "applications": list})
+}
+
+// sketchPolicy is the content security policy of an architecture sketch,
+// that of the engine's answer: the picture's own styles, nothing that
+// runs, nothing loaded (ADR-0146).
+const sketchPolicy = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+
+// architecture answers a sketch as a picture of this site, which the UI
+// shows as an image under its own policy and a new tab opens under the
+// picture's; it is read anew each time and not kept.
+func (h engineHandlers) architecture(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	var release int32
+	if v := r.PathValue("release"); v != "newest" {
+		n, err := strconv.ParseInt(v, 10, 32)
+		if err != nil || n < 1 {
+			writeError(w, http.StatusBadRequest, "release "+strconv.Quote(v)+": a release is newest or its version, a positive number")
+			return
+		}
+		release = int32(n)
+	}
+	var layers []string
+	if v := r.URL.Query().Get("layers"); v != "" {
+		for _, l := range strings.Split(v, ",") {
+			if !slices.Contains(item.ArchitectureLayers, l) {
+				writeError(w, http.StatusBadRequest, "layer "+strconv.Quote(l)+": the layers are "+strings.Join(item.ArchitectureLayers, ", "))
+				return
+			}
+		}
+		// Each once, in the order the engine draws them, as a block names
+		// them.
+		for _, l := range item.ArchitectureLayers {
+			if slices.Contains(strings.Split(v, ","), l) {
+				layers = append(layers, l)
+			}
+		}
+	}
+	svg, rel, err := h.d.Engines.ArchitectureSketch(r.Context(), e, r.PathValue("application"), release, layers)
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	hd := w.Header()
+	hd.Set("Content-Type", "image/svg+xml")
+	hd.Set("X-Content-Type-Options", "nosniff")
+	hd.Set("Content-Security-Policy", sketchPolicy)
+	hd.Set("Cache-Control", "private, no-store")
+	hd.Set("X-Release-Version", strconv.Itoa(int(rel.Version)))
+	hd.Set("X-Release-Taken-At", rel.TakenAt.UTC().Format(time.RFC3339))
+	hd.Set("Content-Length", strconv.Itoa(len(svg)))
+	_, _ = w.Write(svg)
 }

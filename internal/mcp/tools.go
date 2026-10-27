@@ -55,7 +55,9 @@ const blockFormat = "A body is a list of blocks, each an object with kind and te
 	"image (ref: an attachment ID of the item, text the caption, width 10-100 percent of the column or absent for its own size, align left or right to let text flow beside it, or center), " +
 	"bpmn (ref: an attachment ID of the item holding a BPMN 2.0 model, text the caption), process (engine: a process engine's ID, process: a BPMN process ID, text the caption; shows the process's newest version), " +
 	"form (engine: a process engine's ID, form: the form's ID there, text the caption; shows the form as the engine keeps it), " +
-	"decision (engine: a process engine's ID, decision: the decision's ID there, text the caption; shows the decision's newest deployed version); " +
+	"decision (engine: a process engine's ID, decision: the decision's ID there, text the caption; shows the decision's newest deployed version), " +
+	"architecture (engine: a process engine's ID, application: the application's ID there, release: a version, or absent for the newest release with a sketch, " +
+	"layers: some of strategy, business, application, data, technology in this order, or absent for the engine's default, text the caption; shows the release's architecture sketch); " +
 	"a bpmn or process block may have view both (the diagram and below it the description of its tasks and decisions) or text (the description only), or none for the diagram alone. " +
 	"Paragraphs, headings, quotes and panels may have align center, right or justify. " +
 	"Inline formats are marks over the text, counted in Unicode code points: " +
@@ -102,10 +104,11 @@ var (
 // on a person's behalf.
 //
 // The process engines' routes (ADR-0129), their forms and decisions
-// included (ADR-0144), are not offered: whether agents read an engine's
-// processes, forms, decisions and operations through this server, with
-// the engine's credential rather than their own, is a decision of its
-// own.
+// (ADR-0144) and the architecture sketches of their applications
+// (ADR-0146) included, are not offered: whether agents read an engine's
+// processes, forms, decisions, sketches and operations through this
+// server, with the engine's credential rather than their own, is a
+// decision of its own.
 var tools = []tool{
 	{Name: "list_spaces", Description: "List the spaces the caller holds a role in.", Method: "GET", Path: "/api/spaces"},
 	{Name: "get_own_roles", Description: "The caller's own roles: the system roles held, and every space role granted to the caller, directly or through a group (via), one entry per grant.",
