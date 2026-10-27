@@ -200,7 +200,7 @@ async function commentsView(tab = "") {
   // The feed is paged, so the server filters it (ADR-0098).
   const { spaces } = await get("/api/spaces");
   const filter = serverFilter({ id: "comments", label: t("comments.title"),
-    choices: [{ key: "space", label: t("col.space"), options: spaces.map((s) => [s.key, `${s.name} (${s.key})`]) }],
+    choices: [{ key: "space", label: t("col.space"), options: favouritesFirst(spaces).map((s) => [s.key, `${s.name} (${s.key})`]) }],
     load: async () => {
       list.replaceChildren();
       const page = await get(url(0));
@@ -421,7 +421,7 @@ async function labelView(label) {
   const [{ spaces }, { types }] = await Promise.all([get("/api/spaces"), get("/api/types")]);
   const filter = serverFilter({ id: "labelled", label: t("label.heading"),
     choices: [
-      { key: "space", label: t("col.space"), options: spaces.map((s) => [s.key, `${s.name} (${s.key})`]) },
+      { key: "space", label: t("col.space"), options: favouritesFirst(spaces).map((s) => [s.key, `${s.name} (${s.key})`]) },
       { key: "type", label: t("col.type"), options: types.map((ty) => [ty.name, ty.name]) },
     ],
     load: async (state) => {
@@ -1650,7 +1650,7 @@ async function searchView(q) {
   const states = [...new Set(types.flatMap((ty) => ty.workflow?.states || []))].sort();
   const filter = serverFilter({ id: "hits", label: t("search.title"),
     choices: [
-      { key: "space", label: t("col.space"), options: spaces.map((s) => [s.key, `${s.name} (${s.key})`]) },
+      { key: "space", label: t("col.space"), options: favouritesFirst(spaces).map((s) => [s.key, `${s.name} (${s.key})`]) },
       { key: "type", label: t("col.type"), options: types.map((ty) => [ty.name, ty.name]) },
       ...(states.length ? [{ key: "state", label: t("col.state"), options: states.map((s) => [s, s]) }] : []),
     ],
@@ -1934,6 +1934,13 @@ async function homeView() {
   );
 }
 
+// favouritesFirst orders spaces with one's favourites first, then the
+// others, each group in its order, as the start page and every choice of a
+// space show them (ADR-0145).
+function favouritesFirst(spaces) {
+  return [...spaces.filter((s) => s.favourite), ...spaces.filter((s) => !s.favourite)];
+}
+
 // spaceIcon shows a space's icon or logo (ADR-0062), or its key when it
 // has none.
 function spaceIcon(s, size) {
@@ -2092,7 +2099,9 @@ function setupCard(types) {
 async function newView(params) {
   const show = screen();
   const [{ spaces }, { types }] = await Promise.all([get("/api/spaces"), get("/api/types")]);
-  const editable = spaces.filter((s) => mayEdit(s.role));
+  // One's favourite spaces come first, and without a space in the address
+  // the first of them is chosen (ADR-0145).
+  const editable = favouritesFirst(spaces.filter((s) => mayEdit(s.role)));
   let parent = null;
   if (params.get("parent")) parent = (await get("/api/items/" + encodeURIComponent(params.get("parent")))).item;
   const space = editable.some((s) => s.key === params.get("space")) ? params.get("space") : editable[0]?.key;
@@ -2665,7 +2674,8 @@ async function labelBoardView(label, space) {
   const filter = inSpaces.length > 1 || space
     ? field(t("col.space"), h("select", { id: "labelboard-space", onchange: (ev) => go(ev.target.value) },
       h("option", { value: "", text: t("labelboard.allSpaces") }),
-      [...new Set([...inSpaces, space].filter(Boolean))].map((sp) => h("option", { value: sp, selected: sp === space,
+      favouritesFirst([...new Set([...inSpaces, space].filter(Boolean))].map((key) => ({ key, favourite: spaces.find((x) => x.key === key)?.favourite })))
+        .map(({ key: sp }) => h("option", { value: sp, selected: sp === space,
         text: `${sp} ${spaces.find((x) => x.key === sp)?.name || ""}` }))))
     : null;
   const kept = kanbans.filter((k) => k.label === label && (!space || k.space === space));
@@ -2721,7 +2731,7 @@ async function kanbansView() {
   const create = editable.length && flows.length ? form({ id: "new-kanban", class: "card" }, [
     h("h2", { text: t("kanban.new") }),
     h("div", { class: "form-row" },
-      field(t("col.space"), h("select", { name: "space" }, editable.map((sp) => h("option", { value: sp.key, text: `${sp.key} ${sp.name}`, selected: sp.key === here.space })))),
+      field(t("col.space"), h("select", { name: "space" }, favouritesFirst(editable).map((sp) => h("option", { value: sp.key, text: `${sp.key} ${sp.name}`, selected: sp.key === here.space })))),
       field(t("kanban.name"), h("input", { name: "name", required: true, maxlength: 80, placeholder: t("kanban.namePlaceholder") })),
       field(t("kanban.type"), h("select", { name: "type" }, flows.map((ty) => h("option", { value: ty.name, text: ty.name, selected: ty.name === "task" }))))),
     h("details", {}, h("summary", { text: t("kanban.labelMore") }),
@@ -3763,7 +3773,7 @@ function readProperty(f, el) {
 function newItemForm({ space, spaces = null, types, parent = null, heading = t("item.new"), id = "new-item", type = "page" }) {
   if (types.length === 0) return null;
   const spaceSelect = spaces && spaces.length > 1
-    ? h("select", { name: "space" }, spaces.map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})`, selected: s.key === space })))
+    ? h("select", { name: "space" }, favouritesFirst(spaces).map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})`, selected: s.key === space })))
     : null;
   const under = parent ? h("input", { type: "checkbox", name: "under", checked: true }) : null;
   // A page lies below its parent only in the parent's space.
@@ -4053,7 +4063,7 @@ async function itemView(ref, params = new URLSearchParams()) {
 // by typing.
 async function relocateForm(box, item, mode, spaces, status) {
   const editable = spaces.filter((s) => mayEdit(s.role));
-  const spaceSelect = h("select", { name: "space", id: "relocate-space" }, editable.map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})`, selected: s.key === item.space })));
+  const spaceSelect = h("select", { name: "space", id: "relocate-space" }, favouritesFirst(editable).map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})`, selected: s.key === item.space })));
   const parentSelect = h("select", { name: "parent", id: "relocate-parent" });
   const fillParents = async () => {
     const { items } = await get(`/api/items?space=${encodeURIComponent(spaceSelect.value)}&limit=500`);
@@ -5079,7 +5089,7 @@ async function adminView() {
   const grantSection = section("roles", t("admin.grant"),
     h("p", { class: "muted", text: t("admin.grantHelp") }),
     form({ id: "grant" }, [
-      field(t("col.space"), h("select", { name: "space" }, spaces.map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})` })))),
+      field(t("col.space"), h("select", { name: "space" }, favouritesFirst(spaces).map((s) => h("option", { value: s.key, text: `${s.name} (${s.key})` })))),
       field(t("admin.user"), h("select", { name: "user" }, userOptions(), groups.map((g) => h("option", { value: "@" + g.name, text: "@" + g.name })))),
       field(t("admin.role"), h("select", { name: "role" }, [["viewer", t("role.viewer")], ["editor", t("role.editor")], ["space-admin", t("role.space-admin")]].map(([r, label]) => h("option", { value: r, text: label })))),
       h("button", { type: "submit", text: t("admin.grantButton") }),
@@ -5726,7 +5736,7 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       field(t("connector.name"), h("input", { name: "name", value: c.name, required: true, maxlength: 80 })),
       h("label", { class: "check" }, h("input", { type: "checkbox", name: "enabled", checked: c.enabled }), " ", t("catalog.enabled")),
       a ? "" : field(t("catalog.space"), h("select", { name: "space", required: true }, h("option", { value: "", text: "—" }),
-        spaces.map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === c.space })))),
+        favouritesFirst(spaces).map((sp) => h("option", { value: sp.key, text: `${sp.name} (${sp.key})`, selected: sp.key === c.space })))),
       a ? atlassianSource() : j ? jsonSource() : g ? gitSource() : ckanSource(),
       a ? "" : h("fieldset", { class: "connector-target" }, h("legend", { text: t("connector.target") }),
         field(t("connector.type"), typeSelect),

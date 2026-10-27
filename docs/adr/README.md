@@ -159,4 +159,5 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0144](0144-forms-and-decisions-from-a-process-engine.md) | Forms and decisions from a process engine in the text | Proposed | Partial |
 | [0145](0145-favourite-spaces-come-first-on-the-start-page.md) | Favourite spaces come first on the start page | Accepted | Landed |
 | [0146](0146-architecture-sketches-of-releases-from-an-engine.md) | Architecture sketches of releases from an engine in the text | Proposed | Partial |
+| [0147](0147-favourite-spaces-come-first-in-every-choice-of-a-space.md) | Favourite spaces come first in every choice of a space | Accepted | Landed |
 | [0148](0148-start-forms-and-the-forms-of-a-process.md) | The forms of a process's steps, and start forms that start a process from a page | Proposed | Partial |
