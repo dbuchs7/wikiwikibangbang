@@ -94,6 +94,9 @@ type spaceJSON struct {
 	// Icon names the content of the space's icon, or is empty when it has
 	// none (ADR-0062).
 	Icon string `json:"icon,omitempty"`
+	// Favourite says the caller marked the space as a favourite
+	// (ADR-0145).
+	Favourite bool `json:"favourite,omitempty"`
 }
 
 type markJSON struct {

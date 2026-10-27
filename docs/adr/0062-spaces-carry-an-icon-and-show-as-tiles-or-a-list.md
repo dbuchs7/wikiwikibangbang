@@ -54,4 +54,5 @@ Strongest form: the choice follows the reader everywhere.
 
 ## Links
 
+- amended by [ADR-0145](0145-favourite-spaces-come-first-on-the-start-page.md) (favourite spaces first, as tiles and in the list)
 - relates to ADR-0052 (corporate design), ADR-0041 (page tree)

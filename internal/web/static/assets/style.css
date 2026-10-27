@@ -1086,6 +1086,15 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .space-tiles .space-tile { flex: 1; }
 .space-tiles .space-tile-head { min-height: 48px; }
 .space-tiles .space-tile .badge { margin-top: auto; }
+/* A star marks a space as one's favourite (ADR-0145): in a tile's lower
+   right corner, beside the role, and in the first column of the list. */
+.space-tiles > li { position: relative; }
+.favourite-star { border: 0; background: transparent; padding: 2px 6px; min-height: 0; font-size: 20px; line-height: 1;
+  color: var(--muted); cursor: pointer; border-radius: 6px; }
+.favourite-star:hover, .favourite-star[aria-pressed="true"] { color: var(--accent); }
+.favourite-star:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.space-tiles .favourite-star { position: absolute; right: 10px; bottom: 10px; }
+.space-list .favourite-col { width: 2.5em; text-align: center; }
 .space-icon { flex: none; border-radius: 8px; object-fit: contain; background: var(--surface); }
 .space-icon-24 { width: 24px; height: 24px; border-radius: 5px; }
 .space-icon-48 { width: 48px; height: 48px; }

@@ -1949,27 +1949,48 @@ const spacesLayout = {
 };
 
 // spacesOverview shows the spaces as tiles or as a list, with a switch.
+// The spaces one marked as favourites come first, in both (ADR-0145); a
+// star on each tile and row marks and unmarks them.
 function spacesOverview(spaces) {
   const box = h("div", { id: "spaces-overview" });
   const draw = (layout) => {
     const toggle = (value, label) => h("button", { type: "button", class: "segment", "aria-pressed": String(layout === value), id: "spaces-" + value, text: label,
       onclick: () => { spacesLayout.set(value); draw(value); } });
     const href = (s) => "#/space/" + encodeURIComponent(s.key);
+    const star = (s) => h("button", { type: "button", class: "favourite-star", "data-space": s.key, "aria-pressed": String(Boolean(s.favourite)),
+      title: s.favourite ? t("spaces.unfavourite") : t("spaces.favourite"), "aria-label": `${s.favourite ? t("spaces.unfavourite") : t("spaces.favourite")}: ${s.name}`,
+      text: s.favourite ? "★" : "☆",
+      onclick: async () => {
+        const path = `/api/spaces/${encodeURIComponent(s.key)}/favourite`;
+        try {
+          if (s.favourite) await del(path); else await put(path);
+        } catch (err) {
+          return alert(err.message);
+        }
+        // Drawn again in place, the star keeps the focus where it went.
+        s.favourite = !s.favourite;
+        draw(layout);
+        box.querySelector(`.favourite-star[data-space="${CSS.escape(s.key)}"]`)?.focus();
+      } });
+    const ordered = [...spaces.filter((s) => s.favourite), ...spaces.filter((s) => !s.favourite)];
+    const favourite = (s) => (s.favourite ? t("spaces.favouriteYes") : t("spaces.favouriteNo"));
     box.replaceChildren(
       h("div", { class: "segmented", role: "group", "aria-label": t("home.layout") }, toggle("tiles", t("home.tiles")), toggle("list", t("home.list"))),
       filtered(layout === "list"
         ? h("table", { class: "spaces space-list" },
-          h("tr", {}, h("th", { text: t("field.name") }), h("th", { text: t("admin.key") }), h("th", { text: t("admin.role") })),
-          spaces.map((s) => h("tr", { "data-f-role": roleText(s.role) },
+          h("tr", {}, h("th", { class: "favourite-col", "aria-label": t("spaces.favouriteCol") }), h("th", { text: t("field.name") }), h("th", { text: t("admin.key") }), h("th", { text: t("admin.role") })),
+          ordered.map((s) => h("tr", { "data-f-role": roleText(s.role), "data-f-favourite": favourite(s), class: s.favourite ? "favourite" : null },
+            h("td", { class: "favourite-col" }, star(s)),
             h("td", {}, h("a", { href: href(s), class: "space-link" }, spaceIcon(s, 24), h("span", { text: s.name }))),
             h("td", { class: "muted", text: s.key }),
             h("td", {}, h("span", { class: "badge", text: roleText(s.role) })))))
-        : h("ul", { class: "space-tiles spaces" }, spaces.map((s) => h("li", { "data-f-role": roleText(s.role) },
+        : h("ul", { class: "space-tiles spaces" }, ordered.map((s) => h("li", { "data-f-role": roleText(s.role), "data-f-favourite": favourite(s), class: s.favourite ? "favourite" : null },
           h("a", { href: href(s), class: "space-tile" },
             h("span", { class: "space-tile-head" }, h("span", { class: "space-key", text: s.key }), s.icon ? spaceIcon(s, 48) : ""),
             h("strong", { text: s.name }),
-            h("span", { class: "badge", text: roleText(s.role) }))))),
-      { id: "spaces", label: t("spaces.title"), choices: [{ key: "role", label: t("admin.role") }] }));
+            h("span", { class: "badge", text: roleText(s.role) })),
+          star(s)))),
+      { id: "spaces", label: t("spaces.title"), choices: [{ key: "role", label: t("admin.role") }, { key: "favourite", label: t("spaces.favouriteCol") }] }));
   };
   draw(spacesLayout.get());
   return box;

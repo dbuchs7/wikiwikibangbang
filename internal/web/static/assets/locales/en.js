@@ -90,6 +90,11 @@ export default {
   "spaces.none": "You have no role in any room yet. Ask an administrator.",
   "spaces.noneAdmin": "No rooms yet. Create the first one below.",
   "spaces.title": "Rooms",
+  "spaces.favourite": "Mark as favourite",
+  "spaces.unfavourite": "Remove from favourites",
+  "spaces.favouriteCol": "Favourite",
+  "spaces.favouriteYes": "Favourite",
+  "spaces.favouriteNo": "Not a favourite",
 
   "space.board": "Board: {type}",
   "space.items": { "one": "{n} item", "other": "{n} items" },

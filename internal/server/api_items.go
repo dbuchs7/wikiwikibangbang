@@ -38,6 +38,8 @@ func itemRoutes(d Deps) []Route {
 		{Method: del, Pattern: "/api/types/{name}", Summary: "Remove a type that no item and no kanban uses (administrators)", Handler: http.HandlerFunc(h.removeType)},
 		{Method: get, Pattern: "/api/spaces", Summary: "List the spaces one holds a role in", Handler: http.HandlerFunc(h.listSpaces)},
 		{Method: post, Pattern: "/api/spaces", Summary: "Create a space (administrators)", Handler: http.HandlerFunc(h.createSpace)},
+		{Method: put, Pattern: "/api/spaces/{space}/favourite", Summary: "Mark a space one holds a role in as one's favourite; favourites come first on the start page", Handler: http.HandlerFunc(h.markFavourite)},
+		{Method: del, Pattern: "/api/spaces/{space}/favourite", Summary: "Unmark a space as one's favourite", Handler: http.HandlerFunc(h.unmarkFavourite)},
 		{Method: put, Pattern: "/api/spaces/{space}/roles/{principal}", Summary: "Grant a space role to a user ID or @group (space administrators)", Handler: http.HandlerFunc(h.grantRole)},
 		{Method: put, Pattern: "/api/groups/{group}/members/{principal}", Summary: "Add a member to a group (administrators)", Handler: http.HandlerFunc(h.addMember)},
 		{Method: put, Pattern: "/api/system-roles/{role}/{principal}", Summary: "Grant a system role, admin or erasure (administrators)", Handler: http.HandlerFunc(h.grantSystemRole)},
@@ -242,11 +244,46 @@ func (h itemHandlers) removeType(w http.ResponseWriter, r *http.Request) {
 func (h itemHandlers) listSpaces(w http.ResponseWriter, r *http.Request) {
 	h.read(w, r, func(x *item.Session) (any, error) {
 		out := []spaceJSON{}
+		favourites := h.d.DB.Accounts.Favourites(auth.UserID(who(r)))
 		for _, sp := range x.Spaces() {
-			out = append(out, spaceJSON{Key: sp.Key, Name: sp.Name, Role: roleName(x.Role(sp.Key)), Icon: spaceIconTag(h.d.DB.Site, sp.Key)})
+			out = append(out, spaceJSON{Key: sp.Key, Name: sp.Name, Role: roleName(x.Role(sp.Key)), Icon: spaceIconTag(h.d.DB.Site, sp.Key),
+				Favourite: slices.Contains(favourites, sp.Key)})
 		}
 		return map[string]any{"spaces": out}, nil
 	})
+}
+
+// markFavourite and unmarkFavourite keep the spaces a person marked as
+// favourites, with their account (ADR-0145). Only a space one holds a role
+// in can be marked; one that is not found answers 404, as for a space one
+// may not see. Unmarking is allowed for any key, so a favourite outlives
+// neither a lost role nor a removed space for long.
+func (h itemHandlers) markFavourite(w http.ResponseWriter, r *http.Request) {
+	h.setFavourite(w, r, true)
+}
+
+func (h itemHandlers) unmarkFavourite(w http.ResponseWriter, r *http.Request) {
+	h.setFavourite(w, r, false)
+}
+
+func (h itemHandlers) setFavourite(w http.ResponseWriter, r *http.Request, on bool) {
+	space := r.PathValue("space")
+	if on {
+		var held bool
+		h.d.DB.Read(func(s *item.Store) { held = s.As(who(r)).Role(space) >= item.Viewer })
+		if !held {
+			h.fail(w, fmt.Errorf("space %s: %w", space, item.ErrNotFound))
+			return
+		}
+	}
+	switch err := h.d.DB.Accounts.SetFavourite(auth.UserID(who(r)), space, on); {
+	case errors.Is(err, auth.ErrInvalid):
+		writeError(w, http.StatusBadRequest, err.Error())
+	case err != nil:
+		h.fail(w, err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func (h itemHandlers) createSpace(w http.ResponseWriter, r *http.Request) {

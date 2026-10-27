@@ -2014,6 +2014,34 @@ function gitSource() {
     await page.waitForSelector("#spaces-list[aria-pressed=true]"); // the choice is kept
     await page.click("#spaces-tiles");
     await page.waitForSelector("#spaces-overview .space-tile");
+
+    step("start page: a star marks a space as a favourite; favourites come first, as tiles and in the list (ADR-0145)");
+    // A second space, last in the order, to bring to the front; removed for
+    // good at the end of the step.
+    check((await page.request.post(base + "/api/spaces", { data: { key: "ZFAV", name: "Favourite" } })).status() === 201, "a second space");
+    await page.reload();
+    await page.waitForSelector("#spaces-overview .space-tile:has-text('Favourite')");
+    const tileKeys = () => page.$$eval("#spaces-overview .space-tiles > li .space-key", (els) => els.map((e) => e.textContent));
+    const before = await tileKeys();
+    check(before.length >= 2, "more than one space to order");
+    const last = before[before.length - 1];
+    await page.click(`#spaces-overview .favourite-star[data-space="${last}"]`);
+    await page.waitForSelector(`#spaces-overview .space-tiles > li.favourite .favourite-star[data-space="${last}"][aria-pressed=true]`);
+    check((await tileKeys())[0] === last, "the favourite is the first tile");
+    check(await page.evaluate((k) => document.activeElement?.dataset.space === k, last), "the star keeps the focus");
+    await page.click("#spaces-list");
+    await page.waitForSelector("#spaces-overview table.space-list tr.favourite");
+    check(await page.$eval("#spaces-overview table.space-list tr:nth-child(2) .favourite-star", (e) => e.dataset.space) === last,
+      "the favourite is the first row of the list");
+    await page.reload(); // kept with the account, not the page
+    await page.waitForSelector(`#spaces-overview table.space-list tr.favourite .favourite-star[data-space="${last}"][aria-pressed=true]`);
+    await page.click(`#spaces-overview .favourite-star[data-space="${last}"]`);
+    await page.waitForSelector(`#spaces-overview .favourite-star[data-space="${last}"][aria-pressed=false]`);
+    await page.click("#spaces-tiles");
+    await page.waitForSelector("#spaces-overview .space-tile");
+    check(JSON.stringify(await tileKeys()) === JSON.stringify(before), "unmarked, the space is back in its place");
+    check((await page.request.delete(base + "/api/spaces/ZFAV")).ok(), "the second space goes to the trash");
+    check((await page.request.post(base + "/api/spaces/ZFAV/purge", { data: { confirm: "ZFAV" } })).ok(), "and is deleted for good");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");
     await page.click("#groups button[aria-label^='Take bert out']");

@@ -70,6 +70,8 @@ var classified = map[string]string{
 	"internal/auth.MaxFailures":      "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
 	"internal/auth.MaxTokenLifetime": "a security policy (ADR-0027): how long an API token may live",
 	"internal/auth.MaxReasonLength":  "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",
+	"internal/auth.maxFavourites": "the shape of one's preferences (ADR-0145), like the length of a username: favourites are space keys, " +
+		"which only an administrator creates, so the list cannot outgrow the spaces",
 	"internal/wal.MaxRecord": "part of the event log format: a server must read every record a server wrote, " +
 		"so the bound may not differ between them",
 	"internal/backup.maxIterations": "part of the backup format: the work factor a header may demand " +
