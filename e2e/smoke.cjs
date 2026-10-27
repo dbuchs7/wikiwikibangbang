@@ -2015,7 +2015,7 @@ function gitSource() {
     await page.click("#spaces-tiles");
     await page.waitForSelector("#spaces-overview .space-tile");
 
-    step("start page: a star marks a space as a favourite; favourites come first, as tiles and in the list (ADR-0145)");
+    step("start page: a star marks a space as a favourite; favourites come first, as tiles, in the list and in every choice of a space (ADR-0145)");
     // A second space, last in the order, to bring to the front; removed for
     // good at the end of the step.
     check((await page.request.post(base + "/api/spaces", { data: { key: "ZFAV", name: "Favourite" } })).status() === 201, "a second space");
@@ -2035,6 +2035,14 @@ function gitSource() {
       "the favourite is the first row of the list");
     await page.reload(); // kept with the account, not the page
     await page.waitForSelector(`#spaces-overview table.space-list tr.favourite .favourite-star[data-space="${last}"][aria-pressed=true]`);
+    // A choice of a space puts favourites first too, and "New" without a
+    // space chooses the first of them.
+    await page.goto(base + "/#/new");
+    await page.waitForSelector("#new-item select[name=space]");
+    check(await page.$eval("#new-item select[name=space]", (e) => e.options[0].value) === last, "the favourite is the first choice of a space");
+    check(await page.inputValue("#new-item select[name=space]") === last, "and is chosen for a new page");
+    await page.click("a.brand");
+    await page.waitForSelector(`#spaces-overview .favourite-star[data-space="${last}"]`);
     await page.click(`#spaces-overview .favourite-star[data-space="${last}"]`);
     await page.waitForSelector(`#spaces-overview .favourite-star[data-space="${last}"][aria-pressed=false]`);
     await page.click("#spaces-tiles");
