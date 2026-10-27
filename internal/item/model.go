@@ -99,7 +99,19 @@ const (
 	// (ADR-0144).
 	Form     BlockKind = "form"
 	Decision BlockKind = "decision"
+	// Architecture shows the architecture sketch of a release of an
+	// application a process engine keeps: Engine names the engine,
+	// Application is the application's ID there, Release the release's
+	// version (0 for the newest release with a sketch, followed on every
+	// read), Layers the layers shown (none for the engine's default) and
+	// Text the caption. The body holds no copy of the sketch (ADR-0145).
+	Architecture BlockKind = "architecture"
 )
+
+// ArchitectureLayers are the layers an architecture sketch may show, in
+// the order the engine draws them from top to bottom (ADR-0145). A block
+// names them in this order.
+var ArchitectureLayers = []string{"strategy", "business", "application", "data", "technology"}
 
 // BPMNTypes are the types a BPMN model's file has, as read from its bytes:
 // XML with its declaration, or text without one (ADR-0129).
@@ -182,6 +194,14 @@ type Block struct {
 	// form's or the decision's ID at the engine (ADR-0144).
 	Form     string `json:",omitempty"`
 	Decision string `json:",omitempty"`
+	// Application, Release and Layers name what an architecture block
+	// shows: the application's ID at the engine, the release's version, 0
+	// for the newest release with a sketch, and the layers shown, in the
+	// order of ArchitectureLayers, none for the engine's default
+	// (ADR-0145).
+	Application string   `json:",omitempty"`
+	Release     int      `json:",omitempty"`
+	Layers      []string `json:",omitempty"`
 }
 
 // The views of a bpmn or a process block besides its diagram alone
@@ -513,6 +533,7 @@ func (d Doc) clone() Doc {
 	for i, b := range d.Blocks {
 		b.Mentions = slices.Clone(b.Mentions)
 		b.Marks = slices.Clone(b.Marks)
+		b.Layers = slices.Clone(b.Layers)
 		blocks[i] = b
 	}
 	return Doc{Blocks: blocks}

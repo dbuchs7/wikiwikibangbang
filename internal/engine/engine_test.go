@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,14 @@ import (
 const (
 	model = `<?xml version="1.0" encoding="UTF-8"?><bpmn:definitions id="d"/>`
 	dmn   = `<?xml version="1.0" encoding="UTF-8"?><definitions id="credit"/>`
+	// sketch is an architecture sketch as atlas draws one: self-contained,
+	// its only references fragments of its own. %s names the layers asked.
+	sketch = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1140" height="420" viewBox="0 0 1140 420" role="img" aria-labelledby="sketch-title" font-family="sans-serif" font-size="13">
+<title id="sketch-title">Bestellwesen v3, layers %s</title>
+<defs><marker id="arrow" orient="auto"><path d="M0 0L10 5L0 10z"/></marker></defs>
+<g><title>Worker &lt;script&gt; &amp; co</title><rect x="10" y="10" width="200" height="60" rx="6" style="fill:#fff;stroke:#333"/><use href="#arrow"/><use xlink:href="#arrow"/><line x1="0" y1="0" x2="5" y2="5" marker-end="url(#arrow)" opacity="0.5" offset="1"/></g>
+</svg>`
 )
 
 // fakeAtlas answers the reads as atlas does, for the token "secret".
@@ -23,6 +32,12 @@ func fakeAtlas(t *testing.T) (*httptest.Server, *[]string) {
 	var asked []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		asked = append(asked, r.Method+" "+r.URL.EscapedPath())
+		// A token whose reach names no application lists none (atlas
+		// ADR-0493, as amended).
+		if r.Header.Get("Authorization") == "Bearer unreached" && r.URL.Path == "/base/api/v1/architectures" {
+			_, _ = w.Write([]byte(`{"applications":[]}`))
+			return
+		}
 		if r.Header.Get("Authorization") != "Bearer secret" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
@@ -61,6 +76,32 @@ func fakeAtlas(t *testing.T) (*httptest.Server, *[]string) {
 		case "/base/api/v1/decision-deployments/561/xml":
 			w.Header().Set("Content-Type", "application/xml; charset=utf-8")
 			_, _ = w.Write([]byte(dmn))
+		case "/base/api/v1/architectures":
+			_, _ = w.Write([]byte(`{"applications":[
+				{"applicationId":"c46e","application":"bestellwesen","releases":[
+					{"version":2,"releaseId":"r2","publishedAt":1793000000,"takenAt":1793000001,"recorded":["application","technology"]},
+					{"version":3,"releaseId":"r3","publishedAt":1793094979,"takenAt":1793094980,"recorded":["strategy","business","application","data","technology"]},
+					{"version":1,"releaseId":"r1","publishedAt":1792000000,"takenAt":1792000001,"recorded":["application","technology"]}]},
+				{"applicationId":"a/b","application":"Abrechnung","releases":[{"version":1,"releaseId":"x","publishedAt":1,"takenAt":2}]},
+				{"applicationId":"empty","application":"Leer","releases":[]},
+				{"applicationId":"","application":"broken","releases":[{"version":1}]}]}`))
+		case "/base/api/v1/applications/c46e/releases/3/architecture.embed.svg":
+			if r.URL.Query().Get("layers") == "strategy" {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"error":"release 3 records none of the layers asked for"}`))
+				return
+			}
+			w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+			_, _ = fmt.Fprintf(w, sketch, r.URL.Query().Get("layers"))
+		case "/base/api/v1/applications/c46e/releases/2/architecture.embed.svg":
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(`<html><body>a sign-in page</body></html>`))
+		case "/base/api/v1/applications/c46e/releases/1/architecture.embed.svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+			_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.cookie)</script></svg>`))
+		case "/base/api/v1/applications/a%2Fb/releases/1/architecture.embed.svg", "/base/api/v1/applications/a/b/releases/1/architecture.embed.svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+			_, _ = fmt.Fprintf(w, sketch, "")
 		case "/base/api/v1/processes/7/xml":
 			http.Redirect(w, r, "https://elsewhere.example.org/", http.StatusFound)
 		default:
@@ -201,6 +242,136 @@ func TestFormsAndDecisions(t *testing.T) {
 	}
 	if _, err := r.DecisionModel(ctx, e, "Bonität"); !errors.Is(err, ErrNoCredential) {
 		t.Errorf("a decision without credential: %v", err)
+	}
+}
+
+// TestArchitectureSketches: the applications whose releases carry an
+// architecture sketch, newest release first, and a release's sketch, read
+// after the application and the release are found in that list; release 0
+// is the newest (ADR-0145).
+func TestArchitectureSketches(t *testing.T) {
+	srv, asked := fakeAtlas(t)
+	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	r := NewReader(func(k string) string { return env[k] }, srv.Client())
+	e := site.Engine{ID: "atlas", Name: "Atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}
+	ctx := context.Background()
+
+	apps, err := r.Architectures(ctx, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(apps) != 2 || apps[0].ID != "a/b" || apps[0].Name != "Abrechnung" || apps[1].ID != "c46e" || apps[1].Name != "bestellwesen" {
+		t.Fatalf("applications %+v", apps)
+	}
+	rels := apps[1].Releases
+	if len(rels) != 3 || rels[0].Version != 3 || rels[1].Version != 2 || rels[2].Version != 1 ||
+		rels[0].PublishedAt.Unix() != 1793094979 || rels[0].TakenAt.Unix() != 1793094980 || strings.Join(rels[0].Recorded, ",") != "strategy,business,application,data,technology" {
+		t.Fatalf("releases %+v", rels)
+	}
+	if apps[0].Releases[0].Recorded == nil {
+		t.Error("a release that records no layer lists none, not null")
+	}
+
+	svg, rel, err := r.ArchitectureSketch(ctx, e, "c46e", 0, []string{"business", "application"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel.Application != "c46e" || rel.Name != "bestellwesen" || rel.Version != 3 || rel.TakenAt.Unix() != 1793094980 || !strings.Contains(string(svg), "layers business,application") {
+		t.Fatalf("the newest sketch: %+v %s", rel, svg)
+	}
+	if want := "GET /base/api/v1/applications/c46e/releases/3/architecture.embed.svg"; (*asked)[len(*asked)-1] != want || (*asked)[len(*asked)-2] != "GET /base/api/v1/architectures" {
+		t.Fatalf("asked %v", (*asked)[len(*asked)-2:])
+	}
+	if svg, rel, err := r.ArchitectureSketch(ctx, e, "c46e", 3, nil); err != nil || rel.Version != 3 || !strings.Contains(string(svg), "layers </title>") {
+		t.Fatalf("a fixed release with the engine's layers: %+v %v %s", rel, err, svg)
+	}
+	if _, rel, err := r.ArchitectureSketch(ctx, e, "a/b", 0, nil); err != nil || rel.Version != 1 || (*asked)[len(*asked)-1] != "GET /base/api/v1/applications/a%2Fb/releases/1/architecture.embed.svg" {
+		t.Fatalf("an ID with a slash is one segment: %+v %v %v", rel, err, (*asked)[len(*asked)-1])
+	}
+
+	// Only what the list offers is read.
+	n := len(*asked)
+	for name, c := range map[string]struct {
+		app     string
+		release int32
+		want    string
+	}{
+		"an application not listed":  {"hidden", 0, "application hidden"},
+		"an application without one": {"empty", 0, "application empty"},
+		"a release without a sketch": {"c46e", 9, "release 9 of bestellwesen"},
+		"a release no number":        {"c46e", -1, "release -1 of bestellwesen"},
+		"an empty application":       {"", 0, "application "},
+	} {
+		if _, _, err := r.ArchitectureSketch(ctx, e, c.app, c.release, nil); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for _, x := range (*asked)[n:] {
+		if x != "GET /base/api/v1/architectures" {
+			t.Errorf("read what the list does not offer: %v", (*asked)[n:])
+			break
+		}
+	}
+
+	if _, _, err := r.ArchitectureSketch(ctx, e, "c46e", 3, []string{"strategy"}); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "release 3 of bestellwesen records none of the layers strategy") {
+		t.Errorf("layers the release does not record: %v", err)
+	}
+	if _, _, err := r.ArchitectureSketch(ctx, e, "c46e", 2, nil); !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "text/html") {
+		t.Errorf("an answer that is no SVG picture: %v", err)
+	}
+	if _, _, err := r.ArchitectureSketch(ctx, e, "c46e", 1, nil); !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "<script>") || !strings.Contains(err.Error(), "bestellwesen v1") {
+		t.Errorf("a sketch with a script: %v", err)
+	}
+
+	// A token whose reach names no application lists none; a sketch then
+	// points the administrator at the token's reach.
+	env["WWBB_ENGINE_ATLAS_TOKEN"] = "unreached"
+	if apps, err := r.Architectures(ctx, e); err != nil || apps == nil || len(apps) != 0 {
+		t.Errorf("a token that reaches no application: %v %v", apps, err)
+	}
+	if _, _, err := r.ArchitectureSketch(ctx, e, "c46e", 0, nil); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "reach") || strings.Contains(err.Error(), "unreached") {
+		t.Errorf("a sketch with a token that reaches no application: %v", err)
+	}
+	delete(env, "WWBB_ENGINE_ATLAS_TOKEN")
+	if _, err := r.Architectures(ctx, e); !errors.Is(err, ErrNoCredential) {
+		t.Errorf("architectures without credential: %v", err)
+	}
+	if _, _, err := r.ArchitectureSketch(ctx, e, "c46e", 0, nil); !errors.Is(err, ErrNoCredential) {
+		t.Errorf("a sketch without credential: %v", err)
+	}
+}
+
+// TestUnsafeSketchesAreRefused: as defence in depth, a sketch is shown only
+// when it holds no script, no embedded document, no event attribute and no
+// reference outside itself (ADR-0145); the engine's own content security
+// policy forbids them too.
+func TestUnsafeSketchesAreRefused(t *testing.T) {
+	if what := unsafeSVG([]byte(fmt.Sprintf(sketch, "application,technology"))); what != "" {
+		t.Fatalf("atlas's sketch is refused: %s", what)
+	}
+	for svg, want := range map[string]string{
+		`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`:                                                  "<script>",
+		`<svg xmlns="http://www.w3.org/2000/svg"><SCRIPT/></svg>`:                                                                  "<script>",
+		`<svg xmlns="http://www.w3.org/2000/svg" xmlns:s="http://www.w3.org/2000/svg"><s:script/></svg>`:                           "<script>",
+		`<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div xmlns="http://www.w3.org/1999/xhtml"/></foreignObject></svg>`: "<foreignobject>",
+		`<svg xmlns="http://www.w3.org/2000/svg" onload="x()"/>`:                                                                   "an event attribute (onload)",
+		`<svg xmlns="http://www.w3.org/2000/svg"><rect ONCLICK="x()"/></svg>`:                                                      "an event attribute (onclick)",
+		`<svg xmlns="http://www.w3.org/2000/svg"><image href="https://elsewhere.example.org/x.png"/></svg>`:                        "a reference outside the sketch",
+		`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="other.svg#a"/></svg>`: "a reference outside the sketch",
+		`<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><text>x</text></a></svg>`:                           "a reference outside the sketch",
+		`<svg xmlns="http://www.w3.org/2000/svg"><use href=" #a"/></svg>`:                                                          "a reference outside the sketch",
+		`<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="onmouseover" to="alert(1)"/></svg>`:                           "an animation of onmouseover",
+		`<svg xmlns="http://www.w3.org/2000/svg"><animate attributeName="xlink:href" values="javascript:alert(1)"/></svg>`:         "an animation of xlink:href",
+		`<?xml-stylesheet href="https://elsewhere.example.org/s.css"?><svg xmlns="http://www.w3.org/2000/svg"/>`:                   "a stylesheet outside the sketch",
+		`<svg xmlns="http://www.w3.org/2000/svg"><![CDATA[<script>alert(1)</script>]]></svg>`:                                      "<script>",
+		`<svg xmlns="http://www.w3.org/2000/svg"><rect></svg>`:                                                                     "no well-formed XML",
+		`<svg xmlns="http://www.w3.org/2000/svg">&unknown;</svg>`:                                                                  "no well-formed XML",
+		`<html><body/></html>`: "no SVG picture",
+		``:                     "no SVG picture",
+	} {
+		if got := unsafeSVG([]byte(svg)); got != want {
+			t.Errorf("%s: %q, want %q", svg, got, want)
+		}
 	}
 }
 

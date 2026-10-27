@@ -246,23 +246,32 @@ func documentXML(t *testing.T, file []byte) string {
 }
 
 // TestDiagramsAreNamedInDocuments: a BPMN diagram and a process are named
-// with their captions in both exports, not drawn (ADR-0129).
+// with their captions in both exports, not drawn (ADR-0129). An
+// architecture sketch is named by its caption, which the picker fills with
+// the application's name, since the block holds only the application's ID
+// (ADR-0145).
 func TestDiagramsAreNamedInDocuments(t *testing.T) {
 	page := Page{ID: "p", Title: "Order to cash", Body: []item.Block{
 		{Kind: item.BPMN, Ref: "m", Text: "As <drawn>"},
 		{Kind: item.Process, Engine: "atlas", Process: "order-to-cash", Text: "As it runs"},
 		{Kind: item.Form, Engine: "atlas", Form: "reise-antrag", Text: "Filled <in>"},
 		{Kind: item.Decision, Engine: "atlas", Decision: "Decision 1", Text: "Who needs a visa"},
+		{Kind: item.Architecture, Engine: "atlas", Application: "c46e", Release: 3, Text: "Bestellwesen & co"},
+		{Kind: item.Architecture, Engine: "atlas", Application: "c46e", Layers: []string{"data"}},
 	}, Images: map[item.ID]Image{"m": {Name: "order&co.bpmn", Type: "text/xml; charset=utf-8"}}}
 	var h bytes.Buffer
 	if err := HTML(&h, Document{Pages: []Page{page}}, "en"); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "<figcaption>As &lt;drawn&gt;</figcaption>", "[BPMN: order-to-cash (atlas)]", "<figcaption>As it runs</figcaption>",
-		"[Form: reise-antrag (atlas)]", "<figcaption>Filled &lt;in&gt;</figcaption>", "[Decision: Decision 1 (atlas)]", "<figcaption>Who needs a visa</figcaption>"} {
+		"[Form: reise-antrag (atlas)]", "<figcaption>Filled &lt;in&gt;</figcaption>", "[Decision: Decision 1 (atlas)]", "<figcaption>Who needs a visa</figcaption>",
+		"[Architecture sketch: Bestellwesen &amp; co v3 (atlas)]", "[Architecture sketch: c46e, newest release (atlas)]"} {
 		if !strings.Contains(h.String(), want) {
 			t.Errorf("the HTML lacks %q:\n%s", want, h.String())
 		}
+	}
+	if strings.Contains(h.String(), "<figcaption>Bestellwesen") {
+		t.Errorf("the HTML repeats the name of an architecture sketch as its caption:\n%s", h.String())
 	}
 	var w bytes.Buffer
 	if err := DOCX(&w, Document{Pages: []Page{page}}); err != nil {
@@ -278,10 +287,14 @@ func TestDiagramsAreNamedInDocuments(t *testing.T) {
 		}
 		r, _ := f.Open()
 		data, _ := io.ReadAll(r)
-		for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "As &lt;drawn&gt;", "[BPMN: order-to-cash (atlas)]", "As it runs", "[Form: reise-antrag (atlas)]", "Filled &lt;in&gt;", "[Decision: Decision 1 (atlas)]"} {
+		for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "As &lt;drawn&gt;", "[BPMN: order-to-cash (atlas)]", "As it runs", "[Form: reise-antrag (atlas)]", "Filled &lt;in&gt;", "[Decision: Decision 1 (atlas)]",
+			"[Architecture sketch: Bestellwesen &amp; co v3 (atlas)]", "[Architecture sketch: c46e, newest release (atlas)]"} {
 			if !strings.Contains(string(data), want) {
 				t.Errorf("the Word document lacks %q", want)
 			}
+		}
+		if n := strings.Count(string(data), "Bestellwesen &amp; co"); n != 1 {
+			t.Errorf("the Word document names an architecture sketch %d times", n)
 		}
 	}
 }

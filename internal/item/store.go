@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"maps"
+	"math"
 	"net/url"
 	"reflect"
 	"regexp"
@@ -1228,6 +1229,26 @@ func validIDAtEngine(id string) bool {
 	return !strings.ContainsFunc(id, unicode.IsControl)
 }
 
+// validLayers reports whether layers can be what an architecture block
+// shows (ADR-0145): none, for the engine's default, or some of
+// ArchitectureLayers, each once and in their order. An empty list that is
+// not none is refused, so that a body decoded from the log, where it reads
+// as none, holds what the live one held.
+func validLayers(layers []string) bool {
+	if layers == nil {
+		return true
+	}
+	last := -1
+	for _, l := range layers {
+		i := slices.Index(ArchitectureLayers, l)
+		if i <= last {
+			return false
+		}
+		last = i
+	}
+	return len(layers) > 0
+}
+
 // checkBlock validates one block of a body (ADR-0001, ADR-0032).
 func checkBlock(b Block, self ID) error {
 	switch b.Kind {
@@ -1275,17 +1296,33 @@ func checkBlock(b Block, self ID) error {
 		case len(b.Marks) > 0 || len(b.Mentions) > 0:
 			return invalid("a %s has a plain caption", b.Kind)
 		}
+	case Architecture:
+		switch {
+		case !ValidEngineID(b.Engine):
+			return invalid("engine %q: an architecture sketch names an engine by its ID, lower-case letters, digits, dots and hyphens, at most 40", b.Engine)
+		case !validIDAtEngine(b.Application):
+			return invalid("application %q: an application is named by its ID at the engine, 1 to 255 characters without control characters or surrounding spaces", b.Application)
+		case b.Release < 0 || b.Release > math.MaxInt32:
+			return invalid("release %d: a release is its version, a positive number, or 0 for the newest release with a sketch", b.Release)
+		case !validLayers(b.Layers):
+			return invalid("layers %q: an architecture sketch shows some of %s, each once and in this order, or none for the engine's default", b.Layers, strings.Join(ArchitectureLayers, ", "))
+		case len(b.Marks) > 0 || len(b.Mentions) > 0:
+			return invalid("an architecture sketch has a plain caption")
+		}
 	default:
 		return invalid("unknown block kind %q", b.Kind)
 	}
 	if b.Kind != Embed && b.Kind != Image && b.Kind != Video && b.Kind != BPMN && b.Ref != "" {
 		return invalid("only an embed, an image, a video or a BPMN diagram has a reference")
 	}
-	if b.Kind != Process && b.Kind != Form && b.Kind != Decision && b.Engine != "" {
-		return invalid("only a process, a form or a decision names an engine")
+	if b.Kind != Process && b.Kind != Form && b.Kind != Decision && b.Kind != Architecture && b.Engine != "" {
+		return invalid("only a process, a form, a decision or an architecture sketch names an engine")
 	}
 	if b.Kind != Process && b.Process != "" || b.Kind != Form && b.Form != "" || b.Kind != Decision && b.Decision != "" {
 		return invalid("only a process names a process, only a form a form and only a decision a decision")
+	}
+	if b.Kind != Architecture && (b.Application != "" || b.Release != 0 || b.Layers != nil) {
+		return invalid("only an architecture sketch names an application, a release and layers")
 	}
 	if b.View != "" && ((b.Kind != BPMN && b.Kind != Process) || !slices.Contains(DiagramViews, b.View)) {
 		return invalid("view %q: a BPMN diagram or a process shows %s, or its diagram alone; other blocks have no view", b.View, strings.Join(DiagramViews, ", "))

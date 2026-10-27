@@ -296,6 +296,9 @@ export function liveBody({ ref, embeds, resolve, childPages, files, extra = [], 
     if (b.kind === "process") return { kind: "process", text: b.text ?? "", engine: b.engine, process: b.process, ...(b.view ? { view: b.view } : {}) };
     if (b.kind === "form") return { kind: "form", text: b.text ?? "", engine: b.engine, form: b.form };
     if (b.kind === "decision") return { kind: "decision", text: b.text ?? "", engine: b.engine, decision: b.decision };
+    if (b.kind === "architecture") {
+      return { kind: "architecture", text: b.text ?? "", engine: b.engine, application: b.application, ...(b.release ? { release: b.release } : {}), ...(b.layers?.length ? { layers: b.layers } : {}) };
+    }
     if (b.kind === "image" || b.kind === "video") {
       const img = { kind: b.kind, text: b.text ?? "", ref: b.ref };
       if (b.width) img.width = b.width;

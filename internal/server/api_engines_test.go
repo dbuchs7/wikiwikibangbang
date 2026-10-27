@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -35,6 +36,16 @@ func fakeEngine(t *testing.T) *httptest.Server {
 				{"key":20,"decisionId":"Decision 1","version":2,"modelName":"Credit","deployedAt":1790235601}]`))
 		case "/api/v1/decision-deployments/21/xml":
 			_, _ = w.Write([]byte(`<?xml version="1.0"?><definitions id="credit-v3"/>`))
+		case "/api/v1/architectures":
+			_, _ = w.Write([]byte(`{"applications":[{"applicationId":"c46e","application":"Bestellwesen","releases":[
+				{"version":3,"releaseId":"cfc9","publishedAt":1793094979,"takenAt":1793094979,"recorded":["strategy","business","application","data","technology"]},
+				{"version":2,"releaseId":"b1a0","publishedAt":1793000000,"takenAt":1793000001,"recorded":["application","technology"]}]}]}`))
+		case "/api/v1/applications/c46e/releases/3/architecture.embed.svg":
+			w.Header().Set("Content-Type", "image/svg+xml; charset=utf-8")
+			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n" + `<svg xmlns="http://www.w3.org/2000/svg" width="1140" height="300"><title>v3 ` + r.URL.Query().Get("layers") + `</title><use href="#a"/></svg>`))
+		case "/api/v1/applications/c46e/releases/2/architecture.embed.svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+			_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><image href="https://elsewhere.example.org/tracker.png"/></svg>`))
 		case "/api/v1/processes/12/runtime":
 			_, _ = w.Write([]byte(`{"instances":2,"finished":5,"tokens":2,"incidentTotal":1,"incidentCountsExact":true,
 				"elements":[{"elementId":"check","tokens":2,"visits":7,"incidents":1,"terminated":0}],
@@ -171,5 +182,111 @@ func TestFormsAndDecisionsFromAnEngine(t *testing.T) {
 		if r := w.vera.do("GET", path, ""); r.Code != http.StatusBadGateway || strings.Contains(r.Body.String(), "wrong") {
 			t.Errorf("%s with a refused credential: %d %s", path, r.Code, r.Body)
 		}
+	}
+}
+
+// TestArchitectureSketchesFromAnEngine covers ADR-0145 through the API:
+// every signed-in person and token lists the applications whose releases
+// carry a sketch and reads a sketch as an image of this site, the newest
+// release or a fixed one, with the layers asked; what is no release, no
+// layer or no safe picture is refused, and the credential is never
+// answered.
+func TestArchitectureSketchesFromAnEngine(t *testing.T) {
+	srv := fakeEngine(t)
+	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	w := newWorld(t, func(d *Deps) { d.Engines = engine.NewReader(func(k string) string { return env[k] }, srv.Client()) })
+	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusCreated)
+
+	listed := w.vera.expect("GET", "/api/engines/atlas/architectures", "", http.StatusOK)
+	apps := listed["applications"].([]any)
+	if len(apps) != 1 || field(listed, "engine", "name") != "Atlas" {
+		t.Fatalf("architectures %v", listed)
+	}
+	app := apps[0].(map[string]any)
+	rel := app["releases"].([]any)[0].(map[string]any)
+	if app["application"] != "c46e" || app["name"] != "Bestellwesen" || len(app["releases"].([]any)) != 2 || rel["version"] != float64(3) ||
+		rel["takenAt"] != "2026-10-27T09:56:19Z" || len(rel["recorded"].([]any)) != 5 || rel["releaseId"] != nil {
+		t.Fatalf("application %v", app)
+	}
+
+	rec := readToken(w.carla).do("GET", "/api/engines/atlas/architectures/c46e/newest?layers=technology,application,application", "")
+	hd := rec.Header()
+	if rec.Code != http.StatusOK || hd.Get("Content-Type") != "image/svg+xml" || hd.Get("X-Content-Type-Options") != "nosniff" ||
+		hd.Get("Content-Security-Policy") != "default-src 'none'; style-src 'unsafe-inline'; sandbox" || hd.Get("Cache-Control") != "private, no-store" ||
+		hd.Get("X-Release-Version") != "3" || hd.Get("X-Release-Taken-At") != "2026-10-27T09:56:19Z" {
+		t.Fatalf("the newest sketch: %d %v %s", rec.Code, hd, rec.Body)
+	}
+	// The layers reach the engine once each, in the engine's order.
+	if !strings.Contains(rec.Body.String(), "<title>v3 application,technology</title>") {
+		t.Fatalf("the sketch %s", rec.Body)
+	}
+	if rec := w.vera.do("GET", "/api/engines/atlas/architectures/c46e/3", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "<title>v3 </title>") {
+		t.Fatalf("a fixed release with the engine's layers: %d %s", rec.Code, rec.Body)
+	}
+
+	for path, status := range map[string]int{
+		"/api/engines/atlas/architectures/c46e/0":                     http.StatusBadRequest,
+		"/api/engines/atlas/architectures/c46e/-3":                    http.StatusBadRequest,
+		"/api/engines/atlas/architectures/c46e/latest":                http.StatusBadRequest,
+		"/api/engines/atlas/architectures/c46e/4294967299":            http.StatusBadRequest,
+		"/api/engines/atlas/architectures/c46e/newest?layers=physics": http.StatusBadRequest,
+		"/api/engines/atlas/architectures/c46e/newest?layers=data,":   http.StatusBadRequest,
+		"/api/engines/atlas/architectures/c46e/7":                     http.StatusNotFound,
+		"/api/engines/atlas/architectures/hidden/newest":              http.StatusNotFound,
+		"/api/engines/gone/architectures":                             http.StatusNotFound,
+		"/api/engines/gone/architectures/c46e/newest":                 http.StatusNotFound,
+		"/api/engines/atlas/architectures/c46e/2":                     http.StatusBadGateway, // a picture that reaches outside itself
+	} {
+		if rec := w.vera.do("GET", path, ""); rec.Code != status || rec.Header().Get("Content-Type") == "image/svg+xml" {
+			t.Errorf("%s: %d %s, want %d", path, rec.Code, rec.Body, status)
+		}
+	}
+	if rec := w.vera.do("GET", "/api/engines/atlas/architectures/c46e/2", ""); !strings.Contains(rec.Body.String(), "engine atlas") || !strings.Contains(rec.Body.String(), "a reference outside the sketch") {
+		t.Errorf("an unsafe picture says why: %s", rec.Body)
+	}
+
+	env["WWBB_ENGINE_ATLAS_TOKEN"] = "wrong"
+	for _, path := range []string{"/api/engines/atlas/architectures", "/api/engines/atlas/architectures/c46e/newest"} {
+		if r := w.vera.do("GET", path, ""); r.Code != http.StatusBadGateway || strings.Contains(r.Body.String(), "wrong") || !strings.Contains(r.Body.String(), "engine atlas: the engine refused the credential") {
+			t.Errorf("%s with a refused credential: %d %s", path, r.Code, r.Body)
+		}
+	}
+
+	// The description names what the routes answer.
+	doc := w.vera.expect("GET", "/api/openapi.json", "", http.StatusOK)
+	sketch, _ := field(doc, "paths", "/api/engines/{id}/architectures/{application}/{release}", "get").(map[string]any)["summary"].(string)
+	for _, want := range []string{"image/svg+xml", "newest", "layers", "strategy, business, application, data, technology"} {
+		if !strings.Contains(sketch, want) {
+			t.Errorf("the description of the sketch lacks %q: %s", want, sketch)
+		}
+	}
+}
+
+// TestArchitectureBlocksThroughTheAPI: a body names an architecture sketch
+// by its engine, application, release and layers; an empty list of layers
+// is the engine's default, written as none (ADR-0145).
+func TestArchitectureBlocksThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"Ordering","properties":{"priority":"low"}}`, http.StatusCreated)
+	path := "/api/items/" + field(it, "item", "key").(string) + "/body"
+	got := field(w.bert.expect("PUT", path, `{"blocks":[
+		{"kind":"architecture","engine":"atlas","application":"c46e","layers":[],"text":"Bestellwesen"},
+		{"kind":"architecture","engine":"atlas","application":"c46e","release":3,"layers":["business","data"],"text":"As released"}]}`, http.StatusOK), "item", "body").([]any)
+	newest, fixed := got[0].(map[string]any), got[1].(map[string]any)
+	if newest["kind"] != "architecture" || newest["engine"] != "atlas" || newest["application"] != "c46e" || newest["text"] != "Bestellwesen" ||
+		newest["release"] != nil || newest["layers"] != nil ||
+		fixed["release"] != float64(3) || fmt.Sprint(fixed["layers"]) != "[business data]" {
+		t.Fatalf("the body %v", got)
+	}
+	for _, bad := range []string{
+		`{"kind":"architecture","engine":"atlas","application":"c46e","layers":["data","business"]}`,
+		`{"kind":"architecture","engine":"atlas","application":"c46e","layers":["physics"]}`,
+		`{"kind":"architecture","engine":"atlas","application":"c46e","release":-1}`,
+		`{"kind":"architecture","engine":"atlas"}`,
+		`{"kind":"paragraph","text":"x","application":"c46e"}`,
+		`{"kind":"paragraph","text":"x","release":2}`,
+		`{"kind":"process","engine":"atlas","process":"p","layers":["data"]}`,
+	} {
+		w.bert.expect("PUT", path, `{"blocks":[`+bad+`]}`, http.StatusBadRequest)
 	}
 }

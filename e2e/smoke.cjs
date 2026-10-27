@@ -126,15 +126,29 @@ const decisionModel = (version) => `<?xml version="1.0" encoding="UTF-8"?>
   </dmndi:DMNDiagram></dmndi:DMNDI>
 </definitions>`;
 
+// sketchPicture is an architecture sketch as atlas draws one: an SVG
+// picture that names its release and the layers asked for in its text.
+const sketchPicture = (version, layers) => `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1140" height="300" viewBox="0 0 1140 300" role="img" aria-labelledby="t">
+<title id="t">Bestellwesen v${version}</title><rect x="0" y="0" width="1140" height="300" style="fill:#f4f6fb"/>
+<g><title>The application</title><rect x="420" y="40" width="300" height="80" rx="8" style="fill:#fff;stroke:#335"/>
+<text x="570" y="88" text-anchor="middle">Bestellwesen v${version}: ${layers || "application,technology"}</text></g>
+</svg>`;
+
 // engineSource answers like an atlas engine (ADR-0129), for the credential
 // ENGINE_TOKEN, which the server under test holds as WWBB_ENGINE_ATLAS_TOKEN:
 // the versions of the process "order", their models and where the
 // newest's instances are. deploy() adds a version. It also answers its
 // forms and the deployed versions of its decisions (ADR-0144); decide()
-// deploys the decisions anew.
+// deploys the decisions anew. And it lists the releases of the application
+// Bestellwesen with their architecture sketches and answers each sketch
+// (ADR-0145); release() records a new release, and reach(false) makes the
+// token reach no application, as a token minted without a reach.
 function engineSource() {
   let versions = 3;
   let decided = 2;
+  let releases = 2;
+  let reached = true;
   const server = require("http").createServer((req, res) => {
     if (req.headers.authorization !== "Bearer " + process.env.ENGINE_TOKEN) {
       res.statusCode = 401;
@@ -157,6 +171,17 @@ function engineSource() {
         { key: 200 + i, decisionId: "Bonität", version: i + 1, modelName: "Credit", deployedAt: 1791000000 + i, current: i === decided - 1 },
         { key: 200 + i, decisionId: "Kreditentscheid", version: i + 1, modelName: "Credit", deployedAt: 1791000000 + i, current: i === decided - 1 }]).flat()));
     }
+    if (req.url === "/api/v1/architectures") {
+      return res.end(JSON.stringify({ applications: !reached ? [] : [{ applicationId: "c46e-bestell", application: "Bestellwesen",
+        releases: Array.from({ length: releases }, (_, i) => ({ version: releases - i, releaseId: "rel-" + (releases - i), publishedAt: 1793094979 + releases - i,
+          takenAt: 1793094979 + releases - i, recorded: releases - i === 1 ? ["application", "technology"] : ["strategy", "business", "application", "data", "technology"] })) }] }));
+    }
+    const a = /^\/api\/v1\/applications\/c46e-bestell\/releases\/(\d+)\/architecture\.embed\.svg(?:\?layers=([a-z,%2C]*))?$/.exec(req.url);
+    if (a && reached && Number(a[1]) >= 1 && Number(a[1]) <= releases) {
+      res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+      return res.end(sketchPicture(a[1], decodeURIComponent(a[2] || "")));
+    }
     const d = /^\/api\/v1\/decision-deployments\/(\d+)\/xml$/.exec(req.url);
     if (d) {
       res.setHeader("Content-Type", "application/xml; charset=utf-8");
@@ -175,6 +200,8 @@ function engineSource() {
   server.listen(0, "127.0.0.1");
   server.deploy = () => { versions++; };
   server.decide = () => { decided++; };
+  server.release = () => { releases++; };
+  server.reach = (on) => { reached = on; };
   return server;
 }
 
@@ -2648,6 +2675,77 @@ function gitSource() {
         "the watermark of the graph stays at its corner, as dmn-js places it");
       await decisionBlock.locator("select.pm-dmn-views").selectOption({ label: "Kreditentscheid" });
       await decisionBlock.locator(".dmn-decision-table-container :text('granted')").waitFor();
+
+      step("architecture: a release's sketch is a picture of this site; the newest release is followed, a fixed one stays, and a token that reaches nothing says so (ADR-0145)");
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .ProseMirror");
+      await page.locator("#body .ProseMirror").click();
+      await page.selectOption("#body .pm-toolbar select:has(option[value=architecture])", "architecture");
+      const pick = page.locator("dialog.arch-pick[open]");
+      await pick.locator("select.arch-application option[value=c46e-bestell]").waitFor({ state: "attached" });
+      check(await pick.locator("select.arch-release").inputValue() === "0", "the newest release is chosen at first");
+      check((await pick.locator("select.arch-release option").allTextContents())[0].startsWith("Newest release (currently v2, recorded"), "the newest release names its version");
+      check(await pick.locator(".arch-layer-list input").count() === 5, "the layers the release records are offered");
+      check((await pick.locator(".arch-layer-list input:checked").evaluateAll((boxes) => boxes.map((b) => b.value))).join(",") === "application,technology",
+        "application and technology are checked at first");
+      check(await pick.locator("input.arch-caption").inputValue() === "Bestellwesen", "the caption is the application's name");
+      await pick.locator(".arch-layer-list input[value=data]").check();
+      await pick.locator("button.arch-apply").click();
+      await page.waitForSelector("dialog.arch-pick", { state: "detached" });
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
+      const sketchBlock = page.locator("#body .pm-arch");
+      await sketchBlock.scrollIntoViewIfNeeded();
+      await sketchBlock.locator(".pm-diagram-info:has-text('Bestellwesen · newest — currently v2 · recorded')").waitFor();
+      const sketchImg = sketchBlock.locator("img.pm-arch-img");
+      await page.waitForFunction(() => document.querySelector("#body .pm-arch img.pm-arch-img")?.naturalWidth > 0);
+      check(await sketchImg.getAttribute("src") === "/api/engines/atlas/architectures/c46e-bestell/2?layers=application,data,technology", "the sketch is the newest release's, with the layers chosen");
+      check(await sketchBlock.locator("a.pm-arch-open").getAttribute("target") === "_blank", "a click opens the sketch in a new tab");
+      const served = await page.evaluate(async (src) => {
+        const r = await fetch(src);
+        return { type: r.headers.get("content-type"), policy: r.headers.get("content-security-policy"), cache: r.headers.get("cache-control"), text: await r.text() };
+      }, await sketchImg.getAttribute("src"));
+      check(served.type === "image/svg+xml" && served.policy === "default-src 'none'; style-src 'unsafe-inline'; sandbox" && served.cache === "private, no-store", "the sketch is served as a picture that runs nothing");
+      check(served.text.includes("Bestellwesen v2: application,data,technology"), "the engine is asked for the layers chosen");
+      engine.release();
+      await sketchBlock.locator(".pm-diagram-refresh").click();
+      await sketchBlock.locator(".pm-diagram-info:has-text('newest — currently v3')").waitFor(); // always the newest release
+      await page.waitForFunction(() => /\/3\?layers=/.test(document.querySelector("#body .pm-arch img.pm-arch-img")?.getAttribute("src") || ""));
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .ProseMirror");
+      await page.locator("#body .pm-arch .pm-arch-edit").click();
+      await pick.locator("select.arch-application option[value=c46e-bestell]").waitFor({ state: "attached" });
+      check(await pick.locator(".arch-layer-list input[value=data]").isChecked(), "the picker opens with the block's layers");
+      await pick.locator("select.arch-release").selectOption("2");
+      await pick.locator(".arch-layer-list input[value=data]").uncheck();
+      await pick.locator("button.arch-apply").click();
+      await page.waitForSelector("dialog.arch-pick", { state: "detached" });
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
+      await sketchBlock.scrollIntoViewIfNeeded();
+      await sketchBlock.locator(".pm-diagram-info:has-text('Bestellwesen · v2 · recorded')").waitFor(); // a fixed release
+      await page.waitForFunction(() => document.querySelector("#body .pm-arch img.pm-arch-img")?.getAttribute("src") === "/api/engines/atlas/architectures/c46e-bestell/2?layers=application,technology");
+      check(await sketchBlock.locator("figcaption:has-text('Bestellwesen')").count() === 1, "the caption is shown");
+      expectedConsole = /status of 404/;
+      engine.reach(false);
+      await sketchBlock.locator(".pm-diagram-refresh").click();
+      await sketchBlock.locator(".pm-diagram-error:has-text('The architecture sketch cannot be shown: engine atlas: not found at the engine')").waitFor();
+      check((await sketchBlock.locator(".pm-diagram-error").textContent()).includes("token's reach"), "a token that reaches no application points at its reach");
+      check(await sketchBlock.locator(".pm-arch-canvas").isHidden(), "no picture stays when the engine refuses it");
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .ProseMirror");
+      await page.locator("#body .ProseMirror").click();
+      await page.selectOption("#body .pm-toolbar select:has(option[value=architecture])", "architecture");
+      await pick.locator(".arch-status:has-text('The engine shows no application with an architecture sketch to this installation.')").waitFor();
+      check(await pick.locator("button.arch-apply").isDisabled(), "nothing is inserted when nothing is offered");
+      await pick.locator(".drawing-bar button:has-text('Cancel')").click();
+      await page.waitForSelector("dialog.arch-pick", { state: "detached" });
+      engine.reach(true);
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
+      await sketchBlock.scrollIntoViewIfNeeded();
+      await sketchBlock.locator(".pm-diagram-info:has-text('Bestellwesen · v2 · recorded')").waitFor(); // shown again once the token reaches it
+      expectedConsole = null;
     }
 
     step("connectors: an API description offers its lists; the one picked fills a JSON source's settings (ADR-0130)");

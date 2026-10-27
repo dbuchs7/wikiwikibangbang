@@ -146,3 +146,4 @@ Strongest form: the engine's own permissions decide per reader, which is the fin
 - extended by [ADR-0142](0142-processes-in-a-drawing.md) (processes in a drawing)
 - extended by [ADR-0143](0143-a-diagram-describes-its-tasks-and-decisions.md) (the description of tasks and decisions)
 - extended by [ADR-0144](0144-forms-and-decisions-from-a-process-engine.md) (forms and decisions from an engine)
+- extended by [ADR-0145](0145-architecture-sketches-of-releases-from-an-engine.md) (architecture sketches of releases from an engine)

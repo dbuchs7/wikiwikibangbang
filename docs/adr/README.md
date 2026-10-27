@@ -157,3 +157,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0142](0142-processes-in-a-drawing.md) | Processes in a drawing, live over its picture where they come from an engine | Proposed | Partial |
 | [0143](0143-a-diagram-describes-its-tasks-and-decisions.md) | A diagram describes its tasks and decisions below it, or in its place | Proposed | Partial |
 | [0144](0144-forms-and-decisions-from-a-process-engine.md) | Forms and decisions from a process engine in the text | Proposed | Partial |
+| [0145](0145-architecture-sketches-of-releases-from-an-engine.md) | Architecture sketches of releases from an engine in the text | Proposed | Partial |
