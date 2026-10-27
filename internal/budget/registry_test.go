@@ -62,6 +62,9 @@ var classified = map[string]string{
 	"internal/item.maxSpaceName":     "the shape of a space (ADR-0086): the length of its display name, like the length of a title",
 	"internal/item.maxSecretReaders": "the shape of a protected passage (ADR-0088): how many people and groups it names, like the lists of a restriction",
 	"internal/item.maxPictureLabels": "the shape of a picture (ADR-0090): how many labels it carries, a list a person types, not a memory setting",
+	"internal/item.MaxPrefill":       "the shape of a start form (ADR-0147): how many of its fields it fills in beforehand, a list a person chooses, like the labels of a picture",
+	"internal/engine/engine.go:4096": "the start of an engine's refusal of a start link's submission, quoted in the error message (ADR-0147); " +
+		"not a caller's input to this server, the whole answer is bounded by EngineResponseBytes elsewhere",
 	"internal/item.maxRetentionKeep": "a retention policy (ADR-0104): how many versions of a picture a rule may keep, not something the server holds in memory",
 	"internal/item.maxRetentionDays": "a retention policy (ADR-0104): how many days a rule may keep versions of a picture",
 	"internal/notes.maxNoteText":     "the shape of a personal note (ADR-0107): how long its text may be, like the length of a comment",

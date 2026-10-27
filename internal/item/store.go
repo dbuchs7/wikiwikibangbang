@@ -1229,6 +1229,37 @@ func validIDAtEngine(id string) bool {
 	return !strings.ContainsFunc(id, unicode.IsControl)
 }
 
+// startLink is the form of a public start link's token (ADR-0147): atlas
+// makes it of 32 random bytes in lower-case hexadecimal; 32 to 128 digits
+// leave room for an engine that makes it otherwise, and nothing else
+// reaches the engine's path.
+var startLink = regexp.MustCompile(`^[0-9a-f]{32,128}$`)
+
+// ValidStartLink reports whether link is the form of a public start link's
+// token.
+func ValidStartLink(link string) bool { return startLink.MatchString(link) }
+
+// validPrefill reports whether prefill can be what a start form fills in
+// beforehand (ADR-0147): none, or at most MaxPrefill fields, each named by
+// its key at the engine once and filled in from one of PrefillSources. An
+// empty list that is not none is refused, as for layers.
+func validPrefill(prefill []Prefill) bool {
+	if prefill == nil {
+		return true
+	}
+	if len(prefill) == 0 || len(prefill) > MaxPrefill {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, p := range prefill {
+		if !validIDAtEngine(p.Field) || seen[p.Field] || !slices.Contains(PrefillSources, p.From) {
+			return false
+		}
+		seen[p.Field] = true
+	}
+	return true
+}
+
 // validLayers reports whether layers can be what an architecture block
 // shows (ADR-0146): none, for the engine's default, or some of
 // ArchitectureLayers, each once and in their order. An empty list that is
@@ -1291,10 +1322,25 @@ func checkBlock(b Block, self ID) error {
 			return invalid("engine %q: a %s names an engine by its ID, lower-case letters, digits, dots and hyphens, at most 40", b.Engine, b.Kind)
 		case b.Kind == Form && !validIDAtEngine(b.Form):
 			return invalid("form %q: a form is named by its ID at the engine, 1 to 255 characters without control characters or surrounding spaces", b.Form)
+		case b.Kind == Form && b.Process != "" && !validProcessID.MatchString(b.Process):
+			return invalid("process %q: a form names the process whose steps name it by its BPMN ID, or none", b.Process)
 		case b.Kind == Decision && !validIDAtEngine(b.Decision):
 			return invalid("decision %q: a decision is named by its ID at the engine, 1 to 255 characters without control characters or surrounding spaces", b.Decision)
 		case len(b.Marks) > 0 || len(b.Mentions) > 0:
 			return invalid("a %s has a plain caption", b.Kind)
+		}
+	case StartForm:
+		switch {
+		case !ValidEngineID(b.Engine):
+			return invalid("engine %q: a start form names an engine by its ID, lower-case letters, digits, dots and hyphens, at most 40", b.Engine)
+		case !ValidStartLink(b.Link):
+			return invalid("link %q: a start form names a public start link by its token at the engine, 32 to 128 lower-case hexadecimal digits", b.Link)
+		case b.Process != "" && !validProcessID.MatchString(b.Process):
+			return invalid("process %q: a start form names the process it starts by its BPMN ID, or none", b.Process)
+		case !validPrefill(b.Prefill):
+			return invalid("prefill: a start form fills in at most %d fields beforehand, each named by its key once and filled in from one of %s", MaxPrefill, strings.Join(PrefillSources, ", "))
+		case len(b.Marks) > 0 || len(b.Mentions) > 0:
+			return invalid("a start form has a plain caption")
 		}
 	case Architecture:
 		switch {
@@ -1315,17 +1361,20 @@ func checkBlock(b Block, self ID) error {
 	if b.Kind != Embed && b.Kind != Image && b.Kind != Video && b.Kind != BPMN && b.Ref != "" {
 		return invalid("only an embed, an image, a video or a BPMN diagram has a reference")
 	}
-	if b.Kind != Process && b.Kind != Form && b.Kind != Decision && b.Kind != Architecture && b.Engine != "" {
-		return invalid("only a process, a form, a decision or an architecture sketch names an engine")
+	if b.Kind != Process && b.Kind != Form && b.Kind != Decision && b.Kind != Architecture && b.Kind != StartForm && b.Engine != "" {
+		return invalid("only a process, a form, a decision, an architecture sketch or a start form names an engine")
 	}
-	if b.Kind != Process && b.Process != "" || b.Kind != Form && b.Form != "" || b.Kind != Decision && b.Decision != "" {
-		return invalid("only a process names a process, only a form a form and only a decision a decision")
+	if b.Kind != Process && b.Kind != Form && b.Kind != StartForm && b.Process != "" || b.Kind != Form && b.Form != "" || b.Kind != Decision && b.Decision != "" {
+		return invalid("only a process, a form or a start form names a process, only a form a form and only a decision a decision")
+	}
+	if b.Kind != StartForm && (b.Link != "" || b.Prefill != nil) {
+		return invalid("only a start form names a start link and fills in fields")
 	}
 	if b.Kind != Architecture && (b.Application != "" || b.Release != 0 || b.Layers != nil) {
 		return invalid("only an architecture sketch names an application, a release and layers")
 	}
-	if b.View != "" && ((b.Kind != BPMN && b.Kind != Process) || !slices.Contains(DiagramViews, b.View)) {
-		return invalid("view %q: a BPMN diagram or a process shows %s, or its diagram alone; other blocks have no view", b.View, strings.Join(DiagramViews, ", "))
+	if b.View != "" && ((b.Kind != BPMN && b.Kind != Process && b.Kind != Form) || !slices.Contains(DiagramViews, b.View)) {
+		return invalid("view %q: a BPMN diagram, a process or a form shows %s, or its diagram or form alone; other blocks have no view", b.View, strings.Join(DiagramViews, ", "))
 	}
 	if b.Checked && b.Kind != TaskItem {
 		return invalid("only a task is checked")

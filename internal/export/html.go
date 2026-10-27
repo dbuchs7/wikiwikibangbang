@@ -163,10 +163,11 @@ func (h *htmlBuilder) block(bl item.Block, p Page, base int) {
 			h.printf("<figcaption>%s</figcaption>", html.EscapeString(bl.Text))
 		}
 		h.out.WriteString("</figure>")
-	case item.BPMN, item.Process, item.Form, item.Decision, item.Architecture:
+	case item.BPMN, item.Process, item.Form, item.Decision, item.Architecture, item.StartForm:
 		// A printed page does not draw a diagram, a form, a decision or a
-		// sketch; it names the file, the process, the form, the decision or
-		// the sketch (ADR-0129, ADR-0144, ADR-0146).
+		// sketch; it names the file, the process, the form, the decision,
+		// the sketch or the start form (ADR-0129, ADR-0144, ADR-0146,
+		// ADR-0147).
 		h.printf(`<figure class="diagram"><p>[%s]</p>`, html.EscapeString(diagramName(bl, p.Images)))
 		if strings.TrimSpace(bl.Text) != "" && !namedByCaption(bl) {
 			h.printf("<figcaption>%s</figcaption>", html.EscapeString(bl.Text))

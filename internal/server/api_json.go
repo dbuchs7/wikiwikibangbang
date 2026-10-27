@@ -128,13 +128,25 @@ type blockJSON struct {
 	Application string   `json:"application,omitempty"`
 	Release     int      `json:"release,omitempty"`
 	Layers      []string `json:"layers,omitempty"`
+	// Link and Prefill name a start form and what it fills in beforehand
+	// (ADR-0147).
+	Link    string        `json:"link,omitempty"`
+	Prefill []prefillJSON `json:"prefill,omitempty"`
+}
+
+type prefillJSON struct {
+	Field string `json:"field"`
+	From  string `json:"from"`
 }
 
 func toBlockJSON(b item.Block) blockJSON {
 	j := blockJSON{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process, View: b.View,
-		Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Layers: b.Layers}
+		Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Layers: b.Layers, Link: b.Link}
 	for _, m := range b.Marks {
 		j.Marks = append(j.Marks, markJSON{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})
+	}
+	for _, p := range b.Prefill {
+		j.Prefill = append(j.Prefill, prefillJSON{Field: p.Field, From: p.From})
 	}
 	return j
 }
@@ -150,19 +162,23 @@ func toDoc(blocks []blockJSON, kept func(text string) bool) (item.Doc, error) {
 		switch b.Kind {
 		case item.Paragraph, item.Heading, item.Embed, item.BulletItem, item.OrderedItem, item.Quote, item.CodeBlock,
 			item.TaskItem, item.Panel, item.Table, item.TOC, item.Children, item.Image, item.Video, item.Divider, item.TaskList, item.Figures, item.Tables, item.BPMN, item.Process, item.Form, item.Decision,
-			item.Architecture:
+			item.Architecture, item.StartForm:
 		case item.Unsupported:
 			if kept == nil || !kept(b.Text) {
 				return d, badInput("block %d: unsupported blocks come only from imports", i+1)
 			}
 		default:
-			return d, badInput("block %d: kind must be paragraph, heading, bullet, ordered, quote, code, task, panel, table, toc, figures, tables, children, divider, image, video, bpmn, process, form, decision, architecture, tasklist or embed", i+1)
+			return d, badInput("block %d: kind must be paragraph, heading, bullet, ordered, quote, code, task, panel, table, toc, figures, tables, children, divider, image, video, bpmn, process, form, decision, architecture, startform, tasklist or embed", i+1)
 		}
 		blk := item.Block{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process, View: b.View,
-			Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release}
+			Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Link: b.Link}
 		if len(b.Layers) > 0 {
 			// An empty list is the engine's default, as none is.
 			blk.Layers = b.Layers
+		}
+		for _, p := range b.Prefill {
+			// An empty list fills in nothing, as none does.
+			blk.Prefill = append(blk.Prefill, item.Prefill{Field: p.Field, From: p.From})
 		}
 		for _, m := range b.Marks {
 			blk.Marks = append(blk.Marks, item.Mark{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})

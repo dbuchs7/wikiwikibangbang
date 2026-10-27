@@ -101,6 +101,10 @@ const (
 	// EngineChanged records a process engine added, changed or removed
 	// (ADR-0129).
 	EngineChanged = "engine.change"
+	// EngineStarted records a process started through a public start link
+	// of an engine for a signed-in person (ADR-0147), which the engine
+	// records without an initiator.
+	EngineStarted = "engine.start"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for

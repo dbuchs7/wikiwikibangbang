@@ -54,11 +54,15 @@ const blockFormat = "A body is a list of blocks, each an object with kind and te
 	"is the header), toc, children and divider (no text: a table of contents, a list of child pages, a horizontal rule), embed (ref: an item ID), " +
 	"image (ref: an attachment ID of the item, text the caption, width 10-100 percent of the column or absent for its own size, align left or right to let text flow beside it, or center), " +
 	"bpmn (ref: an attachment ID of the item holding a BPMN 2.0 model, text the caption), process (engine: a process engine's ID, process: a BPMN process ID, text the caption; shows the process's newest version), " +
-	"form (engine: a process engine's ID, form: the form's ID there, text the caption; shows the form as the engine keeps it), " +
+	"form (engine: a process engine's ID, form: the form's ID there, process: the BPMN ID of the process whose steps name it, or absent, text the caption; shows the form as the engine keeps it), " +
 	"decision (engine: a process engine's ID, decision: the decision's ID there, text the caption; shows the decision's newest deployed version), " +
 	"architecture (engine: a process engine's ID, application: the application's ID there, release: a version, or absent for the newest release with a sketch, " +
-	"layers: some of strategy, business, application, data, technology in this order, or absent for the engine's default, text the caption; shows the release's architecture sketch); " +
-	"a bpmn or process block may have view both (the diagram and below it the description of its tasks and decisions) or text (the description only), or none for the diagram alone. " +
+	"layers: some of strategy, business, application, data, technology in this order, or absent for the engine's default, text the caption; shows the release's architecture sketch), " +
+	"startform (engine: a process engine's ID, link: the token of a public start link there, 32-128 lower-case hexadecimal digits, process: the BPMN ID of the process it starts, or absent, " +
+	"prefill: a list of {\"field\": a field's key, \"from\": username, email, page or url} filled in beforehand with what this site knows of the reader, or absent, text the caption; " +
+	"shows the link's form, which a reader fills in and sends to start the process); " +
+	"a bpmn or process block may have view both (the diagram and below it the description of its tasks and decisions) or text (the description only), or none for the diagram alone; " +
+	"a form block alike, with the list of its fields as its description. " +
 	"Paragraphs, headings, quotes and panels may have align center, right or justify. " +
 	"Inline formats are marks over the text, counted in Unicode code points: " +
 	"{\"type\": \"bold\"|\"italic\"|\"underline\"|\"strike\"|\"highlight\"|\"code\"|\"link\" (with href)|\"mention\" (with ref, an item ID), \"start\": 0, \"end\": 5}. " +
@@ -104,11 +108,11 @@ var (
 // on a person's behalf.
 //
 // The process engines' routes (ADR-0129), their forms and decisions
-// (ADR-0144) and the architecture sketches of their applications
-// (ADR-0146) included, are not offered: whether agents read an engine's
-// processes, forms, decisions, sketches and operations through this
-// server, with the engine's credential rather than their own, is a
-// decision of its own.
+// (ADR-0144), the architecture sketches of their applications (ADR-0146)
+// and their public start links (ADR-0147) included, are not offered:
+// whether agents read an engine's processes, forms, decisions, sketches
+// and operations through this server, with the engine's credential rather
+// than their own, or start its processes, is a decision of its own.
 var tools = []tool{
 	{Name: "list_spaces", Description: "List the spaces the caller holds a role in.", Method: "GET", Path: "/api/spaces"},
 	{Name: "get_own_roles", Description: "The caller's own roles: the system roles held, and every space role granted to the caller, directly or through a group (via), one entry per grant.",

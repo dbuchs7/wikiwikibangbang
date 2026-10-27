@@ -249,8 +249,10 @@ func documentXML(t *testing.T, file []byte) string {
 // with their captions in both exports, not drawn (ADR-0129). An
 // architecture sketch is named by its caption, which the picker fills with
 // the application's name, since the block holds only the application's ID
-// (ADR-0146).
+// (ADR-0146). A start form is named by the process it starts, or by its
+// caption when it names none, and its link is never written (ADR-0147).
 func TestDiagramsAreNamedInDocuments(t *testing.T) {
+	link := strings.Repeat("ab", 32)
 	page := Page{ID: "p", Title: "Order to cash", Body: []item.Block{
 		{Kind: item.BPMN, Ref: "m", Text: "As <drawn>"},
 		{Kind: item.Process, Engine: "atlas", Process: "order-to-cash", Text: "As it runs"},
@@ -258,6 +260,8 @@ func TestDiagramsAreNamedInDocuments(t *testing.T) {
 		{Kind: item.Decision, Engine: "atlas", Decision: "Decision 1", Text: "Who needs a visa"},
 		{Kind: item.Architecture, Engine: "atlas", Application: "c46e", Release: 3, Text: "Bestellwesen & co"},
 		{Kind: item.Architecture, Engine: "atlas", Application: "c46e", Layers: []string{"data"}},
+		{Kind: item.StartForm, Engine: "atlas", Link: link, Process: "incident", Text: "Report an incident"},
+		{Kind: item.StartForm, Engine: "atlas", Link: link, Text: "Holidays & leave"},
 	}, Images: map[item.ID]Image{"m": {Name: "order&co.bpmn", Type: "text/xml; charset=utf-8"}}}
 	var h bytes.Buffer
 	if err := HTML(&h, Document{Pages: []Page{page}}, "en"); err != nil {
@@ -265,13 +269,17 @@ func TestDiagramsAreNamedInDocuments(t *testing.T) {
 	}
 	for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "<figcaption>As &lt;drawn&gt;</figcaption>", "[BPMN: order-to-cash (atlas)]", "<figcaption>As it runs</figcaption>",
 		"[Form: reise-antrag (atlas)]", "<figcaption>Filled &lt;in&gt;</figcaption>", "[Decision: Decision 1 (atlas)]", "<figcaption>Who needs a visa</figcaption>",
-		"[Architecture sketch: Bestellwesen &amp; co v3 (atlas)]", "[Architecture sketch: c46e, newest release (atlas)]"} {
+		"[Architecture sketch: Bestellwesen &amp; co v3 (atlas)]", "[Architecture sketch: c46e, newest release (atlas)]",
+		"[Start form: incident (atlas)]", "<figcaption>Report an incident</figcaption>", "[Start form: Holidays &amp; leave (atlas)]"} {
 		if !strings.Contains(h.String(), want) {
 			t.Errorf("the HTML lacks %q:\n%s", want, h.String())
 		}
 	}
-	if strings.Contains(h.String(), "<figcaption>Bestellwesen") {
-		t.Errorf("the HTML repeats the name of an architecture sketch as its caption:\n%s", h.String())
+	if strings.Contains(h.String(), "<figcaption>Bestellwesen") || strings.Contains(h.String(), "<figcaption>Holidays") {
+		t.Errorf("the HTML repeats the name of an architecture sketch or a start form as its caption:\n%s", h.String())
+	}
+	if strings.Contains(h.String(), link) {
+		t.Errorf("the HTML writes a start link:\n%s", h.String())
 	}
 	var w bytes.Buffer
 	if err := DOCX(&w, Document{Pages: []Page{page}}); err != nil {
@@ -288,10 +296,14 @@ func TestDiagramsAreNamedInDocuments(t *testing.T) {
 		r, _ := f.Open()
 		data, _ := io.ReadAll(r)
 		for _, want := range []string{"[BPMN: order&amp;co.bpmn]", "As &lt;drawn&gt;", "[BPMN: order-to-cash (atlas)]", "As it runs", "[Form: reise-antrag (atlas)]", "Filled &lt;in&gt;", "[Decision: Decision 1 (atlas)]",
-			"[Architecture sketch: Bestellwesen &amp; co v3 (atlas)]", "[Architecture sketch: c46e, newest release (atlas)]"} {
+			"[Architecture sketch: Bestellwesen &amp; co v3 (atlas)]", "[Architecture sketch: c46e, newest release (atlas)]", "[Start form: incident (atlas)]", "Report an incident",
+			"[Start form: Holidays &amp; leave (atlas)]"} {
 			if !strings.Contains(string(data), want) {
 				t.Errorf("the Word document lacks %q", want)
 			}
+		}
+		if strings.Contains(string(data), link) {
+			t.Error("the Word document writes a start link")
 		}
 		if n := strings.Count(string(data), "Bestellwesen &amp; co"); n != 1 {
 			t.Errorf("the Word document names an architecture sketch %d times", n)

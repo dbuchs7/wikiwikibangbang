@@ -4,7 +4,10 @@
 // (ADR-0144): each form as it is saved, with its form-js schema, and the
 // newest deployed version of each decision, with its DMN model; and the
 // architecture sketches of the releases of their applications, as SVG
-// pictures (ADR-0146). It speaks the API of atlas (github.com/pblumer/atlas).
+// pictures (ADR-0146); and the forms the steps of a process name, and the
+// public start links that start a process from its start form, through
+// the engine's public routes and without the credential (ADR-0147). It
+// speaks the API of atlas (github.com/pblumer/atlas).
 // The credential comes from the environment and is sent to the engine only.
 package engine
 
@@ -44,6 +47,11 @@ var (
 	ErrNotFound = errors.New("not found at the engine")
 	// ErrUnavailable: the engine did not answer, or not as expected.
 	ErrUnavailable = errors.New("the engine is not available")
+	// ErrRejected: the engine refused what was sent to a public start
+	// link; the message says why, in the engine's words.
+	ErrRejected = errors.New("the engine refused the submission")
+	// ErrBusy: the engine asks to try again shortly.
+	ErrBusy = errors.New("the engine is busy; try again shortly")
 )
 
 // Timeout bounds one read of an engine.
@@ -115,6 +123,11 @@ type Process struct {
 	Name       string    `json:"name"`
 	Version    int       `json:"version"`
 	DeployedAt time.Time `json:"deployedAt"`
+	// StartForm is the form the process starts with, empty when it has
+	// none; Executable says whether the engine starts it at all
+	// (ADR-0147).
+	StartForm  string `json:"startForm,omitempty"`
+	Executable bool   `json:"executable"`
 	// key is the engine's key of this version; it stays on the server.
 	key uint64
 }
@@ -158,6 +171,8 @@ func (r *Reader) Processes(ctx context.Context, e site.Engine) ([]Process, error
 		Name       string `json:"name"`
 		Version    int    `json:"version"`
 		DeployedAt int64  `json:"deployedAt"`
+		StartForm  string `json:"startFormId"`
+		Executable bool   `json:"executable"`
 	}
 	if err := r.get(ctx, e, "/api/v1/processes", func(body io.Reader) error { return json.NewDecoder(body).Decode(&all) }); err != nil {
 		return nil, err
@@ -168,7 +183,8 @@ func (r *Reader) Processes(ctx context.Context, e site.Engine) ([]Process, error
 			continue
 		}
 		if n, ok := newest[p.ProcessID]; !ok || p.Version > n.Version {
-			newest[p.ProcessID] = Process{ID: p.ProcessID, Name: p.Name, Version: p.Version, DeployedAt: time.Unix(p.DeployedAt, 0).UTC(), key: p.Key}
+			newest[p.ProcessID] = Process{ID: p.ProcessID, Name: p.Name, Version: p.Version, DeployedAt: time.Unix(p.DeployedAt, 0).UTC(),
+				StartForm: p.StartForm, Executable: p.Executable, key: p.Key}
 		}
 	}
 	out := make([]Process, 0, len(newest))
@@ -252,10 +268,12 @@ type Form struct {
 }
 
 // FormSchema is a form with its form-js schema, a JSON object passed on as
-// the engine answered it.
+// the engine answered it. Steps are the steps of the process the form was
+// asked for that name it (ADR-0147).
 type FormSchema struct {
 	Form
 	Schema json.RawMessage `json:"schema"`
+	Steps  []Step          `json:"steps,omitempty"`
 }
 
 // Forms returns the forms the credential may see, by name.
@@ -281,20 +299,45 @@ func (r *Reader) Forms(ctx context.Context, e site.Engine) ([]Form, error) {
 }
 
 // Form returns a form with its schema. atlas answers any form by its ID to
-// whoever is signed in, as a task needs it; the form is first looked up in
-// the list, so that a block shows only a form the credential may see, as
-// the picker offers it.
-func (r *Reader) Form(ctx context.Context, e site.Engine, id string) (FormSchema, error) {
-	all, err := r.Forms(ctx, e)
-	if err != nil {
-		return FormSchema{}, err
-	}
-	i := slices.IndexFunc(all, func(f Form) bool { return f.ID == id })
-	if i < 0 {
-		return FormSchema{}, fmt.Errorf("%w: form %s", ErrNotFound, id)
+// whoever is signed in, as a task needs it, so the form is first found
+// where the picker offers it: with process set, among the forms the steps
+// of the process's newest version name (ADR-0147); without, among the
+// forms the credential lists, as the blocks made before name them
+// (ADR-0144).
+func (r *Reader) Form(ctx context.Context, e site.Engine, id, process string) (FormSchema, error) {
+	var (
+		known Form
+		steps []Step
+	)
+	if process != "" {
+		pf, err := r.ProcessForms(ctx, e, process)
+		if err != nil {
+			return FormSchema{}, err
+		}
+		for _, st := range pf.Steps {
+			if st.Form == id {
+				steps = append(steps, st)
+			}
+		}
+		if len(steps) == 0 {
+			return FormSchema{}, fmt.Errorf("%w: form %s is named by no step of process %s", ErrNotFound, id, process)
+		}
+	} else {
+		all, err := r.Forms(ctx, e)
+		if err != nil {
+			return FormSchema{}, err
+		}
+		i := slices.IndexFunc(all, func(f Form) bool { return f.ID == id })
+		if i < 0 {
+			return FormSchema{}, fmt.Errorf("%w: form %s", ErrNotFound, id)
+		}
+		known = all[i]
 	}
 	var got struct {
-		Schema json.RawMessage `json:"schema"`
+		ID      string          `json:"id"`
+		Name    string          `json:"name"`
+		SavedAt int64           `json:"savedAt"`
+		Schema  json.RawMessage `json:"schema"`
 	}
 	if err := r.get(ctx, e, "/api/v1/forms/"+url.PathEscape(id), func(body io.Reader) error { return json.NewDecoder(body).Decode(&got) }); err != nil {
 		return FormSchema{}, err
@@ -302,7 +345,233 @@ func (r *Reader) Form(ctx context.Context, e site.Engine, id string) (FormSchema
 	if s := bytes.TrimSpace(got.Schema); len(s) == 0 || s[0] != '{' {
 		return FormSchema{}, fmt.Errorf("%w: the schema of form %s is no JSON object", ErrUnavailable, id)
 	}
-	return FormSchema{Form: all[i], Schema: got.Schema}, nil
+	if known.ID == "" {
+		known = Form{ID: id, Name: got.Name, SavedAt: time.Unix(got.SavedAt, 0).UTC()}
+	}
+	return FormSchema{Form: known, Schema: got.Schema, Steps: steps}, nil
+}
+
+// Step is a step of a process that names a form (ADR-0147): its BPMN
+// element, the element's kind (startEvent, userTask, or the task a repair
+// form belongs to) and name, and the form's ID.
+type Step struct {
+	Element string `json:"element"`
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	Form    string `json:"form"`
+}
+
+// ProcessForms is the newest version of a process with the steps that name
+// a form, in the order of its model, and whether the process holds a
+// public wizard: steps an anonymous filler is led through in the engine's
+// own pages after the start (atlas ADR-0449), which this site does not
+// show.
+type ProcessForms struct {
+	Process
+	Steps        []Step `json:"steps"`
+	PublicWizard bool   `json:"publicWizard"`
+}
+
+// ProcessForms returns the newest version of a process with the steps of
+// its model that name a form.
+func (r *Reader) ProcessForms(ctx context.Context, e site.Engine, process string) (ProcessForms, error) {
+	d, err := r.Diagram(ctx, e, process)
+	if err != nil {
+		return ProcessForms{}, err
+	}
+	steps, wizard, err := stepsOf(d.XML)
+	if err != nil {
+		return ProcessForms{}, fmt.Errorf("%w: the model of process %s cannot be read: %v", ErrUnavailable, process, err)
+	}
+	return ProcessForms{Process: d.Process, Steps: steps, PublicWizard: wizard}, nil
+}
+
+// formKinds are the BPMN elements a form may belong to: a start event's
+// start form, a user task's work form, and the repair form of a task an
+// operator mends (atlas ADR-0028, ADR-0169).
+var formKinds = []string{"startEvent", "userTask", "serviceTask", "sendTask", "receiveTask", "scriptTask", "businessRuleTask", "manualTask", "task"}
+
+// stepsOf reads the steps of a BPMN model that name a form, in the order
+// of the model, by their zeebe:formDefinition, and whether a sub-process
+// of it is a public wizard (atlas:wizard="public"). Namespaces are matched
+// by the local names only, as the engine writes them under its own
+// prefixes.
+func stepsOf(model string) ([]Step, bool, error) {
+	dec := xml.NewDecoder(strings.NewReader(model))
+	type frame struct {
+		step Step
+		form bool
+	}
+	var (
+		stack  []frame
+		steps  = []Step{}
+		wizard bool
+	)
+	attr := func(el xml.StartElement, name string) string {
+		for _, a := range el.Attr {
+			if a.Name.Local == name {
+				return a.Value
+			}
+		}
+		return ""
+	}
+	for {
+		tok, err := dec.Token()
+		if err == io.EOF {
+			return steps, wizard, nil
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		switch el := tok.(type) {
+		case xml.StartElement:
+			local := el.Name.Local
+			if local == "subProcess" && attr(el, "wizard") == "public" {
+				wizard = true
+			}
+			if local == "formDefinition" && len(stack) > 0 {
+				for i := len(stack) - 1; i >= 0; i-- {
+					if stack[i].form {
+						if id := attr(el, "formId"); id != "" {
+							st := stack[i].step
+							st.Form = id
+							steps = append(steps, st)
+						}
+						break
+					}
+				}
+			}
+			stack = append(stack, frame{step: Step{Element: attr(el, "id"), Kind: local, Name: attr(el, "name")}, form: slices.Contains(formKinds, local)})
+		case xml.EndElement:
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
+}
+
+// PublicLink is a public start link of a process (atlas ADR-0029): the
+// token that names it, and the process and the form it starts with.
+type PublicLink struct {
+	Token   string `json:"link"`
+	Process string `json:"process"`
+	Name    string `json:"name"`
+	Form    string `json:"form"`
+}
+
+// PublicLinks returns the public start links the credential may list, by
+// the name of their process. On atlas, listing them needs the role
+// Modeler; a credential without it is refused, and the links are then
+// pasted.
+func (r *Reader) PublicLinks(ctx context.Context, e site.Engine) ([]PublicLink, error) {
+	var all []struct {
+		Token     string `json:"token"`
+		ProcessID string `json:"processId"`
+		FormID    string `json:"formId"`
+	}
+	if err := r.get(ctx, e, "/api/v1/public-links", func(body io.Reader) error { return json.NewDecoder(body).Decode(&all) }); err != nil {
+		return nil, err
+	}
+	procs, err := r.Processes(ctx, e)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]string{}
+	for _, p := range procs {
+		names[p.ID] = p.Name
+	}
+	out := []PublicLink{}
+	for _, l := range all {
+		if l.Token != "" && l.ProcessID != "" {
+			out = append(out, PublicLink{Token: l.Token, Process: l.ProcessID, Name: names[l.ProcessID], Form: l.FormID})
+		}
+	}
+	slices.SortFunc(out, func(a, b PublicLink) int {
+		return cmp.Or(strings.Compare(strings.ToLower(cmp.Or(a.Name, a.Process)), strings.ToLower(cmp.Or(b.Name, b.Process))), strings.Compare(a.Token, b.Token))
+	})
+	return out, nil
+}
+
+// PublicForm is the form of a public start link as anyone with the link
+// reads it: the name of the process it starts and the form's schema. URL
+// is the engine's own page of the link. Wizard says whether the process
+// leads its filler through further steps in the engine's own pages (atlas
+// ADR-0449), which this site does not show; it is nil when that is not
+// known, because the block names no process or the credential cannot read
+// it.
+type PublicForm struct {
+	ProcessName string          `json:"processName"`
+	Schema      json.RawMessage `json:"schema"`
+	URL         string          `json:"url"`
+	Wizard      *bool           `json:"wizard,omitempty"`
+}
+
+// PublicForm reads the form of a public start link through the engine's
+// public route, without the credential; client is the address of the
+// person it is read for. With process, the BPMN ID of the process the link
+// starts, the process's model is read with the credential, if there is
+// one, to say whether it holds a public wizard.
+func (r *Reader) PublicForm(ctx context.Context, e site.Engine, link, process, client string) (PublicForm, error) {
+	var got PublicForm
+	path := "/public/forms/" + url.PathEscape(link)
+	err := r.call(ctx, e, request{method: http.MethodGet, path: path + "/schema", accept: "application/json", public: true, client: client},
+		func(_ string, body io.Reader) error { return json.NewDecoder(body).Decode(&got) })
+	if err != nil {
+		return PublicForm{}, err
+	}
+	if s := bytes.TrimSpace(got.Schema); len(s) == 0 || s[0] != '{' {
+		return PublicForm{}, fmt.Errorf("%w: the schema of the link is no JSON object", ErrUnavailable)
+	}
+	got.URL, got.Wizard = e.BaseURL+path, nil
+	if process != "" && r.HasCredential(e.ID) {
+		if pf, err := r.ProcessForms(ctx, e, process); err == nil {
+			got.Wizard = &pf.PublicWizard
+		}
+	}
+	return got, nil
+}
+
+// Started says how a start through a public link went. Wizard is set when
+// the process carries on in the engine's own pages, which this site does
+// not show.
+type Started struct {
+	Wizard bool `json:"wizard"`
+}
+
+// StartPublic starts the process of a public start link with variables, a
+// JSON object of the form's values, through the engine's public route and
+// without the credential: the engine records nobody as its initiator.
+// client is the address of the person who sends it, passed on as
+// X-Forwarded-For, which an engine that trusts this server counts its
+// limits by. With process, a process that holds a public wizard is not
+// started: its filler would be led on in the engine's own pages, with a
+// pass this site cannot hand over, so the link is opened there instead.
+func (r *Reader) StartPublic(ctx context.Context, e site.Engine, link, process string, variables json.RawMessage, client string) (Started, error) {
+	if v := bytes.TrimSpace(variables); len(v) == 0 || v[0] != '{' {
+		return Started{}, fmt.Errorf("%w: the values are no JSON object", ErrRejected)
+	}
+	if process != "" && r.HasCredential(e.ID) {
+		if pf, err := r.ProcessForms(ctx, e, process); err == nil && pf.PublicWizard {
+			return Started{}, fmt.Errorf("%w: process %s leads its filler through further steps in the engine's own pages; open the link there", ErrRejected, process)
+		}
+	}
+	body, err := json.Marshal(map[string]json.RawMessage{"variables": variables})
+	if err != nil {
+		return Started{}, fmt.Errorf("%w: %v", ErrRejected, err)
+	}
+	var got struct {
+		Started bool            `json:"started"`
+		Wizard  json.RawMessage `json:"wizard"`
+	}
+	err = r.call(ctx, e, request{method: http.MethodPost, path: "/public/forms/" + url.PathEscape(link) + "/start", accept: "application/json", body: body, public: true, client: client},
+		func(_ string, b io.Reader) error { return json.NewDecoder(b).Decode(&got) })
+	if err != nil {
+		return Started{}, err
+	}
+	if !got.Started {
+		return Started{}, fmt.Errorf("%w: it did not say that it started the process", ErrUnavailable)
+	}
+	return Started{Wizard: len(got.Wizard) > 0 && string(got.Wizard) != "null"}, nil
 }
 
 // Decision is the newest deployed version of a decision.
@@ -577,27 +846,56 @@ func (r *Reader) get(ctx context.Context, e site.Engine, path string, read func(
 	return r.fetch(ctx, e, path, "application/json, application/xml", func(_ string, body io.Reader) error { return read(body) })
 }
 
-// fetch reads path of the engine, asking for the types accept names, and
-// hands the answer's type and body to read, at most budget
-// EngineResponseBytes of it.
+// fetch reads path of the engine with the credential, asking for the
+// types accept names, and hands the answer's type and body to read.
 func (r *Reader) fetch(ctx context.Context, e site.Engine, path, accept string, read func(contentType string, body io.Reader) error) error {
+	return r.call(ctx, e, request{method: http.MethodGet, path: path, accept: accept}, read)
+}
+
+// request is one call of an engine. A public one goes to a route the
+// engine answers anyone on, a public start link's (ADR-0147): it carries
+// no credential, and client, the address of the person it is made for, as
+// X-Forwarded-For.
+type request struct {
+	method, path, accept string
+	body                 []byte
+	public               bool
+	client               string
+}
+
+// call makes a request of the engine and hands the answer's type and body
+// to read, at most budget EngineResponseBytes of it.
+func (r *Reader) call(ctx context.Context, e site.Engine, rq request, read func(contentType string, body io.Reader) error) error {
 	if e.Kind != site.EngineAtlas {
 		return fmt.Errorf("%w: kind %q is not read", ErrUnavailable, e.Kind)
 	}
 	token := r.getenv(TokenVar(e.ID))
-	if token == "" {
+	if token == "" && !rq.public {
 		return fmt.Errorf("%w: set %s", ErrNoCredential, TokenVar(e.ID))
 	}
-	u, err := url.Parse(e.BaseURL + path)
+	u, err := url.Parse(e.BaseURL + rq.path)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	var body io.Reader
+	if rq.body != nil {
+		body = bytes.NewReader(rq.body)
+	}
+	req, err := http.NewRequestWithContext(ctx, rq.method, u.String(), body)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", accept)
+	if rq.public {
+		if rq.client != "" {
+			req.Header.Set("X-Forwarded-For", rq.client)
+		}
+	} else {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if rq.body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", rq.accept)
 	res, err := r.http.Do(req)
 	if errors.Is(err, connector.ErrPrivateAddress) {
 		return fmt.Errorf("%w: %s is not on the public internet; set %s=on to allow engines in the server's own network", ErrUnavailable, u.Host, AllowPrivateVar)
@@ -607,25 +905,45 @@ func (r *Reader) fetch(ctx context.Context, e site.Engine, path, accept string, 
 	}
 	defer res.Body.Close()
 	switch {
+	case rq.public && res.StatusCode == http.StatusNotFound:
+		return fmt.Errorf("%w: the start link is unknown or was revoked", ErrNotFound)
+	case rq.public && (res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusConflict):
+		return fmt.Errorf("%w: %s", ErrRejected, engineMessage(res.Body))
+	case rq.public && res.StatusCode == http.StatusTooManyRequests:
+		return ErrBusy
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 		return fmt.Errorf("%w (%d)", ErrRefused, res.StatusCode)
 	case res.StatusCode == http.StatusNotFound:
-		return fmt.Errorf("%w (%s)", ErrNotFound, path)
+		return fmt.Errorf("%w (%s)", ErrNotFound, rq.path)
 	case res.StatusCode != http.StatusOK:
 		return fmt.Errorf("%w: it answered %d", ErrUnavailable, res.StatusCode)
 	}
 	limit := budget.Get().EngineResponseBytes
-	body := &capped{r: io.LimitReader(res.Body, limit+1), left: limit}
-	if err := read(res.Header.Get("Content-Type"), body); err != nil {
-		if body.over {
+	capped := &capped{r: io.LimitReader(res.Body, limit+1), left: limit}
+	if err := read(res.Header.Get("Content-Type"), capped); err != nil {
+		if capped.over {
 			return fmt.Errorf("%w: its answer is larger than %d bytes", ErrUnavailable, limit)
 		}
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
 	}
-	if body.over {
+	if capped.over {
 		return fmt.Errorf("%w: its answer is larger than %d bytes", ErrUnavailable, limit)
 	}
 	return nil
+}
+
+// engineMessage is the reason an engine gives for refusing a submission,
+// from its {"error": …} answer, as plain text of at most 300 characters.
+func engineMessage(body io.Reader) string {
+	var got struct {
+		Error string `json:"error"`
+	}
+	_ = json.NewDecoder(io.LimitReader(body, 4096)).Decode(&got)
+	msg := strings.Join(strings.Fields(got.Error), " ")
+	if r := []rune(msg); len(r) > 300 {
+		msg = string(r[:300]) + "…"
+	}
+	return cmp.Or(msg, "no reason given")
 }
 
 // capped reads at most left bytes and fails beyond them.
