@@ -15,7 +15,7 @@ import { anchorOf } from "./anchors.js";
 import { openDrawing, drawingName } from "./drawing.js";
 import { diagramView, openModeler, pickProcess, bpmnName, drawingProcesses, processRegion } from "./bpmn.js";
 import { regionsIn } from "./drawprocesses.js";
-import { formView, decisionView, pickFromEngine } from "./engineviews.js";
+import { formView, decisionView, pickFromEngine, startFormView, pickStartLink, editPrefill } from "./engineviews.js";
 import { architectureView, pickArchitecture } from "./architecture.js";
 import { pickFromAlbum, pictureFile, captionOf, copiedPicture, clipMark } from "./album.js";
 import { assist } from "./assist.js";
@@ -80,7 +80,16 @@ export const schema = new Schema({
     process: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, process: {}, text: { default: "" }, view: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     // A form as a process engine keeps it, and the newest deployed version
     // of a decision of a process engine (ADR-0144); with a plain caption.
-    form: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, form: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
+    // A form may name the process whose steps name it, and its view is ""
+    // the form, "both" the form and its fields, "text" the fields only
+    // (ADR-0148).
+    form: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, form: {}, process: { default: "" }, view: { default: "" }, text: { default: "" } },
+      toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
+    // The form of a public start link of a process engine, which starts
+    // the link's process; prefill names the fields filled in beforehand
+    // (ADR-0148). With a plain caption.
+    startform: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, link: {}, process: { default: "" }, prefill: { default: [] }, text: { default: "" } },
+      toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     decision: { group: "block", atom: true, selectable: true, attrs: { ...bid, engine: {}, decision: {}, text: { default: "" } }, toDOM: (n) => ["figure", { class: "pm-diagram" }, ["figcaption", n.attrs.text]] },
     // The architecture sketch of a release of an engine's application
     // (ADR-0146): release 0 follows the newest, layers none is the
@@ -180,7 +189,10 @@ export function nodeFromBlock(b, embeds = []) {
   if (b.kind === "image" || b.kind === "video") return schema.nodes[b.kind].create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0, align: b.align || "" });
   if (b.kind === "bpmn") return schema.nodes.bpmn.create({ bid: id, ref: b.ref, text: b.text || "", view: b.view || "" });
   if (b.kind === "process") return schema.nodes.process.create({ bid: id, engine: b.engine, process: b.process, text: b.text || "", view: b.view || "" });
-  if (b.kind === "form") return schema.nodes.form.create({ bid: id, engine: b.engine, form: b.form, text: b.text || "" });
+  if (b.kind === "form") return schema.nodes.form.create({ bid: id, engine: b.engine, form: b.form, process: b.process || "", view: b.view || "", text: b.text || "" });
+  if (b.kind === "startform") {
+    return schema.nodes.startform.create({ bid: id, engine: b.engine, link: b.link, process: b.process || "", prefill: (b.prefill || []).map((p) => ({ field: p.field, from: p.from })), text: b.text || "" });
+  }
   if (b.kind === "decision") return schema.nodes.decision.create({ bid: id, engine: b.engine, decision: b.decision, text: b.text || "" });
   if (b.kind === "architecture") return schema.nodes.architecture.create({ bid: id, engine: b.engine, application: b.application, release: b.release || 0, layers: b.layers || [], text: b.text || "" });
   if (b.kind === "embed") {
@@ -244,7 +256,15 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.tasklist) return { kind: "tasklist", text: node.attrs.label };
   if (node.type === schema.nodes.bpmn) return { kind: "bpmn", text: node.attrs.text, ref: node.attrs.ref, ...(node.attrs.view ? { view: node.attrs.view } : {}) };
   if (node.type === schema.nodes.process) return { kind: "process", text: node.attrs.text, engine: node.attrs.engine, process: node.attrs.process, ...(node.attrs.view ? { view: node.attrs.view } : {}) };
-  if (node.type === schema.nodes.form) return { kind: "form", text: node.attrs.text, engine: node.attrs.engine, form: node.attrs.form };
+  if (node.type === schema.nodes.form) {
+    const a = node.attrs;
+    return { kind: "form", text: a.text, engine: a.engine, form: a.form, ...(a.process ? { process: a.process } : {}), ...(a.view ? { view: a.view } : {}) };
+  }
+  if (node.type === schema.nodes.startform) {
+    const a = node.attrs;
+    return { kind: "startform", text: a.text, engine: a.engine, link: a.link, ...(a.process ? { process: a.process } : {}),
+      ...(a.prefill?.length ? { prefill: a.prefill.map((p) => ({ field: p.field, from: p.from })) } : {}) };
+  }
   if (node.type === schema.nodes.decision) return { kind: "decision", text: node.attrs.text, engine: node.attrs.engine, decision: node.attrs.decision };
   if (node.type === schema.nodes.architecture) {
     const a = node.attrs;
@@ -782,6 +802,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       bpmn: (node, v, getPos) => diagramView(node, v, getPos, files),
       process: (node, v, getPos) => diagramView(node, v, getPos, files),
       form: (node, v, getPos) => formView(node, v, getPos),
+      startform: (node, v, getPos) => startFormView(node, v, getPos, files),
       decision: (node, v, getPos) => decisionView(node, v, getPos),
       architecture: (node, v, getPos) => architectureView(node, v, getPos),
       embed: (node) => embedView(node, embedContent),
@@ -817,6 +838,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     else if (kind === "bpmnfile") modelPicker.click();
     else if (kind === "process") pickedProcess();
     else if (kind === "form" || kind === "decision") pickedFromEngine(kind);
+    else if (kind === "startform") pickedStartLink();
     else if (kind === "architecture") pickedArchitecture();
     else if (kind === "album") fromAlbum();
     else if (kind === "clip") fromClip();
@@ -829,7 +851,7 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   } }, [["", t("editor.insert")], ["embed", t("assist.embedItem")], ["markdown", t("editor.markdown")], markdown ? ["markdownfile", t("editor.markdownFile")] : null, tasks?.create ? ["newtask", t("editor.newTask")] : null, tasks?.pickLabel ? ["tasklist", t("editor.taskList")] : null, ["table", t("editor.table")], ["divider", t("editor.divider")], ["toc", t("editor.toc")], ["figures", t("editor.figures")], ["tables", t("editor.tables")], ["children", t("editor.children")],
     files ? ["image", t("editor.image")] : null, files ? ["video", t("editor.video")] : null, files ? ["drawing", t("draw.insert")] : null, files ? ["album", t("album.fromAlbum")] : null, files ? ["clip", t("editor.copiedPicture")] : null,
     files ? ["bpmnnew", t("bpmn.insertNew")] : null, files ? ["bpmnfile", t("bpmn.insertFile")] : null, ["process", t("bpmn.insertProcess")],
-    ["form", t("form.insert")], ["decision", t("decision.insert")], ["architecture", t("arch.insert")]].filter(Boolean)
+    ["form", t("form.insert")], ["startform", t("start.insert")], ["decision", t("decision.insert")], ["architecture", t("arch.insert")]].filter(Boolean)
     .map(([v, label]) => h("option", { value: v, text: label })));
   // An image is uploaded as an attachment of the item, then shown.
   const picker = h("input", { type: "file", accept: "image/png,image/jpeg,image/gif,image/webp", hidden: true, "aria-label": t("editor.image") });
@@ -914,7 +936,16 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
   const pickedFromEngine = async (kind) => {
     status.textContent = "";
     const p = await pickFromEngine(kind === "form" ? "forms" : "decisions");
-    if (p) insertBlock(schema.nodes[kind].create({ engine: p.engine, [kind]: p.id, text: p.name || "" }));
+    if (p) insertBlock(schema.nodes[kind].create({ engine: p.engine, [kind]: p.id, ...(p.process ? { process: p.process } : {}), text: p.name || "" }));
+  };
+  // A start form (ADR-0148) names a public start link; what it fills in
+  // beforehand is chosen when it is placed, from what its fields hint at.
+  const pickedStartLink = async () => {
+    status.textContent = "";
+    const p = await pickStartLink();
+    if (!p) return;
+    const prefill = await editPrefill({ engine: p.engine, link: p.link, prefill: [] }, true);
+    insertBlock(schema.nodes.startform.create({ engine: p.engine, link: p.link, process: p.process || "", prefill: prefill || [], text: p.name || "" }));
   };
   // The architecture sketch of a release (ADR-0146) is named, and read
   // from the engine when shown.

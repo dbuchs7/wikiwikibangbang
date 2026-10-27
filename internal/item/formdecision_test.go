@@ -25,7 +25,8 @@ func TestFormsAndDecisions(t *testing.T) {
 	for name, b := range map[string]Block{
 		"form without engine":         {Kind: Form, Form: "f"},
 		"form without form":           {Kind: Form, Engine: "atlas"},
-		"form with a process":         {Kind: Form, Engine: "atlas", Form: "f", Process: "p"},
+		"form with a bad process":     {Kind: Form, Engine: "atlas", Form: "f", Process: "1p"},
+		"form with a link":            {Kind: Form, Engine: "atlas", Form: "f", Link: strings.Repeat("a", 64)},
 		"form with a decision":        {Kind: Form, Engine: "atlas", Form: "f", Decision: "d"},
 		"form engine in capitals":     {Kind: Form, Engine: "Atlas", Form: "f"},
 		"form with a file":            {Kind: Form, Engine: "atlas", Form: "f", Ref: fileA},
@@ -41,7 +42,7 @@ func TestFormsAndDecisions(t *testing.T) {
 		"decision with a process":     {Kind: Decision, Engine: "atlas", Decision: "d", Process: "p"},
 		"decision with a tab":         {Kind: Decision, Engine: "atlas", Decision: "a\tb"},
 		"decision with a width":       {Kind: Decision, Engine: "atlas", Decision: "d", Width: 50},
-		"form with a view":            {Kind: Form, Engine: "atlas", Form: "f", View: ViewBoth},
+		"form with an unknown view":   {Kind: Form, Engine: "atlas", Form: "f", View: "table"},
 		"decision with a view":        {Kind: Decision, Engine: "atlas", Decision: "d", View: ViewText},
 		"process with a form":         {Kind: Process, Engine: "atlas", Process: "p", Form: "f"},
 		"process with a decision":     {Kind: Process, Engine: "atlas", Process: "p", Decision: "d"},

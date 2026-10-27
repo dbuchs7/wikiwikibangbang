@@ -106,7 +106,31 @@ const (
 	// read), Layers the layers shown (none for the engine's default) and
 	// Text the caption. The body holds no copy of the sketch (ADR-0146).
 	Architecture BlockKind = "architecture"
+	// StartForm shows the form of a public start link of a process engine
+	// and starts the link's process with what a reader fills in, through
+	// the engine's public route, as anyone with the link does: Engine
+	// names the engine, Link is the link's token there, Process the BPMN
+	// ID of the process it starts when known, Prefill the fields filled in
+	// beforehand with what this site knows of the reader, and Text the
+	// caption. The body holds no copy of the form (ADR-0148).
+	StartForm BlockKind = "startform"
 )
+
+// PrefillSources are what a start form's field may be filled in with
+// beforehand (ADR-0148): the reader's username, the reader's own mail
+// address, and the title and the address of the item the block is on.
+var PrefillSources = []string{"username", "email", "page", "url"}
+
+// MaxPrefill bounds the fields a start form fills in beforehand.
+const MaxPrefill = 20
+
+// Prefill fills in the field of a start form whose key is Field with the
+// value of From, one of PrefillSources, before the reader sees it; the
+// reader may change it.
+type Prefill struct {
+	Field string
+	From  string
+}
 
 // ArchitectureLayers are the layers an architecture sketch may show, in
 // the order the engine draws them from top to bottom (ADR-0146). A block
@@ -188,7 +212,9 @@ type Block struct {
 	Process string `json:",omitempty"`
 	// View is what a bpmn or a process block shows: its diagram (empty),
 	// its diagram and its description (ViewBoth), or its description only
-	// (ViewText) (ADR-0143).
+	// (ViewText) (ADR-0143). A form block shows its form, its form and the
+	// list of its fields, or the list alone, alike (ADR-0148); there,
+	// Process names the process whose steps name the form, or is empty.
 	View string `json:",omitempty"`
 	// Form and Decision name what a form or a decision block shows: the
 	// form's or the decision's ID at the engine (ADR-0144).
@@ -202,17 +228,23 @@ type Block struct {
 	Application string   `json:",omitempty"`
 	Release     int      `json:",omitempty"`
 	Layers      []string `json:",omitempty"`
+	// Link and Prefill name what a start form block shows and fills in:
+	// the token of the public start link at the engine and the fields
+	// filled in beforehand, in the editor's order (ADR-0148).
+	Link    string    `json:",omitempty"`
+	Prefill []Prefill `json:",omitempty"`
 }
 
 // The views of a bpmn or a process block besides its diagram alone
 // (ADR-0143): the description lists the process's tasks and decisions,
-// read from its model.
+// read from its model. A form block's description lists the form's fields
+// (ADR-0148).
 const (
 	ViewBoth = "both"
 	ViewText = "text"
 )
 
-// DiagramViews are the views a bpmn or a process block may carry.
+// DiagramViews are the views a bpmn, a process or a form block may carry.
 var DiagramViews = []string{ViewBoth, ViewText}
 
 // Doc is a structured document body (ADR-0001: a block document, not HTML
@@ -534,6 +566,7 @@ func (d Doc) clone() Doc {
 		b.Mentions = slices.Clone(b.Mentions)
 		b.Marks = slices.Clone(b.Marks)
 		b.Layers = slices.Clone(b.Layers)
+		b.Prefill = slices.Clone(b.Prefill)
 		blocks[i] = b
 	}
 	return Doc{Blocks: blocks}

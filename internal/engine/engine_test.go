@@ -193,11 +193,11 @@ func TestFormsAndDecisions(t *testing.T) {
 	if len(forms) != 2 || forms[0].ID != "a/b" || forms[1].ID != "travel" || forms[1].Name != "Travel request" || forms[1].SavedAt.Unix() != 1791795101 {
 		t.Fatalf("forms %+v", forms)
 	}
-	f, err := r.Form(ctx, e, "travel")
+	f, err := r.Form(ctx, e, "travel", "")
 	if err != nil || f.Name != "Travel request" || string(f.Schema) != `{"type":"default","components":[{"key":"to","type":"textfield"}]}` {
 		t.Fatalf("form %+v, %v", f, err)
 	}
-	if _, err := r.Form(ctx, e, "a/b"); !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "no JSON object") {
+	if _, err := r.Form(ctx, e, "a/b", ""); !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "no JSON object") {
 		t.Errorf("a schema that is no object: %v", err)
 	}
 	if want := "GET /base/api/v1/forms/a%2Fb"; (*asked)[len(*asked)-1] != want {
@@ -206,7 +206,7 @@ func TestFormsAndDecisions(t *testing.T) {
 	// atlas answers any form by its ID; the reader shows only those the
 	// credential lists.
 	n := len(*asked)
-	if _, err := r.Form(ctx, e, "hidden"); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "form hidden") {
+	if _, err := r.Form(ctx, e, "hidden", ""); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "form hidden") {
 		t.Errorf("a form the credential does not list: %v", err)
 	}
 	if len(*asked) != n+1 {
@@ -237,7 +237,7 @@ func TestFormsAndDecisions(t *testing.T) {
 	if _, err := r.Decisions(ctx, e); !errors.Is(err, ErrNoCredential) {
 		t.Errorf("decisions without credential: %v", err)
 	}
-	if _, err := r.Form(ctx, e, "travel"); !errors.Is(err, ErrNoCredential) {
+	if _, err := r.Form(ctx, e, "travel", ""); !errors.Is(err, ErrNoCredential) {
 		t.Errorf("a form without credential: %v", err)
 	}
 	if _, err := r.DecisionModel(ctx, e, "Bonität"); !errors.Is(err, ErrNoCredential) {

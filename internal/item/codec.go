@@ -91,7 +91,10 @@ import (
 //     Decision (ADR-0144). Versions 1 to 32 are still read.
 //   - 34: the block kind architecture, and the block fields Application,
 //     Release and Layers (ADR-0146). Versions 1 to 33 are still read.
-const CodecVersion = 34
+//   - 35: the block kind startform, the block fields Link and Prefill, and
+//     a form block's View and Process (ADR-0148). Versions 1 to 34 are
+//     still read.
+const CodecVersion = 35
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

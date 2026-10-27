@@ -74,11 +74,12 @@ function ckanSource() {
 }
 
 // processModel is a BPMN model of the process "order" whose task names the
-// version, so a reader can tell the versions apart.
+// version, so a reader can tell the versions apart; its start event names
+// the form "travel" as its start form (ADR-0148).
 const processModel = (version) => `<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="defs" targetNamespace="http://bpmn.io/schema/bpmn">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" id="defs" targetNamespace="http://bpmn.io/schema/bpmn">
   <bpmn:process id="order" name="Order to cash" isExecutable="true">
-    <bpmn:startEvent id="start" name="Order received"/>
+    <bpmn:startEvent id="start" name="Order received"><bpmn:extensionElements><zeebe:formDefinition formId="travel"/></bpmn:extensionElements></bpmn:startEvent>
     <bpmn:task id="check" name="Check order v${version}"><bpmn:documentation>Compare the order with the stock.</bpmn:documentation></bpmn:task>
     <bpmn:endEvent id="end"/>
     <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="check"/>
@@ -143,13 +144,44 @@ const sketchPicture = (version, layers) => `<?xml version="1.0" encoding="UTF-8"
 // deploys the decisions anew. And it lists the releases of the application
 // Bestellwesen with their architecture sketches and answers each sketch
 // (ADR-0146); release() records a new release, and reach(false) makes the
-// token reach no application, as a token minted without a reach.
+// token reach no application, as a token minted without a reach. Its
+// public start links (ADR-0148) are listed for the credential and answer
+// anyone, never with a credential: startLink starts "order" with a report
+// form, wizardLink starts "approve", which holds a public wizard. starts
+// records what reached the start route.
+const startLink = "8f14e45fceea167a5a36dedd4bea2543a4c1b5e2f0d6c7b8a9e0f1d2c3b4a596";
+const wizardLink = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 function engineSource() {
   let versions = 3;
   let decided = 2;
   let releases = 2;
   let reached = true;
+  const starts = [];
   const server = require("http").createServer((req, res) => {
+    const pub = /^\/public\/forms\/([0-9a-f]+)\/(schema|start)$/.exec(req.url);
+    if (pub) {
+      res.setHeader("Content-Type", "application/json");
+      if (req.headers.authorization || ![startLink, wizardLink].includes(pub[1])) {
+        res.statusCode = req.headers.authorization ? 400 : 404;
+        return res.end(JSON.stringify({ error: req.headers.authorization ? "a credential on a public route" : "unknown or revoked link" }));
+      }
+      if (pub[2] === "schema") {
+        return res.end(JSON.stringify(pub[1] === startLink
+          ? { processName: "Order to cash", schema: { type: "default", components: [
+            { type: "textfield", key: "reporter", label: "Reporter", validate: { required: true } },
+            { type: "textfield", key: "email", label: "E-Mail" },
+            { type: "textfield", key: "page", label: "Page" },
+            { type: "textarea", key: "what", label: "What happened", validate: { required: true } }] } }
+          : { processName: "Approve leave", schema: { type: "default", components: [{ type: "textfield", key: "dates", label: "Dates" }] } }));
+      }
+      let body = "";
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => {
+        starts.push({ link: pub[1], forwarded: req.headers["x-forwarded-for"] || "", body: JSON.parse(body) });
+        res.end(JSON.stringify({ started: true }));
+      });
+      return;
+    }
     if (req.headers.authorization !== "Bearer " + process.env.ENGINE_TOKEN) {
       res.statusCode = 401;
       return res.end();
@@ -160,6 +192,9 @@ function engineSource() {
         { key: 7, processId: "approve", name: "Approve leave", version: 1, deployedAt: 1761300000 }]));
     }
     if (req.url === "/api/v1/forms") return res.end(JSON.stringify([{ id: "travel", name: "Travel request", projectId: "p1", savedAt: 1791795101 }]));
+    if (req.url === "/api/v1/public-links") {
+      return res.end(JSON.stringify([{ token: startLink, processId: "order", formId: "report", createdAt: 1 }, { token: wizardLink, processId: "approve", formId: "leave", createdAt: 2 }]));
+    }
     if (req.url === "/api/v1/forms/travel") {
       return res.end(JSON.stringify({ id: "travel", name: "Travel request", savedAt: 1791795101, schema: { type: "default", id: "travel", components: [
         { type: "textfield", key: "destination", label: "Destination", validate: { required: true } },
@@ -188,6 +223,9 @@ function engineSource() {
       return res.end(decisionModel(Number(d[1]) - 199));
     }
     const m = /^\/api\/v1\/processes\/(\d+)\/(xml|runtime)$/.exec(req.url);
+    if (m && m[2] === "xml" && m[1] === "7") {
+      return res.end(`<definitions xmlns:atlas="https://atlas.example/bpmn"><process id="approve"><startEvent id="s"/><subProcess id="w" atlas:wizard="public"/></process></definitions>`);
+    }
     if (m && m[2] === "xml") return res.end(processModel(Number(m[1]) - 99));
     if (m) {
       return res.end(JSON.stringify({ instances: 3, finished: 12, tokens: 3, incidentTotal: 1, incidentCountsExact: true,
@@ -202,6 +240,7 @@ function engineSource() {
   server.decide = () => { decided++; };
   server.release = () => { releases++; };
   server.reach = (on) => { reached = on; };
+  server.starts = starts;
   return server;
 }
 
@@ -2671,21 +2710,23 @@ function gitSource() {
       await page.click("#edit-done");
       await page.waitForSelector("#body.reading");
 
-      step("forms and decisions: a form of an engine is a preview that sends nothing; a decision shows its newest deployed table and its model's graph (ADR-0144)");
+      step("forms and decisions: a form of a process's step is a preview that sends nothing; a decision shows its newest deployed table and its model's graph (ADR-0144, ADR-0148)");
       await page.click("#edit");
       await page.waitForSelector("#body.editing .ProseMirror");
       await page.locator("#body .ProseMirror").click();
       await page.selectOption("#body .pm-toolbar select:has(option[value=form])", "form");
-      await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Travel request')");
+      await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Order to cash')"); // the processes first
+      await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Order received')"); // then the steps that name a form
       await page.waitForSelector("dialog.bpmn-pick", { state: "detached" });
       await page.selectOption("#body .pm-toolbar select:has(option[value=decision])", "decision");
+      await page.waitForSelector("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Kreditentscheid')"); // the list is read
       await page.fill("dialog.bpmn-pick[open] input[type=search]", "bon");
       check(await page.locator("dialog.bpmn-pick[open] .bpmn-processes li").count() === 1, "the decisions are filtered");
       await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Bonität')");
       await page.waitForSelector("dialog.bpmn-pick", { state: "detached" });
       await page.click("#edit-done");
       await page.waitForSelector("#body.reading");
-      const formBlock = page.locator("#body .pm-form");
+      const formBlock = page.locator("#body .pm-form:not(.pm-start)");
       await formBlock.scrollIntoViewIfNeeded();
       await formBlock.locator(".pm-diagram-info:has-text('Travel request')").waitFor();
       await formBlock.locator(".pm-diagram-ops:has-text('Preview: what is entered here is not sent.')").waitFor();
@@ -2694,6 +2735,17 @@ function gitSource() {
       await formBlock.locator("button:has-text('Send request')").click();
       await formBlock.locator(".pm-diagram-ops:has-text('Nothing was sent')").waitFor();
       check(await formBlock.locator(".fjs-powered-by").isVisible(), "the bpmn.io watermark stays visible on a form");
+      // Its fields are listed below it.
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .pm-form select.pm-diagram-view");
+      await page.locator("#body .pm-form select.pm-diagram-view").selectOption("both");
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
+      await formBlock.scrollIntoViewIfNeeded();
+      await formBlock.locator(".pm-form-doc :text('Used at: Order received (start form)')").waitFor();
+      await formBlock.locator(".pm-form-doc .pm-doc-step:has-text('Destination') .pm-doc-kind:has-text('text · destination · required')").waitFor();
+      check(await formBlock.locator(".pm-form-doc :text('Send request')").count() === 0, "a button is no field");
+      check(await formBlock.locator(".fjs-form").count() === 1, "the form is shown above its fields");
       const decisionBlock = page.locator("#body .pm-dmn");
       await decisionBlock.scrollIntoViewIfNeeded();
       await decisionBlock.locator(".pm-diagram-info:has-text('Bonität · Credit · version 2 · Atlas test')").waitFor();
@@ -2782,6 +2834,69 @@ function gitSource() {
       await sketchBlock.scrollIntoViewIfNeeded();
       await sketchBlock.locator(".pm-diagram-info:has-text('Bestellwesen · v2 · recorded')").waitFor(); // shown again once the token reaches it
       expectedConsole = null;
+
+      step("start forms: a public start link's form opens filled in with the reader's username and the page, and starts its process through this server without the credential; a process with a wizard is started in the engine (ADR-0148)");
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .ProseMirror");
+      await page.locator("#body .ProseMirror").click();
+      await page.selectOption("#body .pm-toolbar select:has(option[value=startform])", "startform");
+      await page.click("dialog.bpmn-pick[open] .bpmn-processes button:has-text('Order to cash')");
+      const prefill = page.locator("dialog.bpmn-pick[open][aria-label='Fill in beforehand']");
+      await prefill.locator("select[aria-label=Reporter]").waitFor();
+      check(await prefill.locator("select[aria-label=Reporter]").inputValue() === "username", "a reporter is proposed to be the reader's username");
+      check(await prefill.locator("select[aria-label=E-Mail]").inputValue() === "email", "a mail field is proposed to be the reader's address");
+      check(await prefill.locator("select[aria-label=Page]").inputValue() === "page", "a page field is proposed to be the page's title");
+      check(await prefill.locator("select[aria-label='What happened']").inputValue() === "", "a field without a hint is not filled in");
+      await prefill.locator("select[aria-label=E-Mail]").selectOption("");
+      await prefill.locator("button:has-text('Save')").click();
+      await page.waitForSelector("dialog.bpmn-pick", { state: "detached" });
+      const startBlock = page.locator("#body .pm-start").first();
+      await startBlock.scrollIntoViewIfNeeded(); // read when it comes into sight
+      await startBlock.locator(".pm-start-send[disabled]").waitFor(); // nothing is sent while the text is edited
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
+      await startBlock.scrollIntoViewIfNeeded();
+      await startBlock.locator(".pm-diagram-info:has-text('Start: Order to cash · Atlas test')").waitFor();
+      const me = await page.evaluate(async () => (await (await fetch("/api/me")).json()).user.username);
+      const title = await page.evaluate(() => document.querySelector("h1.item-title")?.textContent?.trim() || "");
+      await startBlock.locator(".pm-diagram-ops:has-text('Filled in beforehand, to be checked: Reporter (the reader’s username), Page (the title of this page)')").waitFor();
+      check(await startBlock.getByLabel("Reporter").inputValue() === me, "the reporter is the reader's username");
+      check(await startBlock.getByLabel("E-Mail").inputValue() === "", "a field the editor left out is not filled in");
+      check(title !== "" && await startBlock.getByLabel("Page").inputValue() === title, "the page is the page's title");
+      await startBlock.locator(".pm-start-hint:has-text('it learns what is entered here, not who you are')").waitFor();
+      await startBlock.locator(".pm-start-send").click(); // a required field is empty: nothing is sent
+      await page.waitForTimeout(300);
+      check(engine.starts.length === 0, "a form with an empty required field is not sent");
+      await startBlock.getByLabel("What happened").fill("The printer is on fire");
+      await startBlock.locator(".pm-start-send").click();
+      await startBlock.locator(".pm-start-done:has-text('Sent: Order to cash was started. Thank you.')").waitFor();
+      const sent = engine.starts.at(-1);
+      const v = sent.body.variables;
+      check(sent.link === startLink && sent.forwarded === "127.0.0.1" && v.reporter === me && v.page === title && v.what === "The printer is on fire" && !v.email,
+        "the form's values reach the engine's public route, with the reader's address: " + JSON.stringify(sent));
+      await startBlock.locator("button:has-text('Fill in again')").click();
+      await startBlock.getByLabel("Reporter").waitFor();
+      // A pasted link of a process with a public wizard is started in the
+      // engine's own pages.
+      await page.click("#edit");
+      await page.waitForSelector("#body.editing .ProseMirror");
+      await page.locator("#body .ProseMirror").click();
+      await page.selectOption("#body .pm-toolbar select:has(option[value=startform])", "startform");
+      await page.fill("dialog.bpmn-pick[open] input[aria-label='Or paste a start link']", "not a link");
+      await page.click("dialog.bpmn-pick[open] button:has-text('Use')");
+      await page.waitForSelector("dialog.bpmn-pick[open] .error:has-text('This is no public start link')");
+      await page.fill("dialog.bpmn-pick[open] input[aria-label='Or paste a start link']", `http://127.0.0.1:${engine.address().port}/public/forms/${wizardLink}`);
+      await page.click("dialog.bpmn-pick[open] button:has-text('Use')");
+      await page.click("dialog.bpmn-pick[open][aria-label='Fill in beforehand'] button:has-text('Save')");
+      await page.waitForSelector("dialog.bpmn-pick", { state: "detached" });
+      await page.click("#edit-done");
+      await page.waitForSelector("#body.reading");
+      const wizardBlock = page.locator("#body .pm-start:has(.pm-diagram-info:has-text('Approve leave'))");
+      await wizardBlock.scrollIntoViewIfNeeded();
+      await wizardBlock.locator(":text('This process leads you through further steps in the engine')").waitFor();
+      check(await wizardBlock.locator("a:has-text('Open in the engine')").getAttribute("href") === `http://127.0.0.1:${engine.address().port}/public/forms/${wizardLink}`, "the block links to the engine's page of the link");
+      check(await wizardBlock.locator(".pm-start-send:visible").count() === 0, "a process with a wizard is not sent from here");
+      check(engine.starts.length === 1, "only the one form was sent");
     }
 
     step("connectors: an API description offers its lists; the one picked fills a JSON source's settings (ADR-0130)");

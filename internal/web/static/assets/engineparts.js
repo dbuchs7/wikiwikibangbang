@@ -1,5 +1,6 @@
-// Forms and decisions of process engines (ADR-0144): what their views in a
-// text need and nothing that needs a browser, so it is tested on its own.
+// Forms and decisions of process engines (ADR-0144), the fields of a form
+// and what a start form fills in (ADR-0148): what their views in a text
+// need and nothing that needs a browser, so it is tested on its own.
 
 // The DMN 1.5 namespaces of a model and of its diagram, as atlas writes
 // them, and the DMN 1.3 ones the vendored dmn-js reads.
@@ -41,4 +42,107 @@ export function previewSchema(schema, known, note) {
     return Array.isArray(c.components) ? { ...c, components: walk(c.components) } : c;
   }) : components);
   return { ...schema, components: walk(schema?.components) };
+}
+
+// The components of a form-js schema that hold nothing a person enters:
+// texts, pictures, separators and buttons. groupKinds hold components.
+const unkeyed = new Set(["text", "html", "image", "spacer", "separator", "button", "iframe", "table", "documentPreview"]);
+// Path segments that would reach an object's prototype are never used.
+const unsafeSegment = new Set(["__proto__", "prototype", "constructor"]);
+
+// fieldsOf lists the fields of a form-js schema in its order, for the list
+// that describes a form and for what a start form fills in beforehand
+// (ADR-0148). A field is {key, label, type, description, required,
+// options, hidden, repeated, depth}: key is the path its value is sent
+// under, the keys of its groups' paths before its own, joined by "."; a
+// group or a list of entries is {group: true, label, type, repeated,
+// depth}, before its fields. repeated says that a field belongs to a list
+// of entries, whose values are sent per entry.
+export function fieldsOf(schema) {
+  const out = [];
+  const walk = (components, prefix, depth, repeated) => {
+    if (!Array.isArray(components)) return;
+    for (const c of components) {
+      if (!c || typeof c !== "object") continue;
+      const type = String(c.type ?? "");
+      if (Array.isArray(c.components)) {
+        const list = repeated || type === "dynamiclist";
+        out.push({ group: true, label: String(c.label ?? ""), type, repeated: list, depth });
+        walk(c.components, c.path ? [...prefix, ...String(c.path).split(".")] : prefix, depth + 1, list);
+        continue;
+      }
+      if (c.key === undefined || c.key === null || c.key === "" || unkeyed.has(type)) continue;
+      const path = [...prefix, ...String(c.key).split(".")];
+      if (path.some((p) => unsafeSegment.has(p))) continue;
+      out.push({
+        key: path.join("."), label: String(c.label ?? ""), type, description: String(c.description ?? ""),
+        required: Boolean(c.validate?.required), options: Array.isArray(c.values) ? c.values.map((v) => String(v?.label ?? v?.value ?? "")) : [],
+        hidden: Boolean(c.conditional?.hide), repeated, depth,
+      });
+    }
+  };
+  walk(schema?.components, [], 0, false);
+  return out;
+}
+
+// prefillSources are what a start form's field may be filled in with
+// beforehand, as the model names them: the reader's username, the
+// reader's own mail address, and the title and the address of the page.
+export const prefillSources = ["username", "email", "page", "url"];
+
+// fillable says whether a field may be filled in beforehand: one value a
+// person types as text, not one per entry of a list.
+export const fillable = (f) => !f.group && !f.repeated && (f.type === "textfield" || f.type === "textarea");
+
+// The hints by which a field is proposed for a source, tried in this order
+// on its key's last part and on its label, in lower case.
+const hints = [
+  ["email", /(^|[^a-z])(e-?mail|mail|mailadresse|e-mail-adresse)($|[^a-z])/],
+  ["url", /(^|[^a-z])(url|page_?url|seiten_?url|source_?url)($|[^a-z])/],
+  ["page", /^(page|seite|wikiseite|wiki_?page|quelle|source|context|kontext)$/],
+  ["username", /^(user|username|user_?name|benutzer|benutzername|login|reporter|reported_?by|gemeldet von|melder|melderin|requester|requested_?by|antragsteller|antragstellerin|initiator|name|your name|ihr name)$/],
+];
+
+// suggestPrefill proposes what a start form fills in beforehand when it is
+// first placed: for each source, the first fillable field whose key or
+// label hints at it, each field once. The editor confirms or changes it.
+export function suggestPrefill(fields) {
+  const out = [];
+  const taken = new Set();
+  for (const [from, hint] of hints) {
+    const f = fields.find((x) => fillable(x) && !taken.has(x.key) &&
+      [x.key.split(".").at(-1), x.label].some((s) => hint.test(String(s).trim().toLowerCase())));
+    if (f) {
+      out.push({ field: f.key, from });
+      taken.add(f.key);
+    }
+  }
+  return out;
+}
+
+// prefillData is the data a start form opens with: for each field to fill
+// in that the form has and that may be filled in, the value of its source
+// in known, set at the field's path; a source without a value fills in
+// nothing.
+export function prefillData(prefill, fields, known) {
+  const keys = new Set(fields.filter(fillable).map((f) => f.key));
+  const data = {};
+  for (const { field, from } of prefill || []) {
+    const v = known?.[from];
+    if (!keys.has(field) || typeof v !== "string" || !v) continue;
+    const path = field.split(".");
+    let o = data;
+    for (const p of path.slice(0, -1)) o = o[p] !== null && typeof o[p] === "object" ? o[p] : (o[p] = {});
+    o[path.at(-1)] = v;
+  }
+  return data;
+}
+
+// linkOf returns the token of a public start link, given the token or the
+// address of the engine's page of it (…/public/forms/<token>), or null.
+// atlas makes a token of lower-case hexadecimal digits, as the model
+// requires.
+export function linkOf(text) {
+  const m = /^(?:[a-z][a-z0-9+.-]*:\/\/[^\s]*\/public\/forms\/)?([0-9a-f]{32,128})(?:[/?#][^\s]*)?$/.exec(String(text ?? "").trim());
+  return m ? m[1] : null;
 }

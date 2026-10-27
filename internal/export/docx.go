@@ -33,12 +33,15 @@ type Document struct {
 	Figure, Table string
 }
 
-// diagramName names what a bpmn, process, form, decision or architecture
-// block shows, for documents that do not draw it (ADR-0129, ADR-0144,
-// ADR-0146): "BPMN:" and the file, or the process, form or decision and
-// its engine. An architecture sketch holds only its application's ID, so
-// it is named by its caption, which the picker fills with the
-// application's name, and its release or "newest release".
+// diagramName names what a bpmn, process, form, decision, architecture or
+// start form block shows, for documents that do not draw it (ADR-0129,
+// ADR-0144, ADR-0146, ADR-0148): "BPMN:" and the file, or the process,
+// form or decision and its engine. An architecture sketch holds only its
+// application's ID, so it is named by its caption, which the picker fills
+// with the application's name, and its release or "newest release". A
+// start form is named by the process it starts, or by its caption when
+// the link was pasted without one; its link is a document's to keep out,
+// since anyone who holds it starts the process.
 func diagramName(bl item.Block, files map[item.ID]Image) string {
 	switch bl.Kind {
 	case item.Process:
@@ -53,13 +56,17 @@ func diagramName(bl item.Block, files map[item.ID]Image) string {
 			return "Architecture sketch: " + name + ", newest release (" + bl.Engine + ")"
 		}
 		return fmt.Sprintf("Architecture sketch: %s v%d (%s)", name, bl.Release, bl.Engine)
+	case item.StartForm:
+		return "Start form: " + cmp.Or(bl.Process, strings.TrimSpace(bl.Text), "public start link") + " (" + bl.Engine + ")"
 	}
 	return "BPMN: " + files[bl.Ref].Name
 }
 
 // namedByCaption reports whether a block's name in a document is its
 // caption, which is then not written again below it.
-func namedByCaption(bl item.Block) bool { return bl.Kind == item.Architecture }
+func namedByCaption(bl item.Block) bool {
+	return bl.Kind == item.Architecture || bl.Kind == item.StartForm && bl.Process == ""
+}
 
 // listing is what a list of figures (kind Figures) or of tables (Tables)
 // shows for a body: each picture or table, numbered in the order of the
@@ -301,10 +308,11 @@ func (b *docxBuilder) block(bl item.Block, p Page, base, listNum int) string {
 			out += para("Caption", "", run(bl.Text, ""))
 		}
 		return out
-	case item.BPMN, item.Process, item.Form, item.Decision, item.Architecture:
+	case item.BPMN, item.Process, item.Form, item.Decision, item.Architecture, item.StartForm:
 		// A document does not draw a diagram, a form, a decision or a
-		// sketch; it names the file, the process, the form, the decision or
-		// the sketch (ADR-0129, ADR-0144, ADR-0146).
+		// sketch; it names the file, the process, the form, the decision,
+		// the sketch or the start form (ADR-0129, ADR-0144, ADR-0146,
+		// ADR-0148).
 		out := para("", "", run("["+diagramName(bl, p.Images)+"]", ""))
 		if strings.TrimSpace(bl.Text) != "" && !namedByCaption(bl) {
 			out += para("Caption", "", run(bl.Text, ""))

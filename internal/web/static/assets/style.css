@@ -646,6 +646,21 @@ dialog.drawing.bpmn-settings .drawing-bar button + button { margin-left: 0; }
    expression too, scrolling sideways, and its requirements graph the
    height of a diagram. */
 .pm-form-canvas { background: #fff; color: #222; padding: 4px 8px; }
+/* The fields of a form below it or alone, and a start form's button with
+   what it says (ADR-0148). */
+.pm-form-canvas[hidden] + .pm-form-doc { border-top: 0; }
+.pm-form-fields .pm-form-group { margin-top: 4px; }
+.pm-start-after { padding: 8px 14px 12px; border-top: 1px solid var(--border); }
+.pm-start-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.pm-start-actions p { margin: 0; }
+.pm-start-send[hidden] { display: none; }
+.pm-start-hint { flex-basis: 100%; font-size: 13px; }
+.pm-start-done { margin: 8px 0; font-weight: 600; }
+.pm-start-canvas > a, .pm-start-canvas > button { margin-right: 12px; }
+.pm-start-paste { display: flex; gap: 6px; }
+.pm-start-paste input { flex: 1; min-width: 0; }
+.pm-prefill-rows { display: flex; flex-direction: column; gap: 8px; }
+.pm-prefill-actions { display: flex; justify-content: flex-end; }
 .pm-dmn-canvas { position: relative; background: #fff; color: #222; overflow-x: auto; min-height: 80px; }
 .pm-dmn-canvas.pm-dmn-graph { height: 420px; overflow: hidden; }
 .pm-dmn-views { max-width: 260px; }

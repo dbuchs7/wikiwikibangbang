@@ -124,4 +124,5 @@ Strongest form: a page documents; fields that can be filled in suggest that some
 
 ## Links
 
+- extended by [ADR-0148](0148-start-forms-and-the-forms-of-a-process.md) (the forms of a process's steps, and start forms)
 - relates to [ADR-0012](0012-mcp-adapter-over-http-api.md) (MCP), [ADR-0015](0015-resource-budgets-and-paged-listings.md) (budgets), [ADR-0031](0031-web-ui-shell.md) (the UI and its policy), [ADR-0032](0032-prosemirror-rich-text-editor.md) (vendored bundles), [ADR-0129](0129-bpmn-diagrams-and-processes-from-a-process-engine.md) (processes from an engine), [ADR-0142](0142-processes-in-a-drawing.md) (processes in a drawing)

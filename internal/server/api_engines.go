@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -20,7 +22,11 @@ import (
 // forms and decisions (ADR-0144) and the architecture sketches of their
 // applications' releases (ADR-0146). Every signed-in principal reads;
 // which processes, forms, decisions and sketches it reads is decided by
-// the engine's account behind the credential.
+// the engine's account behind the credential. The forms of a process's
+// steps and the public start links of its processes (ADR-0148) are read
+// alike; a start link's form is read and sent through the engine's
+// public routes, without the credential, so that it starts a process as
+// anyone with the link does.
 func engineRoutes(d Deps) []Route {
 	h := engineHandlers{authHandlers: authHandlers{d: d}, log: d.Log}
 	if h.log == nil {
@@ -34,7 +40,11 @@ func engineRoutes(d Deps) []Route {
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes/{process}", Summary: "The newest version of a process with its BPMN model, read from the engine now", Handler: http.HandlerFunc(h.process)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes/{process}/operations", Summary: "Where the instances of a process's newest version are: counts per element, when the engine's operations may be shown", Handler: http.HandlerFunc(h.operations)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/forms", Summary: "The forms the engine lets its credential see, as they are saved, read from the engine now (ADR-0144)", Handler: http.HandlerFunc(h.forms)},
-		{Method: http.MethodGet, Pattern: "/api/engines/{id}/forms/{form}", Summary: "A form as it is saved, with its form-js schema, read from the engine now", Handler: http.HandlerFunc(h.form)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/forms/{form}", Summary: "A form as it is saved, with its form-js schema, read from the engine now; with the query parameter process, the form must be named by a step of that process's newest version, and steps lists those steps (ADR-0148)", Handler: http.HandlerFunc(h.form)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes/{process}/forms", Summary: "The steps of a process's newest version that name a form, in the order of its model: element, kind, name and form; and whether it holds a public wizard (ADR-0148)", Handler: http.HandlerFunc(h.processForms)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/public-links", Summary: "The public start links the engine lets its credential list: link, process and form (those who may edit in a space; ADR-0148)", Handler: http.HandlerFunc(h.publicLinks)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/public-links/{link}", Summary: "The form of a public start link as anyone with the link reads it: the process's name, the form-js schema and the engine's own page of the link, read through the engine's public route without the credential; with the query parameter process, wizard says whether that process leads its filler on in the engine's own pages (ADR-0148)", Handler: http.HandlerFunc(h.publicForm)},
+		{Method: http.MethodPost, Pattern: "/api/engines/{id}/public-links/{link}/start", Summary: "Start the process of a public start link with {\"variables\": {...}}, the form's values, and the process it starts if known, through the engine's public route without the credential: the engine records no initiator; a process that leads its filler on in the engine's own pages is not started (ADR-0148)", Handler: http.HandlerFunc(h.startPublic)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/decisions", Summary: "The newest deployed version of each decision the engine lets its credential read, read from the engine now (ADR-0144)", Handler: http.HandlerFunc(h.decisions)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/decisions/{decision}", Summary: "The newest deployed version of a decision with the DMN model it is deployed in, read from the engine now", Handler: http.HandlerFunc(h.decision)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/architectures", Summary: "The applications whose releases carry an architecture sketch the engine lets its credential read, each with those releases, newest first: version, when published, when the sketch was taken and the layers it records, read from the engine now (ADR-0146)", Handler: http.HandlerFunc(h.architectures)},
@@ -146,8 +156,16 @@ func (h engineHandlers) engineOf(w http.ResponseWriter, r *http.Request) (site.E
 // engine and how; the credential is never part of the message.
 func (h engineHandlers) engineFailed(w http.ResponseWriter, e site.Engine, err error) {
 	msg := "engine " + e.ID + ": " + err.Error()
-	if errors.Is(err, engine.ErrNotFound) {
+	switch {
+	case errors.Is(err, engine.ErrNotFound):
 		writeError(w, http.StatusNotFound, msg)
+		return
+	case errors.Is(err, engine.ErrRejected):
+		writeError(w, http.StatusUnprocessableEntity, msg)
+		return
+	case errors.Is(err, engine.ErrBusy):
+		w.Header().Set("Retry-After", "5")
+		writeError(w, http.StatusServiceUnavailable, msg)
 		return
 	}
 	h.log.Warn("process engine read failed", "engine", e.ID, "err", err)
@@ -220,13 +238,116 @@ func (h engineHandlers) form(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	f, err := h.d.Engines.Form(r.Context(), e, r.PathValue("form"))
+	f, err := h.d.Engines.Form(r.Context(), e, r.PathValue("form"), r.URL.Query().Get("process"))
 	if err != nil {
 		h.engineFailed(w, e, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "form": f})
+}
+
+func (h engineHandlers) processForms(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	pf, err := h.d.Engines.ProcessForms(r.Context(), e, r.PathValue("process"))
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "process": pf})
+}
+
+// publicLinks lists the start links to those who may edit in a space, who
+// place them on pages; a reader of a page reads the link its block names.
+func (h engineHandlers) publicLinks(w http.ResponseWriter, r *http.Request) {
+	p, _ := PrincipalFrom(r.Context())
+	may := false
+	h.d.DB.Read(func(s *item.Store) { may = s.As(string(p.User)).EditsASpace() })
+	if !may {
+		writeError(w, http.StatusForbidden, "only those who may edit in a space list the start links of an engine")
+		return
+	}
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	list, err := h.d.Engines.PublicLinks(r.Context(), e)
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "links": list})
+}
+
+// linkOf returns the start link a request names, or answers that it is no
+// start link: the engine's own token, so that nothing else reaches its
+// path.
+func linkOf(w http.ResponseWriter, r *http.Request) (string, bool) {
+	link := r.PathValue("link")
+	if !item.ValidStartLink(link) {
+		writeError(w, http.StatusBadRequest, "link "+strconv.Quote(link)+": a start link is the engine's token, 32 to 128 lower-case hexadecimal digits")
+		return "", false
+	}
+	return link, true
+}
+
+func (h engineHandlers) publicForm(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	link, ok := linkOf(w, r)
+	if !ok {
+		return
+	}
+	f, err := h.d.Engines.PublicForm(r.Context(), e, link, r.URL.Query().Get("process"), clientAddr(r))
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]any{"engine": h.engineJSON(e, false), "form": f})
+}
+
+// startPublic sends a start link's form for the person who filled it in.
+// The engine records nobody as its initiator; the audit trail records who
+// sent it, and the link only by its first eight digits, which start
+// nothing.
+func (h engineHandlers) startPublic(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.engineOf(w, r)
+	if !ok {
+		return
+	}
+	link, ok := linkOf(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		Variables json.RawMessage `json:"variables"`
+		Process   string          `json:"process"`
+	}
+	if err := readJSON(w, r, &req); err != nil {
+		badRequest(w, err)
+		return
+	}
+	if v := bytes.TrimSpace(req.Variables); len(v) == 0 || v[0] != '{' {
+		writeError(w, http.StatusBadRequest, "variables: the form's values are a JSON object")
+		return
+	}
+	p, _ := PrincipalFrom(r.Context())
+	addr := clientAddr(r)
+	started, err := h.d.Engines.StartPublic(r.Context(), e, link, req.Process, req.Variables, addr)
+	if err != nil {
+		h.engineFailed(w, e, err)
+		return
+	}
+	h.record(audit.Entry{Event: audit.EngineStarted, Actor: string(p.User), Addr: addr, Subject: e.ID, Detail: map[string]string{"link": link[:8]}})
+	writeJSON(w, http.StatusOK, map[string]any{"started": true, "wizard": started.Wizard})
 }
 
 func (h engineHandlers) decisions(w http.ResponseWriter, r *http.Request) {

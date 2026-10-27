@@ -258,10 +258,10 @@ func (m *mdBuilder) block(bl item.Block, p Page, base int) []string {
 			out = append(out, label)
 		}
 		return append(out, captionPart()...)
-	case item.BPMN, item.Process, item.Form, item.Decision, item.Architecture:
+	case item.BPMN, item.Process, item.Form, item.Decision, item.Architecture, item.StartForm:
 		// A diagram is named as in Word and PDF (ADR-0071): its file, linked
-		// where it is reachable, or its process, form, decision or sketch
-		// and engine (ADR-0144, ADR-0146).
+		// where it is reachable, or its process, form, decision, sketch or
+		// start form and engine (ADR-0144, ADR-0146, ADR-0148).
 		var out []string
 		if bl.Kind != item.BPMN {
 			out = append(out, inlineMarkdown(diagramName(bl, nil), nil))
