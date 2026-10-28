@@ -4,7 +4,7 @@
 - **Implementation:** Not started
 - **Date:** 2026-10-28
 - **Deciders:** Project initiators (requested 2026-10-28: a process an engine shares with a group may be started by its members from a page, under their own name; below the form, a reader may see the instances they started and open one for its status); proposed for the maintainer's acceptance
-- **Open question:** Will atlas accept an access token its sign-in provider issued for it on the routes below, and map it to its account by the issuer and a stable user ID? atlas's own record of this is not yet written. This record rests on it, and on the drafts named under "Context" being accepted.
+- **Open question:** Will atlas accept an access token its sign-in provider issued for it on the routes below, and map it to its account by a stable user ID? pblumer/atlas proposes it in `ADR-draft-provider-access-tokens-for-a-person`, not yet accepted. This record rests on it, and on the drafts named under "Context" being accepted.
 - **Question checked:** 2026-10
 
 ## Context and problem statement
@@ -64,7 +64,7 @@ Option 5 stays the way for everything option 1 cannot serve.
 
 - The wiki and the engine sign people in with the same provider.
 - The provider issues access tokens for the engine's API. As far as this record knows, Google's sign-in issues access tokens only for Google's own APIs (an assumption, not checked against a running installation). Installations that sign in with Google alone therefore do not get internal start forms.
-- The engine accepts such a token on the routes below and maps it to its account by the issuer and a stable user ID. In Entra ID the `sub` claim is pairwise per application. Assumption from the provider's documentation, to be checked in atlas's record: an access token the wiki obtains therefore carries a different `sub` than atlas's own sign-in sees, and the mapping must use the object ID (`oid`) within the tenant (`tid`).
+- The engine accepts such a token on the routes below and maps it to its account by a stable user ID, as pblumer/atlas `ADR-draft-provider-access-tokens-for-a-person` proposes. Under that draft, the engine's administrator lists this server's client ID among the applications that may act for people, and the engine requires the delegated scope the settings below name. In Entra ID the `sub` claim is pairwise per application (atlas ADR-0332, checked against the provider's documentation in 2026-09). An access token the wiki obtains therefore carries a different `sub` than atlas's own sign-in sees, and the mapping uses the object ID (`oid`).
 
 ### Settings and the token
 
@@ -123,7 +123,6 @@ Option 5 stays the way for everything option 1 cannot serve.
   - While a token is valid, the wiki's server can act at the engine as the reader within the scope granted. The scope is limited to starting and reading one's own instances only if the engine's record makes it so.
 - **Follow-ups / risks to watch:**
   - atlas's record on accepting the provider's tokens: the open question.
-  - The pairwise `sub` in Entra ID.
   - Whether a short-lived token without refresh causes too many round trips in practice.
   - Public start forms of ADR-0148 are unchanged and stay anonymous.
 
@@ -161,4 +160,4 @@ Strongest form: no new code path; the engine's own page signs the reader in, off
 
 - extends [ADR-0148](0148-start-forms-and-the-forms-of-a-process.md) (start forms; its follow-up on internal start forms)
 - relates to [ADR-0015](0015-resource-budgets-and-paged-listings.md) (budgets), [ADR-0030](0030-openid-connect-single-sign-on.md) and [ADR-0066](0066-several-identity-providers-entra-id-and-google.md) (sign-in), [ADR-0031](0031-web-ui-shell.md) (the UI's policy), [ADR-0129](0129-bpmn-diagrams-and-processes-from-a-process-engine.md) (engines and their credential)
-- depends on pblumer/atlas `ADR-draft-starters-start-processes-and-follow-their-instances` and `ADR-draft-every-user-task-is-addressed`, and on an atlas record, not yet written, on accepting its sign-in provider's access tokens
+- depends on pblumer/atlas `ADR-draft-starters-start-processes-and-follow-their-instances`, `ADR-draft-every-user-task-is-addressed` and `ADR-draft-provider-access-tokens-for-a-person`
