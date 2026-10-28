@@ -102,15 +102,19 @@ type Deps struct {
 	// creates one that reads credentials from the process environment
 	// when it is nil.
 	Engines *engine.Reader
+	// Disk measures the data directory's file system (ADR-0150); Routes
+	// creates one that measures on demand when it is nil, and the caller
+	// runs its Loop.
+	Disk *DiskWatch
 }
 
 // MetricsPath serves the operational metrics. It is the only path a token
 // of scope metrics may reach.
 const MetricsPath = "/metrics"
 
-// NewMetrics returns a metric registry that reads the data directory and
-// the live sessions.
-func NewMetrics(db *storage.DB, hub *collab.Hub) *metrics.Metrics {
+// NewMetrics returns a metric registry that reads the data directory, the
+// live sessions and, with disk, the file system's free space.
+func NewMetrics(db *storage.DB, hub *collab.Hub, disk *DiskWatch) *metrics.Metrics {
 	src := metrics.Sources{Build: buildinfo.Get().String()}
 	if db != nil {
 		src.Storage = db.Sizes
@@ -127,6 +131,12 @@ func NewMetrics(db *storage.DB, hub *collab.Hub) *metrics.Metrics {
 	if hub != nil {
 		src.Live = hub.Stats
 	}
+	if disk != nil {
+		src.Disk = func() (uint64, uint64, int, int64) {
+			r := disk.Report()
+			return r.Free, r.Total, int(r.level), r.Parts[storage.AttachmentsDir]
+		}
+	}
 	return metrics.New(src)
 }
 
@@ -138,11 +148,14 @@ func Routes(d Deps) []Route {
 	if d.Collab == nil && d.DB != nil {
 		d.Collab = NewCollab(d.DB)
 	}
-	if d.Metrics == nil {
-		d.Metrics = NewMetrics(d.DB, d.Collab)
-	}
 	if d.Messages == nil {
 		d.Messages = NewMessenger(nil, d.DB, d.Log, 0)
+	}
+	if d.Disk == nil && d.DB != nil {
+		d.Disk = NewDiskWatch(d.DB, d.Messages, d.Log)
+	}
+	if d.Metrics == nil {
+		d.Metrics = NewMetrics(d.DB, d.Collab, d.Disk)
 	}
 	if d.Backups == nil && d.DB != nil {
 		d.Backups = autobackup.New(d.DB, os.Getenv, buildinfo.Get().String(), d.Log)
@@ -172,6 +185,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, regulationRoutes(d)...)
 	routes = append(routes, oidcRoutes(d)...)
 	routes = append(routes, itemRoutes(d)...)
+	routes = append(routes, diskRoutes(d)...)
 	routes = append(routes, mcpRoutes()...)
 	routes = append(routes, oauthRoutes(d)...)
 	routes = append(routes, autoBackupRoutes(d)...)

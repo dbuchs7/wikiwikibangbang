@@ -72,6 +72,9 @@ const (
 	// versions by it, automatic or started by an administrator (ADR-0104).
 	AlbumRetentionChanged = "album.retention.change"
 	AlbumCleaned          = "album.clean"
+	// DiskSpaceChanged is a change to the thresholds of free space
+	// (ADR-0150).
+	DiskSpaceChanged = "disk.thresholds.change"
 	// The account requests and contacts (ADR-0061).
 	AccountRequested = "account.request"
 	AccountApproved  = "account.approve"

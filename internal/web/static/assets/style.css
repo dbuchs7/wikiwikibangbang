@@ -1799,3 +1799,18 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
 .kanban-tools .inline-form input, .kanban-tools .inline-form select { min-width: 0; flex: 1 1 12rem; }
 .search-page { flex-wrap: wrap; }
 .search-page input { min-width: 0; flex: 1 1 10rem; }
+
+/* How full the storage is (ADR-0150): a bar in the level's colour. */
+.storage-level { margin: 0 0 8px; }
+.storage-notice { display: block; margin: 0 0 14px; }
+.storage-notice.storage-critical, .storage-notice.storage-full { border-left-color: var(--danger); }
+.storage-level.storage-warning strong { color: #a15c00; }
+.storage-level.storage-critical strong, .storage-level.storage-full strong { color: var(--danger); }
+.storage-bar { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--border); overflow: hidden; margin: 0 0 12px; }
+.storage-bar-used { display: block; height: 100%; background: var(--accent); }
+.storage-bar-used.storage-warning { background: #d98e04; }
+.storage-bar-used.storage-critical, .storage-bar-used.storage-full { background: var(--danger); }
+#storage-parts td.num, #storage-parts th.num { text-align: right; white-space: nowrap; }
+#storage-thresholds .form-row { display: flex; flex-wrap: wrap; gap: 10px; }
+#storage-thresholds .form-row .field { flex: 1 1 140px; }
+#storage-thresholds button + button { margin-left: 8px; }

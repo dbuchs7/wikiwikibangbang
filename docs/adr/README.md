@@ -162,3 +162,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0147](0147-favourite-spaces-come-first-in-every-choice-of-a-space.md) | Favourite spaces come first in every choice of a space | Accepted | Landed |
 | [0148](0148-start-forms-and-the-forms-of-a-process.md) | The forms of a process's steps, and start forms that start a process from a page | Proposed | Partial |
 | [0149](0149-the-editors-toolbar-follows-the-cursor-and-stays-in-view.md) | The editor's toolbar follows the cursor and stays in view | Accepted | Landed |
+| [0150](0150-the-wiki-watches-its-storage.md) | The wiki watches its storage | Accepted | Landed |

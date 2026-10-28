@@ -108,6 +108,8 @@ scrape_configs:
     static_configs: [{ targets: ["wiki.example:8080"] }]
 ```
 
+The server watches the free space of the file system its data directory lives on ([ADR-0150](docs/adr/0150-the-wiki-watches-its-storage.md)): **Administration → Storage** shows what takes the space and how fast it grows. Below 15 % or 5 GB free administrators are told; below 5 % or 1 GB uploads are refused; below 200 MB free the wiki only reads, apart from deleting. The thresholds can be changed there, and the metrics carry `wwbb_disk_free_bytes` and `wwbb_disk_level`.
+
 Behind a reverse proxy, live editing ([ADR-0010](docs/adr/0010-real-time-collaboration-with-block-locks.md)) needs `/api/items/*/live` passed through unbuffered and without a short read timeout; the server sends a heartbeat every 20 seconds. For nginx:
 
 ```nginx

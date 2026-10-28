@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
@@ -95,6 +96,22 @@ func TestAttachmentsRoundTripEncrypted(t *testing.T) {
 	if _, err := db.StoreAttachment(id, bytes.NewReader(make([]byte, 101)), 100); !errors.Is(err, ErrAttachmentTooLarge) {
 		t.Errorf("too large: %v", err)
 	}
+	// An almost full file system refuses uploads from the critical level
+	// on (ADR-0150), and counts what is kept.
+	if db.AttachmentBytes() <= 0 {
+		t.Error("the attachments kept have no size")
+	}
+	for _, l := range []diskspace.Level{diskspace.Critical, diskspace.Full} {
+		db.SetSpace(l)
+		if _, err := db.StoreAttachment(id, bytes.NewReader([]byte("x")), 100); !errors.Is(err, ErrNoSpace) {
+			t.Errorf("%v: %v", l, err)
+		}
+	}
+	db.SetSpace(diskspace.Warning)
+	if _, err := db.StoreAttachment(id, bytes.NewReader([]byte("x")), 100); err != nil {
+		t.Errorf("warning: %v", err)
+	}
+	db.SetSpace(diskspace.OK)
 	if _, err := db.OpenAttachment(id, "../../keys.wal"); err == nil {
 		t.Error("a path as attachment ID was opened")
 	}

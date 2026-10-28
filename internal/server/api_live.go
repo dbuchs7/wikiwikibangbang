@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
+	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
@@ -49,6 +50,9 @@ func (b storeBackend) Body(id item.ID) (item.Doc, error) {
 }
 
 func (b storeBackend) Commit(id item.ID, principal string, d item.Doc) error {
+	if b.db.Space() == diskspace.Full {
+		return storage.ErrNoSpace
+	}
 	return b.db.Write(func(s *item.Store) error { return s.As(principal).CommitBody(id, d) })
 }
 
