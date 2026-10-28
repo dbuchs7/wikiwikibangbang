@@ -263,7 +263,15 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	catalogDone := make(chan struct{})
 	go func() { catalog.Loop(catalogCtx); close(catalogDone) }()
 	defer func() { stopCatalog(); <-catalogDone; catalog.Close() }()
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration, Backups: backups, Connectors: catalog})
+	// The free space of the data directory is measured every few minutes;
+	// below the thresholds administrators are told, uploads refused and,
+	// at the floor, the wiki only reads (ADR-0150).
+	disk := server.NewDiskWatch(db, messages, log)
+	diskCtx, stopDisk := context.WithCancel(ctx)
+	diskDone := make(chan struct{})
+	go func() { disk.Loop(diskCtx); close(diskDone) }()
+	defer func() { stopDisk(); <-diskDone }()
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration, Backups: backups, Connectors: catalog, Disk: disk})
 	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.WithPublicURL(notifier.PublicURL(), server.Handler(routes, db.Accounts))), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1

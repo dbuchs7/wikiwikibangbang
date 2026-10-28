@@ -453,6 +453,27 @@ function gitSource() {
     await page.waitForSelector("#grant >> text=Granted.");
     await page.waitForSelector("td:has-text('role.grant')", { state: "attached" }).catch(() => {});
 
+    step("administration: the storage shows how full it is and what takes the space; its thresholds warn on the start page (ADR-0150)");
+    await page.waitForSelector("#storage-level");
+    await page.waitForSelector("#storage-parts td:text-is('Event log (texts, history)')");
+    check(await page.inputValue("#storage-thresholds [name=warnPercent]") === "15", "the default warning is 15 %");
+    // The test machine's own level, which the defaults bring back.
+    const storageLevel = await page.$eval("#storage-level", (e) => [...e.classList].find((c) => c.startsWith("storage-") && c !== "storage-level"));
+    // A warning at 50 % or 1 TB free is reached on any test machine.
+    await page.fill("#storage-thresholds [name=warnPercent]", "50");
+    await page.fill("#storage-thresholds [name=warnMB]", "1048576");
+    await page.click("#storage-thresholds button[type=submit]");
+    await page.waitForSelector("#storage-level:not(.storage-ok)");
+    await page.click("a.brand");
+    await page.waitForSelector("#home-storage");
+    await page.click("#home-storage");
+    await page.waitForSelector("#storage-thresholds");
+    await page.fill("#storage-thresholds [name=warnPercent]", "15");
+    await page.fill("#storage-thresholds [name=warnMB]", "5120");
+    await page.click("#storage-thresholds button[type=submit]");
+    await page.waitForSelector("#admin-storage .status .notice");
+    await page.waitForSelector(`#storage-level.${storageLevel}`);
+
     step("administration: an encrypted backup downloads");
     await page.fill("#backup [name=passphrase]", "a long backup passphrase");
     await page.fill("#backup [name=repeat]", "a long backup passphrase");

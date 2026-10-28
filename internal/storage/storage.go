@@ -17,6 +17,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
@@ -68,6 +69,10 @@ type DB struct {
 	// requests waiting for a change wake without holding mu (ADR-0121).
 	changedMu sync.Mutex
 	changed   chan struct{}
+
+	// space is how close the data directory's file system is to full, as
+	// the server last measured it (ADR-0150).
+	space atomic.Int32
 }
 
 // Read runs fn with the item store while no command runs; reads run side

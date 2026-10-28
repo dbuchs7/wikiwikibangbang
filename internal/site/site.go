@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
 )
 
 // Journal makes one record durable before it is applied.
@@ -134,8 +136,10 @@ type event struct {
 	Connector *Connector `json:"connector,omitempty"`
 	// AlbumRetention is set by AlbumRetentionSet (ADR-0104).
 	AlbumRetention *AlbumRetention `json:"albumRetention,omitempty"`
-	Type           string          `json:"type,omitempty"`
-	Data           []byte          `json:"data,omitempty"`
+	// DiskSpace is set by DiskSpaceSet (ADR-0150).
+	DiskSpace *diskspace.Thresholds `json:"diskSpace,omitempty"`
+	Type      string                `json:"type,omitempty"`
+	Data      []byte                `json:"data,omitempty"`
 	// Engine is set by EngineSet; EngineRemoved names it in Asset
 	// (ADR-0129).
 	Engine *Engine `json:"engine,omitempty"`
@@ -160,6 +164,8 @@ const (
 
 	albumRetentionSet = "AlbumRetentionSet"
 
+	diskSpaceSet = "DiskSpaceSet"
+
 	engineSet     = "EngineSet"
 	engineRemoved = "EngineRemoved"
 )
@@ -180,6 +186,9 @@ type Settings struct {
 	connectors  map[string]Connector
 	// albumRetention is the album's default rule (ADR-0104).
 	albumRetention AlbumRetention
+	// diskSpace are the thresholds of free space, nil for the defaults
+	// (ADR-0150).
+	diskSpace *diskspace.Thresholds
 	// engines are the process engines by ID (ADR-0129).
 	engines map[string]Engine
 }
@@ -251,6 +260,12 @@ func (s *Settings) apply(e event) error {
 			return errors.New("an album retention event without a rule")
 		}
 		s.albumRetention = *e.AlbumRetention
+	case diskSpaceSet:
+		if e.DiskSpace == nil {
+			return errors.New("a disk space event without thresholds")
+		}
+		t := *e.DiskSpace
+		s.diskSpace = &t
 	case engineSet:
 		if e.Engine == nil {
 			return errors.New("an engine event without an engine")

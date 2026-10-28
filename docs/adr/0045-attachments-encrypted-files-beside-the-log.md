@@ -62,5 +62,6 @@ Chosen option: **1**.
 
 ## Links
 
+- amended by [ADR-0150](0150-the-wiki-watches-its-storage.md) (uploads are refused when the storage is almost full)
 - amended by [ADR-0097](0097-videos-in-the-text-the-instance-in-the-tab-done-beside-the-text.md) (files are read and served in parts)
 - ADR-0014 (no user content runs), ADR-0015 (budgets), ADR-0022 (permissions), ADR-0023 (import), ADR-0025 (the log), ADR-0026 (erasure), ADR-0027 (CSRF), ADR-0034 (backups), ADR-0040 (governance), ADR-0042 (block kinds)

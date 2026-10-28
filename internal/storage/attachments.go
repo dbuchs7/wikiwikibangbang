@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
@@ -73,6 +74,9 @@ func (db *DB) itemKey(id item.ID) ([]byte, error) {
 // caller's next step, and a file never recorded is removed on the next
 // start.
 func (db *DB) StoreAttachment(id item.ID, content io.Reader, limit int64) (item.Attachment, error) {
+	if db.Space() >= diskspace.Critical {
+		return item.Attachment{}, ErrNoSpace
+	}
 	key, err := db.itemKey(id)
 	if err != nil {
 		return item.Attachment{}, err

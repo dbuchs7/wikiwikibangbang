@@ -18,9 +18,11 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/notes"
 	querylang "github.com/dbuchs7/wikiwikibangbang/internal/query"
+	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
 
 // itemRoutes are the item API (ADR-0028). Every handler acts through
@@ -129,6 +131,10 @@ func (h itemHandlers) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, notes.ErrNotFound):
 		writeError(w, http.StatusNotFound, "note not found")
+	case errors.Is(err, storage.ErrNoSpace):
+		// The storage is almost full (ADR-0150): uploads are refused from
+		// the critical level on, every other change below the floor.
+		writeError(w, http.StatusInsufficientStorage, "the storage is almost full; an administrator has to make room")
 	default:
 		h.log.Error("request failed", "err", err)
 		writeError(w, http.StatusInternalServerError, "the change was not made")
@@ -156,6 +162,11 @@ func (h itemHandlers) read(w http.ResponseWriter, r *http.Request, fn func(*item
 // write runs fn as the single writer and answers its result; a nil result
 // answers 204.
 func (h itemHandlers) write(w http.ResponseWriter, r *http.Request, status int, fn func(*item.Session, *item.Store) (any, error)) {
+	// A full file system only reads, apart from what makes room (ADR-0150).
+	if h.d.DB.Space() == diskspace.Full && !freesSpace(r) {
+		h.fail(w, storage.ErrNoSpace)
+		return
+	}
 	var out any
 	err := h.d.DB.Write(func(s *item.Store) error {
 		var err error

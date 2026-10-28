@@ -25,6 +25,10 @@ type Sources struct {
 	Live func() (sessions, clients int)
 	// Storage reports the bytes per data file.
 	Storage func() map[string]int64
+	// Disk reports the data directory's file system as last measured
+	// (ADR-0150): free and total bytes, the level (0 ok, 1 warning, 2
+	// critical, 3 full) and the bytes of the attachments kept.
+	Disk func() (free, total uint64, level int, attachments int64)
 	// Build names the running version.
 	Build string
 }
@@ -85,6 +89,18 @@ func New(src Sources) *Metrics {
 				return out
 			},
 		})
+	}
+	if src.Disk != nil {
+		reg.MustRegister(
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_disk_free_bytes", Help: "Free bytes of the data directory's file system (ADR-0150)."},
+				func() float64 { f, _, _, _ := src.Disk(); return float64(f) }),
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_disk_total_bytes", Help: "Size in bytes of the data directory's file system."},
+				func() float64 { _, t, _, _ := src.Disk(); return float64(t) }),
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_disk_level", Help: "How close the file system is to full: 0 ok, 1 warning, 2 critical (uploads refused), 3 full (read-only)."},
+				func() float64 { _, _, l, _ := src.Disk(); return float64(l) }),
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_attachments_bytes", Help: "Bytes of the attachment files kept, album versions included."},
+				func() float64 { _, _, _, a := src.Disk(); return float64(a) }),
+		)
 	}
 	if src.Live != nil {
 		reg.MustRegister(

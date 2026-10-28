@@ -734,7 +734,7 @@ function taskTools(item, editing) {
 
 // sizeText shows a number of bytes for people.
 function sizeText(n) {
-  const units = ["B", "KB", "MB", "GB"];
+  const units = ["B", "KB", "MB", "GB", "TB"];
   let i = 0;
   for (; n >= 1024 && i < units.length - 1; i++) n /= 1024;
   return `${i ? n.toFixed(1) : n} ${units[i]}`;
@@ -1872,10 +1872,11 @@ const mayEdit = (role) => role === "editor" || role === "space-admin";
 
 async function homeView() {
   const show = screen();
-  const [{ spaces }, { types }, notes, brand, { requests }, mine] = await Promise.all([get("/api/spaces"), get("/api/types"),
+  const [{ spaces }, { types }, notes, brand, { requests }, mine, storage] = await Promise.all([get("/api/spaces"), get("/api/types"),
     get("/api/notifications?limit=1").catch(() => ({ unread: 0 })), get("/branding.json").catch(() => ({})),
     me.admin ? get("/api/account-requests").catch(() => ({ requests: [] })) : { requests: [] },
-    get("/api/notes").catch(() => ({ notes: [] }))]);
+    get("/api/notes").catch(() => ({ notes: [] })),
+    me.admin ? get("/api/storage").catch(() => null) : null]);
   if (me.admin) setRequests(requests.length);
   const anyEditable = spaces.some((s) => mayEdit(s.role));
   // A greeting by the time of day, the reader's own clock.
@@ -1921,6 +1922,10 @@ async function homeView() {
     // and decided under the tasks.
     requests.length ? h("a", { class: "notice requests-notice", href: "#/tasks", id: "home-requests" },
       h("strong", { text: t("requests.waiting", { n: requests.length }) }), " ", t("requests.homeHint")) : "",
+    // A storage getting full is said to administrators first (ADR-0150).
+    storage && storage.level !== "ok" ? h("a", { class: "notice storage-notice storage-" + storage.level, href: "#/admin", id: "home-storage" },
+      h("strong", { text: t("storage.homeNotice", { level: storageLevel(storage.level) }) }), " ",
+      t("storage.free", { free: sizeText(storage.free), total: sizeText(storage.total), share: storage.total ? Math.round((storage.free * 1000) / storage.total) / 10 : "?" })) : "",
     h("section", { class: "home-tiles", "aria-label": t("home.quick") },
       quick("#/tasks", t("nav.tasks"), t("home.tasksText"), "home-tasks",
         requests.length ? h("span", { class: "chip", text: t("nav.requestsWaiting", { n: requests.length }) }) : null),
@@ -5123,6 +5128,7 @@ async function adminView() {
     }),
     autoBackupCard());
 
+  const storageSection = section("storage", t("storage.title"), await storageCard());
   const albumSection = section("album", t("retention.title"), await retentionCard());
   const catalogSection = section("connectors", t("connector.title"), connectorsCard(spaces, users));
   const enginesSection = section("engines", t("engine.title"), enginesCard());
@@ -5209,8 +5215,61 @@ async function adminView() {
     h("div", { class: "admin-layout" },
       h("nav", { class: "admin-toc", "aria-label": t("admin.contents") }, ...tocLinks),
       h("div", { class: "admin-sections" },
-        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, backupSection, albumSection, catalogSection, enginesSection, designSection, regulationsSection, importSection, auditSection)),
+        spacesSection, typesSection, usersSection, requestsSection, groupsSection, grantSection, storageSection, backupSection, albumSection, catalogSection, enginesSection, designSection, regulationsSection, importSection, auditSection)),
   );
+}
+
+// storageLevel says a level of the storage in words.
+function storageLevel(level) {
+  return { warning: t("storage.level.warning"), critical: t("storage.level.critical"), full: t("storage.level.full") }[level] || t("storage.level.ok");
+}
+
+// storageCard shows how full the data directory's file system is, what
+// takes the space and how fast it grows, and sets the thresholds below
+// which administrators are told, uploads refused and, at the floor, the
+// wiki only reads (ADR-0150).
+async function storageCard() {
+  const box = h("div", { id: "storage" });
+  const status = h("div", { class: "status", role: "status" });
+  const fail = (err) => status.replaceChildren(errorBox(err));
+  const parts = [["events.wal", "storage.partLog"], ["attachments", "storage.partAttachments"], ["keys.wal", "storage.partKeys"],
+    ["accounts.wal", "storage.partAccounts"], ["audit.wal", "storage.partAudit"], ["site.wal", "storage.partSite"], ["notes.wal", "storage.partNotes"]];
+  const draw = (r) => {
+    const used = r.total ? r.total - r.free : 0;
+    const bar = h("span", { class: "storage-bar-used storage-" + r.level });
+    if (r.total) bar.style.width = `${Math.min(100, (used * 100) / r.total)}%`;
+    const share = r.total ? Math.round((r.free * 1000) / r.total) / 10 : null;
+    const number = (name, label, value, min, max) => field(label, h("input", { type: "number", name, id: "storage-" + name, min, max, step: 1, required: true, value: String(value) }));
+    box.replaceChildren(
+      h("p", { id: "storage-level", class: "storage-level storage-" + r.level },
+        h("strong", { text: storageLevel(r.level) }), " ",
+        r.problem ? t("storage.unmeasured") : t("storage.free", { free: sizeText(r.free), total: sizeText(r.total), share })),
+      r.total ? h("div", { class: "storage-bar", role: "img", "aria-label": t("storage.used", { used: sizeText(used) }) }, bar) : "",
+      r.problem ? h("p", { class: "error", text: r.problem }) : "",
+      h("table", { class: "history", id: "storage-parts" },
+        parts.filter(([key]) => r.parts[key] !== undefined).map(([key, label]) => h("tr", {}, h("td", { text: t(label) }), h("td", { class: "num", text: sizeText(r.parts[key]) }))),
+        h("tr", {}, h("th", { text: t("storage.data") }), h("th", { class: "num", text: sizeText(r.data) }))),
+      h("p", { class: "muted", id: "storage-growth", text: r.growthPerDay > 0
+        ? t("storage.growth", { day: sizeText(r.growthPerDay), days: r.daysLeft || "–" }) : t("storage.growthUnknown") }),
+      h("p", { class: "muted", text: t("storage.help") }),
+      form({ id: "storage-thresholds" }, [
+        h("div", { class: "form-row" },
+          number("warnPercent", t("storage.warnPercent"), r.thresholds.warnPercent, 1, 50), number("warnMB", t("storage.warnMB"), r.thresholds.warnMB, 0, 1048576),
+          number("criticalPercent", t("storage.criticalPercent"), r.thresholds.criticalPercent, 1, 50), number("criticalMB", t("storage.criticalMB"), r.thresholds.criticalMB, 0, 1048576)),
+        h("p", { class: "muted", text: t("storage.thresholdsHelp") }),
+        h("button", { type: "submit", text: t("common.save") }),
+        h("button", { type: "button", id: "storage-measure", text: t("storage.measure"), onclick: async () => {
+          try { draw(await get("/api/storage?fresh=1")); } catch (err) { fail(err); }
+        } }),
+      ], async (d) => {
+        const next = await put("/api/settings/storage", Object.fromEntries(["warnPercent", "warnMB", "criticalPercent", "criticalMB"].map((k) => [k, Number(d.get(k))])));
+        draw(next);
+        status.replaceChildren(h("p", { class: "notice", text: t("storage.saved") }));
+      }),
+    );
+  };
+  draw(await get("/api/storage"));
+  return h("div", {}, box, status);
 }
 
 // holdBanner shows an item's open data protection review (ADR-0058): what
