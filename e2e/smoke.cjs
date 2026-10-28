@@ -544,6 +544,16 @@ function gitSource() {
     await page.keyboard.type("second item");
     await page.keyboard.press("Enter");
     await page.keyboard.press("Enter"); // an empty item ends the list
+    // The block kind shows the block the cursor is in, so choosing the kind
+    // last chosen elsewhere applies at once (a choice that shows it already
+    // would not change).
+    check(await page.inputValue(".pm-toolbar select") === "paragraph", "the block kind follows the cursor into a paragraph");
+    await page.keyboard.press("ArrowUp");
+    await page.waitForFunction(() => document.querySelector(".pm-toolbar select").value === "bullet"); // and into a list item
+    await page.keyboard.press("ArrowDown");
+    await page.waitForFunction(() => document.querySelector(".pm-toolbar select").value === "paragraph");
+    // While editing, the toolbar stays below the top bar as the text scrolls.
+    check(await page.$eval(".pm-toolbar:not(.pm-readbar)", (e) => getComputedStyle(e).position) === "sticky", "the toolbar stays in view while editing");
     await page.keyboard.press("Control+b");
     await page.keyboard.type("Bold");
     await page.keyboard.press("Control+b");
