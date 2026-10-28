@@ -1158,7 +1158,18 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     run(setBlockType(inIt ? schema.nodes.paragraph : node))();
   } });
   const stateful = [...markButtons, ...alignButtons];
+  // The block kind shows the kind of the block the selection starts in, so
+  // choosing a kind always changes the choice and applies at once; a block
+  // the choice does not list, such as a picture, leaves it empty.
+  const kindOf = (st) => {
+    const node = st.selection.$from.parent;
+    const name = node.type.name;
+    return name === "heading" ? `heading:${node.attrs.level}` : name === "panel" ? `panel:${node.attrs.tone}` : name;
+  };
   const refresh = (st) => {
+    const kind = kindOf(st);
+    if ([...kindSelect.options].some((o) => o.value === kind)) kindSelect.value = kind;
+    else kindSelect.selectedIndex = -1;
     for (const b of stateful) b.el.setAttribute("aria-pressed", String(Boolean(b.isOn(st))));
     const canAlign = alignOf(st) !== null;
     for (const b of alignButtons) b.el.disabled = !canAlign;

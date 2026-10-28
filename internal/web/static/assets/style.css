@@ -186,6 +186,18 @@ table.history td { font-size: 13px; }
 }
 .pm-toolbar button:hover { background: var(--bg); }
 .pm-toolbar select, .pm-toolbar input { padding: 4px 8px; font-size: 12px; }
+/* While a text is edited, its toolbar stays just below the top bar as the
+   text scrolls, however long it is (ADR-0149). The top bar's height is
+   measured, as it wraps to two rows on narrow screens. */
+#body.editing .pm-wrap > .pm-toolbar { position: sticky; top: var(--top-offset, var(--topbar-h)); z-index: 15; }
+/* The headings of a text differ at a glance: by size, weight and space
+   above them, the first level also by a rule below it (ADR-0149). The
+   levels 1 to 3 are h2 to h4, as h1 is the item's title. */
+.pm-editor h2, .pm-editor h3, .pm-editor h4 { line-height: 1.3; letter-spacing: -0.01em; }
+.pm-editor .ProseMirror > h2 { font-size: 1.75em; font-weight: 700; margin: 22px 0 10px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+.pm-editor .ProseMirror > h3 { font-size: 1.4em; font-weight: 650; margin: 18px 0 8px; }
+.pm-editor .ProseMirror > h4 { font-size: 1.15em; font-weight: 600; margin: 14px 0 6px; color: var(--muted); }
+.pm-editor .ProseMirror > :first-child { margin-top: 0; }
 .pm-editor .ProseMirror { min-height: 6rem; padding: 12px 16px; outline: none; white-space: pre-wrap; word-wrap: break-word; font-variant-ligatures: none; counter-reset: ordered; }
 .pm-editor .ProseMirror > * { margin: 6px 0; }
 .pm-editor .ProseMirror > :not(.pm-ordered) { counter-reset: ordered; }

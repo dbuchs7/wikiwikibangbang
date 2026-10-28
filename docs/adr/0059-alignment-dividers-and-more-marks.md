@@ -55,4 +55,5 @@ Strongest form: no model change.
 
 ## Links
 
+- amended by [ADR-0149](0149-the-editors-toolbar-follows-the-cursor-and-stays-in-view.md) (the block kind follows the cursor; headings set apart; the toolbar stays in view)
 - relates to ADR-0001 (structured bodies), ADR-0032 (editor), ADR-0042 (block kinds), ADR-0052 (design), ADR-0056 (image size)

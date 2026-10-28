@@ -1476,6 +1476,13 @@ async function applyBranding(reload = false) {
   }
 }
 
+// The editor's toolbar stays just below the top bar while a text scrolls
+// (ADR-0149); the top bar wraps on narrow screens, so its height is
+// measured rather than assumed.
+const topBar = document.querySelector("header.top");
+if (topBar && "ResizeObserver" in window) {
+  new ResizeObserver(() => document.documentElement.style.setProperty("--top-offset", topBar.offsetHeight + "px")).observe(topBar);
+}
 window.addEventListener("hashchange", route);
 applyTheme();
 applyBranding();
