@@ -119,4 +119,5 @@ Strongest form: exactly the engine's page, wizards included, inside the wiki's p
 ## Links
 
 - extends [ADR-0144](0144-forms-and-decisions-from-a-process-engine.md) (forms and decisions from an engine)
+- extended by [ADR-0151](0151-internal-start-forms-start-a-process-as-the-reader.md) (internal start forms that start a process as the reader)
 - relates to [ADR-0012](0012-mcp-adapter-over-http-api.md) (MCP), [ADR-0015](0015-resource-budgets-and-paged-listings.md) (budgets), [ADR-0027](0027-local-accounts-sessions-and-api-tokens.md) (API tokens), [ADR-0031](0031-web-ui-shell.md) (the UI and its policy), [ADR-0129](0129-bpmn-diagrams-and-processes-from-a-process-engine.md) (processes from an engine), [ADR-0143](0143-a-diagram-describes-its-tasks-and-decisions.md) (the description of a process)
