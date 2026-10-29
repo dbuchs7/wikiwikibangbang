@@ -119,7 +119,7 @@ func TestEveryChangeTakesANewKeyAndDestroysTheOld(t *testing.T) {
 func TestRemovingTheLastCredentialLeavesNothingToOpen(t *testing.T) {
 	dir := t.TempDir()
 	db := openOrFail(t, dir)
-	for _, name := range []string{tokenName, "WWBB_CONNECTOR_JIRA_TOKEN"} {
+	for _, name := range []string{tokenName, "WWBB_CONNECTOR_TICKETS_TOKEN"} {
 		if err := db.SetCredential(name, tokenValue, "admin"); err != nil {
 			t.Fatal(err)
 		}
@@ -130,13 +130,13 @@ func TestRemovingTheLastCredentialLeavesNothingToOpen(t *testing.T) {
 	if _, ok := db.Credential(tokenName); ok {
 		t.Error("a removed credential is still there")
 	}
-	if _, ok := db.Credential("WWBB_CONNECTOR_JIRA_TOKEN"); !ok {
+	if _, ok := db.Credential("WWBB_CONNECTOR_TICKETS_TOKEN"); !ok {
 		t.Error("removing one credential removed another")
 	}
 	if gone, err := db.RemoveCredential(tokenName); err != nil || gone {
 		t.Errorf("removing it again = %v, %v; want nothing removed", gone, err)
 	}
-	if gone, err := db.RemoveCredential("WWBB_CONNECTOR_JIRA_TOKEN"); err != nil || !gone {
+	if gone, err := db.RemoveCredential("WWBB_CONNECTOR_TICKETS_TOKEN"); err != nil || !gone {
 		t.Fatal(gone, err)
 	}
 	if keys := credentialKeys(db); len(keys) != 0 {
@@ -146,7 +146,7 @@ func TestRemovingTheLastCredentialLeavesNothingToOpen(t *testing.T) {
 
 	db = openOrFail(t, dir)
 	defer db.Close()
-	if _, ok := db.Credential("WWBB_CONNECTOR_JIRA_TOKEN"); ok {
+	if _, ok := db.Credential("WWBB_CONNECTOR_TICKETS_TOKEN"); ok {
 		t.Error("a removed credential came back after reopening")
 	}
 }

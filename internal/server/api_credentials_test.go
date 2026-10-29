@@ -103,12 +103,12 @@ func TestACredentialStoredOnThePageTakesEffectAtOnce(t *testing.T) {
 // stored as an engine's are; another connector's e-mail is no credential.
 func TestAConnectorsCredentialsAreStoredOnThePage(t *testing.T) {
 	w := newWorld(t)
-	if _, err := w.db.Site.SetConnector("admin", site.Connector{ID: "jira", Name: "Jira", Kind: site.KindAtlassian, IntervalHours: 24,
+	if _, err := w.db.Site.SetConnector("admin", site.Connector{ID: "tickets", Name: "Tickets", Kind: site.KindAtlassian, IntervalHours: 24,
 		Atlassian: &site.Atlassian{Site: "https://example.atlassian.net", Spaces: []string{"DOC"}}}); err != nil {
 		t.Fatal(err)
 	}
-	w.admin.expect("PUT", "/api/credentials/WWBB_CONNECTOR_JIRA_EMAIL", `{"value":"bot@example.org"}`, http.StatusOK)
-	w.admin.expect("PUT", "/api/credentials/WWBB_CONNECTOR_JIRA_TOKEN", `{"value":"api-token"}`, http.StatusOK)
+	w.admin.expect("PUT", "/api/credentials/WWBB_CONNECTOR_TICKETS_EMAIL", `{"value":"bot@example.org"}`, http.StatusOK)
+	w.admin.expect("PUT", "/api/credentials/WWBB_CONNECTOR_TICKETS_TOKEN", `{"value":"api-token"}`, http.StatusOK)
 
 	got := w.admin.expect("GET", "/api/connectors", "", http.StatusOK)
 	raw, _ := json.Marshal(got)
@@ -121,11 +121,11 @@ func TestAConnectorsCredentialsAreStoredOnThePage(t *testing.T) {
 		t.Fatalf("status %v", status)
 	}
 
-	w.admin.expect("DELETE", "/api/connectors/jira", "", http.StatusNoContent)
-	for _, n := range []string{"WWBB_CONNECTOR_JIRA_EMAIL", "WWBB_CONNECTOR_JIRA_TOKEN"} {
+	w.admin.expect("DELETE", "/api/connectors/tickets", "", http.StatusNoContent)
+	for _, n := range []string{"WWBB_CONNECTOR_TICKETS_EMAIL", "WWBB_CONNECTOR_TICKETS_TOKEN"} {
 		if _, ok := w.db.Credential(n); ok {
 			t.Errorf("%s outlived its connector", n)
 		}
 	}
-	w.admin.expect("PUT", "/api/credentials/WWBB_CONNECTOR_JIRA_TOKEN", `{"value":"api-token"}`, http.StatusNotFound)
+	w.admin.expect("PUT", "/api/credentials/WWBB_CONNECTOR_TICKETS_TOKEN", `{"value":"api-token"}`, http.StatusNotFound)
 }
