@@ -192,6 +192,14 @@ function engineSource() {
         { key: 7, processId: "approve", name: "Approve leave", version: 1, deployedAt: 1761300000 }]));
     }
     if (req.url === "/api/v1/forms") return res.end(JSON.stringify([{ id: "travel", name: "Travel request", projectId: "p1", savedAt: 1791795101 }]));
+    // The open user tasks (ADR-0151): one of the process urlaub, one of a
+    // process no rule names, and a public wizard's step, never linked.
+    if (req.url.startsWith("/api/v1/tasks?")) {
+      return res.end(JSON.stringify({ truncated: false, items: [
+        { key: 4711, processInstanceKey: 1, elementInstanceKey: 2, processId: "urlaub", elementId: "genehmigen", name: "Approve holidays", candidateGroups: "hr", dueDate: 1793000000000 },
+        { key: 4712, processInstanceKey: 3, elementInstanceKey: 4, processId: "onboarding", elementId: "laptop", name: "Prepare the laptop" },
+        { key: 4713, processInstanceKey: 5, elementInstanceKey: 6, processId: "urlaub", elementId: "genehmigen", name: "A wizard's step", wizard: "public" }] }));
+    }
     if (req.url === "/api/v1/public-links") {
       return res.end(JSON.stringify([{ token: startLink, processId: "order", formId: "report", createdAt: 1 }, { token: wizardLink, processId: "approve", formId: "leave", createdAt: 2 }]));
     }
@@ -2658,6 +2666,36 @@ function gitSource() {
       check((await live.locator(".pm-ops-badge").allTextContents()).join(" ") === "15 12 3 1", "passed, waiting and held tokens per element");
       await live.locator(".pm-diagram-ops:has-text('Version 4 · running: 3 · finished: 12 · incidents: 1')").waitFor();
       check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader");
+
+      step("task links: an administrator sets a rule for the engine's user tasks, tries it and links them; a linked task is hidden until the engine says who sees it (ADR-0151)");
+      check((await page.request.post(base + "/api/types", { data: { name: "approval", body: true, fields: [{ name: "due", kind: "date" }],
+        workflow: { initial: "open", states: ["open", "done", "cancelled"], transitions: [
+          { name: "approve", from: ["open"], to: "done" }, { name: "drop", from: ["open"], to: "cancelled" }] } } })).ok(), "the type of linked tasks is made");
+      await page.goto(base + "/#/admin");
+      await page.click("#engine-list tr[data-engine=atlas] button:has-text('Edit')");
+      await page.waitForSelector("#task-links-credential >> text=WWBB_ENGINE_ATLAS_TASKLIST_TOKEN; it is set");
+      await page.click("#task-rule-add");
+      const rule = page.locator("#task-rules .task-rule").first();
+      await rule.locator("[name=processes]").fill("urlaub");
+      await rule.locator("[name=space]").selectOption("PLAT");
+      await rule.locator("[name=type]").selectOption("approval");
+      check((await rule.locator("[name=completed] option").allTextContents()).join(",") === "done,cancelled", "the end states are the type's finished ones");
+      await rule.locator("[name=cancelled]").selectOption("cancelled");
+      await rule.locator("[name=dueField]").selectOption("due");
+      await rule.locator("[name=labels]").fill("atlas, {process}");
+      await page.check("#task-links [name=enabled]");
+      await page.click("#task-links-save");
+      await page.waitForSelector("#task-links-status >> text=The task links are saved.");
+      await page.click("#task-links-dry");
+      await page.waitForSelector("#task-links-status >> text=1 would be linked");
+      await page.click("#task-links-run");
+      await page.waitForSelector("#task-links-status >> text=1 linked");
+      const linked = (await (await page.request.get(base + "/api/items?type=approval")).json()).items;
+      check(linked.length === 1 && linked[0].title === "Approve holidays" && linked[0].linked === "atlas" &&
+        linked[0].labels.join(",") === "atlas,urlaub", "the task of the process urlaub is linked, with its labels; the other two are not");
+      check(linked[0].restriction?.read?.join(",") === "engine:atlas", "a linked task is read by nobody until the engine says who may");
+      await page.goto(base + "/#/item/" + flow.item.key); // where the drawing begins
+      await page.waitForSelector("#edit");
 
       step("drawing: a model of its own and a process of an engine go into a drawing; the latter shows live over its picture, with its operations (ADR-0142)");
       await page.click("#edit");
