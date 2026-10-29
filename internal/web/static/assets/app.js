@@ -652,25 +652,48 @@ function fileOrigin(item, path, canEdit, status) {
   return h("p", { class: "notice origin", id: "item-origin" }, ...fileSource(o), ...buttons.flatMap((b) => [" · ", b]));
 }
 
-// taskTools are what a text needs for its tasks (ADR-0114): list(label)
-// shows the tasks that carry a label, in every space the reader may read,
-// as a table one sorts by a column and filters; with item and editing,
-// pickLabel asks for a label and create makes a task below the item and
-// says whether it goes into the text as a link or shown whole.
+// taskTools are what a text needs for its tasks (ADR-0114): list(spec)
+// shows the tasks that carry a label, or that a query selects (ADR-0151),
+// in every space the reader may read, as a table one sorts by a column
+// and filters, with when each is due and who holds it; with item and
+// editing, pickLabel asks for a label or a query and create makes a task
+// below the item and says whether it goes into the text as a link or
+// shown whole.
 function taskTools(item, editing) {
   let typesOnce = null;
   const taskTypes = async () => (typesOnce ??= get("/api/types").then(({ types }) => types.filter((ty) => ty.workflow)));
-  const list = async (label) => {
-    const [flows, found] = await Promise.all([taskTypes(), readAll(`/api/items?label=${encodeURIComponent(label)}&limit=100`)]);
+  const list = async (spec) => {
+    const { label, query } = typeof spec === "string" ? { label: spec } : spec;
+    const [flows, found] = await Promise.all([taskTypes(), readAll(query
+      ? `/api/items?query=${encodeURIComponent(query)}&limit=100` : `/api/items?label=${encodeURIComponent(label)}&limit=100`)]);
     const rows = found.items.filter((it) => flows.some((ty) => ty.name === it.type));
     if (!rows.length) return null;
-    const cols = [["key", t("col.key")], ["title", t("col.title")], ["state", t("col.state")], ["space", t("col.space")]];
-    let by = "key", up = true;
-    const order = (a, b) => String(a[by] || "").localeCompare(String(b[by] || ""), undefined, { numeric: true }) * (up ? 1 : -1);
+    const fieldsOf = new Map(flows.map((ty) => [ty.name, taskFields(ty)]));
+    const dueOf = (it) => {
+      const f = fieldsOf.get(it.type)?.due;
+      return f && it.properties[f.name] ? String(it.properties[f.name]).slice(0, 10) : "";
+    };
+    const whoOf = (it) => {
+      const f = fieldsOf.get(it.type)?.assignee;
+      return f ? it.properties[f.name] || "" : "";
+    };
+    await learnNames(rows.map(whoOf).filter(Boolean));
+    for (const it of rows) {
+      it.due = dueOf(it);
+      it.who = whoOf(it) ? person(whoOf(it)) : "";
+    }
+    // Due dates and people only where a task has them.
+    const cols = [["key", t("col.key")], ["title", t("col.title")], ["state", t("col.state")], ["space", t("col.space")],
+      rows.some((it) => it.due) ? ["due", t("col.due")] : null, rows.some((it) => it.who) ? ["who", t("col.assignee")] : null].filter(Boolean);
+    // A query's own order stands until one sorts by a column.
+    let by = query ? "" : "key", up = true;
+    const order = (a, b) => (by ? String(a[by] || "").localeCompare(String(b[by] || ""), undefined, { numeric: true }) * (up ? 1 : -1) : 0);
     const body = h("tbody");
     const draw = () => body.replaceChildren(...[...rows].sort(order).map((it) => h("tr", { "data-f-state": it.state || "", "data-f-space": it.space },
       h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key, "key")), h("td", { text: it.title }),
-      h("td", {}, it.state ? h("span", { class: "chip", text: it.state }) : ""), h("td", { text: it.space }))));
+      h("td", {}, it.state ? h("span", { class: "chip", text: it.state }) : ""), h("td", { text: it.space }),
+      cols.some(([k]) => k === "due") ? h("td", { class: "task-due", text: it.due }) : null,
+      cols.some(([k]) => k === "who") ? h("td", { class: "task-who", text: it.who }) : null)));
     const head = h("tr", {}, cols.map(([k, name]) => h("th", { scope: "col", "aria-sort": k === by ? (up ? "ascending" : "descending") : "none" },
       h("button", { type: "button", class: "link sort", "data-sort": k, text: name, onclick: (ev) => {
         up = by === k ? !up : true;
@@ -682,23 +705,32 @@ function taskTools(item, editing) {
       } }))));
     draw();
     const table = h("table", { class: "list tasklist-table" }, h("thead", {}, head), body);
-    const box = filtered(table, { id: "tasks-" + label, label: t("editor.taskListOf", { label }), min: 0,
+    const box = filtered(table, { id: "tasks-" + (label || "query"), label: query ? t("editor.taskListQuery", { query }) : t("editor.taskListOf", { label }), min: 0,
       choices: [{ key: "state", label: t("col.state") }, { key: "space", label: t("col.space") }] });
     return h("div", { class: "tasklist-box" }, box, found.truncated ? h("p", { class: "muted", text: t("board.truncated", { n: rows.length }) }) : null);
   };
   if (!editing) return { list };
   const dialog = formDialog;
+  // pickLabel asks for a label, or a query (ADR-0151), which the server
+  // checks before the list goes into the text.
   const pickLabel = async () => {
     const { labels } = await get("/api/labels?tasks=1").catch(() => ({ labels: [] }));
-    const input = h("input", { name: "label", required: true, list: "tasklist-labels", autocomplete: "off", placeholder: t("editor.taskListPlaceholder") });
+    const input = h("input", { name: "label", list: "tasklist-labels", autocomplete: "off", placeholder: t("editor.taskListPlaceholder") });
+    const query = h("textarea", { name: "query", rows: 2, placeholder: t("editor.taskListQueryPlaceholder") });
     return dialog(t("editor.taskList"), "tasklist-dialog", [
       field(t("kanban.label"), input),
       h("datalist", { id: "tasklist-labels" }, labels.map((l) => h("option", { value: l.label }))),
+      field(t("editor.taskListByQuery"), query),
       h("p", { class: "muted", text: t("editor.taskListHint") }),
     ], async () => {
+      const q = query.value.trim();
+      if (q) {
+        await get(`/api/items?query=${encodeURIComponent(q)}&limit=1`); // says where a mistake is
+        return { query: q };
+      }
       const label = input.value.trim().toLowerCase().split(/\s+/).join("-");
       if (!label) throw new Error(t("editor.taskListNeedsLabel"));
-      return label;
+      return { label };
     });
   };
   const create = async () => {

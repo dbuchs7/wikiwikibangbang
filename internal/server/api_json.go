@@ -132,6 +132,9 @@ type blockJSON struct {
 	// (ADR-0148).
 	Link    string        `json:"link,omitempty"`
 	Prefill []prefillJSON `json:"prefill,omitempty"`
+	// Query is what a task list selects its tasks by, in place of a label
+	// (ADR-0151).
+	Query string `json:"query,omitempty"`
 }
 
 type prefillJSON struct {
@@ -141,7 +144,7 @@ type prefillJSON struct {
 
 func toBlockJSON(b item.Block) blockJSON {
 	j := blockJSON{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process, View: b.View,
-		Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Layers: b.Layers, Link: b.Link}
+		Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Layers: b.Layers, Link: b.Link, Query: b.Query}
 	for _, m := range b.Marks {
 		j.Marks = append(j.Marks, markJSON{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})
 	}
@@ -171,7 +174,7 @@ func toDoc(blocks []blockJSON, kept func(text string) bool) (item.Doc, error) {
 			return d, badInput("block %d: kind must be paragraph, heading, bullet, ordered, quote, code, task, panel, table, toc, figures, tables, children, divider, image, video, bpmn, process, form, decision, architecture, startform, tasklist or embed", i+1)
 		}
 		blk := item.Block{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process, View: b.View,
-			Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Link: b.Link}
+			Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Link: b.Link, Query: b.Query}
 		if len(b.Layers) > 0 {
 			// An empty list is the engine's default, as none is.
 			blk.Layers = b.Layers

@@ -199,11 +199,11 @@ func (h itemHandlers) exportDocument(r *http.Request, children, withData bool) (
 				}
 			}
 			for _, b := range it.Body.Blocks {
-				if b.Kind == item.TaskList && p.Tasks[b.Text] == nil {
+				if k := export.TaskListKey(b); b.Kind == item.TaskList && p.Tasks[k] == nil {
 					if p.Tasks == nil {
 						p.Tasks = map[string][]string{}
 					}
-					p.Tasks[b.Text] = taskLines(x, s, b.Text)
+					p.Tasks[k] = taskLines(x, s, b, h.queryEnv())
 				}
 			}
 			shown := map[item.ID]item.BlockKind{}
@@ -458,9 +458,15 @@ func (h itemHandlers) exportSearch(w http.ResponseWriter, r *http.Request) {
 // taskLines are the tasks that carry a label, as a task list shows them
 // (ADR-0114): the items of a type with a workflow the reader may read, by
 // key, with title and state.
-func taskLines(x *item.Session, s *item.Store, label string) []string {
+func taskLines(x *item.Session, s *item.Store, b item.Block, env item.QueryEnv) []string {
 	out := []string{}
-	for _, it := range x.Find(item.Query{Label: label}) {
+	found := x.Find(item.Query{Label: b.Text})
+	if b.Query != "" {
+		// The query was checked when the text was saved; one that no longer
+		// selects, as a field removed since, lists nothing.
+		found, _ = x.Select(item.Query{}, b.Query, env)
+	}
+	for _, it := range found {
 		if s.Type(it.Type).Workflow == nil {
 			continue
 		}

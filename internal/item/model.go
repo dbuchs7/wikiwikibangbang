@@ -75,8 +75,9 @@ const (
 	// picture: Ref names it and Text is its caption (ADR-0097).
 	Video BlockKind = "video"
 	// TaskList lists the tasks that carry a label, in every space the
-	// reader may read; Text is the label (ADR-0114). Like a table of
-	// contents it is computed when shown.
+	// reader may read; Text is the label (ADR-0114). Or it lists the tasks
+	// a query selects, and Query is the query (ADR-0136, ADR-0151). Like a
+	// table of contents it is computed when shown.
 	TaskList BlockKind = "tasklist"
 	// Figures lists the item's pictures and Tables its tables, numbered in
 	// the order of the body, as a table of contents lists its headings
@@ -233,6 +234,9 @@ type Block struct {
 	// filled in beforehand, in the editor's order (ADR-0148).
 	Link    string    `json:",omitempty"`
 	Prefill []Prefill `json:",omitempty"`
+	// Query is the query of the query language a task list selects its
+	// tasks by, in place of a label (ADR-0136, ADR-0151).
+	Query string `json:",omitempty"`
 }
 
 // The views of a bpmn or a process block besides its diagram alone

@@ -68,6 +68,7 @@ func TestMarkdownWritesEachBlockKind(t *testing.T) {
 			{Kind: item.StartForm, Engine: "atlas", Link: strings.Repeat("0f", 32)},
 			{Kind: item.Figures},
 			{Kind: item.TaskList, Text: "release"},
+			{Kind: item.TaskList, Query: "label = release ORDER BY due"},
 			{Kind: item.Unsupported, Text: "<ac:macro name=\"x\"/>"},
 			{Kind: item.Heading, Level: 1, Text: "Item #"},
 			{Kind: item.Heading, Level: 3, Text: "#"},
@@ -76,7 +77,7 @@ func TestMarkdownWritesEachBlockKind(t *testing.T) {
 		Images: map[item.ID]Image{"pic": {Name: "plan.png", Type: "image/png"}, "vid": {Name: "demo.mp4", Type: "video/mp4"},
 			"flow": {Name: "order.bpmn", Type: "text/xml; charset=utf-8"}},
 		Children: []string{"Child page"},
-		Tasks:    map[string][]string{"release": {"OPS-3 Tag the build (open)"}},
+		Tasks:    map[string][]string{"release": {"OPS-3 Tag the build (open)"}, "?label = release ORDER BY due": {"OPS-4 Ship it (open)"}},
 	}}}
 	want := strings.Join([]string{
 		`# Runbook \*Ops\*`,
@@ -117,6 +118,8 @@ func TestMarkdownWritesEachBlockKind(t *testing.T) {
 		"- Figure 1: The plan\n- Figure 2: gone",
 		`\# release`,
 		"- OPS-3 Tag the build (open)",
+		"label = release ORDER BY due",
+		"- OPS-4 Ship it (open)",
 		"```\n<ac:macro name=\"x\"/>\n```",
 		`## Item \#`,
 		`#### \#`,

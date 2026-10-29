@@ -453,15 +453,21 @@ func TestAnItemIsCreatedWithItsBody(t *testing.T) {
 }
 
 // TestATaskListNamesOneLabel: a task list block holds one label as it is
-// stored, and nothing else (ADR-0114).
+// stored (ADR-0114), or a query of the query language (ADR-0151), and
+// nothing else; only a task list has a query.
 func TestATaskListNamesOneLabel(t *testing.T) {
 	noErr(t, CheckBlock(Block{Kind: TaskList, Text: "release-2"}, "self"))
+	noErr(t, CheckBlock(Block{Kind: TaskList, Query: "label = atlas AND due < now() ORDER BY due"}, "self"))
 	for name, b := range map[string]Block{
-		"empty":         {Kind: TaskList},
-		"not as stored": {Kind: TaskList, Text: "Release 2"},
-		"two words":     {Kind: TaskList, Text: "a b"},
-		"a mark":        {Kind: TaskList, Text: "release", Marks: []Mark{{Type: MarkBold, Start: 0, End: 1}}},
-		"a ref":         {Kind: TaskList, Text: "release", Ref: "x"},
+		"empty":            {Kind: TaskList},
+		"not as stored":    {Kind: TaskList, Text: "Release 2"},
+		"two words":        {Kind: TaskList, Text: "a b"},
+		"a mark":           {Kind: TaskList, Text: "release", Marks: []Mark{{Type: MarkBold, Start: 0, End: 1}}},
+		"a ref":            {Kind: TaskList, Text: "release", Ref: "x"},
+		"label and query":  {Kind: TaskList, Text: "release", Query: "label = atlas"},
+		"a broken query":   {Kind: TaskList, Query: "label = AND"},
+		"a paragraph's":    {Kind: Paragraph, Text: "x", Query: "label = atlas"},
+		"a query and mark": {Kind: TaskList, Query: "label = atlas", Marks: []Mark{{Type: MarkBold, Start: 0, End: 1}}},
 	} {
 		if err := CheckBlock(b, "self"); !errors.Is(err, ErrValidation) {
 			t.Errorf("%s: %v", name, err)

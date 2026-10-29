@@ -65,7 +65,7 @@ export const schema = new Schema({
     tables: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-tables" }] },
     children: { group: "block", atom: true, selectable: true, attrs: bid, toDOM: () => ["div", { class: "pm-children" }] },
     // The tasks that carry a label, computed when shown (ADR-0114).
-    tasklist: { group: "block", atom: true, selectable: true, attrs: { ...bid, label: { default: "" } }, toDOM: (n) => ["div", { class: "pm-tasklist", "data-label": n.attrs.label }] },
+    tasklist: { group: "block", atom: true, selectable: true, attrs: { ...bid, label: { default: "" }, query: { default: "" } }, toDOM: (n) => ["div", { class: "pm-tasklist", "data-label": n.attrs.label, ...(n.attrs.query ? { "data-query": n.attrs.query } : {}) }] },
     // An image attachment of the item (ADR-0045), with a plain caption.
     // width is percent of the column, 0 for the picture's own size (ADR-0056).
     // align is left or right (the text flows beside it) or center (ADR-0059).
@@ -185,7 +185,7 @@ export function nodeFromBlock(b, embeds = []) {
   const id = b.id ?? null;
   if (b.kind === "table") return schema.nodes.table.create({ bid: id, text: b.text || "" });
   if (["toc", "figures", "tables", "children", "divider"].includes(b.kind)) return schema.nodes[b.kind].create({ bid: id });
-  if (b.kind === "tasklist") return schema.nodes.tasklist.create({ bid: id, label: b.text || "" });
+  if (b.kind === "tasklist") return schema.nodes.tasklist.create({ bid: id, label: b.text || "", query: b.query || "" });
   if (b.kind === "image" || b.kind === "video") return schema.nodes[b.kind].create({ bid: id, ref: b.ref, text: b.text || "", width: b.width || 0, align: b.align || "" });
   if (b.kind === "bpmn") return schema.nodes.bpmn.create({ bid: id, ref: b.ref, text: b.text || "", view: b.view || "" });
   if (b.kind === "process") return schema.nodes.process.create({ bid: id, engine: b.engine, process: b.process, text: b.text || "", view: b.view || "" });
@@ -253,7 +253,7 @@ export function blockFromNode(node) {
   if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
   if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
   if (["toc", "figures", "tables", "children", "divider"].includes(node.type.name)) return { kind: node.type.name };
-  if (node.type === schema.nodes.tasklist) return { kind: "tasklist", text: node.attrs.label };
+  if (node.type === schema.nodes.tasklist) return node.attrs.query ? { kind: "tasklist", query: node.attrs.query } : { kind: "tasklist", text: node.attrs.label };
   if (node.type === schema.nodes.bpmn) return { kind: "bpmn", text: node.attrs.text, ref: node.attrs.ref, ...(node.attrs.view ? { view: node.attrs.view } : {}) };
   if (node.type === schema.nodes.process) return { kind: "process", text: node.attrs.text, engine: node.attrs.engine, process: node.attrs.process, ...(node.attrs.view ? { view: node.attrs.view } : {}) };
   if (node.type === schema.nodes.form) {
@@ -547,18 +547,21 @@ function embedView(node, load) {
   return { dom, ignoreMutation: () => true, stopEvent: (ev) => body.contains(ev.target) };
 }
 
-// taskListView shows the tasks that carry a label, from tasks.list(label),
-// which the view of the item supplies: sortable and filterable (ADR-0114).
+// taskListView shows the tasks that carry a label, or that a query
+// selects (ADR-0151), from tasks.list, which the view of the item
+// supplies: sortable and filterable (ADR-0114).
 function taskListView(node, tasks) {
-  const dom = h("section", { class: "pm-tasklist", contenteditable: "false", "data-label": node.attrs.label },
-    h("p", { class: "pm-box-title", text: t("editor.taskListOf", { label: node.attrs.label }) }));
+  const { label, query } = node.attrs;
+  const dom = h("section", { class: "pm-tasklist", contenteditable: "false", "data-label": label, "data-query": query || null },
+    h("p", { class: "pm-box-title", text: query ? t("editor.taskListQuery", { query }) : t("editor.taskListOf", { label }) }));
   const body = h("div", { "aria-busy": "true" }, h("p", { class: "muted", text: "…" }));
   dom.append(body);
-  Promise.resolve(tasks?.list ? tasks.list(node.attrs.label) : null)
-    .then((el) => body.replaceChildren(el || h("p", { class: "muted", text: t("editor.taskListNone") })))
+  Promise.resolve(tasks?.list ? tasks.list(query ? { query } : { label }) : null)
+    .then((el) => body.replaceChildren(el || h("p", { class: "muted", text: query ? t("editor.taskListQueryNone") : t("editor.taskListNone") })))
     .catch(() => body.replaceChildren(h("p", { class: "muted", text: t("embed.failed") })))
     .finally(() => body.removeAttribute("aria-busy"));
-  return { dom, ignoreMutation: () => true, stopEvent: (ev) => body.contains(ev.target), update: (n) => n.type === node.type && n.attrs.label === node.attrs.label };
+  return { dom, ignoreMutation: () => true, stopEvent: (ev) => body.contains(ev.target),
+    update: (n) => n.type === node.type && n.attrs.label === label && n.attrs.query === query };
 }
 
 // childrenView lists the child pages of the item, from childPages().
@@ -1104,12 +1107,13 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     }
   };
   showFile = markdownFile;
-  // A list of the tasks that carry a label (ADR-0114).
+  // A list of the tasks that carry a label (ADR-0114), or that a query
+  // selects (ADR-0151).
   const taskList = async () => {
     status.textContent = "";
-    const label = await tasks.pickLabel();
-    if (!label) return view.focus();
-    insertBlock(schema.nodes.tasklist.create({ label }));
+    const spec = await tasks.pickLabel();
+    if (!spec) return view.focus();
+    insertBlock(schema.nodes.tasklist.create(spec));
   };
   // Commenting on a passage works while reading too (ADR-0047).
   const commentButton = comment ? h("button", { type: "button", id: "comment-selection", text: t("editor.comment"), onclick: () => {

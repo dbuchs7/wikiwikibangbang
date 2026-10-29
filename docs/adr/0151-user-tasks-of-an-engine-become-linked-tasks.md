@@ -179,7 +179,13 @@ Step 6: following the facts, and how current a linked task is.
 - How current: `GET /api/engines/{id}/tasks-read`, for anyone signed in, answers when the engine's tasks were last read in full and whether that is longer ago than `Stale` (5 minutes); the task panel, every board and kanban with linked cards, and the engine's page under Administration say so, with a warning once stale.
 - Metrics (ADR-0016): `wwbb_tasklinks_last_read_timestamp_seconds`, `wwbb_tasklinks_failed_rounds` and `wwbb_engine_connections`, each by engine.
 
-Not built yet: the task list's query.
+Step 7: a table of tasks by a query.
+
+- `internal/item`: a `tasklist` block may carry `Query`, a query of the query language (ADR-0136), in place of its label; saving checks it parses, a block names a label or a query, never both, and only a task list has a query. **Codec version 37** adds the field; versions 1 to 36 are still read.
+- `internal/web`: *Insert → Task list…* takes a label or a query, which the server checks before the list goes into the text; the table keeps the query's order until a reader sorts by a column, and adds when a task is due and who holds it, wherever a task's type has such fields — for linked tasks the due date the rule maps.
+- `internal/export`: a list by a query is exported as a list by a label is, the query its heading, selected as the exporting reader may read.
+
+Not built yet: the person who holds a task, into a user field of its item (the decision names it as optional): the engine names its assignee by its own username, which a connection could map to the account here.
 
 ### Consequences
 

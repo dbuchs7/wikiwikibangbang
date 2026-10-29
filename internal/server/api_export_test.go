@@ -169,6 +169,19 @@ func TestExportListsTheTasksOfALabel(t *testing.T) {
 	if r := w.bert.do("GET", "/api/items/"+plan+"/export/docx", ""); r.Code != http.StatusOK || !bytes.Contains(r.Body.Bytes(), []byte("PK")) {
 		t.Fatalf("docx %d", r.Code)
 	}
+
+	// A list by a query (ADR-0151): the query is checked when the text is
+	// saved, and selects as the exporting reader may read.
+	w.bert.expect("PUT", "/api/items/"+plan+"/body", `{"blocks":[{"kind":"tasklist","query":"label = release-2 AND priority = high"}]}`, http.StatusOK)
+	w.bert.expect("PUT", "/api/items/"+plan+"/body", `{"blocks":[{"kind":"tasklist","query":"label ="}]}`, http.StatusBadRequest)
+	w.bert.expect("PUT", "/api/items/"+plan+"/body", `{"blocks":[{"kind":"tasklist","text":"release-2","query":"label = x"}]}`, http.StatusBadRequest)
+	if got := html(w.bert); !strings.Contains(got, "label = release-2 AND priority = high") || !strings.Contains(got, open+" Tag the build") || strings.Contains(got, "Pay the vendor") {
+		t.Fatalf("an export of a list by a query: %s", got)
+	}
+	body := w.bert.expect("GET", "/api/items/"+plan, "", http.StatusOK)["item"].(map[string]any)["body"].([]any)
+	if q := body[0].(map[string]any)["query"]; q != "label = release-2 AND priority = high" {
+		t.Errorf("the block reads back with query %v", q)
+	}
 }
 
 // TestMarkdownExport: a page as Markdown text, for the API and for agents,

@@ -14,6 +14,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/dbuchs7/wikiwikibangbang/internal/query"
 )
 
 // Store holds items, relations and the event log in memory. Commands
@@ -1300,8 +1302,17 @@ func checkBlock(b Block, self ID) error {
 			return invalid("a %s block has no text", b.Kind)
 		}
 	case TaskList:
+		if b.Query != "" {
+			if b.Text != "" || len(b.Marks) > 0 || len(b.Mentions) > 0 {
+				return invalid("a task list names a label or a query, not both, and nothing else")
+			}
+			if _, err := query.Parse(b.Query); err != nil {
+				return invalid("the task list's query: %v", err)
+			}
+			break
+		}
 		if l, ok := NormalLabel(b.Text); !ok || l != b.Text || len(b.Marks) > 0 || len(b.Mentions) > 0 {
-			return invalid("a task list names one label, as stored (ADR-0044), and nothing else")
+			return invalid("a task list names one label, as stored (ADR-0044), or a query, and nothing else")
 		}
 	case Image, Video, BPMN:
 		if !ValidAttachmentID(string(b.Ref)) || len(b.Marks) > 0 || len(b.Mentions) > 0 {
@@ -1372,6 +1383,9 @@ func checkBlock(b Block, self ID) error {
 	}
 	if b.Kind != Architecture && (b.Application != "" || b.Release != 0 || b.Layers != nil) {
 		return invalid("only an architecture sketch names an application, a release and layers")
+	}
+	if b.Kind != TaskList && b.Query != "" {
+		return invalid("only a task list has a query")
 	}
 	if b.View != "" && ((b.Kind != BPMN && b.Kind != Process && b.Kind != Form) || !slices.Contains(DiagramViews, b.View)) {
 		return invalid("view %q: a BPMN diagram, a process or a form shows %s, or its diagram or form alone; other blocks have no view", b.View, strings.Join(DiagramViews, ", "))
