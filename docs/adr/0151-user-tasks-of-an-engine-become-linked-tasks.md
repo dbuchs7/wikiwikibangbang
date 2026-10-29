@@ -158,7 +158,13 @@ Step 3: connecting a person.
 
 What the engine side lacks, found while building (pblumer/atlas follow-ups): its consent page signs a person in with a password only, so a person who signs in to atlas through single sign-on must already have an atlas session when connecting; it offers no revocation endpoint, so a disconnected grant stays listed under *AI access* until the person withdraws it there, though its refresh token is destroyed here; and its token endpoint shares one throttle per address with the public forms, so after a restart of the wiki the first renewals of many people queue there.
 
-Not built yet: the visibility rounds — until they are, linked tasks are read by administrators and the target space's administrators only —, the task dialog and completing through the engine, following the facts, the task list's query and how current a linked task is.
+Step 4: who sees a linked task.
+
+- `internal/tasklink`: after a round of an engine's links, every `VisibilityEvery` (2 minutes), and at once when the round linked a task or a person connected or disconnected, each connected person's own task list is read with their grant (`engine.OpenTasksAs`, up to budget `EngineOpenTasks`). Each open linked item is then restricted, for reading and editing alike, to the synchronisation's actor and the connected people whose list holds its task, written as that actor; an item whose readers did not change writes nothing. A person whose list could not be read — the engine busy or away, or the list cut by the budget — keeps what they saw; an access token the engine refuses is given back, so the next round renews it and learns whether the grant still stands; a person no longer connected sees nothing. An ended task's item keeps its readers. Editing goes with reading because a linked item is not managed: who sees the task comments on it, labels it and moves it between open states, as far as their role in the space allows.
+- The round's report says how many connected people's lists were read and not read, and on how many items the readers changed; a dry round reads no person's list.
+- The protection narrows and never grants (D9): a connected person without a role in the target space still does not read the item.
+
+Not built yet: the task dialog and completing through the engine, following the facts, the task list's query and how current a linked task is.
 
 ### Consequences
 

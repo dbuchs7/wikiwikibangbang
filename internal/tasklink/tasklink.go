@@ -4,8 +4,10 @@
 // wiki, and ends the items whose task is no longer open.
 //
 // Linked items are made restricted to the synchronisation, so nobody reads
-// one before the engine has said who may; who sees a task is decided by
-// each connected person's own task list, which a later step reads.
+// one before the engine has said who may. Who sees a task is decided by
+// each connected person's own task list, read with the person's grant:
+// an open linked item is restricted to the connected people whose list
+// holds its task.
 package tasklink
 
 import (
@@ -28,6 +30,11 @@ import (
 
 // Every is how often an engine whose task links are switched on is read.
 const Every = time.Minute
+
+// VisibilityEvery is how often the connected people's own task lists are
+// read again, to tell who sees each linked task. A round that linked a
+// task, or follows a person connecting, reads them at once.
+const VisibilityEvery = 2 * time.Minute
 
 // maxProblems is how many problems a report names; it says how many more
 // there were.
@@ -55,6 +62,14 @@ type Report struct {
 	Updated   int `json:"updated"`
 	Ended     int `json:"ended"`
 	Unmatched int `json:"unmatched"`
+	// People are the connected people whose task lists were read,
+	// Unread those whose lists could not be, who keep what they saw;
+	// Readers counts the items whose readers changed. Visible says the
+	// round read the lists at all.
+	Visible bool `json:"visible"`
+	People  int  `json:"people"`
+	Unread  int  `json:"unread"`
+	Readers int  `json:"readers"`
 	// Problems are what went wrong, the first maxProblems of them; More
 	// counts the others.
 	Problems []string `json:"problems"`
@@ -71,9 +86,19 @@ func (r *Report) problem(format string, args ...any) {
 	}
 }
 
-// Lister lists the open tasks of an engine; *engine.Reader is one.
+// Lister lists the open tasks of an engine, and those a person sees with
+// the access token of their grant; *engine.Reader is one.
 type Lister interface {
 	OpenTasks(ctx context.Context, e site.Engine) ([]engine.Task, bool, error)
+	OpenTasksAs(ctx context.Context, e site.Engine, bearer string) ([]engine.Task, bool, error)
+}
+
+// Grants gives the access token of a connected person's grant at an
+// engine, and is told when the engine refused one; *engineauth.Broker is
+// one.
+type Grants interface {
+	Token(ctx context.Context, e site.Engine, user string) (string, error)
+	Refused(user, engineID string)
 }
 
 // Runner reads the engines on their schedule and on request, one round
@@ -81,11 +106,17 @@ type Lister interface {
 type Runner struct {
 	db     *storage.DB
 	tasks  Lister
+	grants Grants
 	log    *slog.Logger
 	now    func() time.Time
+	nudge  chan string
 	mu     sync.Mutex
 	run    map[string]bool
 	report map[string]Report
+	// seen is when each engine's people's lists were last read; due says
+	// they are to be read in the next round.
+	seen map[string]time.Time
+	due  map[string]bool
 }
 
 // New returns a runner for db that lists tasks with tasks.
@@ -93,7 +124,28 @@ func New(db *storage.DB, tasks Lister, log *slog.Logger) *Runner {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Runner{db: db, tasks: tasks, log: log, now: time.Now, run: map[string]bool{}, report: map[string]Report{}}
+	return &Runner{db: db, tasks: tasks, log: log, now: time.Now, nudge: make(chan string, 1), run: map[string]bool{}, report: map[string]Report{},
+		seen: map[string]time.Time{}, due: map[string]bool{}}
+}
+
+// WithGrants has the runner tell who sees each linked task from the
+// connected people's own task lists, read with grants. Without it, linked
+// tasks stay restricted to the synchronisation.
+func (r *Runner) WithGrants(g Grants) *Runner {
+	r.grants = g
+	return r
+}
+
+// Nudge asks for a round of the engine soon, its people's lists read
+// again, as after a person connected.
+func (r *Runner) Nudge(engineID string) {
+	r.mu.Lock()
+	r.due[engineID] = true
+	r.mu.Unlock()
+	select {
+	case r.nudge <- engineID:
+	default: // one is asked for already
+	}
 }
 
 // Loop runs a round of every engine whose task links are switched on,
@@ -107,6 +159,7 @@ func (r *Runner) Loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		case <-r.nudge:
 		}
 	}
 }
@@ -158,6 +211,13 @@ func (r *Runner) Run(ctx context.Context, engineID string, dry bool) (Report, er
 	err := r.round(ctx, engineID, &rep)
 	if err != nil {
 		rep.Error = err.Error()
+	} else if !dry && r.grants != nil {
+		r.mu.Lock()
+		read := rep.Linked > 0 || r.due[engineID] || r.now().Sub(r.seen[engineID]) >= VisibilityEvery
+		r.mu.Unlock()
+		if read {
+			r.visibility(ctx, engineID, &rep)
+		}
 	}
 	if !dry {
 		r.mu.Lock()
@@ -253,6 +313,99 @@ func (r *Runner) round(ctx context.Context, engineID string, rep *Report) error 
 		}
 		return nil
 	})
+}
+
+// visibility reads every connected person's own task list with their
+// grant and restricts each open linked item, for reading and editing, to
+// the synchronisation and the connected people whose list holds its task.
+// A person whose list could not be read keeps what they saw; a person no
+// longer connected sees nothing.
+func (r *Runner) visibility(ctx context.Context, engineID string, rep *Report) {
+	e, ok := r.db.Site.Engine(engineID)
+	if !ok {
+		return
+	}
+	sees := map[string][]string{} // task key -> people
+	unsure := map[string]bool{}
+	var failed error
+	for _, c := range r.db.Connections.Of("", engineID) {
+		tasks, complete, err := r.tasksOf(ctx, e, c.User)
+		if _, still := r.db.Connections.Get(c.User, engineID); !still {
+			continue // the engine refused the grant, and the connection ended
+		}
+		if err != nil {
+			unsure[c.User] = true
+			rep.Unread++
+			failed = cmp.Or(failed, err)
+			continue
+		}
+		rep.People++
+		if !complete {
+			unsure[c.User] = true // what lies beyond the list stays as it was
+		}
+		for _, t := range tasks {
+			key := strconv.FormatUint(t.Key, 10)
+			sees[key] = append(sees[key], c.User)
+		}
+	}
+	if failed != nil {
+		rep.problem("task lists of connected people not read (%d), who keep what they saw: %v", rep.Unread, failed)
+	}
+	actor := Actor(engineID)
+	err := r.db.Write(func(s *item.Store) error {
+		for _, it := range s.LinkedTasks(engineID) {
+			if it.Origin == nil || s.Type(it.Type).Workflow.Finished(it.State) {
+				continue // an ended task's readers stay as they were
+			}
+			want := append([]string{actor}, sees[it.Origin.ExternalKey]...)
+			for _, p := range it.Restriction.Read {
+				if unsure[p] {
+					want = append(want, p)
+				}
+			}
+			slices.Sort(want)
+			want = slices.Compact(want)
+			if slices.Equal(want, sortedCopy(it.Restriction.Read)) && slices.Equal(want, sortedCopy(it.Restriction.Edit)) {
+				continue
+			}
+			if err := s.Restrict(actor, it.ID, item.Restriction{Read: want, Edit: want}); err != nil {
+				rep.problem("%s: %v", it.Key, err)
+				continue
+			}
+			rep.Readers++
+		}
+		return nil
+	})
+	if err != nil {
+		rep.problem("who sees the tasks was not written: %v", err)
+		return
+	}
+	rep.Visible = true
+	r.mu.Lock()
+	r.seen[engineID] = r.now()
+	delete(r.due, engineID)
+	r.mu.Unlock()
+}
+
+// tasksOf lists the open tasks a person sees, with their grant. An access
+// token the engine refuses is given back, so the next round renews it and
+// learns whether the grant still stands.
+func (r *Runner) tasksOf(ctx context.Context, e site.Engine, user string) ([]engine.Task, bool, error) {
+	tok, err := r.grants.Token(ctx, e, user)
+	if err != nil {
+		return nil, false, err
+	}
+	tasks, complete, err := r.tasks.OpenTasksAs(ctx, e, tok)
+	if errors.Is(err, engine.ErrRefused) {
+		r.grants.Refused(user, e.ID)
+	}
+	return tasks, complete, err
+}
+
+func sortedCopy(list []string) []string {
+	out := slices.Clone(list)
+	slices.Sort(out)
+	return out
 }
 
 // match is the first rule whose filter takes the task.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
+	"github.com/dbuchs7/wikiwikibangbang/internal/engineconn"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
@@ -21,6 +22,10 @@ type fakeLister struct {
 	complete bool
 	err      error
 	block    chan struct{}
+	// sees are the task keys each person's own list holds; asErr fails
+	// a person's list.
+	sees  map[string][]uint64
+	asErr map[string]error
 }
 
 func (f *fakeLister) OpenTasks(ctx context.Context, _ site.Engine) ([]engine.Task, bool, error) {
@@ -29,6 +34,43 @@ func (f *fakeLister) OpenTasks(ctx context.Context, _ site.Engine) ([]engine.Tas
 	}
 	return slices.Clone(f.tasks), f.complete, f.err
 }
+
+// OpenTasksAs answers the tasks of the person whose token it is: the
+// token is "token-" and the person's ID.
+func (f *fakeLister) OpenTasksAs(_ context.Context, _ site.Engine, bearer string) ([]engine.Task, bool, error) {
+	user := strings.TrimPrefix(bearer, "token-")
+	if err := f.asErr[user]; err != nil {
+		return nil, false, err
+	}
+	var out []engine.Task
+	for _, k := range f.sees[user] {
+		out = append(out, holidayTask(k))
+	}
+	return out, true, nil
+}
+
+// fakeGrants gives each connected person the token "token-" and their ID,
+// or the error set for them; a person whose grant the engine refused is
+// disconnected, as the broker does.
+type fakeGrants struct {
+	db      *storage.DB
+	err     map[string]error
+	ended   map[string]bool
+	refused []string
+}
+
+func (g *fakeGrants) Token(_ context.Context, e site.Engine, user string) (string, error) {
+	if g.ended[user] {
+		_ = g.db.Connections.End(user, e.ID, "refused by the engine")
+		return "", errors.New("the engine refused the grant")
+	}
+	if err := g.err[user]; err != nil {
+		return "", err
+	}
+	return "token-" + user, nil
+}
+
+func (g *fakeGrants) Refused(user, _ string) { g.refused = append(g.refused, user) }
 
 type fixture struct {
 	db *storage.DB
@@ -283,4 +325,97 @@ func TestLoopRunsUntilItsContextEnds(t *testing.T) {
 	}
 	cancel()
 	<-done
+}
+
+// TestEachLinkedTaskIsReadByThoseTheEngineShowsItTo covers ADR-0151's
+// visibility: each connected person's own task list, read with their
+// grant, decides who reads and edits each open linked item; a new task is
+// shown in the round that links it; a person whose list cannot be read
+// keeps what they saw, a person no longer connected loses it; an ended
+// task's readers stay; the lists are read again every VisibilityEvery, or
+// sooner when asked.
+func TestEachLinkedTaskIsReadByThoseTheEngineShowsItTo(t *testing.T) {
+	f := setup(t)
+	now := time.Date(2026, 10, 29, 8, 0, 0, 0, time.UTC)
+	f.r.now = func() time.Time { return now }
+	g := &fakeGrants{db: f.db, err: map[string]error{}, ended: map[string]bool{}}
+	f.r.WithGrants(g)
+	for _, u := range []string{"bert", "vera", "carla", "dora"} {
+		if _, err := f.db.Connections.Connect(u, "atlas-prod", engineconn.Profile{Subject: "x-" + u, Username: u}, "refresh-"+u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.l.tasks = []engine.Task{holidayTask(1), holidayTask(2)}
+	f.l.sees = map[string][]uint64{"bert": {1}, "vera": {1, 2}, "dora": {2}}
+	f.l.asErr = map[string]error{}
+	g.err["carla"] = errors.New("the engine is busy")
+	g.ended["dora"] = true
+
+	rep, err := f.r.Run(context.Background(), "atlas-prod", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rep.Visible || rep.People != 2 || rep.Unread != 1 || rep.Readers != 2 || !strings.Contains(strings.Join(rep.Problems, "\n"), "not read (1), who keep what they saw: the engine is busy") {
+		t.Fatalf("first round = %+v", rep)
+	}
+	readers := func() map[string]string {
+		out := map[string]string{}
+		for _, it := range f.linked(t) {
+			out[it.Origin.ExternalKey] = strings.Join(it.Restriction.Read, ",")
+			if !slices.Equal(it.Restriction.Read, it.Restriction.Edit) {
+				t.Errorf("%s: read by %v, edited by %v", it.Key, it.Restriction.Read, it.Restriction.Edit)
+			}
+		}
+		return out
+	}
+	if got := readers(); got["1"] != "bert,engine:atlas-prod,vera" || got["2"] != "engine:atlas-prod,vera" {
+		t.Fatalf("readers after the first round = %v", got)
+	}
+	if _, still := f.db.Connections.Get("dora", "atlas-prod"); still {
+		t.Error("dora's refused grant left her connected")
+	}
+
+	// Within VisibilityEvery and nothing new linked: the lists are not
+	// read again.
+	if rep, _ := f.r.Run(context.Background(), "atlas-prod", false); rep.Visible {
+		t.Errorf("read again at once: %+v", rep)
+	}
+
+	// Bert no longer sees task 1; carla's list is read and holds task 2;
+	// vera's token is refused, so she keeps what she saw.
+	f.l.sees["bert"], f.l.sees["carla"] = nil, []uint64{2}
+	delete(g.err, "carla")
+	f.l.asErr["vera"] = engine.ErrRefused
+	f.r.Nudge("atlas-prod")
+	rep, err = f.r.Run(context.Background(), "atlas-prod", false)
+	if err != nil || !rep.Visible || rep.People != 2 || rep.Unread != 1 || rep.Readers != 2 {
+		t.Fatalf("second round = %+v %v", rep, err)
+	}
+	if got := readers(); got["1"] != "engine:atlas-prod,vera" || got["2"] != "carla,engine:atlas-prod,vera" {
+		t.Fatalf("readers after the second round = %v", got)
+	}
+	if !slices.Equal(g.refused, []string{"vera"}) {
+		t.Errorf("refused tokens given back: %v", g.refused)
+	}
+
+	// Task 1 ends: its item keeps its readers. Vera disconnects: after
+	// VisibilityEvery she no longer reads task 2.
+	f.l.tasks = []engine.Task{holidayTask(2)}
+	delete(f.l.asErr, "vera")
+	if err := f.db.Connections.End("vera", "atlas-prod", "disconnected"); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(VisibilityEvery)
+	rep, err = f.r.Run(context.Background(), "atlas-prod", false)
+	if err != nil || rep.Ended != 1 || !rep.Visible || rep.Readers != 1 {
+		t.Fatalf("third round = %+v %v", rep, err)
+	}
+	if got := readers(); got["1"] != "engine:atlas-prod,vera" || got["2"] != "carla,engine:atlas-prod" {
+		t.Fatalf("readers after the third round = %v", got)
+	}
+
+	// A dry round reads no person's list.
+	if rep, _ := f.r.Run(context.Background(), "atlas-prod", true); rep.Visible {
+		t.Error("a dry round read the people's lists")
+	}
 }

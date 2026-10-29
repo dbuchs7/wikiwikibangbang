@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -52,6 +53,12 @@ type Engine struct {
 	Refreshes, Revoked int
 	// LastAuthorize is the query of the last consent asked for.
 	LastAuthorize url.Values
+	// Tasks are the open user tasks, as GET /api/v1/tasks answers them:
+	// all of them for ListToken, and to a person's grant those whose key
+	// Sees lists for the person's ID.
+	Tasks     []map[string]any
+	ListToken string
+	Sees      map[string][]uint64
 
 	codes   map[string]code
 	refresh map[string]string // refresh token -> person ID
@@ -145,9 +152,29 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			e.Revoked++
 		}
 		w.WriteHeader(http.StatusOK)
-	case "/api/v1/auth/me":
-		if _, ok := e.access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]; !ok {
+	case "/api/v1/tasks":
+		bearer := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		person, ok := e.access[bearer]
+		if !ok && (e.ListToken == "" || bearer != e.ListToken) {
 			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		items := []map[string]any{}
+		for _, t := range e.Tasks {
+			key, _ := t["key"].(int)
+			if !ok || slices.Contains(e.Sees[person], uint64(key)) {
+				items = append(items, t)
+			}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"items": items, "truncated": false})
+	case "/api/v1/auth/me":
+		person, ok := e.access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		if !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if person != e.Person.ID {
+			writeJSON(w, http.StatusOK, map[string]any{"authEnabled": true, "user": map[string]any{"id": person, "username": person, "groups": []any{}}})
 			return
 		}
 		groups := []map[string]string{}

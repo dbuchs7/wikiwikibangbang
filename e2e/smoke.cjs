@@ -158,6 +158,10 @@ function engineSource() {
   let reached = true;
   const starts = [];
   const grants = { codes: new Map(), access: new Set(), refresh: new Set(), revoked: 0 };
+  const openTasks = [
+    { key: 4711, processInstanceKey: 1, elementInstanceKey: 2, processId: "urlaub", elementId: "genehmigen", name: "Approve holidays", candidateGroups: "hr", dueDate: 1793000000000 },
+    { key: 4712, processInstanceKey: 3, elementInstanceKey: 4, processId: "onboarding", elementId: "laptop", name: "Prepare the laptop" },
+    { key: 4713, processInstanceKey: 5, elementInstanceKey: 6, processId: "urlaub", elementId: "genehmigen", name: "A wizard's step", wizard: "public" }];
   const server = require("http").createServer((req, res) => {
     const pub = /^\/public\/forms\/([0-9a-f]+)\/(schema|start)$/.exec(req.url);
     if (pub) {
@@ -186,7 +190,9 @@ function engineSource() {
     // A person connects their account (ADR-0151): the engine's metadata,
     // a consent that approves at once, the token endpoint with PKCE and the
     // client's credentials in the form, revocation, and who a grant is.
-    const self = `http://127.0.0.1:${server.address().port}`;
+    // Its own address, as the caller reached it: server.address() is null
+    // once the server is closed, and the wiki's rounds may still call then.
+    const self = "http://" + req.headers.host;
     const json = (v, status = 200) => { res.statusCode = status; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(v)); };
     const path = req.url.split("?")[0];
     if (path === "/.well-known/oauth-protected-resource/tasks") return json({ resource: self + "/tasks", authorization_servers: [self] });
@@ -229,6 +235,10 @@ function engineSource() {
       });
       return;
     }
+    // The person sees the task of the process urlaub, offered to hr.
+    if (path === "/api/v1/tasks" && grants.access.has((req.headers.authorization || "").replace(/^Bearer /, ""))) {
+      return json({ truncated: false, items: openTasks.slice(0, 1) });
+    }
     if (path === "/api/v1/auth/me" && grants.access.has((req.headers.authorization || "").replace(/^Bearer /, ""))) {
       return json({ authEnabled: true, user: { id: "u-17", username: "anna", displayName: "Anna Muster", email: "anna@example.org", roles: ["user"],
         groups: [{ id: "g1", name: "hr" }] } });
@@ -245,12 +255,7 @@ function engineSource() {
     if (req.url === "/api/v1/forms") return res.end(JSON.stringify([{ id: "travel", name: "Travel request", projectId: "p1", savedAt: 1791795101 }]));
     // The open user tasks (ADR-0151): one of the process urlaub, one of a
     // process no rule names, and a public wizard's step, never linked.
-    if (req.url.startsWith("/api/v1/tasks?")) {
-      return res.end(JSON.stringify({ truncated: false, items: [
-        { key: 4711, processInstanceKey: 1, elementInstanceKey: 2, processId: "urlaub", elementId: "genehmigen", name: "Approve holidays", candidateGroups: "hr", dueDate: 1793000000000 },
-        { key: 4712, processInstanceKey: 3, elementInstanceKey: 4, processId: "onboarding", elementId: "laptop", name: "Prepare the laptop" },
-        { key: 4713, processInstanceKey: 5, elementInstanceKey: 6, processId: "urlaub", elementId: "genehmigen", name: "A wizard's step", wizard: "public" }] }));
-    }
+    if (req.url.startsWith("/api/v1/tasks?")) return res.end(JSON.stringify({ truncated: false, items: openTasks }));
     if (req.url === "/api/v1/public-links") {
       return res.end(JSON.stringify([{ token: startLink, processId: "order", formId: "report", createdAt: 1 }, { token: wizardLink, processId: "approve", formId: "leave", createdAt: 2 }]));
     }
@@ -2747,7 +2752,7 @@ function gitSource() {
         linked[0].labels.join(",") === "atlas,urlaub", "the task of the process urlaub is linked, with its labels; the other two are not");
       check(linked[0].restriction?.read?.join(",") === "engine:atlas", "a linked task is read by nobody until the engine says who may");
 
-      step("connected engines: a person connects their account to the engine by its sign-in and consent, sees who they are there, and disconnects (ADR-0151)");
+      step("connected engines: a person connects their account to the engine by its sign-in and consent, sees who they are there and reads the linked tasks the engine shows them, and disconnects (ADR-0151)");
       await page.waitForSelector("#task-links-connect >> text=People connect their accounts to the engine under Account; 0 did.");
       check(await page.textContent("#task-links-connect code") === base + "/api/engines/atlas/connect/callback", "the administrator sees the redirect address to register");
       await page.goto(base + "/#/account");
@@ -2757,10 +2762,20 @@ function gitSource() {
       await page.waitForSelector("#engines >> text=Groups at the engine: hr");
       check(!new URL(page.url()).search, "the engine's answer leaves the address");
       check(engine.grants.access.size === 1 && engine.grants.refresh.size === 1, "the code was exchanged once, with its verifier");
+      // Who reads the linked task follows the person's own task list at the
+      // engine, read soon after connecting and again after disconnecting.
+      const meID = (await (await page.request.get(base + "/api/me")).json()).user.id;
+      const readersOf = async () => ((await (await page.request.get(base + "/api/items?type=approval")).json()).items[0].restriction?.read || []).join(",");
+      const readersBecome = async (want, what) => {
+        for (let i = 0; i < 50 && (await readersOf()) !== want; i++) await page.waitForTimeout(200);
+        check((await readersOf()) === want, what + ": " + (await readersOf()));
+      };
+      await readersBecome(["engine:atlas", meID].sort().join(","), "the person whose task list holds the task reads it");
       answer = true; // the confirmation to disconnect
       await page.click("#engines li.connected button:has-text('Disconnect')");
       await page.waitForSelector("#engines li[data-engine=atlas] a:has-text('Connect')");
       check(engine.grants.revoked === 1, "disconnecting revokes the grant at the engine");
+      await readersBecome("engine:atlas", "a person no longer connected no longer reads it");
       await page.goto(base + "/#/item/" + flow.item.key); // where the drawing begins
       await page.waitForSelector("#edit");
 

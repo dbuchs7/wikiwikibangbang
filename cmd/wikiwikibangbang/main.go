@@ -268,12 +268,13 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	defer func() { stopCatalog(); <-catalogDone; catalog.Close() }()
 	// The user tasks of process engines become linked tasks by the rules
 	// set under Administration, read every minute (ADR-0151).
-	engines := engine.NewReader(nil, nil)
-	taskLinks := tasklink.New(db, engines, log)
 	// People connect their accounts to the engines by OAuth, through this
-	// server's registration there, coming back to WWBB_PUBLIC_URL.
+	// server's registration there, coming back to WWBB_PUBLIC_URL; who sees
+	// a linked task is read from each one's own task list.
+	engines := engine.NewReader(nil, nil)
 	connect := engineauth.NewBroker(db.Connections, engines, engine.NewClient(os.Getenv), os.Getenv, notifier.PublicURL())
 	connect.OnEnded(server.RecordEnded(db))
+	taskLinks := tasklink.New(db, engines, log).WithGrants(connect)
 	linksCtx, stopLinks := context.WithCancel(ctx)
 	linksDone := make(chan struct{})
 	go func() { taskLinks.Loop(linksCtx); close(linksDone) }()
