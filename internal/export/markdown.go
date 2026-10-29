@@ -298,10 +298,10 @@ func (m *mdBuilder) block(bl item.Block, p Page, base int) []string {
 		return list(entries)
 	case item.TaskList:
 		var entries []string
-		for _, c := range p.Tasks[bl.Text] {
+		for _, c := range p.Tasks[TaskListKey(bl)] {
 			entries = append(entries, "- "+inlineMarkdown(c, nil))
 		}
-		return append([]string{inlineMarkdown("# "+bl.Text, nil)}, list(entries)...)
+		return append([]string{inlineMarkdown(TaskListTitle(bl), nil)}, list(entries)...)
 	default: // a paragraph
 		return []string{inlineMarkdown(bl.Text, bl.Marks)}
 	}

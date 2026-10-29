@@ -97,7 +97,10 @@ import (
 //   - 36: an imported item may carry Linked and LinkedFields, the process
 //     engine whose user task it is and the fields that engine owns
 //     (ADR-0151). Versions 1 to 35 are still read.
-const CodecVersion = 36
+//   - 37: a tasklist block may carry Query, a query of the query language
+//     in place of its label (ADR-0136, ADR-0151). Versions 1 to 36 are
+//     still read.
+const CodecVersion = 37
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,

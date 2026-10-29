@@ -99,6 +99,24 @@ func entry(label, text string) string {
 	return label
 }
 
+// TaskListKey is what a task list block lists its tasks by: its label,
+// or its query (ADR-0151), told apart, as Page.Tasks keys them.
+func TaskListKey(b item.Block) string {
+	if b.Query != "" {
+		return "?" + b.Query
+	}
+	return b.Text
+}
+
+// TaskListTitle is the line a task list starts with in a document: its
+// label as a label is written, or its query.
+func TaskListTitle(b item.Block) string {
+	if b.Query != "" {
+		return b.Query
+	}
+	return "# " + b.Text
+}
+
 // Page is an item as exported.
 type Page struct {
 	ID    item.ID
@@ -114,8 +132,9 @@ type Page struct {
 	Images map[item.ID]Image
 	// Children are the titles of the child pages, for a list of them.
 	Children []string
-	// Tasks are, by label, the tasks a task list shows: key, title and
-	// state, as the reader may read them (ADR-0114).
+	// Tasks are, by TaskListKey, the tasks a task list shows: key, title
+	// and state, as a reader read them when the document was made
+	// (ADR-0114, ADR-0151).
 	Tasks map[string][]string
 	// Depth is the page's level below the root.
 	Depth int
@@ -334,8 +353,8 @@ func (b *docxBuilder) block(bl item.Block, p Page, base, listNum int) string {
 		return out.String()
 	case item.TaskList:
 		out := strings.Builder{}
-		out.WriteString(para("", "", run("# "+bl.Text, "")))
-		for _, c := range p.Tasks[bl.Text] {
+		out.WriteString(para("", "", run(TaskListTitle(bl), "")))
+		for _, c := range p.Tasks[TaskListKey(bl)] {
 			out.WriteString(paraPr(`<w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>`, run(c, "")))
 		}
 		return out.String()

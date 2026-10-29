@@ -3289,7 +3289,7 @@ function gitSource() {
     await page.waitForFunction(() => !location.hash.includes("notifications.kind"));
     await page.waitForFunction((n) => document.querySelectorAll("#notifications li").length >= n, mentionsShown);
 
-    step("tasks in a text: a new task below the item, as a link and shown whole; a list of the tasks of a label, sorted and filtered (ADR-0114)");
+    step("tasks in a text: a new task below the item, as a link and shown whole; a list of the tasks of a label, sorted and filtered, and one by a query (ADR-0114, ADR-0151)");
     const plan = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ space: "PLAT", type: "task", title: "Release plan", properties: { priority: "low" } }) })).json()).item);
     await page.goto(base + "/#/item/" + plan.key + "?edit");
@@ -3331,6 +3331,22 @@ function gitSource() {
     check((await page.locator(rows + " td:nth-child(2)").first().textContent()) === "Write the release notes", "and the other way round");
     await page.fill("#body section.pm-tasklist .filter-text", "notes");
     await page.waitForFunction((sel) => [...document.querySelectorAll(sel)].filter((r) => !r.hidden).length === 1, rows);
+    // A list by a query keeps the query's order until one sorts it (ADR-0151).
+    await page.goto(base + "/#/item/" + plan.key + "?edit");
+    await page.waitForSelector(".ProseMirror[contenteditable=true] section.pm-tasklist");
+    await page.focus(".ProseMirror");
+    await page.keyboard.press("Control+End"); // after the list by label, which stays
+    await page.selectOption(".pm-toolbar select[aria-label='Insert…']", "tasklist");
+    await page.fill("#tasklist-dialog [name=query]", "label = release-2 ORDER BY title DESC");
+    await page.click("#tasklist-dialog-ok");
+    await page.waitForSelector(".ProseMirror section.pm-tasklist[data-query] tbody tr >> nth=1");
+    await page.click("#details h2");
+    await page.waitForSelector(".live[data-pending='0']");
+    await page.goto(base + "/#/item/" + plan.key);
+    const queried = "#body section.pm-tasklist[data-query='label = release-2 ORDER BY title DESC'] tbody tr";
+    await page.waitForSelector(queried + " >> nth=1");
+    check((await page.locator(queried + " td:nth-child(2)").allTextContents()).join("|") === "Write the release notes|Tag the build", "the query's order");
+    check(await page.locator("#body section.pm-tasklist[data-label='release-2'] tbody tr").count() === 2, "the list by label stays");
 
     step("a Markdown file in a text: a pasted link offers its content, a page below the item shown whole, following its branch; pinned and read again from its page (ADR-0138)");
     const notesHost = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
