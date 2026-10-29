@@ -163,3 +163,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0148](0148-start-forms-and-the-forms-of-a-process.md) | The forms of a process's steps, and start forms that start a process from a page | Proposed | Partial |
 | [0149](0149-the-editors-toolbar-follows-the-cursor-and-stays-in-view.md) | The editor's toolbar follows the cursor and stays in view | Accepted | Landed |
 | [0150](0150-the-wiki-watches-its-storage.md) | The wiki watches its storage | Accepted | Landed |
+| [0151](0151-user-tasks-of-an-engine-become-linked-tasks.md) | User tasks of a process engine become linked tasks, and the engine decides who completes them | Proposed | Not started |
