@@ -32,6 +32,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
 	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
+	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/metrics"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
@@ -107,6 +108,10 @@ type Deps struct {
 	// tasks (ADR-0151); Routes creates one that lists tasks with Engines
 	// when it is nil, and the caller runs its Loop.
 	TaskLinks *tasklink.Runner
+	// Connect connects people's accounts to process engines (ADR-0151);
+	// Routes creates one that reads the registration and WWBB_PUBLIC_URL
+	// from the process environment when it is nil.
+	Connect *engineauth.Broker
 	// Disk measures the data directory's file system (ADR-0150); Routes
 	// creates one that measures on demand when it is nil, and the caller
 	// runs its Loop.
@@ -174,6 +179,10 @@ func Routes(d Deps) []Route {
 	if d.TaskLinks == nil && d.DB != nil {
 		d.TaskLinks = tasklink.New(d.DB, d.Engines, d.Log)
 	}
+	if d.Connect == nil && d.DB != nil {
+		d.Connect = engineauth.NewBroker(d.DB.Connections, d.Engines, engine.NewClient(os.Getenv), os.Getenv, os.Getenv("WWBB_PUBLIC_URL"))
+		d.Connect.OnEnded(RecordEnded(d.DB))
+	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},
@@ -200,6 +209,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, connectorRoutes(d)...)
 	routes = append(routes, engineRoutes(d)...)
 	routes = append(routes, taskLinkRoutes(d)...)
+	routes = append(routes, engineConnRoutes(d)...)
 	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
 		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}

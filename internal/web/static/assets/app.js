@@ -14,6 +14,7 @@ import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.j
 import { applyTheme, setTheme, isDark } from "./theme.js";
 import { filtered, serverFilter, filterParams, norm } from "./filter.js";
 import { taskLinksCard } from "./tasklinks.js";
+import { connectionsCard } from "./engineconn.js";
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -4558,6 +4559,8 @@ async function accountView() {
     h("p", { class: "muted", text: t("account.id", { id: me.user.id, via: me.via }) }),
     avatarCard(),
     contactsCard(contacts),
+    // One's connections to process engines (ADR-0151).
+    connectionsCard(),
     form({ class: "card", id: "language" }, [
       field(t("account.language"), h("select", { name: "language", onchange: (ev) => ev.target.form.requestSubmit() },
         languages.filter((l) => !me.languages || me.languages.includes(l.code))

@@ -22,6 +22,7 @@ import (
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/engineconn"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/notes"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
@@ -42,6 +43,14 @@ const SiteFile = "site.wal"
 // sealed with each item's key.
 const NotesFile = "notes.wal"
 
+// ConnectionsFile holds the connections of people to process engines
+// (ADR-0151), their refresh tokens sealed with a key of each connection's
+// own, kept in the keys file.
+const ConnectionsFile = "connections.wal"
+
+// connectionKey begins the ID of a connection's key in the keys file.
+const connectionKey = "engineconn:"
+
 // DB is an open data directory.
 type DB struct {
 	// Store is the item store. It is not safe for concurrent use: callers
@@ -53,6 +62,10 @@ type DB struct {
 	// Notes are personal notes (ADR-0107). They are sealed with the item
 	// keys, so they are changed only within Write.
 	Notes *notes.Notes
+	// Connections are the connections of people to process engines
+	// (ADR-0151). They take the writer's lock to seal, which guards the
+	// keys, so they are never changed within Write.
+	Connections *engineconn.Connections
 
 	// mu lets reads run side by side and a command alone (ADR-0081).
 	mu       sync.RWMutex
@@ -63,6 +76,7 @@ type DB struct {
 	audit    *wal.Log
 	site     *wal.Log
 	notes    *wal.Log
+	conns    *wal.Log
 	dir      string
 
 	// changed is closed, and replaced, after every command, so that
@@ -243,6 +257,9 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 	if db.Notes, err = notes.New(nsc.Records, nl.Append, notesSealer{db.keys}, newNoteID); err != nil {
 		return nil, Recovery{}, fmt.Errorf("storage: reading %s: %w", NotesFile, err)
 	}
+	if err := db.openConnections(); err != nil {
+		return nil, Recovery{}, err
+	}
 	// Content is assessed against the installation's data protection
 	// regulations on save (ADR-0058); replay reads the outcome from the log.
 	settings := db.Site
@@ -269,7 +286,18 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 // between storing a key and its batch).
 func (db *DB) heal() (int, error) {
 	var ids []item.ID
+	live := map[string]bool{}
+	for _, k := range db.Connections.Keys() {
+		live[k] = true
+	}
 	for id := range db.keys.keys {
+		// A connection's key belongs to the connection (ADR-0151).
+		if k, ok := strings.CutPrefix(string(id), connectionKey); ok {
+			if !live[k] {
+				ids = append(ids, id)
+			}
+			continue
+		}
 		// A protected passage's key belongs to its item (ADR-0088).
 		// A protected passage's key, {item}~{passage}, belongs to its item.
 		owner, passage, ok := strings.Cut(string(id), "~")
@@ -339,6 +367,9 @@ func (db *DB) close() error {
 	}
 	if db.notes != nil {
 		errs = append(errs, db.notes.Close())
+	}
+	if db.conns != nil {
+		errs = append(errs, db.conns.Close())
 	}
 	if db.audit != nil {
 		errs = append(errs, db.audit.Close())
@@ -463,6 +494,68 @@ func (n notesSealer) Seal(id item.ID, pt, aad []byte) ([]byte, error) {
 }
 
 func (n notesSealer) Open(id item.ID, ct, aad []byte) ([]byte, error) { return n.kr.Open(id, ct, aad) }
+
+// openConnections reads the connections to engines and, when renewals
+// have made their journal much longer than what it holds, rewrites it
+// with the connections as they are (ADR-0151).
+func (db *DB) openConnections() error {
+	cl, csc, err := wal.OpenFile(db.dir, ConnectionsFile)
+	if err != nil {
+		return err
+	}
+	db.conns = cl
+	if db.Connections, err = engineconn.New(csc.Records, func(b []byte) error { return db.conns.Append(b) }, connSealer{db}, newNoteID); err != nil {
+		return fmt.Errorf("storage: reading %s: %w", ConnectionsFile, err)
+	}
+	records := db.Connections.Compacted()
+	if records == nil {
+		return nil
+	}
+	if err := db.conns.Close(); err != nil {
+		return err
+	}
+	rerr := wal.Rewrite(db.dir, ConnectionsFile, records)
+	if db.conns, _, err = wal.OpenFile(db.dir, ConnectionsFile); err != nil {
+		return errors.Join(rerr, err)
+	}
+	if rerr != nil {
+		return rerr
+	}
+	db.Connections.Rewritten(len(records))
+	return nil
+}
+
+// connSealer seals the refresh tokens of connections to engines with a
+// key of each connection's own, in the keys file (ADR-0151). It takes the
+// writer's lock, which guards the keys; a key it creates is made durable
+// at once.
+type connSealer struct{ db *DB }
+
+func (c connSealer) Seal(key string, pt, aad []byte) ([]byte, error) {
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+	ct, err := c.db.keys.Seal(item.ID(connectionKey+key), pt, aad)
+	if err != nil {
+		return nil, err
+	}
+	return ct, c.db.keys.persistPending()
+}
+
+func (c connSealer) Open(key string, ct, aad []byte) ([]byte, error) {
+	c.db.mu.RLock()
+	defer c.db.mu.RUnlock()
+	return c.db.keys.Open(item.ID(connectionKey+key), ct, aad)
+}
+
+func (c connSealer) Shred(keys ...string) error {
+	ids := make([]item.ID, len(keys))
+	for i, k := range keys {
+		ids[i] = item.ID(connectionKey + k)
+	}
+	c.db.mu.Lock()
+	defer c.db.mu.Unlock()
+	return c.db.keys.shred(ids...)
+}
 
 // newNoteID is a random ID for a note.
 func newNoteID() string {

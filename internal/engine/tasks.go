@@ -125,3 +125,56 @@ func (r *Reader) OpenTasks(ctx context.Context, e site.Engine) (tasks []Task, co
 func TaskURL(e site.Engine, key uint64) string {
 	return e.BaseURL + "/#/tasks/t/" + strconv.FormatUint(key, 10)
 }
+
+// ClientIDVar and ClientSecretVar name the environment variables of this
+// server's registration as an OAuth client at an engine (ADR-0151), e.g.
+// WWBB_ENGINE_ATLAS_PROD_CLIENT_ID: people connect to the engine through
+// it.
+func ClientIDVar(id string) string {
+	return strings.TrimSuffix(TokenVar(id), "_TOKEN") + "_CLIENT_ID"
+}
+
+// ClientSecretVar: see ClientIDVar.
+func ClientSecretVar(id string) string {
+	return strings.TrimSuffix(TokenVar(id), "_TOKEN") + "_CLIENT_SECRET"
+}
+
+// Person is who a person's grant belongs to at an engine: the engine's ID
+// of the account, its username, name and mail address, and the names of
+// its groups.
+type Person struct {
+	ID, Username, Name, Email string
+	Groups                    []string
+}
+
+// Me reads who the access token of a person's grant belongs to, from
+// GET /api/v1/auth/me.
+func (r *Reader) Me(ctx context.Context, e site.Engine, bearer string) (Person, error) {
+	var got struct {
+		User struct {
+			ID          string `json:"id"`
+			Username    string `json:"username"`
+			Email       string `json:"email"`
+			DisplayName string `json:"displayName"`
+			Groups      []struct {
+				Name string `json:"name"`
+			} `json:"groups"`
+		} `json:"user"`
+	}
+	err := r.call(ctx, e, request{method: http.MethodGet, path: "/api/v1/auth/me", accept: "application/json", bearer: bearer},
+		func(_ string, body io.Reader) error { return json.NewDecoder(body).Decode(&got) })
+	if err != nil {
+		return Person{}, err
+	}
+	u := got.User
+	if u.ID == "" {
+		return Person{}, fmt.Errorf("%w: it did not say who the grant belongs to", ErrUnavailable)
+	}
+	p := Person{ID: u.ID, Username: u.Username, Name: strings.TrimSpace(u.DisplayName), Email: u.Email}
+	for _, g := range u.Groups {
+		if g.Name != "" {
+			p.Groups = append(p.Groups, g.Name)
+		}
+	}
+	return p, nil
+}

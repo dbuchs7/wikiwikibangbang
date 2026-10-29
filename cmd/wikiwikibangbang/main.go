@@ -36,6 +36,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
 	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
+	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
 	"github.com/dbuchs7/wikiwikibangbang/internal/mcp"
@@ -269,6 +270,10 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	// set under Administration, read every minute (ADR-0151).
 	engines := engine.NewReader(nil, nil)
 	taskLinks := tasklink.New(db, engines, log)
+	// People connect their accounts to the engines by OAuth, through this
+	// server's registration there, coming back to WWBB_PUBLIC_URL.
+	connect := engineauth.NewBroker(db.Connections, engines, engine.NewClient(os.Getenv), os.Getenv, notifier.PublicURL())
+	connect.OnEnded(server.RecordEnded(db))
 	linksCtx, stopLinks := context.WithCancel(ctx)
 	linksDone := make(chan struct{})
 	go func() { taskLinks.Loop(linksCtx); close(linksDone) }()
@@ -281,7 +286,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	diskDone := make(chan struct{})
 	go func() { disk.Loop(diskCtx); close(diskDone) }()
 	defer func() { stopDisk(); <-diskDone }()
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration, Backups: backups, Connectors: catalog, Engines: engines, TaskLinks: taskLinks, Disk: disk})
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration, Backups: backups, Connectors: catalog, Engines: engines, TaskLinks: taskLinks, Connect: connect, Disk: disk})
 	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.WithPublicURL(notifier.PublicURL(), server.Handler(routes, db.Accounts))), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1

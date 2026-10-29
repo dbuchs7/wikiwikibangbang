@@ -112,6 +112,14 @@ const (
 	// TaskLinksRun a round of them run on request (ADR-0151).
 	TaskLinksChanged = "engine.tasklinks.change"
 	TaskLinksRun     = "engine.tasklinks.run"
+	// EngineConnected records a person connecting their account to a
+	// process engine, EngineDisconnected one ending it, and
+	// EngineConnectionEnded a connection ended without its person: the
+	// engine refused the grant, or the engine was removed or moved
+	// (ADR-0151).
+	EngineConnected       = "engine.connect"
+	EngineDisconnected    = "engine.disconnect"
+	EngineConnectionEnded = "engine.connection.end"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for
