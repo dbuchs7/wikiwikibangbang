@@ -225,7 +225,11 @@ type itemJSON struct {
 	Restriction *restrictionJSON `json:"restriction,omitempty"`
 	Origin      *originJSON      `json:"origin,omitempty"`
 	Managed     string           `json:"managed,omitempty"`
-	Labels      []string         `json:"labels"`
+	// Linked names the engine whose user task the item is, and
+	// LinkedFields the fields that engine owns (ADR-0151).
+	Linked       string   `json:"linked,omitempty"`
+	LinkedFields []string `json:"linkedFields,omitempty"`
+	Labels       []string `json:"labels"`
 	// Hold is the item's open data protection review (ADR-0058).
 	Hold *holdJSON `json:"hold,omitempty"`
 	// Secrets are the protected passages of the body as the caller sees
@@ -294,7 +298,7 @@ func toDPFindings(fs []item.DPFinding) []dpFindingJSON {
 func toItemJSON(it item.Item) itemJSON {
 	j := itemJSON{ID: it.ID, Key: it.Key, Type: it.Type, TypeVersion: it.TypeVersion, Space: it.Space,
 		Parent: it.Parent, Title: it.Title, Properties: map[string]any(it.Properties), State: it.State,
-		Body: []blockJSON{}, Version: it.Version, Presence: it.Presence, Managed: it.Managed, Labels: it.Labels}
+		Body: []blockJSON{}, Version: it.Version, Presence: it.Presence, Managed: it.Managed, Linked: it.Linked, LinkedFields: it.LinkedFields, Labels: it.Labels}
 	if j.Labels == nil {
 		j.Labels = []string{}
 	}

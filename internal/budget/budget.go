@@ -83,6 +83,10 @@ type Budgets struct {
 	// EngineResponseBytes is the most the server reads of one answer of a
 	// process engine, such as a process's BPMN model (ADR-0129).
 	EngineResponseBytes int64
+	// EngineOpenTasks is the most open user tasks one round of a task
+	// link reads from an engine (ADR-0151); beyond it, the round links the
+	// first ones, ends none, and says so.
+	EngineOpenTasks int
 	// MarkdownPictureBytes bounds the pictures one page written from a
 	// Markdown file of a repository reads and holds, together (ADR-0138);
 	// the pictures beyond it stay links.
@@ -114,6 +118,7 @@ func Default() Budgets {
 		ChangesWait:          30,
 		ChangesWaiting:       1000,
 		EngineResponseBytes:  8 << 20,
+		EngineOpenTasks:      20_000,
 		MarkdownPictureBytes: 50 << 20,
 	}
 }

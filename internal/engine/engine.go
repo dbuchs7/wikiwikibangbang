@@ -861,6 +861,10 @@ type request struct {
 	body                 []byte
 	public               bool
 	client               string
+	// tokenVar names the variable of the credential to send, TokenVar's
+	// when empty: the task list is read with a credential of its own
+	// (ADR-0151).
+	tokenVar string
 }
 
 // call makes a request of the engine and hands the answer's type and body
@@ -869,9 +873,10 @@ func (r *Reader) call(ctx context.Context, e site.Engine, rq request, read func(
 	if e.Kind != site.EngineAtlas {
 		return fmt.Errorf("%w: kind %q is not read", ErrUnavailable, e.Kind)
 	}
-	token := r.getenv(TokenVar(e.ID))
+	tokenVar := cmp.Or(rq.tokenVar, TokenVar(e.ID))
+	token := r.getenv(tokenVar)
 	if token == "" && !rq.public {
-		return fmt.Errorf("%w: set %s", ErrNoCredential, TokenVar(e.ID))
+		return fmt.Errorf("%w: set %s", ErrNoCredential, tokenVar)
 	}
 	u, err := url.Parse(e.BaseURL + rq.path)
 	if err != nil {

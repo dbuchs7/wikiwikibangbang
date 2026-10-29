@@ -103,3 +103,123 @@ func (s *Settings) RemoveEngine(actor, id string) error {
 	}
 	return s.record(event{Kind: engineRemoved, Actor: actor, Asset: id})
 }
+
+// TaskLinks are the rules by which the user tasks of an engine become
+// linked tasks of the wiki (ADR-0151).
+type TaskLinks struct {
+	Engine string `json:"engine"`
+	// Enabled switches the synchronisation on; rules kept while it is off
+	// link nothing.
+	Enabled bool       `json:"enabled"`
+	Rules   []TaskRule `json:"rules"`
+}
+
+// TaskRule links the tasks its filter matches: an empty list matches all.
+// The first rule that matches a task links it.
+type TaskRule struct {
+	ID string `json:"id"`
+	// Processes and Elements are BPMN IDs; Groups are candidate groups as
+	// the engine names them.
+	Processes []string `json:"processes,omitempty"`
+	Elements  []string `json:"elements,omitempty"`
+	Groups    []string `json:"groups,omitempty"`
+	// Space and Type are where a linked task is made.
+	Space string `json:"space"`
+	Type  string `json:"type"`
+	// Labels are the labels a linked task is made with; {process},
+	// {element} and {group} stand for the task's.
+	Labels []string `json:"labels,omitempty"`
+	// DueField is the date field the task's due date goes into, if any.
+	DueField string `json:"dueField,omitempty"`
+	// Completed and Cancelled are the finished states an ended task's item
+	// moves to.
+	Completed string `json:"completed"`
+	Cancelled string `json:"cancelled"`
+}
+
+// maxTaskRules bounds the rules of one engine; it is a shape of the
+// settings, as maxEngines is.
+const maxTaskRules = 20
+
+// Normalize tidies what an administrator typed.
+func (l TaskLinks) Normalize() TaskLinks {
+	l.Engine = strings.TrimSpace(l.Engine)
+	rules := make([]TaskRule, 0, len(l.Rules))
+	for _, r := range l.Rules {
+		r.ID, r.Space, r.Type = strings.TrimSpace(r.ID), strings.TrimSpace(r.Space), strings.TrimSpace(r.Type)
+		r.DueField, r.Completed, r.Cancelled = strings.TrimSpace(r.DueField), strings.TrimSpace(r.Completed), strings.TrimSpace(r.Cancelled)
+		r.Processes, r.Elements, r.Groups, r.Labels = tidyList(r.Processes), tidyList(r.Elements), tidyList(r.Groups), tidyList(r.Labels)
+		rules = append(rules, r)
+	}
+	l.Rules = rules
+	return l
+}
+
+func tidyList(in []string) []string {
+	var out []string
+	for _, v := range in {
+		if v = strings.TrimSpace(v); v != "" && !slices.Contains(out, v) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// Validate checks the shape of task links; that their spaces, types and
+// states exist is the item store's to say.
+func (l TaskLinks) Validate() error {
+	if len(l.Rules) > maxTaskRules {
+		return fmt.Errorf("%w: at most %d rules", ErrInvalid, maxTaskRules)
+	}
+	seen := map[string]bool{}
+	for _, r := range l.Rules {
+		switch {
+		case !item.ValidEngineID(r.ID):
+			return fmt.Errorf("%w: %q is not a rule ID: lower-case letters, digits, dots and hyphens, at most 40", ErrInvalid, r.ID)
+		case seen[r.ID]:
+			return fmt.Errorf("%w: the rule %q is there twice", ErrInvalid, r.ID)
+		case r.Space == "" || r.Type == "" || r.Completed == "" || r.Cancelled == "":
+			return fmt.Errorf("%w: the rule %q needs a space, a type and the states of a completed and a cancelled task", ErrInvalid, r.ID)
+		}
+		seen[r.ID] = true
+		for _, list := range [][]string{r.Processes, r.Elements, r.Groups, r.Labels} {
+			if len(list) > 50 {
+				return fmt.Errorf("%w: the rule %q names more than 50 values in one list", ErrInvalid, r.ID)
+			}
+			for _, v := range list {
+				if len(v) > 200 || strings.ContainsAny(v, "\n\r") {
+					return fmt.Errorf("%w: %q in the rule %q is not one line of at most 200 characters", ErrInvalid, v, r.ID)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// TaskLinks returns the task links of an engine; an engine without any has
+// none, switched off.
+func (s *Settings) TaskLinks(engine string) TaskLinks {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l, ok := s.taskLinks[engine]
+	if !ok {
+		return TaskLinks{Engine: engine, Rules: []TaskRule{}}
+	}
+	l.Rules = slices.Clone(l.Rules)
+	return l
+}
+
+// SetTaskLinks replaces the task links of an engine and returns them as
+// kept.
+func (s *Settings) SetTaskLinks(actor string, l TaskLinks) (TaskLinks, error) {
+	l = l.Normalize()
+	if err := l.Validate(); err != nil {
+		return l, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.engines[l.Engine]; !ok {
+		return l, fmt.Errorf("%w: no engine %q", ErrInvalid, l.Engine)
+	}
+	return l, s.record(event{Kind: taskLinksSet, Actor: actor, TaskLinks: &l})
+}

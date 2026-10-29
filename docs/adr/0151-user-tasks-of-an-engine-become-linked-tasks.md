@@ -1,7 +1,7 @@
 # ADR-0151: User tasks of a process engine become linked tasks, and the engine decides who completes them
 
 - **Status:** Proposed
-- **Implementation:** Not started
+- **Implementation:** Partial
 - **Date:** 2026-10-28
 - **Deciders:** Project initiators (requested 2026-10-28: user tasks of an atlas engine become tasks of the wiki with labels an administrator chooses, a page shows a table of tasks selected by a filter, and a card moved to done on a kanban completes the task, showing its form first where input is needed. The requester decided: the engine alone decides whether a person may work a task; each person connects their account to the engine once, by OAuth, with the mail address only a suggestion; groups serve only to decide who sees a linked task, never rights in a space; the coupling must work whatever people and groups come from — local accounts, single sign-on with any provider, a directory, the engine itself; and a linked task shows how current it is. The engine's side was built in the same step: pblumer/atlas, draft record `tasks-for-a-connected-system`); proposed for the maintainer's acceptance
 - **Open question:** three points (see "Open questions"): whether administrators, whom restrictions do not bind (ADR-0022), may see every linked task; whether the form checked in the browser is enough while the engine checks only who completes, not what is submitted; and whether rules or a list of named processes decide which tasks are linked.
@@ -79,11 +79,12 @@ Chosen options: **1, 4 with 5, 7 and 10**, because a task on a board must be an 
 
 ### Linked items
 
-- A linked item's **origin** is the engine — system `engine`, instance the engine's ID, external ID the task's key — and it carries the mark **`Linked`** naming the engine. **Codec version 36** adds the mark and the task list's query (below); versions 1 to 35 are still read.
+- A linked item's **origin** is the engine — system `engine`, instance the engine's ID, external ID the task's key — and it carries the mark **`Linked`** naming the engine, with the fields the engine owns (`LinkedFields`). **Codec version 36** adds both; versions 1 to 35 are still read. The task list's query (below) comes with a codec version of its own.
 - It is **not managed** (ADR-0128): people comment on it, label it, relate it, put it on kanbans and in a kanban's own columns, and move it between open states.
 - **The engine owns** its title (the task's name) and the mapped fields: the synchronisation writes them as the actor `engine:<id>`, and a person's change to them is refused with a message naming the engine.
 - **A finished state is reached only through the engine:** a transition of a linked item into the rule's completed state is the completion below; into its cancelled state, only the synchronisation makes it.
 - **A task that ends** moves its item to the rule's state, as the synchronisation's transition (D3). The item stays, with its comments and relations (D7, D8).
+- **Who reads it is not changed by people:** a person may not set or lift a linked item's own restriction, move it — or a page holding it — to another space, where its readers have no role, or put it in the trash while its task is open. A restriction on a page above it only narrows further (D9).
 
 ### Learning what is open
 
@@ -131,6 +132,18 @@ Chosen options: **1, 4 with 5, 7 and 10**, because a task on a board must be an 
 - Administrators: `GET` and `PUT /api/engines/{id}/task-links`; `POST /api/engines/{id}/task-links/run`, with a dry run that reports what it would link and close.
 - People: `GET /api/me/engines`; `GET /api/engines/{id}/connect` and `…/connect/callback`; `DELETE /api/me/engines/{id}`.
 - A linked item: `GET /api/items/{ref}/engine-task` (the task, its form and its values, as the person), `POST /api/items/{ref}/engine-task/claim`, `…/unclaim`, `…/complete`.
+
+### As built so far
+
+Step 1 (pull request after #192): the model, the synchronisation by comparing, and the administration's API.
+
+- `internal/item`: `Linked` and `LinkedFields` on items and on `ItemImported` (codec version 36); `LinkTask` makes a new linked item, its restriction to the synchronisation's actor and its labels in one batch, and updates an existing one's title and owned fields only; `EndTask` makes the one transition to a finished state; `TaskReach` checks a rule's type; sessions refuse what only the engine decides.
+- `internal/engine`: `OpenTasks` reads `GET /api/v1/tasks` page by page with `WWBB_ENGINE_<ID>_TASKLIST_TOKEN`, up to budget `EngineOpenTasks` (20 000); a list cut by the budget ends nothing.
+- `internal/site`: `TaskLinks` per engine, at most 20 rules, removed with their engine.
+- `internal/tasklink`: a round per engine every minute while its links are switched on, and on request, dry or not; the last report is kept in memory. Steps of public wizards are never linked.
+- `internal/server`: the administrators' routes above; settings and rounds on request are audited (`engine.tasklinks.change`, `engine.tasklinks.run`). The item's JSON names `linked` and `linkedFields`.
+
+Not built yet: the administration's page, connecting a person, the visibility rounds — until they are, linked tasks are read by administrators and the target space's administrators only —, the task dialog and completing through the engine, following the facts, the task list's query and how current a linked task is.
 
 ### Consequences
 
@@ -197,7 +210,7 @@ Strongest form: groups are a familiar way to protect items (ADR-0078), one prote
 
 ## Open questions
 
-1. **Administrators see every linked task.** A wiki administrator is not bound by restrictions (ADR-0022), so linked tasks are visible to them whatever the engine would show. Accept, as for every restricted item, or keep linked tasks from administrators who are not connected?
+1. **Administrators see every linked task.** A wiki administrator, and an administrator of the target space, is not bound by restrictions (ADR-0022), so linked tasks are visible to them whatever the engine would show. Accept, as for every restricted item, or keep linked tasks from administrators who are not connected?
 2. **What is submitted is checked in the browser.** The engine checks who completes a task, and a directory field's value; required fields and value shapes are checked by form-js in the browser, here as in the engine's own app, with another copy of form-js. Is that enough, or must the engine check submissions against the form before linked tasks are completed here?
 3. **Rules or named processes.** Rules link every task a filter matches, and a rule with an empty filter links all of an engine's tasks. Should linking be limited to processes an administrator names one by one?
 

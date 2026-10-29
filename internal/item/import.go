@@ -45,6 +45,10 @@ type Upsert struct {
 	// Managed marks the item as under a running one-way sync; sessions may
 	// not change it until Release.
 	Managed string
+	// Linked and LinkedFields make the item a linked task (ADR-0151): the
+	// process engine whose user task it is, and the fields that engine owns.
+	Linked       string
+	LinkedFields []string
 	// ID, if set, is the ID of a new item: a restore from a backup brings
 	// an item back with its identity (ADR-0124). The store must not know
 	// it, live, in the trash or as a tombstone, so no ID is used twice (D7).
@@ -57,44 +61,58 @@ var importedKeyRE = regexp.MustCompile(`^([A-Z][A-Z0-9]*)-([1-9][0-9]*)$`)
 // returns the item and whether anything changed; an unchanged re-run writes
 // no event. It is a trusted command: an import job calls it, not a person.
 func (s *Store) Upsert(actor string, u Upsert) (Item, bool, error) {
+	e, current, changed, err := s.upsertEvent(u)
+	if err != nil || !changed {
+		return current, false, err
+	}
+	if err := s.record(actor, e); err != nil {
+		return Item{}, false, err
+	}
+	return s.items[e.Item].clone(), true, nil
+}
+
+// upsertEvent is the event an Upsert records, checked; changed is false,
+// with the item as it is, when the item already stands as asked.
+func (s *Store) upsertEvent(u Upsert) (e Event, current Item, changed bool, err error) {
 	if u.Origin.System == "" || u.Origin.Instance == "" || u.Origin.ExternalID == "" {
-		return Item{}, false, invalid("an imported item needs system, instance and external ID")
+		return Event{}, Item{}, false, invalid("an imported item needs system, instance and external ID")
 	}
 	if !s.HasSpace(u.Space) {
-		return Item{}, false, notFound("space %q", u.Space)
+		return Event{}, Item{}, false, notFound("space %q", u.Space)
 	}
 	td, ok := s.latest(u.Type)
 	if !ok {
-		return Item{}, false, notFound("type %q", u.Type)
+		return Event{}, Item{}, false, notFound("type %q", u.Type)
 	}
 	if strings.TrimSpace(u.Title) == "" {
-		return Item{}, false, invalid("title is empty")
+		return Event{}, Item{}, false, invalid("title is empty")
 	}
 	if err := checkProps(td, u.Properties); err != nil {
-		return Item{}, false, err
+		return Event{}, Item{}, false, err
 	}
 	for _, f := range td.Fields {
 		if f.Required && u.Properties[f.Name] == nil {
-			return Item{}, false, invalid("field %q is required", f.Name)
+			return Event{}, Item{}, false, invalid("field %q is required", f.Name)
 		}
 	}
 	if u.State != "" {
 		if td.Workflow == nil || !slices.Contains(td.Workflow.States, u.State) {
-			return Item{}, false, invalid("type %q has no state %q", td.Name, u.State)
+			return Event{}, Item{}, false, invalid("type %q has no state %q", td.Name, u.State)
 		}
 	}
 	if u.Parent != "" {
 		p, err := s.live(u.Parent)
 		if err != nil {
-			return Item{}, false, err
+			return Event{}, Item{}, false, err
 		}
 		if p.Space != u.Space {
-			return Item{}, false, invalid("parent %s is not in space %s", p.Key, u.Space)
+			return Event{}, Item{}, false, invalid("parent %s is not in space %s", p.Key, u.Space)
 		}
 	}
 
-	e := Event{Kind: ItemImported, Space: u.Space, TypeName: td.Name, TypeVersion: td.Version,
-		Parent: u.Parent, Title: u.Title, Props: maps.Clone(u.Properties), To: u.State, Managed: u.Managed}
+	e = Event{Kind: ItemImported, Space: u.Space, TypeName: td.Name, TypeVersion: td.Version,
+		Parent: u.Parent, Title: u.Title, Props: maps.Clone(u.Properties), To: u.State, Managed: u.Managed,
+		Linked: u.Linked, LinkedFields: slices.Clone(u.LinkedFields)}
 	origin := u.Origin
 	e.Origin = &origin
 
@@ -102,29 +120,27 @@ func (s *Store) Upsert(actor string, u Upsert) (Item, bool, error) {
 		it := s.items[id]
 		switch {
 		case it.Presence != Live:
-			return Item{}, false, invalid("imported item %s is %s; it is not re-imported", it.Key, it.Presence)
+			return Event{}, Item{}, false, invalid("imported item %s is %s; it is not re-imported", it.Key, it.Presence)
 		case it.Space != u.Space:
-			return Item{}, false, invalid("imported item %s is in %s; an import does not move it to %s", it.Key, it.Space, u.Space)
+			return Event{}, Item{}, false, invalid("imported item %s is in %s; an import does not move it to %s", it.Key, it.Space, u.Space)
 		case it.Type != td.Name:
-			return Item{}, false, invalid("imported item %s has type %s; an import does not change it to %s", it.Key, it.Type, td.Name)
+			return Event{}, Item{}, false, invalid("imported item %s has type %s; an import does not change it to %s", it.Key, it.Type, td.Name)
 		case u.Parent != "" && slices.Contains(s.subtree(id), u.Parent):
-			return Item{}, false, invalid("cannot move an item below itself")
+			return Event{}, Item{}, false, invalid("cannot move an item below itself")
 		}
 		if e.To == "" {
 			e.To = it.State
 		}
 		if it.Title == u.Title && it.Parent == u.Parent && it.State == e.To && it.Managed == u.Managed &&
+			it.Linked == u.Linked && slices.Equal(it.LinkedFields, u.LinkedFields) &&
 			reflect.DeepEqual(it.Properties, nonNil(u.Properties)) && *it.Origin == origin {
-			return it.clone(), false, nil
+			return Event{}, it.clone(), false, nil
 		}
 		if err := s.duplicate(u.Space, td, id, u.Properties); err != nil {
-			return Item{}, false, err
+			return Event{}, Item{}, false, err
 		}
 		e.Item = id
-		if err := s.record(actor, e); err != nil {
-			return Item{}, false, err
-		}
-		return s.items[id].clone(), true, nil
+		return e, it.clone(), true, nil
 	}
 
 	if m := importedKeyRE.FindStringSubmatch(u.Key); m != nil && m[1] == u.Space {
@@ -136,22 +152,19 @@ func (s *Store) Upsert(actor string, u Upsert) (Item, bool, error) {
 		e.To = td.Workflow.Initial
 	}
 	if err := s.duplicate(u.Space, td, "", u.Properties); err != nil {
-		return Item{}, false, err
+		return Event{}, Item{}, false, err
 	}
 	e.Item = s.newID()
 	if u.ID != "" {
 		if !ValidItemID(string(u.ID)) {
-			return Item{}, false, invalid("item ID %q", u.ID)
+			return Event{}, Item{}, false, invalid("item ID %q", u.ID)
 		}
 		if _, known := s.items[u.ID]; known {
-			return Item{}, false, invalid("item %s exists; its ID is not used again", u.ID)
+			return Event{}, Item{}, false, invalid("item %s exists; its ID is not used again", u.ID)
 		}
 		e.Item = u.ID
 	}
-	if err := s.record(actor, e); err != nil {
-		return Item{}, false, err
-	}
-	return s.items[e.Item].clone(), true, nil
+	return e, Item{}, true, nil
 }
 
 // FindByOrigin returns the item imported from a source object.
@@ -251,6 +264,7 @@ func (s *Store) applyImport(e Event, touch func(...ID)) {
 		it.Parent, it.Title, it.State = e.Parent, e.Title, e.To
 		it.Properties = nonNil(maps.Clone(e.Props))
 		it.Origin, it.Managed = &origin, e.Managed
+		it.Linked, it.LinkedFields = e.Linked, slices.Clone(e.LinkedFields)
 		it.Version++
 		s.bySource[origin.key()] = it.ID
 		touch(it.ID)

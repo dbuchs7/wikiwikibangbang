@@ -36,6 +36,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/metrics"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/wikiwikibangbang/internal/tasklink"
 )
 
 // Access is a route's access class (ADR-0011). The zero value is
@@ -102,6 +103,10 @@ type Deps struct {
 	// creates one that reads credentials from the process environment
 	// when it is nil.
 	Engines *engine.Reader
+	// TaskLinks keeps the linked tasks in step with the engines' open user
+	// tasks (ADR-0151); Routes creates one that lists tasks with Engines
+	// when it is nil, and the caller runs its Loop.
+	TaskLinks *tasklink.Runner
 	// Disk measures the data directory's file system (ADR-0150); Routes
 	// creates one that measures on demand when it is nil, and the caller
 	// runs its Loop.
@@ -166,6 +171,9 @@ func Routes(d Deps) []Route {
 	if d.Engines == nil {
 		d.Engines = engine.NewReader(nil, nil)
 	}
+	if d.TaskLinks == nil && d.DB != nil {
+		d.TaskLinks = tasklink.New(d.DB, d.Engines, d.Log)
+	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},
@@ -191,6 +199,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, autoBackupRoutes(d)...)
 	routes = append(routes, connectorRoutes(d)...)
 	routes = append(routes, engineRoutes(d)...)
+	routes = append(routes, taskLinkRoutes(d)...)
 	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
 		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}

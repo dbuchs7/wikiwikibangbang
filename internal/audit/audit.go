@@ -108,6 +108,10 @@ const (
 	// of an engine for a signed-in person (ADR-0148), which the engine
 	// records without an initiator.
 	EngineStarted = "engine.start"
+	// TaskLinksChanged records an engine's task links set, and
+	// TaskLinksRun a round of them run on request (ADR-0151).
+	TaskLinksChanged = "engine.tasklinks.change"
+	TaskLinksRun     = "engine.tasklinks.run"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for

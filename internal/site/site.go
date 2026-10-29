@@ -143,6 +143,9 @@ type event struct {
 	// Engine is set by EngineSet; EngineRemoved names it in Asset
 	// (ADR-0129).
 	Engine *Engine `json:"engine,omitempty"`
+	// TaskLinks is set by TaskLinksSet (ADR-0151); an engine's removal
+	// removes them.
+	TaskLinks *TaskLinks `json:"taskLinks,omitempty"`
 }
 
 const (
@@ -168,6 +171,8 @@ const (
 
 	engineSet     = "EngineSet"
 	engineRemoved = "EngineRemoved"
+
+	taskLinksSet = "TaskLinksSet"
 )
 
 // Settings is safe for concurrent use.
@@ -191,11 +196,14 @@ type Settings struct {
 	diskSpace *diskspace.Thresholds
 	// engines are the process engines by ID (ADR-0129).
 	engines map[string]Engine
+	// taskLinks are the task links of the engines, by engine ID
+	// (ADR-0151).
+	taskLinks map[string]TaskLinks
 }
 
 // New rebuilds the settings from records and journals later changes.
 func New(records [][]byte, j Journal) (*Settings, error) {
-	s := &Settings{journal: j, now: time.Now, assets: map[string]Asset{}, regulations: map[string]Regulation{}, connectors: map[string]Connector{}, engines: map[string]Engine{}}
+	s := &Settings{journal: j, now: time.Now, assets: map[string]Asset{}, regulations: map[string]Regulation{}, connectors: map[string]Connector{}, engines: map[string]Engine{}, taskLinks: map[string]TaskLinks{}}
 	for i, r := range records {
 		var e event
 		if err := json.Unmarshal(r, &e); err != nil {
@@ -273,6 +281,12 @@ func (s *Settings) apply(e event) error {
 		s.engines[e.Engine.ID] = *e.Engine
 	case engineRemoved:
 		delete(s.engines, e.Asset)
+		delete(s.taskLinks, e.Asset)
+	case taskLinksSet:
+		if e.TaskLinks == nil {
+			return errors.New("a task links event without links")
+		}
+		s.taskLinks[e.TaskLinks.Engine] = *e.TaskLinks
 	default:
 		return fmt.Errorf("unknown event %q", e.Kind)
 	}
