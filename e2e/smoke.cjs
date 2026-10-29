@@ -190,7 +190,9 @@ function engineSource() {
     // A person connects their account (ADR-0151): the engine's metadata,
     // a consent that approves at once, the token endpoint with PKCE and the
     // client's credentials in the form, revocation, and who a grant is.
-    const self = `http://127.0.0.1:${server.address().port}`;
+    // Its own address, as the caller reached it: server.address() is null
+    // once the server is closed, and the wiki's rounds may still call then.
+    const self = "http://" + req.headers.host;
     const json = (v, status = 200) => { res.statusCode = status; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(v)); };
     const path = req.url.split("?")[0];
     if (path === "/.well-known/oauth-protected-resource/tasks") return json({ resource: self + "/tasks", authorization_servers: [self] });
