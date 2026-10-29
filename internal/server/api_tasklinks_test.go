@@ -110,3 +110,39 @@ func TestTaskLinksThroughTheAPI(t *testing.T) {
 		t.Errorf("a round without the credential = %v", failed)
 	}
 }
+
+// TestHowCurrentLinkedTasksAreIsTold covers ADR-0151's freshness: anyone
+// signed in learns when an engine's tasks were last read and whether that
+// is long ago; the administrators' view names the events variable; the
+// metrics count each engine's rounds and connected people.
+func TestHowCurrentLinkedTasksAreIsTold(t *testing.T) {
+	srv := fakeTaskEngine(t)
+	env := map[string]string{"WWBB_ENGINE_ATLAS_TASKLIST_TOKEN": "lister"}
+	w := newWorld(t, func(d *Deps) { d.Engines = engine.NewReader(func(k string) string { return env[k] }, srv.Client()) })
+	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusCreated)
+	w.bert.expect("GET", "/api/engines/nope/tasks-read", "", http.StatusNotFound)
+	got := w.bert.expect("GET", "/api/engines/atlas/tasks-read", "", http.StatusOK)
+	if got["fresh"].(map[string]any)["readAt"] != nil || got["staleAfter"] != float64(300) {
+		t.Fatalf("before a round = %v", got)
+	}
+	links := w.admin.expect("GET", "/api/engines/atlas/task-links", "", http.StatusOK)
+	if links["eventsVar"] != "WWBB_ENGINE_ATLAS_EVENTS_TOKEN" || links["events"] != false {
+		t.Errorf("events = %v %v", links["eventsVar"], links["events"])
+	}
+	w.admin.expect("POST", "/api/engines/atlas/task-links/run", "", http.StatusOK)
+	fresh := w.bert.expect("GET", "/api/engines/atlas/tasks-read", "", http.StatusOK)["fresh"].(map[string]any)
+	if fresh["readAt"] == nil || fresh["stale"] != false {
+		t.Errorf("after a round = %v", fresh)
+	}
+	rec := w.admin.do("GET", "/metrics", "")
+	for _, want := range []string{`wwbb_tasklinks_last_read_timestamp_seconds{engine="atlas"}`, `wwbb_tasklinks_failed_rounds{engine="atlas"} 0`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("the metrics lack %s", want)
+		}
+	}
+	delete(env, "WWBB_ENGINE_ATLAS_TASKLIST_TOKEN")
+	w.admin.expect("POST", "/api/engines/atlas/task-links/run", "", http.StatusOK)
+	if rec := w.admin.do("GET", "/metrics", ""); !strings.Contains(rec.Body.String(), `wwbb_tasklinks_failed_rounds{engine="atlas"} 1`) {
+		t.Error("a failed round is not counted")
+	}
+}

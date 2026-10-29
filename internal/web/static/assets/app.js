@@ -15,7 +15,7 @@ import { applyTheme, setTheme, isDark } from "./theme.js";
 import { filtered, serverFilter, filterParams, norm } from "./filter.js";
 import { taskLinksCard } from "./tasklinks.js";
 import { connectionsCard } from "./engineconn.js";
-import { taskDialog, taskPanel } from "./taskdialog.js";
+import { freshNotice, taskDialog, taskPanel } from "./taskdialog.js";
 import { finishing } from "./taskparts.js";
 
 const app = document.getElementById("app");
@@ -3295,7 +3295,8 @@ async function cardBoard(o) {
     } });
   filteredBoard.applyFilter();
   const layout = h("div", { class: "kanban-layout" },
-    h("div", { id: o.id, class: "kanban-board" }, legend, filteredBoard),
+    // Linked cards say when their engine was last read (ADR-0151).
+    h("div", { id: o.id, class: "kanban-board" }, freshNotice(items), legend, filteredBoard),
     detail);
   const chosen = params.get("card") && items.find((it) => it.key === params.get("card"));
   if (chosen) select(chosen);

@@ -125,8 +125,32 @@ const MetricsPath = "/metrics"
 
 // NewMetrics returns a metric registry that reads the data directory, the
 // live sessions and, with disk, the file system's free space.
-func NewMetrics(db *storage.DB, hub *collab.Hub, disk *DiskWatch) *metrics.Metrics {
+func NewMetrics(db *storage.DB, hub *collab.Hub, disk *DiskWatch, links *tasklink.Runner) *metrics.Metrics {
 	src := metrics.Sources{Build: buildinfo.Get().String()}
+	if db != nil && links != nil {
+		// The engines that ran a round, and those people are connected to.
+		src.Engines = func() []metrics.EngineRounds {
+			by := map[string]*metrics.EngineRounds{}
+			at := func(id string) *metrics.EngineRounds {
+				if by[id] == nil {
+					by[id] = &metrics.EngineRounds{Engine: id}
+				}
+				return by[id]
+			}
+			for _, st := range links.Stats() {
+				e := at(st.Engine)
+				e.Read, e.Failed = st.Read, st.Failed
+			}
+			for _, c := range db.Connections.Of("", "") {
+				at(c.Engine).Connected++
+			}
+			out := make([]metrics.EngineRounds, 0, len(by))
+			for _, e := range by {
+				out = append(out, *e)
+			}
+			return out
+		}
+	}
 	if db != nil {
 		src.Storage = db.Sizes
 		src.Items = func() map[string]int {
@@ -165,9 +189,6 @@ func Routes(d Deps) []Route {
 	if d.Disk == nil && d.DB != nil {
 		d.Disk = NewDiskWatch(d.DB, d.Messages, d.Log)
 	}
-	if d.Metrics == nil {
-		d.Metrics = NewMetrics(d.DB, d.Collab, d.Disk)
-	}
 	if d.Backups == nil && d.DB != nil {
 		d.Backups = autobackup.New(d.DB, os.Getenv, buildinfo.Get().String(), d.Log)
 	}
@@ -183,6 +204,9 @@ func Routes(d Deps) []Route {
 	}
 	if d.TaskLinks == nil && d.DB != nil {
 		d.TaskLinks = tasklink.New(d.DB, d.Engines, d.Log).WithGrants(d.Connect)
+	}
+	if d.Metrics == nil {
+		d.Metrics = NewMetrics(d.DB, d.Collab, d.Disk, d.TaskLinks)
 	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{

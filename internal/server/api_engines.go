@@ -120,6 +120,7 @@ func (h engineHandlers) setEngine(w http.ResponseWriter, r *http.Request) {
 	// People's grants belong to the engine at its address (ADR-0151).
 	if existed && before.BaseURL != kept.BaseURL {
 		endConnections(h.d, actor, clientAddr(r), kept.ID, "the engine's address changed")
+		h.d.TaskLinks.Forget(kept.ID)
 	}
 	status := http.StatusOK
 	if !existed {
@@ -144,6 +145,7 @@ func (h engineHandlers) removeEngine(w http.ResponseWriter, r *http.Request) {
 	}
 	h.record(audit.Entry{Event: audit.EngineChanged, Actor: actor, Addr: clientAddr(r), Subject: id, Detail: map[string]string{"removed": "true"}})
 	endConnections(h.d, actor, clientAddr(r), id, "the engine was removed")
+	h.d.TaskLinks.Forget(id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

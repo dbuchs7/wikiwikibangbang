@@ -29,8 +29,20 @@ type Sources struct {
 	// (ADR-0150): free and total bytes, the level (0 ok, 1 warning, 2
 	// critical, 3 full) and the bytes of the attachments kept.
 	Disk func() (free, total uint64, level int, attachments int64)
+	// Engines reports the task links of each process engine (ADR-0151):
+	// when its tasks were last read in full, its failed rounds since the
+	// start, and how many people are connected to it.
+	Engines func() []EngineRounds
 	// Build names the running version.
 	Build string
+}
+
+// EngineRounds are the task link rounds of one engine.
+type EngineRounds struct {
+	Engine    string
+	Read      time.Time
+	Failed    int
+	Connected int
 }
 
 // Metrics is the server's metric registry.
@@ -100,6 +112,30 @@ func New(src Sources) *Metrics {
 				func() float64 { _, _, l, _ := src.Disk(); return float64(l) }),
 			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_attachments_bytes", Help: "Bytes of the attachment files kept, album versions included."},
 				func() float64 { _, _, _, a := src.Disk(); return float64(a) }),
+		)
+	}
+	if src.Engines != nil {
+		by := func(value func(EngineRounds) float64) func() map[string]float64 {
+			return func() map[string]float64 {
+				out := map[string]float64{}
+				for _, e := range src.Engines() {
+					out[e.Engine] = value(e)
+				}
+				return out
+			}
+		}
+		reg.MustRegister(
+			&mapGauge{desc: prometheus.NewDesc("wwbb_tasklinks_last_read_timestamp_seconds", "When each engine's tasks were last read in full, as Unix time (ADR-0151); 0 before the first round.", []string{"engine"}, nil),
+				read: by(func(e EngineRounds) float64 {
+					if e.Read.IsZero() {
+						return 0
+					}
+					return float64(e.Read.Unix())
+				})},
+			&mapGauge{desc: prometheus.NewDesc("wwbb_tasklinks_failed_rounds", "Failed task link rounds of each engine since the start.", []string{"engine"}, nil),
+				read: by(func(e EngineRounds) float64 { return float64(e.Failed) })},
+			&mapGauge{desc: prometheus.NewDesc("wwbb_engine_connections", "People whose accounts are connected to each engine.", []string{"engine"}, nil),
+				read: by(func(e EngineRounds) float64 { return float64(e.Connected) })},
 		)
 	}
 	if src.Live != nil {

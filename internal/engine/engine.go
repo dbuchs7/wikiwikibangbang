@@ -883,6 +883,9 @@ type request struct {
 	// work is a person's work on a task: the engine's refusals are
 	// answered with its reason (ADR-0151).
 	work bool
+	// feed is a read of the event feed, whose 410 says the cursor is
+	// older than what it keeps (ErrCursorGone).
+	feed bool
 }
 
 // call makes a request of the engine and hands the answer's type and body
@@ -937,6 +940,8 @@ func (r *Reader) call(ctx context.Context, e site.Engine, rq request, read func(
 		return fmt.Errorf("%w: %s", ErrRejected, engineMessage(res.Body))
 	case rq.public && res.StatusCode == http.StatusTooManyRequests:
 		return ErrBusy
+	case rq.feed && res.StatusCode == http.StatusGone:
+		return ErrCursorGone
 	case rq.work && res.StatusCode == http.StatusForbidden:
 		return fmt.Errorf("%w: %s", ErrNotAllowed, engineMessage(res.Body))
 	case rq.work && (res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusUnprocessableEntity):

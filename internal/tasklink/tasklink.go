@@ -1,7 +1,11 @@
 // Package tasklink keeps the linked tasks of the wiki in step with the open
-// user tasks of process engines (ADR-0151): each round reads an engine's
-// open tasks, links those a rule of the engine matches as items of the
-// wiki, and ends the items whose task is no longer open.
+// user tasks of process engines (ADR-0151): a round links the tasks a rule
+// of the engine matches as items of the wiki and ends the items whose task
+// ended. With an events credential it follows the engine's feed of task
+// facts, which tells a completed task from a cancelled one; it compares
+// the open tasks with the linked items after a start, when the feed no
+// longer holds its cursor, after the rules changed and every CompareEvery.
+// Without one, every round compares.
 //
 // Linked items are made restricted to the synchronisation, so nobody reads
 // one before the engine has said who may. Who sees a task is decided by
@@ -16,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,6 +35,18 @@ import (
 
 // Every is how often an engine whose task links are switched on is read.
 const Every = time.Minute
+
+// CompareEvery is how often an engine whose feed is followed is compared
+// as well: the feed tells what changed, the comparison what is.
+const CompareEvery = 15 * time.Minute
+
+// Stale is how long after an engine was last read its linked tasks are
+// said to be possibly out of date.
+const Stale = 5 * time.Minute
+
+// maxFactPages is how many pages of an engine's feed one round reads; the
+// next round reads on.
+const maxFactPages = 20
 
 // VisibilityEvery is how often the connected people's own task lists are
 // read again, to tell who sees each linked task. A round that linked a
@@ -56,6 +73,10 @@ type Report struct {
 	// list was whole, without which no task is ended.
 	Open     int  `json:"open"`
 	Complete bool `json:"complete"`
+	// Compared says the round compared the open tasks; Facts counts the
+	// task facts it read from the engine's feed.
+	Compared bool `json:"compared"`
+	Facts    int  `json:"facts"`
 	// Linked are the items made, Updated those changed, Ended those whose
 	// task ended, Unmatched the open tasks no rule matched.
 	Linked    int `json:"linked"`
@@ -87,10 +108,14 @@ func (r *Report) problem(format string, args ...any) {
 }
 
 // Lister lists the open tasks of an engine, and those a person sees with
-// the access token of their grant; *engine.Reader is one.
+// the access token of their grant, and follows its feed of task facts;
+// *engine.Reader is one.
 type Lister interface {
 	OpenTasks(ctx context.Context, e site.Engine) ([]engine.Task, bool, error)
 	OpenTasksAs(ctx context.Context, e site.Engine, bearer string) ([]engine.Task, bool, error)
+	OpenTask(ctx context.Context, e site.Engine, key uint64) (engine.Task, error)
+	HasEventsCredential(id string) bool
+	TaskFacts(ctx context.Context, e site.Engine, after string) ([]engine.TaskFact, string, bool, error)
 }
 
 // Grants gives the access token of a connected person's grant at an
@@ -117,6 +142,19 @@ type Runner struct {
 	// they are to be read in the next round.
 	seen map[string]time.Time
 	due  map[string]bool
+	// cursor is how far each engine's feed was followed, saved in the data
+	// directory; ahead says it is still being moved to the feed's end,
+	// passing over what the comparison tells. compared is when an engine
+	// was last compared, recompare that it is to be at the next round.
+	cursor    map[string]string
+	ahead     map[string]bool
+	saved     map[string]string
+	compared  map[string]time.Time
+	recompare map[string]bool
+	// read is when each engine was last read in full, failed how many of
+	// its rounds failed since the start.
+	read   map[string]time.Time
+	failed map[string]int
 }
 
 // New returns a runner for db that lists tasks with tasks.
@@ -124,8 +162,75 @@ func New(db *storage.DB, tasks Lister, log *slog.Logger) *Runner {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Runner{db: db, tasks: tasks, log: log, now: time.Now, nudge: make(chan string, 1), run: map[string]bool{}, report: map[string]Report{},
-		seen: map[string]time.Time{}, due: map[string]bool{}}
+	r := &Runner{db: db, tasks: tasks, log: log, now: time.Now, nudge: make(chan string, 1), run: map[string]bool{}, report: map[string]Report{},
+		seen: map[string]time.Time{}, due: map[string]bool{}, cursor: map[string]string{}, ahead: map[string]bool{}, saved: map[string]string{},
+		compared: map[string]time.Time{}, recompare: map[string]bool{}, read: map[string]time.Time{}, failed: map[string]int{}}
+	cursors, err := db.TaskCursors()
+	if err != nil {
+		log.Warn("task links: the feeds' cursors cannot be read; each feed is followed from its end", "err", err)
+	}
+	for id, c := range cursors {
+		r.cursor[id], r.saved[id] = c, c
+	}
+	return r
+}
+
+// Changed tells that an engine's task links changed: the next round
+// compares its open tasks again. It asks for no round of its own, which an
+// administrator's try right after saving would find running.
+func (r *Runner) Changed(engineID string) {
+	r.mu.Lock()
+	r.recompare[engineID] = true
+	r.mu.Unlock()
+}
+
+// Forget forgets how far an engine's feed was followed, as when the engine
+// is removed or moved to another address, where a cursor of the old one
+// means nothing: the next round follows the feed from its end.
+func (r *Runner) Forget(engineID string) {
+	r.mu.Lock()
+	delete(r.cursor, engineID)
+	delete(r.ahead, engineID)
+	delete(r.compared, engineID)
+	delete(r.read, engineID)
+	r.mu.Unlock()
+	r.saveCursors()
+}
+
+// Freshness is when the engine's tasks were last read in full, and whether
+// that is longer ago than Stale; ok is false before the first round.
+func (r *Runner) Freshness(engineID string) (at time.Time, stale, ok bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	at, ok = r.read[engineID]
+	return at, ok && r.now().Sub(at) > Stale, ok
+}
+
+// EngineStats are an engine's rounds as metrics count them.
+type EngineStats struct {
+	Engine string
+	// Read is when the engine was last read in full, zero before;
+	// Failed counts its failed rounds since the start.
+	Read   time.Time
+	Failed int
+}
+
+// Stats are the rounds of every engine that ran one, by engine.
+func (r *Runner) Stats() []EngineStats {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ids := map[string]bool{}
+	for id := range r.read {
+		ids[id] = true
+	}
+	for id := range r.failed {
+		ids[id] = true
+	}
+	out := make([]EngineStats, 0, len(ids))
+	for _, id := range slices.Sorted(maps.Keys(ids)) {
+		out = append(out, EngineStats{Engine: id, Read: r.read[id], Failed: r.failed[id]})
+	}
+	return out
 }
 
 // WithGrants has the runner tell who sees each linked task from the
@@ -209,6 +314,15 @@ func (r *Runner) Run(ctx context.Context, engineID string, dry bool) (Report, er
 
 	rep := Report{Engine: engineID, At: r.now().UTC(), Dry: dry, Problems: []string{}}
 	err := r.round(ctx, engineID, &rep)
+	if !dry {
+		r.mu.Lock()
+		if err != nil {
+			r.failed[engineID]++
+		} else {
+			r.read[engineID] = r.now()
+		}
+		r.mu.Unlock()
+	}
 	if err != nil {
 		rep.Error = err.Error()
 	} else if !dry && r.grants != nil {
@@ -227,11 +341,191 @@ func (r *Runner) Run(ctx context.Context, engineID string, dry bool) (Report, er
 	return rep, err
 }
 
+// round follows the engine's feed where it can, and compares its open
+// tasks where it must: without an events credential, dry, while the cursor
+// is moved to the feed's end, when the feed no longer holds it, after the
+// rules changed and every CompareEvery. The feed is read first, so a task
+// it tells was cancelled is cancelled before a comparison would close it
+// as completed.
 func (r *Runner) round(ctx context.Context, engineID string, rep *Report) error {
 	e, ok := r.db.Site.Engine(engineID)
 	if !ok {
 		return fmt.Errorf("no engine %q", engineID)
 	}
+	if rep.Dry || !r.tasks.HasEventsCredential(engineID) {
+		return r.compare(ctx, e, rep)
+	}
+	r.mu.Lock()
+	cur, has := r.cursor[engineID]
+	due := r.recompare[engineID] || r.now().Sub(r.compared[engineID]) >= CompareEvery
+	ahead := r.ahead[engineID] || !has
+	r.mu.Unlock()
+	if !ahead {
+		err := r.follow(ctx, e, cur, rep)
+		if errors.Is(err, engine.ErrCursorGone) {
+			rep.problem("the engine's feed no longer holds what followed this server's place in it; the open tasks are compared")
+			cur, ahead = "", true
+		} else if err != nil {
+			return err
+		}
+	}
+	if ahead {
+		// To the feed's end, passing over what the comparison tells.
+		for range maxFactPages {
+			_, next, more, err := r.tasks.TaskFacts(ctx, e, cur)
+			if err != nil {
+				return err
+			}
+			cur = next
+			if !more {
+				ahead = false
+				break
+			}
+		}
+		r.mu.Lock()
+		r.cursor[engineID], r.ahead[engineID] = cur, ahead
+		r.mu.Unlock()
+		due = true
+	}
+	if due {
+		if err := r.compare(ctx, e, rep); err != nil {
+			return err
+		}
+		r.mu.Lock()
+		r.compared[engineID] = r.now()
+		delete(r.recompare, engineID)
+		r.mu.Unlock()
+	}
+	r.saveCursors()
+	return nil
+}
+
+// follow reads the engine's feed after the cursor, a page at a time, and
+// applies its task facts: a task opened is linked as a round would link
+// it, a task taken on or given back has its readers read again, a task
+// completed or cancelled moves its open item to the rule's state for it.
+// A fact about a task already settled changes nothing, so the feed may be
+// read again from an older cursor.
+func (r *Runner) follow(ctx context.Context, e site.Engine, cur string, rep *Report) error {
+	links := r.db.Site.TaskLinks(e.ID)
+	actor := Actor(e.ID)
+	for range maxFactPages {
+		facts, next, more, err := r.tasks.TaskFacts(ctx, e, cur)
+		if err != nil {
+			return err
+		}
+		rep.Facts += len(facts)
+		// A task opened is read whole, with the task list credential, for
+		// what the fact does not tell: whether it is a public form's step,
+		// who holds it now. One that ended meanwhile is left to its fact.
+		opened := map[uint64]engine.Task{}
+		for _, f := range facts {
+			if f.Kind != engine.FactCreated {
+				continue
+			}
+			t, err := r.tasks.OpenTask(ctx, e, f.Key)
+			switch {
+			case errors.Is(err, engine.ErrNotFound):
+			case err != nil:
+				return err
+			default:
+				opened[f.Key] = t
+			}
+		}
+		err = r.db.Write(func(s *item.Store) error {
+			for _, f := range facts {
+				key := strconv.FormatUint(f.Key, 10)
+				found, had := s.FindByOrigin(item.LinkedSystem, e.ID, "task/"+key)
+				switch f.Kind {
+				case engine.FactCreated:
+					t, open := opened[f.Key]
+					if !open || t.Wizard == "public" {
+						continue
+					}
+					rule, ok := match(links.Rules, t)
+					if !ok {
+						if !had {
+							rep.Unmatched++
+						}
+						continue
+					}
+					_, changed, err := s.LinkTask(actor, linked(e, rule, t, rep))
+					switch {
+					case err != nil:
+						rep.problem("task %s (%s): %v", key, t.Name, err)
+					case changed && had:
+						rep.Updated++
+					case changed:
+						rep.Linked++
+					}
+				case engine.FactAssigned, engine.FactUnassigned:
+					if had {
+						r.mu.Lock()
+						r.due[e.ID] = true // who sees it may have changed
+						r.mu.Unlock()
+					}
+				case engine.FactCompleted, engine.FactCancelled:
+					if !had || found.Presence != item.Live || s.Type(found.Type).Workflow.Finished(found.State) {
+						continue
+					}
+					rule, ok := RuleOf(links.Rules, found)
+					if !ok {
+						rep.problem("%s: its task ended, and no rule names its space %s and type %s, so it stays open", found.Key, found.Space, found.Type)
+						continue
+					}
+					state := rule.Completed
+					if f.Kind == engine.FactCancelled {
+						state = rule.Cancelled
+					}
+					if err := s.EndTask(actor, found.ID, state); err != nil {
+						rep.problem("%s: %v", found.Key, err)
+						continue
+					}
+					rep.Ended++
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		cur = next
+		r.mu.Lock()
+		r.cursor[e.ID] = cur
+		r.mu.Unlock()
+		if !more {
+			return nil
+		}
+	}
+	return nil
+}
+
+// saveCursors keeps the feeds' cursors in the data directory when one
+// moved; a round runs at most once a minute per engine, and so does this.
+func (r *Runner) saveCursors() {
+	r.mu.Lock()
+	if maps.Equal(r.cursor, r.saved) {
+		r.mu.Unlock()
+		return
+	}
+	cursors := maps.Clone(r.cursor)
+	r.mu.Unlock()
+	if err := r.db.SetTaskCursors(cursors); err != nil {
+		r.log.Warn("task links: the feeds' cursors were not saved", "err", err)
+		return
+	}
+	r.mu.Lock()
+	r.saved = cursors
+	r.mu.Unlock()
+}
+
+// compare reads the engine's whole list of open tasks and compares it with
+// the linked items: a matching open task without an item is linked, an
+// open item whose task is gone is ended as completed — a task that ended
+// unseen cannot be told completed from cancelled.
+func (r *Runner) compare(ctx context.Context, e site.Engine, rep *Report) error {
+	engineID := e.ID
+	rep.Compared = true
 	links := r.db.Site.TaskLinks(engineID)
 	tasks, complete, err := r.tasks.OpenTasks(ctx, e)
 	if err != nil {

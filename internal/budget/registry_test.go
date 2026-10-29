@@ -56,6 +56,8 @@ var classified = map[string]string{
 	"internal/site.maxEngines":      "the shape of the site's settings (ADR-0129): how many process engines an administrator keeps, like the number of connectors",
 	"internal/tasklink.maxProblems": "the shape of a round's report (ADR-0151): how many problems it names before it counts the rest, held for one engine at a time",
 	"internal/site.maxTaskRules":    "the shape of the site's settings (ADR-0151): how many task link rules an administrator keeps per engine, like the number of engines",
+	"internal/tasklink.maxFactPages": "how many pages of an engine's feed one round reads (ADR-0151), so a long feed is read over several rounds; " +
+		"each page is bounded by EngineResponseBytes and applied before the next is read, not memory a caller of this server can claim",
 	"internal/connector.maxDatasets": "the size of one connector's run (ADR-0075), so a misbehaving source cannot make it endless; " +
 		"not memory a caller of this server can claim",
 	"internal/item.maxColumns":       "the shape of a kanban (ADR-0076), like the length of its name; a definition of the space, not memory a caller claims",

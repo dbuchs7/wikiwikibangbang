@@ -14,9 +14,13 @@ const field = (label, input) => h("label", { class: "field" }, h("span", { text:
 function reportOf(rep) {
   if (!rep) return "";
   const n = (k) => String(rep[k] || 0);
+  const counts = { when: when(rep.at), open: n("open"), linked: n("linked"), updated: n("updated"), ended: n("ended"), unmatched: n("unmatched"), facts: n("facts") };
+  // A round that only followed the feed read no list of open tasks.
+  const key = rep.dry ? "tasklinks.reportDry" : rep.compared === false ? "tasklinks.reportFollow" : "tasklinks.report";
   const lines = [h("p", { class: rep.error ? "error" : "notice", text: rep.error
     ? t("tasklinks.failed", { when: when(rep.at), error: rep.error })
-    : t(rep.dry ? "tasklinks.reportDry" : "tasklinks.report", { when: when(rep.at), open: n("open"), linked: n("linked"), updated: n("updated"), ended: n("ended"), unmatched: n("unmatched") }) })];
+    : t(key, counts) })];
+  if (!rep.dry && rep.compared && rep.facts) lines.push(h("p", { class: "muted", text: t("tasklinks.alsoFollowed", { facts: n("facts") }) }));
   // Who sees each task, from the connected people's own lists.
   if (rep.visible) lines.push(h("p", { class: "muted", id: "task-links-visible", text: t("tasklinks.visible", { people: n("people"), unread: n("unread"), readers: n("readers") }) }));
   const problems = rep.problems || [];
@@ -124,6 +128,8 @@ export function taskLinksCard(engine) {
       h("p", { class: "muted", text: t("tasklinks.note") }),
       h("p", { class: links.credential ? "muted" : "error", id: "task-links-credential",
         text: links.credential ? t("tasklinks.credentialIs", { name: links.credentialVar }) : t("tasklinks.credentialMissing", { name: links.credentialVar }) }),
+      h("p", { class: "muted", id: "task-links-events", text: links.events ? t("tasklinks.eventsIs", { name: links.eventsVar }) : t("tasklinks.eventsMissing", { name: links.eventsVar }) }),
+      links.readAt ? h("p", { class: links.stale ? "notice warning" : "muted", id: "task-links-fresh", text: t(links.stale ? "enginetask.stale" : "enginetask.fresh", { engine: engine.name, when: when(links.readAt) }) }) : "",
       connectInfo(links.connect || {}),
       types.length ? "" : h("p", { class: "error", text: t("tasklinks.noTypes") }),
       h("label", { class: "check" }, enabled, " ", t("tasklinks.enabled")),

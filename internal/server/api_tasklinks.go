@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
@@ -21,6 +22,7 @@ func taskLinkRoutes(d Deps) []Route {
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/task-links", Summary: "An engine's task links: whether they are switched on, their rules, the variable of the credential the open tasks are listed with and whether it is set, and the last round's report (administrators; ADR-0151)", Handler: http.HandlerFunc(h.get)},
 		{Method: http.MethodPut, Pattern: "/api/engines/{id}/task-links", Summary: "Set an engine's task links: whether they are switched on and their rules, each a filter by processes, elements and groups, a space and a type with a workflow, labels, a date field for the due date and the finished states of a completed and a cancelled task (administrators; ADR-0151)", Handler: http.HandlerFunc(h.set)},
+		{Method: http.MethodGet, Pattern: "/api/engines/{id}/tasks-read", Summary: "When the engine's tasks were last read in full, and whether that is so long ago that its linked tasks may be out of date (ADR-0151)", Handler: http.HandlerFunc(h.fresh)},
 		{Method: http.MethodPost, Pattern: "/api/engines/{id}/task-links/run", Summary: "Run a round of an engine's task links now and answer its report; with dry=true, report what it would do and change nothing (administrators; ADR-0151)", Handler: http.HandlerFunc(h.run)},
 	}
 }
@@ -39,6 +41,28 @@ type taskLinksJSON struct {
 	Last          *tasklink.Report `json:"last,omitempty"`
 	// Connect is how people connect their accounts to the engine.
 	Connect connectJSON `json:"connect"`
+	// EventsVar names the variable of the credential the engine's feed is
+	// followed with, Events whether it is set; without it every round
+	// compares, and an ended task is closed as completed.
+	EventsVar string `json:"eventsVar"`
+	Events    bool   `json:"events"`
+	freshJSON
+}
+
+// freshJSON is when an engine's tasks were last read in full, and whether
+// that is longer ago than tasklink.Stale.
+type freshJSON struct {
+	ReadAt *time.Time `json:"readAt,omitempty"`
+	Stale  bool       `json:"stale"`
+}
+
+func freshOf(d Deps, engineID string) freshJSON {
+	at, stale, ok := d.TaskLinks.Freshness(engineID)
+	if !ok {
+		return freshJSON{}
+	}
+	at = at.UTC()
+	return freshJSON{ReadAt: &at, Stale: stale}
 }
 
 // connectJSON is this server's registration at an engine, through which
@@ -70,7 +94,8 @@ func (h taskLinkHandlers) json(e site.Engine) taskLinksJSON {
 	out := taskLinksJSON{TaskLinks: h.d.DB.Site.TaskLinks(e.ID), CredentialVar: engine.TaskListVar(e.ID),
 		Credential: h.d.Engines.HasTaskListCredential(e.ID),
 		Connect: connectJSON{ClientIDVar: engine.ClientIDVar(e.ID), ClientSecretVar: engine.ClientSecretVar(e.ID), Configured: h.d.Connect.Configured(e.ID),
-			Callback: h.d.Connect.Callback(e.ID), Connected: len(h.d.Connect.Connections().Of("", e.ID))}}
+			Callback: h.d.Connect.Callback(e.ID), Connected: len(h.d.Connect.Connections().Of("", e.ID))},
+		EventsVar: engine.EventsVar(e.ID), Events: h.d.Engines.HasEventsCredential(e.ID), freshJSON: freshOf(h.d, e.ID)}
 	if last, ok := h.d.TaskLinks.Last(e.ID); ok {
 		out.Last = &last
 	}
@@ -131,6 +156,8 @@ func (h taskLinkHandlers) set(w http.ResponseWriter, r *http.Request) {
 	}
 	h.record(audit.Entry{Event: audit.TaskLinksChanged, Actor: actor, Addr: clientAddr(r), Subject: e.ID,
 		Detail: map[string]string{"enabled": strconv.FormatBool(l.Enabled), "rules": strconv.Itoa(len(l.Rules))}})
+	// Changed rules may take tasks the feed told of before.
+	h.d.TaskLinks.Changed(e.ID)
 	writeJSON(w, http.StatusOK, h.json(e))
 }
 
@@ -152,6 +179,18 @@ func (h taskLinkHandlers) run(w http.ResponseWriter, r *http.Request) {
 	// A round that could not read the engine is answered with its report,
 	// which says why: the request itself succeeded.
 	writeJSON(w, http.StatusOK, rep)
+}
+
+// fresh answers when the engine's tasks were last read, to anyone signed
+// in: a board or a page of linked tasks says how current they are.
+func (h taskLinkHandlers) fresh(w http.ResponseWriter, r *http.Request) {
+	e, ok := h.d.DB.Site.Engine(r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "no engine "+r.PathValue("id"))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"engine": map[string]string{"id": e.ID, "name": e.Name}, "fresh": freshOf(h.d, e.ID),
+		"staleAfter": int(tasklink.Stale / time.Second)})
 }
 
 // fieldOf is the field of a type by its name.
