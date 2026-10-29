@@ -13,6 +13,7 @@ import { albumBrowser, retentionCard } from "./album.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 import { applyTheme, setTheme, isDark } from "./theme.js";
 import { filtered, serverFilter, filterParams, norm } from "./filter.js";
+import { taskLinksCard } from "./tasklinks.js";
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -5498,7 +5499,9 @@ function engineEditor(e, kinds, taken, reopen) {
       const kept = await put(path(id), { name: d.get("name").trim(), kind: d.get("kind"), baseURL: d.get("baseURL").trim(), operations: d.get("operations") === "on" });
       reopen(kept.id);
     }),
-    checkStatus);
+    checkStatus,
+    // Its user tasks become linked tasks by the rules set here (ADR-0151).
+    e.isNew ? "" : taskLinksCard(e));
 }
 
 // connectorsCard lists the connectors that keep catalog spaces in step

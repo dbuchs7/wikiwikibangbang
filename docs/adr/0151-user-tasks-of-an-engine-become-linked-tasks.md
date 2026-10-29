@@ -143,7 +143,11 @@ Step 1 (pull request after #192): the model, the synchronisation by comparing, a
 - `internal/tasklink`: a round per engine every minute while its links are switched on, and on request, dry or not; the last report is kept in memory. Steps of public wizards are never linked.
 - `internal/server`: the administrators' routes above; settings and rounds on request are audited (`engine.tasklinks.change`, `engine.tasklinks.run`). The item's JSON names `linked` and `linkedFields`.
 
-Not built yet: the administration's page, connecting a person, the visibility rounds — until they are, linked tasks are read by administrators and the target space's administrators only —, the task dialog and completing through the engine, following the facts, the task list's query and how current a linked task is.
+Step 2: the administration's page.
+
+- `internal/web`: the engine's page under Administration shows its task links (`assets/tasklinks.js`): switched on or off, the rules — a rule's type is one with finished states, its due date field one of that type's date fields, its completed and cancelled states among those finished states —, whether the credential's variable is set, a try that changes nothing, a round now, and the last round's report with its problems. What it offers and how it reads a rule is in `assets/taskparts.js`, tested without a browser.
+
+Not built yet: connecting a person, the visibility rounds — until they are, linked tasks are read by administrators and the target space's administrators only —, the task dialog and completing through the engine, following the facts, the task list's query and how current a linked task is.
 
 ### Consequences
 
