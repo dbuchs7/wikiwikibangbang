@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
+	"github.com/dbuchs7/wikiwikibangbang/internal/credential"
 	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
@@ -34,8 +35,8 @@ func engineRoutes(d Deps) []Route {
 	}
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/engines", Summary: "The process engines whose processes pages show: ID, name and whether their operations may be shown; administrators also see the kind, the address and whether the credential is set (ADR-0129)", Handler: http.HandlerFunc(h.engines)},
-		{Method: http.MethodPut, Pattern: "/api/engines/{id}", Summary: "Add or change a process engine: name, kind, address and whether its operations may be shown; its credential is the environment variable WWBB_ENGINE_<ID>_TOKEN (administrators)", Handler: http.HandlerFunc(h.setEngine)},
-		{Method: http.MethodDelete, Pattern: "/api/engines/{id}", Summary: "Remove a process engine; the blocks that show its processes stay (administrators)", Handler: http.HandlerFunc(h.removeEngine)},
+		{Method: http.MethodPut, Pattern: "/api/engines/{id}", Summary: "Add or change a process engine: name, kind, address and whether its operations may be shown; its credential WWBB_ENGINE_<ID>_TOKEN is set in the environment, as that variable or the file WWBB_ENGINE_<ID>_TOKEN_FILE names, or stored through /api/credentials/{name} (administrators, ADR-0151)", Handler: http.HandlerFunc(h.setEngine)},
+		{Method: http.MethodDelete, Pattern: "/api/engines/{id}", Summary: "Remove a process engine and its stored credential; the blocks that show its processes stay (administrators)", Handler: http.HandlerFunc(h.removeEngine)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes", Summary: "The newest version of each process the engine lets its credential read, read from the engine now", Handler: http.HandlerFunc(h.processes)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes/{process}", Summary: "The newest version of a process with its BPMN model, read from the engine now", Handler: http.HandlerFunc(h.process)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes/{process}/operations", Summary: "Where the instances of a process's newest version are: counts per element, when the engine's operations may be shown", Handler: http.HandlerFunc(h.operations)},
@@ -66,16 +67,18 @@ type engineJSON struct {
 	Kind       string `json:"kind,omitempty"`
 	BaseURL    string `json:"baseURL,omitempty"`
 	// CredentialVar names the variable of the credential, Credential says
-	// whether it is set.
-	CredentialVar string `json:"credentialVar,omitempty"`
-	Credential    *bool  `json:"credential,omitempty"`
+	// whether it is set, CredentialState where it comes from (ADR-0151).
+	CredentialVar   string            `json:"credentialVar,omitempty"`
+	Credential      *bool             `json:"credential,omitempty"`
+	CredentialState *credential.State `json:"credentialState,omitempty"`
 }
 
 func (h engineHandlers) engineJSON(e site.Engine, admin bool) engineJSON {
 	out := engineJSON{ID: e.ID, Name: e.Name, Operations: e.Operations}
 	if admin {
-		set := h.d.Engines.HasCredential(e.ID)
-		out.Kind, out.BaseURL, out.CredentialVar, out.Credential = e.Kind, e.BaseURL, engine.TokenVar(e.ID), &set
+		state := h.d.Engines.Credential(e.ID)
+		set := state.Set()
+		out.Kind, out.BaseURL, out.CredentialVar, out.Credential, out.CredentialState = e.Kind, e.BaseURL, state.Name, &set, &state
 	}
 	return out
 }
@@ -139,6 +142,7 @@ func (h engineHandlers) removeEngine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.record(audit.Entry{Event: audit.EngineChanged, Actor: actor, Addr: clientAddr(r), Subject: id, Detail: map[string]string{"removed": "true"}})
+	h.dropCredentials(r, actor, engine.TokenVar(id))
 	w.WriteHeader(http.StatusNoContent)
 }
 

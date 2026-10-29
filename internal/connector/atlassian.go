@@ -33,7 +33,7 @@ var ErrNoCredential = errors.New("connector: the credential is not set")
 func (atlassianReader) Read(ctx context.Context, c site.Connector, env Env) (reading, error) {
 	var rd reading
 	if env.Email == "" || env.Token == "" {
-		return rd, fmt.Errorf("%w: set %s and %s in the server's environment to an account's e-mail address and API token",
+		return rd, fmt.Errorf("%w: set %s and %s to an account's e-mail address and API token, in the server's environment, as files or on the administration page",
 			ErrNoCredential, EmailVar(c.ID), TokenVar(c.ID))
 	}
 	a := c.Atlassian

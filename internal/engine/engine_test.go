@@ -382,10 +382,13 @@ func TestAnAnswerBeyondTheBudgetIsRefused(t *testing.T) {
 	budget.Set(b)
 	t.Cleanup(func() { budget.Set(budget.Default()) })
 	r := NewReader(func(k string) string {
-		if k == AllowPrivateVar {
+		switch k {
+		case AllowPrivateVar:
 			return "on" // the fake engine is on the loopback address
+		case TokenVar("a"):
+			return "secret"
 		}
-		return "secret"
+		return ""
 	}, nil)
 	_, err := r.Processes(context.Background(), site.Engine{ID: "a", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"})
 	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), "larger than 100 bytes") {

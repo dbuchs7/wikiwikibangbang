@@ -56,7 +56,11 @@ var ErrNoDescription = errors.New("connector: not an OpenAPI description")
 // sending the credential of the connector id as a bearer token if one
 // is set; the request is guarded as every connector's (ADR-0127).
 func (r *Runner) DescribeOpenAPI(ctx context.Context, id, addr string) (Description, error) {
-	data, err := fetch(ctx, r.env(id), addr, "application/json, application/yaml;q=0.9, */*;q=0.5", maxSpec)
+	env, err := r.env(id)
+	if err != nil {
+		return Description{}, err
+	}
+	data, err := fetch(ctx, env, addr, "application/json, application/yaml;q=0.9, */*;q=0.5", maxSpec)
 	if err != nil {
 		return Description{}, err
 	}

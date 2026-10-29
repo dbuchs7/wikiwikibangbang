@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
+	"github.com/dbuchs7/wikiwikibangbang/internal/credential"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
 )
@@ -74,7 +75,7 @@ type state struct {
 const sinceOverlap = time.Hour
 
 // New returns a runner for db; credentials come from the process
-// environment.
+// environment, a file it names or db's stored credentials (ADR-0151).
 func New(db *storage.DB, log *slog.Logger) *Runner {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -90,14 +91,15 @@ func New(db *storage.DB, log *slog.Logger) *Runner {
 	return r
 }
 
-// TokenVar is the environment variable that holds a connector's
-// credential, e.g. WWBB_CONNECTOR_OPENDATA_SWISS_TOKEN. Credentials are
-// never kept in the settings (ADR-0077).
+// TokenVar names a connector's credential, e.g.
+// WWBB_CONNECTOR_OPENDATA_SWISS_TOKEN: the variable that sets it, and the
+// name it is stored by. Credentials are never kept in the settings
+// (ADR-0077, ADR-0151).
 func TokenVar(id string) string { return envVar(id, "TOKEN") }
 
-// EmailVar is the environment variable that holds the e-mail address of
-// the account a connector of the kind atlassian signs in with, which goes
-// with its API token (ADR-0128).
+// EmailVar names the e-mail address of the account a connector of the
+// kind atlassian signs in with, which goes with its API token (ADR-0128),
+// as TokenVar names the token.
 func EmailVar(id string) string { return envVar(id, "EMAIL") }
 
 func envVar(id, what string) string {
@@ -205,7 +207,10 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 	res := Result{Connector: c.ID, DryRun: dry, Problems: []string{}, Examples: []Change{}}
 	var rd reading
 	rdr, err := reader(c.Kind)
-	env := r.env(c.ID)
+	env, cerr := r.env(c.ID)
+	if err == nil {
+		err = cerr
+	}
 	settings := fingerprint(c)
 	r.mu.Lock()
 	env.Seen, env.Force = r.of(c.ID).seen, actor != ""
@@ -268,9 +273,26 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 	return res, err
 }
 
-// env is what a connector's reader is given (ADR-0127).
-func (r *Runner) env(id string) Env {
-	return Env{Token: r.getenv(TokenVar(id)), Email: r.getenv(EmailVar(id)), HTTP: r.httpClient(), CKAN: r.client}
+// env is what a connector's reader is given (ADR-0127), with its
+// credentials as they are now (ADR-0151).
+func (r *Runner) env(id string) (Env, error) {
+	creds := r.Credentials()
+	token, _, terr := creds.Lookup(TokenVar(id))
+	email, _, eerr := creds.Lookup(EmailVar(id))
+	if err := errors.Join(terr, eerr); err != nil {
+		return Env{}, fmt.Errorf("%w: %w", ErrNoCredential, err)
+	}
+	return Env{Token: token, Email: email, HTTP: r.httpClient(), CKAN: r.client}, nil
+}
+
+// Credentials resolves the connectors' credentials: a variable, the file
+// it names, or the value stored on the administration page (ADR-0151).
+func (r *Runner) Credentials() *credential.Resolver {
+	var store credential.Store
+	if r.db != nil {
+		store = r.db
+	}
+	return credential.New(r.getenv, store)
 }
 
 // fingerprint is what a run of a connector reads by: its space, type,
@@ -303,7 +325,11 @@ func (r *Runner) Forget(id string) {
 // the organizations if any are named, so an administrator can choose; id
 // names the connector whose credential is sent (ADR-0075).
 func (r *Runner) SourceFormats(ctx context.Context, id, base string, orgs []string) ([]FormatCount, error) {
-	client := r.client(base, r.getenv(TokenVar(id)))
+	token, _, err := r.Credentials().Lookup(TokenVar(id))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrNoCredential, err)
+	}
+	client := r.client(base, token)
 	if unknown, err := client.UnknownOrganizations(ctx, orgs); err == nil && len(unknown) > 0 {
 		return nil, fmt.Errorf("%w: the source knows no organization %s; name publishers as the source's addresses do, e.g. bundesamt-fur-statistik-bfs, or leave the list empty for all",
 			ErrUnknownOrganization, strings.Join(unknown, ", "))
@@ -319,10 +345,13 @@ type Status struct {
 	Running bool      `json:"running"`
 	Next    time.Time `json:"next,omitzero"`
 	History []Result  `json:"history"`
-	// Credential tells whether the connector's credential is set in the
-	// environment, and names the variable; never its value.
+	// Credential tells whether the connector's credential is set, and
+	// names it; never its value.
 	Credential    bool   `json:"credential"`
 	CredentialVar string `json:"credentialVar"`
+	// Credentials say where each credential comes from: the token, and
+	// the e-mail address for a connector of the kind atlassian (ADR-0151).
+	Credentials []credential.State `json:"credentials"`
 	// LastFull is when the last full run began, since the server started;
 	// a run of a source that reads what changed is full after it
 	// (ADR-0140).
@@ -336,9 +365,13 @@ type Status struct {
 // Status reports a connector's last runs and when it runs next.
 func (r *Runner) Status(id string) Status {
 	c, _ := r.db.Site.Connector(id)
-	s := Status{CredentialVar: TokenVar(id), Credential: r.getenv(TokenVar(id)) != ""}
+	creds := r.Credentials()
+	token := creds.State(TokenVar(id))
+	s := Status{CredentialVar: token.Name, Credential: token.Set(), Credentials: []credential.State{token}}
 	if c.Kind == site.KindAtlassian {
-		s.EmailVar, s.Email = EmailVar(id), r.getenv(EmailVar(id)) != ""
+		email := creds.State(EmailVar(id))
+		s.EmailVar, s.Email = email.Name, email.Set()
+		s.Credentials = append(s.Credentials, email)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

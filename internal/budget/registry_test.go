@@ -68,11 +68,14 @@ var classified = map[string]string{
 	"internal/item.maxRetentionKeep": "a retention policy (ADR-0104): how many versions of a picture a rule may keep, not something the server holds in memory",
 	"internal/item.maxRetentionDays": "a retention policy (ADR-0104): how many days a rule may keep versions of a picture",
 	"internal/notes.maxNoteText":     "the shape of a personal note (ADR-0107): how long its text may be, like the length of a comment",
-	"internal/notes.maxNoteQuote":    "the shape of a personal note (ADR-0107): how long the passage it names may be",
-	"internal/notes.maxNotesItem":    "the shape of a person's notes on one item (ADR-0107), like the labels of a picture; a request is bounded by RequestBody",
-	"internal/auth.MaxFailures":      "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
-	"internal/auth.MaxTokenLifetime": "a security policy (ADR-0027): how long an API token may live",
-	"internal/auth.MaxReasonLength":  "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",
+	"internal/credential.maxBytes": "the shape of a credential (ADR-0151): a token or an e-mail address, like the length of a url field; " +
+		"a handful of them per engine and connector, not memory a caller claims",
+	"internal/credential/credential.go:maxBytes + 1": "the same bound, where the file the operator names is read (ADR-0151)",
+	"internal/notes.maxNoteQuote":                    "the shape of a personal note (ADR-0107): how long the passage it names may be",
+	"internal/notes.maxNotesItem":                    "the shape of a person's notes on one item (ADR-0107), like the labels of a picture; a request is bounded by RequestBody",
+	"internal/auth.MaxFailures":                      "a security policy (ADR-0013): failed logins before the throttle, not a memory setting",
+	"internal/auth.MaxTokenLifetime":                 "a security policy (ADR-0027): how long an API token may live",
+	"internal/auth.MaxReasonLength":                  "the shape of an account request (ADR-0061), like the length of a username; the waiting requests are bounded by AccountRequests",
 	"internal/auth.maxFavourites": "the shape of one's preferences (ADR-0145), like the length of a username: favourites are space keys, " +
 		"which only an administrator creates, so the list cannot outgrow the spaces",
 	"internal/wal.MaxRecord": "part of the event log format: a server must read every record a server wrote, " +

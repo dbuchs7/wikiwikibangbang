@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
 	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/wikiwikibangbang/internal/credential"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
@@ -767,5 +769,66 @@ func TestUnknownPublishersAreReported(t *testing.T) {
 	defer failing.Close()
 	if _, err := NewClient(failing.URL, "").UnknownOrganizations(ctx, []string{"x"}); err == nil {
 		t.Error("a source that refuses the list")
+	}
+}
+
+// A connector sends the credential that is set now: a variable, the file
+// it names or the value stored on the administration page, the
+// environment first (ADR-0151).
+func TestTheCredentialIsReadAtEachRun(t *testing.T) {
+	f := setup(t)
+	id := f.cfg.ID
+	const name = "WWBB_CONNECTOR_OPENDATA_SWISS_TOKEN"
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		fmt.Fprint(w, `{"success":true,"result":{"count":0,"results":[],"facets":{"res_format":{}}}}`)
+	}))
+	defer srv.Close()
+	cfg := f.cfg
+	cfg.CKAN.BaseURL = srv.URL
+	if _, err := f.db.Site.SetConnector("admin", cfg); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{}
+	f.r.getenv = allowPrivate(func(k string) string { return env[k] })
+	run := func() error {
+		auth = ""
+		_, err := f.r.Run(context.Background(), id, true, "")
+		return err
+	}
+
+	if err := f.db.SetCredential(name, "stored-token", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(); err != nil || auth != "stored-token" {
+		t.Fatalf("the stored credential: sent %q, %v", auth, err)
+	}
+	if st := f.r.Status(id); !st.Credential || len(st.Credentials) != 1 || st.Credentials[0].Source != credential.Stored {
+		t.Errorf("status %+v", st)
+	}
+
+	path := filepath.Join(t.TempDir(), "token")
+	if err := os.WriteFile(path, []byte("file-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env[name+"_FILE"] = path
+	if err := run(); err != nil || auth != "file-token" {
+		t.Fatalf("the file before the stored credential: sent %q, %v", auth, err)
+	}
+
+	env[name] = "variable-token"
+	err := run()
+	if !errors.Is(err, ErrNoCredential) || auth != "" {
+		t.Fatalf("both the variable and the file: sent %q, %v; want the run refused", auth, err)
+	}
+	if st := f.r.Status(id); st.Credential || st.Credentials[0].Error == "" {
+		t.Errorf("status of a credential set twice %+v", st)
+	}
+	if _, err := f.r.SourceFormats(context.Background(), id, srv.URL, nil); !errors.Is(err, ErrNoCredential) {
+		t.Errorf("formats with an unusable credential: %v", err)
+	}
+	if _, err := f.r.DescribeOpenAPI(context.Background(), id, srv.URL); !errors.Is(err, ErrNoCredential) {
+		t.Errorf("an API description with an unusable credential: %v", err)
 	}
 }

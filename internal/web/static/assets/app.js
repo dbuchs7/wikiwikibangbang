@@ -5418,9 +5418,9 @@ function infoButton(help) {
 }
 
 // enginesCard lists the process engines whose processes pages show in
-// their newest version, and sets one up (ADR-0129). The credential is an
-// environment variable; the card says which one and whether it is set,
-// and checks the engine by listing its processes.
+// their newest version, and sets one up (ADR-0129). The credential is set
+// in the server's environment or stored here (ADR-0151); the card says
+// where it comes from, and checks the engine by listing its processes.
 function enginesCard() {
   const card = h("div", { id: "engines" }, h("p", { class: "muted", text: t("autobackup.loading") }));
   let open = null;
@@ -5468,10 +5468,7 @@ function engineEditor(e, kinds, taken, reopen) {
       h("label", { class: "check" }, h("input", { type: "checkbox", name: "operations", checked: e.operations }), " ", t("engine.allowOperations")),
       h("p", { class: "muted", text: t("engine.operationsHelp") }),
       h("p", { class: "muted", text: t("engine.publicOnly") }),
-      e.isNew ? h("p", { class: "muted", text: t("engine.credentialHelpNew") })
-        : h("p", { class: e.credential ? "muted" : "error", id: "engine-credential",
-          text: e.credential ? t("engine.credentialIs", { name: e.credentialVar }) : t("engine.credentialMissing", { name: e.credentialVar }) }),
-      e.isNew ? "" : envHelp("engine-env-help"),
+      e.isNew ? h("p", { class: "muted", text: t("engine.credentialHelpNew") }) : "",
       h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", text: t("engine.save") }),
         e.isNew ? h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => reopen(null) })
           : h("button", { type: "button", class: "secondary", id: "engine-check-now", text: t("engine.check"), onclick: async () => {
@@ -5498,7 +5495,50 @@ function engineEditor(e, kinds, taken, reopen) {
       const kept = await put(path(id), { name: d.get("name").trim(), kind: d.get("kind"), baseURL: d.get("baseURL").trim(), operations: d.get("operations") === "on" });
       reopen(kept.id);
     }),
+    e.isNew ? "" : credentialBlock(e.credentialState, { what: t("credential.token"), label: t("credential.tokenField"), required: true,
+      id: "engine-credential", onChange: () => reopen(e.id) }),
+    e.isNew ? "" : envHelp("engine-env-help"),
     checkStatus);
+}
+
+// credentialBlock shows where a credential of an engine or a connector
+// comes from: the server's environment, as a variable or the file one
+// names, or a value stored here (ADR-0151). Unless the environment sets
+// it, an administrator stores, replaces or removes it here; it takes
+// effect at its next use, without a restart. The value is sent, never
+// shown again.
+function credentialBlock(state, { what, label, required, type = "password", id, onChange }) {
+  const s = state;
+  const fromEnv = s.source === "variable" || s.source === "file" || Boolean(s.error);
+  const line = (cls, text) => h("p", { class: cls, id: id || null, text });
+  const remove = s.stored ? h("button", { type: "button", class: "link danger credential-remove", text: t("credential.remove"), onclick: async () => {
+    if (!confirm(t("credential.removeConfirm", { name: s.name }))) return;
+    try {
+      await del("/api/credentials/" + encodeURIComponent(s.name));
+      onChange();
+    } catch (err) {
+      block.append(errorBox(err));
+    }
+  } }) : "";
+  let status;
+  if (s.error) status = line("error", t("credential.error", { error: s.error }));
+  else if (s.source === "variable") status = line("muted", t("credential.variable", { what, name: s.name }));
+  else if (s.source === "file") status = line("muted", t("credential.file", { what, fileVar: s.fileVar }));
+  else if (s.source === "stored") status = line("muted", t("credential.stored", { what, by: s.stored.by, when: when(s.stored.at) }));
+  else status = line(required ? "error" : "muted", t(required ? "credential.missing" : "credential.optional", { what, name: s.name, fileVar: s.fileVar }));
+  const input = h("input", { name: "value", type, autocomplete: type === "password" ? "new-password" : "off", required: true, maxlength: 8192, spellcheck: "false" });
+  const block = h("div", { class: "credential", "data-credential": s.name }, status,
+    fromEnv && s.stored ? h("p", { class: "muted credential-overridden" }, t("credential.overridden"), " ", remove) : "",
+    fromEnv ? "" : form({ class: "credential-form" }, [
+      field(label, input),
+      h("div", { class: "actions-row" },
+        h("button", { type: "submit", class: "secondary credential-store", text: s.source === "stored" ? t("credential.replace") : t("credential.storeIt") }), remove),
+    ], async () => {
+      await put("/api/credentials/" + encodeURIComponent(s.name), { value: input.value });
+      input.value = "";
+      onChange();
+    }));
+  return block;
 }
 
 // connectorsCard lists the connectors that keep catalog spaces in step
@@ -5816,9 +5856,6 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       j || a || g ? "" : h("details", {}, h("summary", { text: t("catalog.source") }),
         field(t("catalog.baseURL"), h("input", { name: "baseURL", type: "url", required: true, value: k.baseURL })),
         field(t("catalog.portalURL"), h("input", { name: "portalURL", type: "url", required: true, value: k.portalURL }))),
-      c.isNew ? "" : h("p", { class: "muted", id: "connector-credential",
-        text: a ? t(st.credential && st.email ? "atlassian.credentialSet" : "atlassian.credentialUnset", { email: st.emailVar, token: st.credentialVar })
-          : st.credential ? t("connector.credentialSet", { name: st.credentialVar }) : t("connector.credentialUnset", { name: st.credentialVar }) }),
       h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", text: t("autobackup.save") }),
         c.isNew ? h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => reopen(null) })
           : h("button", { type: "button", class: "link danger", id: "connector-delete", text: t("connector.remove"), onclick: async () => {
@@ -5854,6 +5891,10 @@ function connectorEditor(c, data, spaces, users, list, reopen) {
       const kept = c.isNew ? await post("/api/connectors", body) : await put(path, body);
       reopen(kept.id);
     }),
+    c.isNew ? "" : h("div", { id: "connector-credential" }, h("h4", { text: a ? t("atlassian.credentials") : t("connector.credential") }),
+      (st.credentials || []).map((cs) => cs.name === st.emailVar
+        ? credentialBlock(cs, { what: t("credential.email"), label: t("credential.emailField"), required: true, type: "email", onChange: () => reopen(c.id) })
+        : credentialBlock(cs, { what: t("credential.token"), label: t("credential.tokenField"), required: a, onChange: () => reopen(c.id) }))),
     c.isNew ? "" : h("p", { id: "connector-next" }, st.running ? t("catalog.running") : st.next ? t("catalog.next", { when: when(st.next) }) : t("catalog.off")),
     c.isNew ? "" : h("div", { class: "actions-row" }, run(true, "connector-dry-run", t("catalog.dryRunNow")), run(false, "connector-run-now", t("catalog.runNow")),
       j?.since ? run(false, "connector-run-full", t("since.runFull"), true) : "",

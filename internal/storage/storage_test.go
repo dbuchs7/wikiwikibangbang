@@ -177,7 +177,7 @@ func TestEveryFileIsBackedUpOrExcluded(t *testing.T) {
 	_, err = db.EnsureAdmin("admin", "a long enough password")
 	steps = append(steps, err)
 	_, err = db.ExpireAudit(time.Now().AddDate(20, 0, 0))
-	steps = append(steps, err)
+	steps = append(steps, err, db.SetCredential("WWBB_ENGINE_ATLAS_TOKEN", "t", "admin"))
 	for _, err := range steps {
 		if err != nil {
 			t.Fatal(err)
@@ -198,6 +198,9 @@ func TestEveryFileIsBackedUpOrExcluded(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, f := range files {
+		if f.Name == CredentialsFile {
+			t.Error("a snapshot carries the stored credentials (ADR-0151)")
+		}
 		f.R.Close()
 	}
 	db.Close()

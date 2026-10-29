@@ -104,6 +104,11 @@ const (
 	// EngineChanged records a process engine added, changed or removed
 	// (ADR-0129).
 	EngineChanged = "engine.change"
+	// CredentialSet and CredentialRemoved record a credential of an engine
+	// or a connector stored on the administration page or removed; the
+	// subject names it, nothing records its value (ADR-0151).
+	CredentialSet     = "credential.set"
+	CredentialRemoved = "credential.remove"
 	// EngineStarted records a process started through a public start link
 	// of an engine for a signed-in person (ADR-0148), which the engine
 	// records without an initiator.

@@ -8,7 +8,8 @@
 // public start links that start a process from its start form, through
 // the engine's public routes and without the credential (ADR-0148). It
 // speaks the API of atlas (github.com/pblumer/atlas).
-// The credential comes from the environment and is sent to the engine only.
+// The credential comes from the environment, a file it names or the
+// administration page (ADR-0151), and is sent to the engine only.
 package engine
 
 import (
@@ -32,14 +33,16 @@ import (
 
 	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
 	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
+	"github.com/dbuchs7/wikiwikibangbang/internal/credential"
 	"github.com/dbuchs7/wikiwikibangbang/internal/site"
 )
 
 // Errors of a read. Use errors.Is; the message says more, never the
 // credential.
 var (
-	// ErrNoCredential: the engine's variable is not set.
-	ErrNoCredential = errors.New("the engine's credential is not set")
+	// ErrNoCredential: nothing sets the engine's credential, or what sets
+	// it cannot be used (ADR-0151).
+	ErrNoCredential = errors.New("the engine has no credential to send")
 	// ErrRefused: the engine refused the credential.
 	ErrRefused = errors.New("the engine refused the credential")
 	// ErrNotFound: the engine has no such process, form, decision,
@@ -63,9 +66,10 @@ const Timeout = 15 * time.Second
 // public internet.
 const AllowPrivateVar = "WWBB_ENGINE_ALLOW_PRIVATE"
 
-// TokenVar names the environment variable that holds an engine's
-// credential, e.g. WWBB_ENGINE_ATLAS_PROD_TOKEN: the ID in capitals, other
-// characters as _, named as a connector's (ADR-0077).
+// TokenVar names an engine's credential, e.g. WWBB_ENGINE_ATLAS_PROD_TOKEN:
+// the ID in capitals, other characters as _, named as a connector's
+// (ADR-0077). It is the variable that sets it, and the name it is stored
+// by (ADR-0151).
 func TokenVar(id string) string {
 	return "WWBB_ENGINE_" + strings.Map(func(r rune) rune {
 		switch {
@@ -82,12 +86,16 @@ func TokenVar(id string) string {
 type Reader struct {
 	getenv func(string) string
 	http   *http.Client
+	// store holds the credentials stored on the administration page, if
+	// any (ADR-0151).
+	store credential.Store
 }
 
 // NewReader returns a reader that takes credentials from getenv
-// (os.Getenv when nil) and calls the engines with client. Without one, it
-// makes one with the Timeout, through the environment's proxy, kept to
-// public addresses unless AllowPrivateVar allows others.
+// (os.Getenv when nil), a variable or the file it names, and calls the
+// engines with client. Without one, it makes one with the Timeout, through
+// the environment's proxy, kept to public addresses unless AllowPrivateVar
+// allows others.
 func NewReader(getenv func(string) string, client *http.Client) *Reader {
 	if getenv == nil {
 		getenv = os.Getenv
@@ -113,8 +121,23 @@ func NewReader(getenv func(string) string, client *http.Client) *Reader {
 	return &Reader{getenv: getenv, http: &c}
 }
 
-// HasCredential reports whether the engine's variable is set.
-func (r *Reader) HasCredential(id string) bool { return r.getenv(TokenVar(id)) != "" }
+// WithStore returns a reader that also sends the credentials stored on
+// the administration page, after those the environment sets (ADR-0151).
+func (r *Reader) WithStore(s credential.Store) *Reader {
+	c := *r
+	c.store = s
+	return &c
+}
+
+// Credentials resolves credentials as the reader does.
+func (r *Reader) Credentials() *credential.Resolver { return credential.New(r.getenv, r.store) }
+
+// Credential reports where an engine's credential comes from; never its
+// value.
+func (r *Reader) Credential(id string) credential.State { return r.Credentials().State(TokenVar(id)) }
+
+// HasCredential reports whether the engine has a credential to send.
+func (r *Reader) HasCredential(id string) bool { return r.Credential(id).Set() }
 
 // Process is one version of a process.
 type Process struct {
@@ -869,9 +892,16 @@ func (r *Reader) call(ctx context.Context, e site.Engine, rq request, read func(
 	if e.Kind != site.EngineAtlas {
 		return fmt.Errorf("%w: kind %q is not read", ErrUnavailable, e.Kind)
 	}
-	token := r.getenv(TokenVar(e.ID))
-	if token == "" && !rq.public {
-		return fmt.Errorf("%w: set %s", ErrNoCredential, TokenVar(e.ID))
+	var token string
+	if !rq.public {
+		name := TokenVar(e.ID)
+		var err error
+		if token, _, err = r.Credentials().Lookup(name); err != nil {
+			return fmt.Errorf("%w: %w", ErrNoCredential, err)
+		}
+		if token == "" {
+			return fmt.Errorf("%w: set %s or %s, or store it on the administration page", ErrNoCredential, name, credential.FileVar(name))
+		}
 	}
 	u, err := url.Parse(e.BaseURL + rq.path)
 	if err != nil {

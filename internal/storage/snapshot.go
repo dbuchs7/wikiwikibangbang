@@ -37,6 +37,8 @@ var NotBackedUp = map[string]string{
 	BackupStateFile: "which automatic backup the next incremental one builds on (ADR-0073); " +
 		"a restored instance starts with a full backup",
 	BackupStateFile + ".tmp": "the state of automatic backups while it is replaced",
+	CredentialsFile: "the credentials of other systems that administrators stored (ADR-0151); like the backup's own " +
+		"passphrase (ADR-0073), they are not part of a backup, and are stored again after a restore",
 }
 
 // SnapshotFile is one file of a consistent snapshot: Size bytes of R.

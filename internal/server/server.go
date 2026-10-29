@@ -166,6 +166,11 @@ func Routes(d Deps) []Route {
 	if d.Engines == nil {
 		d.Engines = engine.NewReader(nil, nil)
 	}
+	if d.DB != nil {
+		// Credentials stored on the administration page count after
+		// those the environment sets (ADR-0151).
+		d.Engines = d.Engines.WithStore(d.DB)
+	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},
@@ -191,6 +196,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, autoBackupRoutes(d)...)
 	routes = append(routes, connectorRoutes(d)...)
 	routes = append(routes, engineRoutes(d)...)
+	routes = append(routes, credentialRoutes(d)...)
 	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
 		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}

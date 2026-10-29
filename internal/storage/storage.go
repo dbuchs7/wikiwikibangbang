@@ -73,6 +73,9 @@ type DB struct {
 	// space is how close the data directory's file system is to full, as
 	// the server last measured it (ADR-0150).
 	space atomic.Int32
+
+	// creds are the credentials administrators stored (ADR-0151).
+	creds credentials
 }
 
 // Read runs fn with the item store while no command runs; reads run side
@@ -253,6 +256,9 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 		}
 		return out
 	})
+	if err := db.loadCredentials(); err != nil {
+		return nil, Recovery{}, err
+	}
 	rec := recovery(sc, log)
 	if rec.Shredded, err = db.heal(); err != nil {
 		return nil, Recovery{}, fmt.Errorf("storage: destroying leftover keys: %w", err)
@@ -265,11 +271,15 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 
 // heal destroys the keys that should no longer exist: those of purged items
 // and erased passages (a crash between the purge or erasure and the key's
-// destruction, ADR-0089) and those of items the log does not know (a crash
-// between storing a key and its batch).
+// destruction, ADR-0089), those of items the log does not know (a crash
+// between storing a key and its batch) and those of the stored
+// credentials that their file does not use (ADR-0151).
 func (db *DB) heal() (int, error) {
-	var ids []item.ID
+	ids := db.strayCredentialKeys()
 	for id := range db.keys.keys {
+		if isCredentialKey(id) {
+			continue
+		}
 		// A protected passage's key belongs to its item (ADR-0088).
 		// A protected passage's key, {item}~{passage}, belongs to its item.
 		owner, passage, ok := strings.Cut(string(id), "~")

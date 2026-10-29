@@ -2930,6 +2930,32 @@ function gitSource() {
       check(engine.starts.length === 1, "only the one form was sent");
     }
 
+    step("credentials: an engine's token is stored on the page, takes effect at once and is never shown again (ADR-0151)");
+    await page.goto(base + "/#/admin");
+    await page.click("#engine-new");
+    await page.fill("#engine-settings [name=id]", "vault-test");
+    await page.fill("#engine-settings [name=name]", "Vault test");
+    await page.fill("#engine-settings [name=baseURL]", `http://127.0.0.1:${engine.address().port}`);
+    await page.click("#engine-settings button[type=submit]");
+    const vault = page.locator(".credential[data-credential=WWBB_ENGINE_VAULT_TEST_TOKEN]");
+    await vault.locator("#engine-credential:has-text('The API token is missing')").waitFor();
+    const storedToken = process.env.ENGINE_TOKEN || "a-token-for-the-smoke-test";
+    await vault.locator("[name=value]").fill(storedToken);
+    await vault.locator("button.credential-store").click();
+    await page.waitForSelector("#engine-credential >> text=The API token is stored here");
+    check(await page.inputValue(".credential[data-credential=WWBB_ENGINE_VAULT_TEST_TOKEN] [name=value]") === "", "the field is emptied once the value is stored");
+    check(!(await page.content()).includes(storedToken), "the stored value is not shown");
+    if (process.env.ENGINE_TOKEN) {
+      await page.click("#engine-check-now");
+      await page.waitForSelector("#engine-check >> text=The engine answered with");
+    }
+    answer = true;
+    await page.click(".credential[data-credential=WWBB_ENGINE_VAULT_TEST_TOKEN] button.credential-remove");
+    await page.waitForSelector("#engine-credential >> text=The API token is missing");
+    answer = true;
+    await page.click("#engine-delete");
+    await page.waitForSelector("#engine-list tr[data-engine=vault-test]", { state: "detached" });
+
     step("connectors: an API description offers its lists; the one picked fills a JSON source's settings (ADR-0130)");
     await page.goto(base + "/#/admin");
     await page.click("#connector-new-openapi");
@@ -3006,7 +3032,11 @@ function gitSource() {
     await page.fill("#connector-settings [name=grants]", "bert=viewer");
     await page.click("#connector-settings button[type=submit]");
     await page.waitForSelector("#connector-list tr[data-connector='acme']");
-    await page.waitForSelector("#connector-credential:has-text('WWBB_CONNECTOR_ACME_EMAIL'):has-text('are set')");
+    // The account comes from the environment, which locks it against the page (ADR-0151).
+    for (const name of ["WWBB_CONNECTOR_ACME_EMAIL", "WWBB_CONNECTOR_ACME_TOKEN"]) {
+      await page.waitForSelector(`#connector-credential .credential[data-credential=${name}]:has-text('comes from the environment variable ${name}; it is set')`);
+      check(await page.locator(`.credential[data-credential=${name}] [name=value]`).count() === 0, "no field for what the environment sets");
+    }
     check(await page.inputValue("#connector-settings [name=spaces]") === "ENG", "the keys are kept in capitals");
     await page.click("#connector-dry-run");
     await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('2 new')");
