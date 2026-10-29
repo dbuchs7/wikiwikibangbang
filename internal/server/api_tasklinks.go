@@ -37,6 +37,20 @@ type taskLinksJSON struct {
 	CredentialVar string           `json:"credentialVar"`
 	Credential    bool             `json:"credential"`
 	Last          *tasklink.Report `json:"last,omitempty"`
+	// Connect is how people connect their accounts to the engine.
+	Connect connectJSON `json:"connect"`
+}
+
+// connectJSON is this server's registration at an engine, through which
+// people connect: the variables of its client ID and secret, whether both
+// are set, the address the engine sends people back to, which its
+// administrator registers, and how many people are connected.
+type connectJSON struct {
+	ClientIDVar     string `json:"clientIdVar"`
+	ClientSecretVar string `json:"clientSecretVar"`
+	Configured      bool   `json:"configured"`
+	Callback        string `json:"callback"`
+	Connected       int    `json:"connected"`
 }
 
 func (h taskLinkHandlers) engine(w http.ResponseWriter, r *http.Request) (string, site.Engine, bool) {
@@ -54,7 +68,9 @@ func (h taskLinkHandlers) engine(w http.ResponseWriter, r *http.Request) (string
 
 func (h taskLinkHandlers) json(e site.Engine) taskLinksJSON {
 	out := taskLinksJSON{TaskLinks: h.d.DB.Site.TaskLinks(e.ID), CredentialVar: engine.TaskListVar(e.ID),
-		Credential: h.d.Engines.HasTaskListCredential(e.ID)}
+		Credential: h.d.Engines.HasTaskListCredential(e.ID),
+		Connect: connectJSON{ClientIDVar: engine.ClientIDVar(e.ID), ClientSecretVar: engine.ClientSecretVar(e.ID), Configured: h.d.Connect.Configured(e.ID),
+			Callback: h.d.Connect.Callback(e.ID), Connected: len(h.d.Connect.Connections().Of("", e.ID))}}
 	if last, ok := h.d.TaskLinks.Last(e.ID); ok {
 		out.Last = &last
 	}

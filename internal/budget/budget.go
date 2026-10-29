@@ -87,6 +87,9 @@ type Budgets struct {
 	// link reads from an engine (ADR-0151); beyond it, the round links the
 	// first ones, ends none, and says so.
 	EngineOpenTasks int
+	// EngineConnectsPending bounds the connections of people to process
+	// engines begun and not finished (ADR-0151).
+	EngineConnectsPending int
 	// MarkdownPictureBytes bounds the pictures one page written from a
 	// Markdown file of a repository reads and holds, together (ADR-0138);
 	// the pictures beyond it stay links.
@@ -96,30 +99,31 @@ type Budgets struct {
 // Default returns the budgets the server uses unless configured otherwise.
 func Default() Budgets {
 	return Budgets{
-		RequestBody:          64 << 10,
-		PageItems:            500,
-		SearchQueryBytes:     256,
-		SearchQueryTerms:     10,
-		QueryBytes:           2048,
-		QueryTerms:           64,
-		LiveSessions:         1000,
-		LiveClients:          50,
-		LiveBlocks:           5000,
-		LoginTracked:         100_000,
-		AccountRequests:      100,
-		OAuthClients:         200,
-		SSOPending:           10_000,
-		LinkCheckLinks:       500,
-		AttachmentBytes:      25 << 20,
-		AvatarBytes:          256 << 10,
-		BrandingBytes:        2 << 20,
-		ExportRows:           10_000,
-		ChangesPage:          1000,
-		ChangesWait:          30,
-		ChangesWaiting:       1000,
-		EngineResponseBytes:  8 << 20,
-		EngineOpenTasks:      20_000,
-		MarkdownPictureBytes: 50 << 20,
+		RequestBody:           64 << 10,
+		PageItems:             500,
+		SearchQueryBytes:      256,
+		SearchQueryTerms:      10,
+		QueryBytes:            2048,
+		QueryTerms:            64,
+		LiveSessions:          1000,
+		LiveClients:           50,
+		LiveBlocks:            5000,
+		LoginTracked:          100_000,
+		AccountRequests:       100,
+		OAuthClients:          200,
+		SSOPending:            10_000,
+		LinkCheckLinks:        500,
+		AttachmentBytes:       25 << 20,
+		AvatarBytes:           256 << 10,
+		BrandingBytes:         2 << 20,
+		ExportRows:            10_000,
+		ChangesPage:           1000,
+		ChangesWait:           30,
+		ChangesWaiting:        1000,
+		EngineResponseBytes:   8 << 20,
+		EngineOpenTasks:       20_000,
+		EngineConnectsPending: 10_000,
+		MarkdownPictureBytes:  50 << 20,
 	}
 }
 

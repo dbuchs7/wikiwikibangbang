@@ -1,7 +1,7 @@
 // The task links of a process engine in the administration (ADR-0151):
 // whether they run, their rules, the credential the open tasks are listed
-// with, a try that changes nothing, a round now, and the last round's
-// report.
+// with, how people connect their accounts to the engine, a try that
+// changes nothing, a round now, and the last round's report.
 import { h, when } from "./dom.js";
 import { get, put, post } from "./api.js";
 import { t } from "./i18n.js";
@@ -67,6 +67,19 @@ function readRule(box) {
   return ruleOf(v);
 }
 
+// connectInfo says how people connect their accounts to the engine: this
+// server's registration there, the address the engine sends them back
+// to, and how many did.
+function connectInfo(c) {
+  return h("div", { id: "task-links-connect" },
+    h("p", { class: c.configured ? "muted" : "error", text: c.configured
+      ? t("tasklinks.connectOn", { n: String(c.connected || 0) })
+      : t("tasklinks.connectOff", { id: c.clientIdVar, secret: c.clientSecretVar }) }),
+    c.callback
+      ? h("p", { class: "muted" }, t("tasklinks.callback"), " ", h("code", { text: c.callback }))
+      : h("p", { class: "error", text: t("tasklinks.noPublicURL") }));
+}
+
 // taskLinksCard is the task links of an engine.
 export function taskLinksCard(engine) {
   const path = "/api/engines/" + encodeURIComponent(engine.id) + "/task-links";
@@ -109,6 +122,7 @@ export function taskLinksCard(engine) {
       h("p", { class: "muted", text: t("tasklinks.note") }),
       h("p", { class: links.credential ? "muted" : "error", id: "task-links-credential",
         text: links.credential ? t("tasklinks.credentialIs", { name: links.credentialVar }) : t("tasklinks.credentialMissing", { name: links.credentialVar }) }),
+      connectInfo(links.connect || {}),
       types.length ? "" : h("p", { class: "error", text: t("tasklinks.noTypes") }),
       h("label", { class: "check" }, enabled, " ", t("tasklinks.enabled")),
       rules,

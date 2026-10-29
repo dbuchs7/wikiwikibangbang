@@ -89,6 +89,9 @@ var publicAPI = map[string]bool{
 	"/api/signup":                 true, // asking for an account (ADR-0061)
 	"/api/password-reset":         true, // a forgotten password (ADR-0064)
 	"/api/password-reset/confirm": true,
+	// The engine's redirect back to a begun connection (ADR-0151): the
+	// session cookie is not sent with it, the state cookie binds it.
+	"/api/engines/{id}/connect/callback": true,
 }
 
 func TestEveryAPIRouteButLoginNeedsAPrincipal(t *testing.T) {

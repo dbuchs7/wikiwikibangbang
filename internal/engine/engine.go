@@ -93,24 +93,32 @@ func NewReader(getenv func(string) string, client *http.Client) *Reader {
 		getenv = os.Getenv
 	}
 	if client == nil {
-		var transport http.RoundTripper = &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
-			DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: Timeout,
-			MaxIdleConnsPerHost:   4,
-			IdleConnTimeout:       90 * time.Second,
-		}
-		if getenv(AllowPrivateVar) != "on" {
-			transport = connector.PublicOnly(transport)
-		}
-		client = &http.Client{Timeout: Timeout, Transport: transport}
+		client = NewClient(getenv)
 	}
 	// An engine's API does not redirect; following one would send the
 	// credential where the administrator did not point it.
 	c := *client
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &Reader{getenv: getenv, http: &c}
+}
+
+// NewClient makes the client engines are called with: with the Timeout,
+// through the environment's proxy, kept to public addresses unless
+// AllowPrivateVar allows others, and following no redirect.
+func NewClient(getenv func(string) string) *http.Client {
+	var transport http.RoundTripper = &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: Timeout,
+		MaxIdleConnsPerHost:   4,
+		IdleConnTimeout:       90 * time.Second,
+	}
+	if getenv(AllowPrivateVar) != "on" {
+		transport = connector.PublicOnly(transport)
+	}
+	return &http.Client{Timeout: Timeout, Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
 // HasCredential reports whether the engine's variable is set.
@@ -865,6 +873,9 @@ type request struct {
 	// when empty: the task list is read with a credential of its own
 	// (ADR-0151).
 	tokenVar string
+	// bearer is a person's access token, sent instead of a credential of
+	// the environment: what the person's grant reaches (ADR-0151).
+	bearer string
 }
 
 // call makes a request of the engine and hands the answer's type and body
@@ -874,7 +885,10 @@ func (r *Reader) call(ctx context.Context, e site.Engine, rq request, read func(
 		return fmt.Errorf("%w: kind %q is not read", ErrUnavailable, e.Kind)
 	}
 	tokenVar := cmp.Or(rq.tokenVar, TokenVar(e.ID))
-	token := r.getenv(tokenVar)
+	token := rq.bearer
+	if token == "" {
+		token = r.getenv(tokenVar)
+	}
 	if token == "" && !rq.public {
 		return fmt.Errorf("%w: set %s", ErrNoCredential, tokenVar)
 	}

@@ -105,7 +105,7 @@ func (h engineHandlers) setEngine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e.ID = r.PathValue("id")
-	_, existed := h.d.DB.Site.Engine(e.ID)
+	before, existed := h.d.DB.Site.Engine(e.ID)
 	kept, err := h.d.DB.Site.SetEngine(actor, e)
 	if err != nil {
 		if errors.Is(err, site.ErrInvalid) {
@@ -117,6 +117,10 @@ func (h engineHandlers) setEngine(w http.ResponseWriter, r *http.Request) {
 	}
 	h.record(audit.Entry{Event: audit.EngineChanged, Actor: actor, Addr: clientAddr(r), Subject: kept.ID,
 		Detail: map[string]string{"kind": kept.Kind, "address": kept.BaseURL, "operations": strconv.FormatBool(kept.Operations)}})
+	// People's grants belong to the engine at its address (ADR-0151).
+	if existed && before.BaseURL != kept.BaseURL {
+		endConnections(h.d, actor, clientAddr(r), kept.ID, "the engine's address changed")
+	}
 	status := http.StatusOK
 	if !existed {
 		status = http.StatusCreated
@@ -139,6 +143,7 @@ func (h engineHandlers) removeEngine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.record(audit.Entry{Event: audit.EngineChanged, Actor: actor, Addr: clientAddr(r), Subject: id, Detail: map[string]string{"removed": "true"}})
+	endConnections(h.d, actor, clientAddr(r), id, "the engine was removed")
 	w.WriteHeader(http.StatusNoContent)
 }
 

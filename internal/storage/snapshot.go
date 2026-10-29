@@ -37,6 +37,8 @@ var NotBackedUp = map[string]string{
 	BackupStateFile: "which automatic backup the next incremental one builds on (ADR-0073); " +
 		"a restored instance starts with a full backup",
 	BackupStateFile + ".tmp": "the state of automatic backups while it is replaced",
+	ConnectionsFile: "people's grants at process engines (ADR-0151): a refresh token is a credential of its person, replaced on every use; " +
+		"a restored or copied server must not act as people at an engine, and a backup's token would be spent already, so people connect again",
 }
 
 // SnapshotFile is one file of a consistent snapshot: Size bytes of R.

@@ -157,6 +157,7 @@ function engineSource() {
   let releases = 2;
   let reached = true;
   const starts = [];
+  const grants = { codes: new Map(), access: new Set(), refresh: new Set(), revoked: 0 };
   const server = require("http").createServer((req, res) => {
     const pub = /^\/public\/forms\/([0-9a-f]+)\/(schema|start)$/.exec(req.url);
     if (pub) {
@@ -181,6 +182,56 @@ function engineSource() {
         res.end(JSON.stringify({ started: true }));
       });
       return;
+    }
+    // A person connects their account (ADR-0151): the engine's metadata,
+    // a consent that approves at once, the token endpoint with PKCE and the
+    // client's credentials in the form, revocation, and who a grant is.
+    const self = `http://127.0.0.1:${server.address().port}`;
+    const json = (v, status = 200) => { res.statusCode = status; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(v)); };
+    const path = req.url.split("?")[0];
+    if (path === "/.well-known/oauth-protected-resource/tasks") return json({ resource: self + "/tasks", authorization_servers: [self] });
+    if (path === "/.well-known/oauth-authorization-server") {
+      return json({ issuer: self, authorization_endpoint: self + "/oauth/authorize", token_endpoint: self + "/oauth/token", revocation_endpoint: self + "/oauth/revoke",
+        code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["client_secret_post"] });
+    }
+    if (path === "/oauth/authorize") {
+      const q = new URL(req.url, self).searchParams;
+      const back = new URL(q.get("redirect_uri"));
+      back.searchParams.set("state", q.get("state"));
+      if (q.get("client_id") === "e2e-client" && q.get("resource") === self + "/tasks" && q.get("code_challenge_method") === "S256") {
+        const code = "atlasoc_" + Math.random().toString(16).slice(2);
+        grants.codes.set(code, { challenge: q.get("code_challenge"), redirect: q.get("redirect_uri") });
+        back.searchParams.set("code", code);
+      } else back.searchParams.set("error", "invalid_request");
+      res.statusCode = 302;
+      res.setHeader("Location", back.toString());
+      return res.end();
+    }
+    if (path === "/oauth/token" || path === "/oauth/revoke") {
+      let body = "";
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => {
+        const f = new URLSearchParams(body);
+        if (f.get("client_id") !== "e2e-client" || f.get("client_secret") !== "e2e-client-secret") return json({ error: "invalid_client" }, 401);
+        if (path === "/oauth/revoke") {
+          grants.revoked += grants.refresh.delete(f.get("token")) ? 1 : 0;
+          return json({});
+        }
+        const c = grants.codes.get(f.get("code"));
+        grants.codes.delete(f.get("code"));
+        const verified = c && require("crypto").createHash("sha256").update(f.get("code_verifier") || "").digest("base64url") === c.challenge;
+        const refreshed = f.get("grant_type") === "refresh_token" && grants.refresh.delete(f.get("refresh_token"));
+        if (!(f.get("grant_type") === "authorization_code" && verified && c.redirect === f.get("redirect_uri")) && !refreshed) return json({ error: "invalid_grant" }, 400);
+        const access = "atlasoa_" + Math.random().toString(16).slice(2), refresh = "atlasor_" + Math.random().toString(16).slice(2);
+        grants.access.add(access);
+        grants.refresh.add(refresh);
+        json({ access_token: access, token_type: "Bearer", expires_in: 7200, refresh_token: refresh });
+      });
+      return;
+    }
+    if (path === "/api/v1/auth/me" && grants.access.has((req.headers.authorization || "").replace(/^Bearer /, ""))) {
+      return json({ authEnabled: true, user: { id: "u-17", username: "anna", displayName: "Anna Muster", email: "anna@example.org", roles: ["user"],
+        groups: [{ id: "g1", name: "hr" }] } });
     }
     if (req.headers.authorization !== "Bearer " + process.env.ENGINE_TOKEN) {
       res.statusCode = 401;
@@ -249,6 +300,7 @@ function engineSource() {
   server.release = () => { releases++; };
   server.reach = (on) => { reached = on; };
   server.starts = starts;
+  server.grants = grants;
   return server;
 }
 
@@ -2694,6 +2746,21 @@ function gitSource() {
       check(linked.length === 1 && linked[0].title === "Approve holidays" && linked[0].linked === "atlas" &&
         linked[0].labels.join(",") === "atlas,urlaub", "the task of the process urlaub is linked, with its labels; the other two are not");
       check(linked[0].restriction?.read?.join(",") === "engine:atlas", "a linked task is read by nobody until the engine says who may");
+
+      step("connected engines: a person connects their account to the engine by its sign-in and consent, sees who they are there, and disconnects (ADR-0151)");
+      await page.waitForSelector("#task-links-connect >> text=People connect their accounts to the engine under Account; 0 did.");
+      check(await page.textContent("#task-links-connect code") === base + "/api/engines/atlas/connect/callback", "the administrator sees the redirect address to register");
+      await page.goto(base + "/#/account");
+      await page.click("#engines li[data-engine=atlas] a:has-text('Connect')"); // to the engine's consent, and back
+      await page.waitForSelector("#engine-connected >> text=Your account is connected to Atlas test.");
+      await page.waitForSelector("#engines li.connected >> text=Connected as anna (Anna Muster, anna@example.org)");
+      await page.waitForSelector("#engines >> text=Groups at the engine: hr");
+      check(!new URL(page.url()).search, "the engine's answer leaves the address");
+      check(engine.grants.access.size === 1 && engine.grants.refresh.size === 1, "the code was exchanged once, with its verifier");
+      answer = true; // the confirmation to disconnect
+      await page.click("#engines li.connected button:has-text('Disconnect')");
+      await page.waitForSelector("#engines li[data-engine=atlas] a:has-text('Connect')");
+      check(engine.grants.revoked === 1, "disconnecting revokes the grant at the engine");
       await page.goto(base + "/#/item/" + flow.item.key); // where the drawing begins
       await page.waitForSelector("#edit");
 
