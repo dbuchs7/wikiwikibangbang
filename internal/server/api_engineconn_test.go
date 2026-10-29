@@ -10,6 +10,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
 	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth"
 	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth/engineauthtest"
+	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 )
 
 // connectWorld is a world whose engine atlas is the fake engine, with this
@@ -162,4 +163,67 @@ func TestAPersonConnectsTheirAccountToAnEngine(t *testing.T) {
 	if events[audit.EngineConnected] != 2 || events[audit.EngineDisconnected] != 1 || events[audit.EngineConnectionEnded] != 1 {
 		t.Errorf("audited %v", events)
 	}
+}
+
+// TestALinkedTaskIsReadByTheConnectedPeopleTheEngineShowsItTo covers
+// ADR-0151's visibility through the API: after a person connects, a round
+// reads their own task list, and the linked task is read by the connected
+// people whose list holds it and who hold a role in its space — the
+// protection narrows, it never grants (D9); nobody else finds it (D10);
+// after disconnecting, the next round hides it again.
+func TestALinkedTaskIsReadByTheConnectedPeopleTheEngineShowsItTo(t *testing.T) {
+	fake := engineauthtest.New(t)
+	fake.ListToken = "lister"
+	fake.Tasks = []map[string]any{{"key": 4711, "processInstanceKey": 1, "elementInstanceKey": 2, "processId": "urlaub",
+		"elementId": "genehmigen", "name": "Urlaub genehmigen", "candidateGroups": "hr"}}
+	fake.Sees = map[string][]uint64{"u-bert": {4711}, "u-carla": {4711}}
+	env := map[string]string{engine.ClientIDVar("atlas"): engineauthtest.ClientID, engine.ClientSecretVar("atlas"): engineauthtest.ClientSecret,
+		engine.TaskListVar("atlas"): "lister"}
+	getenv := func(k string) string { return env[k] }
+	hc := fake.Client()
+	w := newWorld(t, func(d *Deps) {
+		d.Engines = engine.NewReader(getenv, hc)
+		d.Connect = engineauth.NewBroker(d.DB.Connections, d.Engines, hc, getenv, "http://wiki.test")
+	})
+	h := w.admin.h
+	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+fake.URL+`"}`, http.StatusCreated)
+	w.admin.expect("POST", "/api/types", `{"name":"engine-task","body":true,"workflow":{"initial":"open","states":["open","done"],
+		"transitions":[{"name":"finish","from":["open"],"to":"done"}]}}`, http.StatusCreated)
+	w.admin.expect("PUT", "/api/engines/atlas/task-links", `{"enabled":true,"rules":[{"id":"holidays","space":"PLAT","type":"engine-task",
+		"completed":"done","cancelled":"done"}]}`, http.StatusOK)
+	rep := w.admin.expect("POST", "/api/engines/atlas/task-links/run", "", http.StatusOK)
+	if rep["linked"] != float64(1) || rep["visible"] != true || rep["people"] != float64(0) {
+		t.Fatalf("the first round = %v", rep)
+	}
+	var id string
+	w.db.Read(func(s *item.Store) { id = string(s.LinkedTasks("atlas")[0].ID) })
+	for _, c := range []*client{w.bert, w.vera, w.carla} {
+		c.expect("GET", "/api/items/"+id, "", http.StatusNotFound)
+	}
+
+	// Bert (an editor of PLAT) and carla (no role there) connect; vera (a
+	// viewer) does not.
+	for _, who := range []struct {
+		c       *client
+		subject string
+	}{{w.bert, "u-bert"}, {w.carla, "u-carla"}} {
+		fake.Lock()
+		fake.Person.ID = who.subject
+		fake.Unlock()
+		back, state := begin(t, who.c, fake)
+		callback(t, h, back, state)
+	}
+	rep = w.admin.expect("POST", "/api/engines/atlas/task-links/run", "", http.StatusOK)
+	if rep["visible"] != true || rep["people"] != float64(2) || rep["readers"] != float64(1) {
+		t.Fatalf("the round after connecting = %v", rep)
+	}
+	w.bert.expect("GET", "/api/items/"+id, "", http.StatusOK)
+	w.vera.expect("GET", "/api/items/"+id, "", http.StatusNotFound)
+	w.carla.expect("GET", "/api/items/"+id, "", http.StatusNotFound)
+
+	w.bert.expect("DELETE", "/api/me/engines/atlas", "", http.StatusNoContent)
+	if rep = w.admin.expect("POST", "/api/engines/atlas/task-links/run", "", http.StatusOK); rep["readers"] != float64(1) {
+		t.Fatalf("the round after disconnecting = %v", rep)
+	}
+	w.bert.expect("GET", "/api/items/"+id, "", http.StatusNotFound)
 }

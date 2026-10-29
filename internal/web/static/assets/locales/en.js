@@ -1558,6 +1558,7 @@ export default {
   "tasklinks.run": "Link now",
   "tasklinks.report": "{when}: {open} open tasks read; {linked} linked, {updated} changed, {ended} ended; {unmatched} matched by no rule.",
   "tasklinks.reportDry": "A try, which changes nothing ({when}): {open} open tasks read; {linked} would be linked, {updated} changed at most, {ended} ended; {unmatched} match no rule.",
+  "tasklinks.visible": "Who sees the tasks: the task lists of {people} connected people read, {unread} not; readers changed on {readers} tasks.",
   "tasklinks.failed": "{when}: the engine could not be read: {error}",
   "tasklinks.problems": "Problems:",
   "tasklinks.more": "and {n} more",

@@ -17,6 +17,8 @@ function reportOf(rep) {
   const lines = [h("p", { class: rep.error ? "error" : "notice", text: rep.error
     ? t("tasklinks.failed", { when: when(rep.at), error: rep.error })
     : t(rep.dry ? "tasklinks.reportDry" : "tasklinks.report", { when: when(rep.at), open: n("open"), linked: n("linked"), updated: n("updated"), ended: n("ended"), unmatched: n("unmatched") }) })];
+  // Who sees each task, from the connected people's own lists.
+  if (rep.visible) lines.push(h("p", { class: "muted", id: "task-links-visible", text: t("tasklinks.visible", { people: n("people"), unread: n("unread"), readers: n("readers") }) }));
   const problems = rep.problems || [];
   if (problems.length) {
     lines.push(h("p", { class: "muted", text: t("tasklinks.problems") }),

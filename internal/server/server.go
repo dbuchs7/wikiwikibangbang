@@ -105,8 +105,9 @@ type Deps struct {
 	// when it is nil.
 	Engines *engine.Reader
 	// TaskLinks keeps the linked tasks in step with the engines' open user
-	// tasks (ADR-0151); Routes creates one that lists tasks with Engines
-	// when it is nil, and the caller runs its Loop.
+	// tasks (ADR-0151); Routes creates one that lists tasks with Engines,
+	// and tells who sees them with Connect, when it is nil, and the caller
+	// runs its Loop.
 	TaskLinks *tasklink.Runner
 	// Connect connects people's accounts to process engines (ADR-0151);
 	// Routes creates one that reads the registration and WWBB_PUBLIC_URL
@@ -176,12 +177,12 @@ func Routes(d Deps) []Route {
 	if d.Engines == nil {
 		d.Engines = engine.NewReader(nil, nil)
 	}
-	if d.TaskLinks == nil && d.DB != nil {
-		d.TaskLinks = tasklink.New(d.DB, d.Engines, d.Log)
-	}
 	if d.Connect == nil && d.DB != nil {
 		d.Connect = engineauth.NewBroker(d.DB.Connections, d.Engines, engine.NewClient(os.Getenv), os.Getenv, os.Getenv("WWBB_PUBLIC_URL"))
 		d.Connect.OnEnded(RecordEnded(d.DB))
+	}
+	if d.TaskLinks == nil && d.DB != nil {
+		d.TaskLinks = tasklink.New(d.DB, d.Engines, d.Log).WithGrants(d.Connect)
 	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{

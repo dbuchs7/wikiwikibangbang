@@ -145,6 +145,8 @@ func (h engineConnHandlers) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	h.record(audit.Entry{Event: audit.EngineConnected, Actor: user, Addr: clientAddr(r), Subject: e.ID,
 		Detail: map[string]string{"username": conn.Username, "subject": conn.Subject}})
+	// The person's tasks are shown soon, not at the next scheduled round.
+	h.d.TaskLinks.Nudge(e.ID)
 	toAccount(w, r, "engine_connected", e.ID)
 }
 
@@ -167,6 +169,7 @@ func (h engineConnHandlers) disconnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.record(audit.Entry{Event: audit.EngineDisconnected, Actor: string(p.User), Addr: clientAddr(r), Subject: id})
+	h.d.TaskLinks.Nudge(id)
 	w.WriteHeader(http.StatusNoContent)
 }
 

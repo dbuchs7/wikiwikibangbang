@@ -58,6 +58,20 @@ const tasksPage = 500
 // complete is false when the budget cut the list: the tasks beyond it are
 // not known to be open or not.
 func (r *Reader) OpenTasks(ctx context.Context, e site.Engine) (tasks []Task, complete bool, err error) {
+	return r.openTasks(ctx, e, "")
+}
+
+// OpenTasksAs lists the open user tasks a person sees, with the access
+// token of the person's grant, as OpenTasks lists them all: the engine
+// decides which they are (ADR-0151).
+func (r *Reader) OpenTasksAs(ctx context.Context, e site.Engine, bearer string) (tasks []Task, complete bool, err error) {
+	if bearer == "" {
+		return nil, false, fmt.Errorf("%w: no grant", ErrNoCredential)
+	}
+	return r.openTasks(ctx, e, bearer)
+}
+
+func (r *Reader) openTasks(ctx context.Context, e site.Engine, bearer string) (tasks []Task, complete bool, err error) {
 	limit := budget.Get().EngineOpenTasks
 	before := ""
 	for {
@@ -84,7 +98,7 @@ func (r *Reader) OpenTasks(ctx context.Context, e site.Engine) (tasks []Task, co
 			Truncated  bool   `json:"truncated"`
 			NextCursor string `json:"nextCursor"`
 		}
-		rq := request{method: http.MethodGet, path: "/api/v1/tasks?" + q.Encode(), accept: "application/json", tokenVar: TaskListVar(e.ID)}
+		rq := request{method: http.MethodGet, path: "/api/v1/tasks?" + q.Encode(), accept: "application/json", tokenVar: TaskListVar(e.ID), bearer: bearer}
 		if err := r.call(ctx, e, rq, func(_ string, body io.Reader) error { return json.NewDecoder(body).Decode(&page) }); err != nil {
 			return nil, false, err
 		}

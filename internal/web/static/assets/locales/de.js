@@ -1556,6 +1556,7 @@ export default {
   "tasklinks.run": "Jetzt verknüpfen",
   "tasklinks.report": "{when}: {open} offene Tasks gelesen; {linked} verknüpft, {updated} geändert, {ended} beendet; auf {unmatched} passt keine Regel.",
   "tasklinks.reportDry": "Ein Versuch, der nichts ändert ({when}): {open} offene Tasks gelesen; {linked} würden verknüpft, höchstens {updated} geändert, {ended} beendet; auf {unmatched} passt keine Regel.",
+  "tasklinks.visible": "Wer die Tasks sieht: die Task-Listen von {people} verbundenen Personen gelesen, {unread} nicht; bei {readers} Aufgaben haben sich die Lesenden geändert.",
   "tasklinks.failed": "{when}: Die Engine konnte nicht gelesen werden: {error}",
   "tasklinks.problems": "Probleme:",
   "tasklinks.more": "und {n} weitere",

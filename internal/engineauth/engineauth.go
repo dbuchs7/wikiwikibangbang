@@ -315,6 +315,11 @@ func (b *Broker) Token(ctx context.Context, e site.Engine, user string) (string,
 	return tok.AccessToken, nil
 }
 
+// Refused tells that the engine refused an access token the broker gave
+// out, as it does once the grant is withdrawn there: the next Token
+// renews, and so learns whether the grant still stands.
+func (b *Broker) Refused(user, engineID string) { b.forget(user, engineID) }
+
 func (b *Broker) forget(user, engineID string) {
 	b.mu.Lock()
 	delete(b.access, key(user, engineID))
