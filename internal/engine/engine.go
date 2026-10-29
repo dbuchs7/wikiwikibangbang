@@ -52,6 +52,10 @@ var (
 	ErrRejected = errors.New("the engine refused the submission")
 	// ErrBusy: the engine asks to try again shortly.
 	ErrBusy = errors.New("the engine is busy; try again shortly")
+	// ErrNotAllowed: the engine refused a person's work on a task — it is
+	// another's, or a public form's step; the message says why, in the
+	// engine's words (ADR-0151).
+	ErrNotAllowed = errors.New("the engine does not let you work this task")
 )
 
 // Timeout bounds one read of an engine.
@@ -876,6 +880,9 @@ type request struct {
 	// bearer is a person's access token, sent instead of a credential of
 	// the environment: what the person's grant reaches (ADR-0151).
 	bearer string
+	// work is a person's work on a task: the engine's refusals are
+	// answered with its reason (ADR-0151).
+	work bool
 }
 
 // call makes a request of the engine and hands the answer's type and body
@@ -929,6 +936,12 @@ func (r *Reader) call(ctx context.Context, e site.Engine, rq request, read func(
 	case rq.public && (res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusConflict):
 		return fmt.Errorf("%w: %s", ErrRejected, engineMessage(res.Body))
 	case rq.public && res.StatusCode == http.StatusTooManyRequests:
+		return ErrBusy
+	case rq.work && res.StatusCode == http.StatusForbidden:
+		return fmt.Errorf("%w: %s", ErrNotAllowed, engineMessage(res.Body))
+	case rq.work && (res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusUnprocessableEntity):
+		return fmt.Errorf("%w: %s", ErrRejected, engineMessage(res.Body))
+	case rq.work && (res.StatusCode == http.StatusTooManyRequests || res.StatusCode == http.StatusServiceUnavailable):
 		return ErrBusy
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
 		return fmt.Errorf("%w (%d)", ErrRefused, res.StatusCode)

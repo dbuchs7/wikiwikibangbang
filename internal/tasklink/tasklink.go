@@ -296,7 +296,7 @@ func (r *Runner) round(ctx context.Context, engineID string, rep *Report) error 
 			if s.Type(it.Type).Workflow.Finished(it.State) {
 				continue
 			}
-			rule, ok := ruleOf(links.Rules, it)
+			rule, ok := RuleOf(links.Rules, it)
 			if !ok {
 				rep.problem("%s: its task ended, and no rule names its space %s and type %s, so it stays open", it.Key, it.Space, it.Type)
 				continue
@@ -420,9 +420,9 @@ func match(rules []site.TaskRule, t engine.Task) (site.TaskRule, bool) {
 	return site.TaskRule{}, false
 }
 
-// ruleOf is the first rule that makes items where it stands: its ended
-// task goes to that rule's state.
-func ruleOf(rules []site.TaskRule, it item.Item) (site.TaskRule, bool) {
+// RuleOf is the first rule that makes items where a linked item stands:
+// its ended task goes to that rule's state.
+func RuleOf(rules []site.TaskRule, it item.Item) (site.TaskRule, bool) {
 	for _, r := range rules {
 		if r.Space == it.Space && r.Type == it.Type {
 			return r, true

@@ -211,6 +211,7 @@ func Routes(d Deps) []Route {
 	routes = append(routes, engineRoutes(d)...)
 	routes = append(routes, taskLinkRoutes(d)...)
 	routes = append(routes, engineConnRoutes(d)...)
+	routes = append(routes, engineTaskRoutes(d)...)
 	routes = append(routes, Route{Method: http.MethodGet, Pattern: MetricsPath, Summary: "Operational metrics in the Prometheus format (administrators and tokens of scope metrics)",
 		Handler: metricsHandler(d)})
 	doc := Route{Method: http.MethodGet, Pattern: "/api/openapi.json", Summary: "This API's description, generated from the route table"}

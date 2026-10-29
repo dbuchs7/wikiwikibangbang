@@ -15,6 +15,8 @@ import { applyTheme, setTheme, isDark } from "./theme.js";
 import { filtered, serverFilter, filterParams, norm } from "./filter.js";
 import { taskLinksCard } from "./tasklinks.js";
 import { connectionsCard } from "./engineconn.js";
+import { taskDialog, taskPanel } from "./taskdialog.js";
+import { finishing } from "./taskparts.js";
 
 const app = document.getElementById("app");
 const nav = document.getElementById("nav");
@@ -778,6 +780,14 @@ async function action(fn, status) {
     if (status) status.replaceChildren(errorBox(err));
     else alert(err.message);
   }
+}
+
+// moveItem makes a transition of an item; for a linked item moved to a
+// finished state it opens the task dialog instead, as the engine decides
+// (ADR-0151).
+function moveItem(workflow, it, tr, make, status) {
+  if (finishing(workflow, it, tr.to)) return taskDialog(it, tr.to).then((done) => done && route());
+  return action(make, status);
 }
 
 // --- people ------------------------------------------------------------------
@@ -2516,7 +2526,7 @@ async function tasksView(tab, params) {
         : h("button", { class: "link", text: t("tasks.claim"), onclick: () => setAssignee(it, me.user.id) }))
       : null;
     const moves = canAct ? ty.workflow.transitions.filter((tr) => tr.from.includes(it.state))
-      .map((tr) => h("button", { class: "link", text: tr.name, onclick: () => action(() => post(`/api/items/${it.id}/transitions`, { name: tr.name }), status) })) : [];
+      .map((tr) => h("button", { class: "link", text: tr.name, onclick: () => moveItem(ty.workflow, it, tr, () => post(`/api/items/${it.id}/transitions`, { name: tr.name }), status) })) : [];
     return h("tr", { class: due && due < today ? "overdue" : "", "data-key": it.key },
       h("td", {}, link("#/item/" + encodeURIComponent(it.key), it.key, "key")),
       h("td", { text: it.title }),
@@ -3086,8 +3096,12 @@ async function cardBoard(o) {
     // A card moves into another lane only where it can move into the
     // column, so a refused move leaves its value as it was.
     const canMove = (it, col) => !col.state || col.state === it.state || wf.transitions.filter((tr) => tr.to === col.state && tr.from.includes(it.state)).length === 1;
+    // A linked card moved to a finished state is completed at its engine,
+    // in the task dialog (ADR-0151).
+    const place = (it, col, before) => (col.state && finishing(wf, it, col.state)
+      ? taskDialog(it, col.state).then((done) => done && route()) : s.place(it, col, before));
     const moveToLane = async (it, col, before, lane) => {
-      if (!canMove(it, col)) return s.place(it, col, before);
+      if (!canMove(it, col)) return place(it, col, before);
       try {
         await put(`/api/items/${it.id}/properties/${encodeURIComponent(laneField.name)}`, { value: lane === "" ? null : lane });
       } catch (err) {
@@ -3095,7 +3109,7 @@ async function cardBoard(o) {
         return;
       }
       if (!s.ordered && col.state === it.state) return route();
-      await s.place(it, col, before);
+      await place(it, col, before);
     };
     // dropZone makes a column, or a column's cell in a lane, take cards
     // of this type: dropped on a card, before it; elsewhere, last. Into
@@ -3114,7 +3128,7 @@ async function cardBoard(o) {
         const before = target && target.dataset.id !== it.id ? target.dataset.id : "";
         if (lane !== undefined && laneOf(it) !== lane) return moveToLane(it, col, before, lane);
         if (!s.ordered && col.state === it.state) return;
-        s.place(it, col, before);
+        place(it, col, before);
       });
       return el;
     };
@@ -3229,7 +3243,7 @@ async function cardBoard(o) {
       }
       return h("tr", { "data-field": f.name }, h("th", { text: f.name }), h("td", {}, input));
     }));
-    const stateBar = statusBar(type.workflow, item.state, editable ? (tr) => action(() => post(path + "/transitions", { name: tr.name }), status) : null);
+    const stateBar = statusBar(type.workflow, item.state, editable ? (tr) => moveItem(type.workflow, item, tr, () => post(path + "/transitions", { name: tr.name }), status) : null);
     detail.replaceChildren(
       h("div", { class: "kanban-detail-head" },
         h("span", { class: "muted", text: item.key }),
@@ -3950,7 +3964,7 @@ async function itemView(ref, params = new URLSearchParams()) {
   }));
 
   const stateBar = type.workflow && item.state ? statusBar(type.workflow, item.state, canEdit
-    ? (tr) => action(() => post(path + "/transitions", { name: tr.name }), status) : null) : null;
+    ? (tr) => moveItem(type.workflow, item, tr, () => post(path + "/transitions", { name: tr.name }), status) : null) : null;
 
   // Only what the server allows is offered (may): trashing needs every
   // page below editable, purging a space admin.
@@ -4031,6 +4045,8 @@ async function itemView(ref, params = new URLSearchParams()) {
     stateBar,
     type.fields.length ? props : null,
     labelsLine(path, item, canEdit));
+  // The task of a linked item, worked at its engine as oneself (ADR-0151).
+  const engineTask = item.linked && live ? taskPanel(item, () => route()) : null;
   // Copying and moving a page with its child pages, to any place one may
   // create in (ADR-0067); dragging in the tree moves within a space.
   const relocate = h("div", { id: "relocate" });
@@ -4059,6 +4075,7 @@ async function itemView(ref, params = new URLSearchParams()) {
       h("div", { class: "item-main" }, protecting, body || h("p", { class: "muted", text: t("item.noBody") })),
       h("aside", { class: "item-side", "aria-label": t("item.side") },
         columnToggle("side"),
+        engineTask,
         details,
         secretsSection(path, item, status),
         threads.section,

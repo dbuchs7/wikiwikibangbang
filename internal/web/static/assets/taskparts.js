@@ -1,6 +1,8 @@
 // The task links of a process engine (ADR-0151): what their administration
 // needs to offer a rule's choices and to read a rule from its form, and
-// nothing that needs a browser, so it is tested on its own.
+// what the task dialog needs to tell when a move is the engine's and
+// whether it draws a task's form; nothing that needs a browser, so it is
+// tested on its own.
 
 // linkTypes are the types whose items can be linked tasks: those with a
 // workflow, by name.
@@ -66,4 +68,30 @@ export function nextRuleID(rules) {
   let n = 2;
   while (taken.has("rule-" + n)) n++;
   return "rule-" + n;
+}
+
+// finishing reports whether moving a linked item to state is completing
+// or cancelling its task (ADR-0151): a finished state of its workflow,
+// which only the engine decides, so the move opens the task dialog.
+export function finishing(workflow, it, state) {
+  return Boolean(it?.linked) && state !== it.state && finished(workflow, state);
+}
+
+// engineOnly lists what of a task's form this server does not draw, so
+// the form is worked in the engine's own app: atlas's own components — the
+// e-mail view, and a field that searches a directory (atlasDataSource) —
+// and any type the viewer does not know (known(type)). Components inside
+// groups and lists are checked as well. Each entry is its label or type.
+export function engineOnly(schema, known) {
+  const out = [];
+  const walk = (components) => {
+    if (!Array.isArray(components)) return;
+    for (const c of components) {
+      if (!c || typeof c !== "object") continue;
+      if (c.type === "mailview" || c.atlasDataSource || !known(c.type)) out.push(String(c.label || c.key || c.type || "?"));
+      walk(c.components);
+    }
+  };
+  walk(schema?.components);
+  return out;
 }
