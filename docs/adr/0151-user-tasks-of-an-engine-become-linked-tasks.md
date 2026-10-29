@@ -3,7 +3,7 @@
 - **Status:** Proposed
 - **Implementation:** Partial
 - **Date:** 2026-10-28
-- **Deciders:** Project initiators (requested 2026-10-28: user tasks of an atlas engine become tasks of the wiki with labels an administrator chooses, a page shows a table of tasks selected by a filter, and a card moved to done on a kanban completes the task, showing its form first where input is needed. The requester decided: the engine alone decides whether a person may work a task; each person connects their account to the engine once, by OAuth, with the mail address only a suggestion; groups serve only to decide who sees a linked task, never rights in a space; the coupling must work whatever people and groups come from — local accounts, single sign-on with any provider, a directory, the engine itself; and a linked task shows how current it is. The engine's side was built in the same step: pblumer/atlas, draft record `tasks-for-a-connected-system`); proposed for the maintainer's acceptance
+- **Deciders:** Project initiators (requested 2026-10-28: user tasks of an atlas engine become tasks of the wiki with labels an administrator chooses, a page shows a table of tasks selected by a filter, and a card moved to done on a kanban completes the task, showing its form first where input is needed. The requester decided: the engine alone decides whether a person may work a task; each person connects their account to the engine once, by OAuth, with the mail address only a suggestion; groups serve only to decide who sees a linked task, never rights in a space; the coupling must work whatever people and groups come from — local accounts, single sign-on with any provider, a directory, the engine itself; and a linked task shows how current it is. The engine's side was built in the same step: pblumer/atlas ADR-0510, Tasks for a connected system); proposed for the maintainer's acceptance
 - **Open question:** three points (see "Open questions"): whether administrators, whom restrictions do not bind (ADR-0022), may see every linked task; whether the form checked in the browser is enough while the engine checks only who completes, not what is submitted; and whether rules or a list of named processes decide which tasks are linked.
 - **Question checked:** 2026-10
 
@@ -18,7 +18,7 @@ The requester asked for four things:
 3. **A board.** Tasks are moved on a kanban; moving one to done completes it in the engine, and where the task needs input, its form opens first.
 4. **People are coupled.** The wiki's accounts and the engine's are matched, possibly through an external identity provider.
 
-What the engine offers, as of pblumer/atlas's draft record `tasks-for-a-connected-system` (built 2026-10-28, proposed there):
+What the engine offers, as of pblumer/atlas ADR-0510, Tasks for a connected system (built 2026-10-28, proposed there):
 
 - **Tasks.** `GET /api/v1/tasks` lists the open user tasks the caller may see, newest first; an operator sees all, a person sees the tasks addressed to them, offered to a group they belong to, or to nobody. `GET /api/v1/tasks/{key}` reads one; a task that ended answers 404. A task names its process, element, name, candidate groups, assignee (a username), form, priority and due date. `POST …/claim`, `…/unclaim` and `…/complete` (with `{"variables": …}`) work a task; completion records the caller as `completedBy` and is refused to a caller who may not work the task.
 - **Forms and values.** `GET /api/v1/forms/{id}` answers a form-js schema; `GET /api/v1/instances/{key}/variables` the values a form opens with, scoped to the caller.
@@ -164,7 +164,14 @@ Step 4: who sees a linked task.
 - The round's report says how many connected people's lists were read and not read, and on how many items the readers changed; a dry round reads no person's list.
 - The protection narrows and never grants (D9): a connected person without a role in the target space still does not read the item.
 
-Not built yet: the task dialog and completing through the engine, following the facts, the task list's query and how current a linked task is.
+Step 5: the task dialog.
+
+- `internal/engine`: a person's work with the access token of their grant — `TaskAs`, `FormAs`, `ValuesAs` (the variables of the task's scope; none where the grant does not reach them), `Claim`, `Unclaim` and `Complete`; the engine's refusals keep its reason: `ErrNotAllowed` for 403 (held by another, a public form's step), `ErrRejected` for 400 and 422 (a value refused, as atlas checks directory fields).
+- `internal/server`: the linked item's routes above. The item is found as the caller reads it (D10); the wiki's edit right is not asked. Without a connection, `GET` says so and the commands answer 409 with `connect`. A task the engine no longer answers is 409, and a round is asked for. Once the engine completes the task, the item moves to the rule's completed state by its one transition, **recorded as the person** — the history names who completed it, rather than the synchronisation's actor this record first named — and a round follows.
+- `internal/web` (`assets/taskdialog.js`): the item's page shows the task as the engine shows it to oneself — who holds it, *Take on*, *Give back*, *Complete…*, and the engine's own app. Moving a linked card to a finished state — on a board or kanban, in the item's or a card's state bar, in the task list — opens the task dialog instead of the transition: the form drawn by form-js with the values it opens with, checked as form-js checks it, sent to the engine as oneself; a task without a form asks to confirm. A move to any other finished state than the rule's completed one is refused there: only the engine cancels. A form with parts only the engine draws — atlas's e-mail view, a field that searches a directory (`atlasDataSource`), or any type the vendored viewer does not know — is not sent from here: the dialog names them and links to the engine's app.
+- Not an MCP tool (`internal/mcp/tools.go` says so).
+
+Not built yet: following the facts, the task list's query and how current a linked task is.
 
 ### Consequences
 
@@ -239,4 +246,4 @@ Strongest form: groups are a familiar way to protect items (ADR-0078), one prote
 
 - answers the open question of [ADR-0049](0049-a-task-inbox-after-atlas.md) (a task inbox) and the third use of [ADR-0148](0148-start-forms-and-the-forms-of-a-process.md) (user tasks)
 - relates to [ADR-0129](0129-bpmn-diagrams-and-processes-from-a-process-engine.md) (engines), [ADR-0144](0144-forms-and-decisions-from-a-process-engine.md) (forms), [ADR-0060](0060-kanbans-are-topics-whose-cards-carry-their-label.md), [ADR-0076](0076-kanban-columns-card-fields-and-free-moves.md) and [ADR-0139](0139-the-boards-of-a-type-and-a-label-show-the-cards-of-a-kanban.md) (kanbans and boards), [ADR-0114](0114-tasks-in-a-text.md) (tasks in a text), [ADR-0136](0136-a-query-language-selects-items-by-their-fields.md) (queries), [ADR-0078](0078-protecting-items-for-people-and-groups.md) (protection), [ADR-0082](0082-a-state-no-transition-leaves-is-finished.md) (finished states), [ADR-0128](0128-the-atlassian-import-as-a-connector.md) (managed items), [ADR-0030](0030-openid-connect-single-sign-on.md) (single sign-on), [ADR-0015](0015-resource-budgets-and-paged-listings.md) (budgets), [ADR-0016](0016-metrics-and-backup.md) (metrics)
-- the engine's side: pblumer/atlas, draft record `tasks-for-a-connected-system` (task facts on the feed, the `tasklist` scope, grants for `…/tasks`, one's own groups in `auth/me`)
+- the engine's side: pblumer/atlas ADR-0510, Tasks for a connected system (task facts on the feed, the `tasklist` scope, grants for `…/tasks`, one's own groups in `auth/me`)

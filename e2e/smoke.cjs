@@ -157,9 +157,9 @@ function engineSource() {
   let releases = 2;
   let reached = true;
   const starts = [];
-  const grants = { codes: new Map(), access: new Set(), refresh: new Set(), revoked: 0 };
+  const grants = { codes: new Map(), access: new Set(), refresh: new Set(), revoked: 0, completed: [] };
   const openTasks = [
-    { key: 4711, processInstanceKey: 1, elementInstanceKey: 2, processId: "urlaub", elementId: "genehmigen", name: "Approve holidays", candidateGroups: "hr", dueDate: 1793000000000 },
+    { key: 4711, processInstanceKey: 1, elementInstanceKey: 2, processId: "urlaub", elementId: "genehmigen", name: "Approve holidays", candidateGroups: "hr", dueDate: 1793000000000, formId: "approve-holidays" },
     { key: 4712, processInstanceKey: 3, elementInstanceKey: 4, processId: "onboarding", elementId: "laptop", name: "Prepare the laptop" },
     { key: 4713, processInstanceKey: 5, elementInstanceKey: 6, processId: "urlaub", elementId: "genehmigen", name: "A wizard's step", wizard: "public" }];
   const server = require("http").createServer((req, res) => {
@@ -235,10 +235,34 @@ function engineSource() {
       });
       return;
     }
-    // The person sees the task of the process urlaub, offered to hr.
-    if (path === "/api/v1/tasks" && grants.access.has((req.headers.authorization || "").replace(/^Bearer /, ""))) {
-      return json({ truncated: false, items: openTasks.slice(0, 1) });
+    // The person sees the task of the process urlaub, offered to hr, and
+    // works it: its form, its values, take it on, complete it (ADR-0151).
+    const person = grants.access.has((req.headers.authorization || "").replace(/^Bearer /, ""));
+    if (path === "/api/v1/tasks" && person) return json({ truncated: false, items: openTasks.filter((t) => t.key === 4711) });
+    const work = /^\/api\/v1\/tasks\/(\d+)(?:\/(claim|unclaim|complete))?$/.exec(path);
+    if (work && person) {
+      const task = openTasks.find((t) => String(t.key) === work[1] && t.key === 4711);
+      if (!task) return json({ error: "no open task with that key" }, 404);
+      if (!work[2]) return json(task);
+      let body = "";
+      req.on("data", (c) => { body += c; });
+      req.on("end", () => {
+        if (work[2] === "claim") task.assignee = "anna";
+        if (work[2] === "unclaim") delete task.assignee;
+        if (work[2] === "complete") {
+          grants.completed.push({ key: task.key, variables: JSON.parse(body || "{}").variables });
+          openTasks.splice(openTasks.indexOf(task), 1);
+        }
+        json({ taskKey: task.key, assignee: task.assignee || "" });
+      });
+      return;
     }
+    if (path === "/api/v1/forms/approve-holidays" && person) {
+      return json({ id: "approve-holidays", name: "Approve holidays", schema: { type: "default", components: [
+        { type: "radio", key: "approved", label: "Approved", values: [{ label: "Yes", value: "yes" }, { label: "No", value: "no" }], validate: { required: true } },
+        { type: "textfield", key: "comment", label: "Comment" }] } });
+    }
+    if (/^\/api\/v1\/instances\/\d+\/variables$/.test(path) && person) return json({ comment: "Ben's two weeks" });
     if (path === "/api/v1/auth/me" && grants.access.has((req.headers.authorization || "").replace(/^Bearer /, ""))) {
       return json({ authEnabled: true, user: { id: "u-17", username: "anna", displayName: "Anna Muster", email: "anna@example.org", roles: ["user"],
         groups: [{ id: "g1", name: "hr" }] } });
@@ -2681,6 +2705,7 @@ function gitSource() {
     await page.waitForSelector("#body.reading");
 
     if (process.env.ENGINE_TOKEN) {
+      console.log("PROBE before-process", JSON.stringify((await (await page.request.get(base + "/api/items/" + flow.item.id)).json()).item.body.map((b) => b.kind)), (await (await page.request.get(base + "/api/items/" + flow.item.id + "/attachments")).json()).attachments.length);
       step("BPMN: a process of an engine shows its newest version and, where allowed, its operations as counts only (ADR-0129)");
       await page.goto(base + "/#/admin");
       await page.waitForSelector("#engines >> text=No process engine is set up yet.");
@@ -2724,6 +2749,7 @@ function gitSource() {
       await live.locator(".pm-diagram-ops:has-text('Version 4 · running: 3 · finished: 12 · incidents: 1')").waitFor();
       check(!(await page.content()).includes("Paul Muster"), "no incident message reaches the reader");
 
+      console.log("PROBE before-tasklinks", JSON.stringify((await (await page.request.get(base + "/api/items/" + flow.item.id)).json()).item.body.map((b) => b.kind)), (await (await page.request.get(base + "/api/items/" + flow.item.id + "/attachments")).json()).attachments.length);
       step("task links: an administrator sets a rule for the engine's user tasks, tries it and links them; a linked task is hidden until the engine says who sees it (ADR-0151)");
       check((await page.request.post(base + "/api/types", { data: { name: "approval", body: true, fields: [{ name: "due", kind: "date" }],
         workflow: { initial: "open", states: ["open", "done", "cancelled"], transitions: [
@@ -2771,11 +2797,41 @@ function gitSource() {
         check((await readersOf()) === want, what + ": " + (await readersOf()));
       };
       await readersBecome(["engine:atlas", meID].sort().join(","), "the person whose task list holds the task reads it");
+
       answer = true; // the confirmation to disconnect
       await page.click("#engines li.connected button:has-text('Disconnect')");
       await page.waitForSelector("#engines li[data-engine=atlas] a:has-text('Connect')");
       check(engine.grants.revoked === 1, "disconnecting revokes the grant at the engine");
       await readersBecome("engine:atlas", "a person no longer connected no longer reads it");
+
+      step("task dialog: the person takes the task on at the engine, and moving its card to done opens its form, which completes it there (ADR-0151)");
+      await page.goto(base + "/#/account");
+      await page.click("#engines li[data-engine=atlas] a:has-text('Connect')"); // again
+      await page.waitForSelector("#engine-connected");
+      await readersBecome(["engine:atlas", meID].sort().join(","), "connected again, the person reads the task again");
+      const approval = (await (await page.request.get(base + "/api/items?type=approval")).json()).items[0];
+      await page.goto(base + "/#/item/" + approval.key);
+      await page.waitForSelector("#engine-task-holder >> text=Offered to hr; nobody holds it yet.");
+      await page.click("#engine-task-claim");
+      await page.waitForSelector("#engine-task-holder >> text=You hold this task.");
+      await page.goto(base + "/#/board/PLAT/approval");
+      await page.waitForSelector(`#board .board-column[data-state=open] .card-item[data-id='${approval.id}']`);
+      await page.evaluate((id) => {
+        const dt = new DataTransfer();
+        dt.setData("text/plain", id);
+        document.querySelector("#board .board-column[data-state=done]").dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+      }, approval.id);
+      await page.waitForSelector("#task-dialog .fjs-container input[type=radio]");
+      check(await page.inputValue("#task-dialog .fjs-container input[type=text]") === "Ben's two weeks", "the form opens with the task's values");
+      await page.click("#task-dialog-send"); // the required choice is missing: form-js says so, nothing is sent
+      check(engine.grants.completed.length === 0, "a form with a missing required value is not sent");
+      await page.click("#task-dialog .fjs-container label:has-text('Yes')");
+      await page.click("#task-dialog-send");
+      await page.waitForSelector("#task-dialog", { state: "detached" });
+      await page.waitForSelector(`#board .board-column[data-state=done] .card-item[data-id='${approval.id}']`);
+      check(engine.grants.completed.length === 1 && engine.grants.completed[0].variables.approved === "yes" &&
+        engine.grants.completed[0].variables.comment === "Ben's two weeks", "the engine completed the task with the form's values");
+      check((await (await page.request.get(base + "/api/items/" + approval.id)).json()).item.state === "done", "the item is done once the engine completed its task");
       await page.goto(base + "/#/item/" + flow.item.key); // where the drawing begins
       await page.waitForSelector("#edit");
 

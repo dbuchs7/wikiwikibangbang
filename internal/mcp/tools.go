@@ -113,6 +113,9 @@ var (
 // whether agents read an engine's processes, forms, decisions, sketches
 // and operations through this server, with the engine's credential rather
 // than their own, or start its processes, is a decision of its own.
+// Nor are a person's connections to engines and the work on a linked
+// task (ADR-0151): completing a task is deciding, and an agent works tasks
+// at the engine with a grant of its own.
 var tools = []tool{
 	{Name: "list_spaces", Description: "List the spaces the caller holds a role in.", Method: "GET", Path: "/api/spaces"},
 	{Name: "get_own_roles", Description: "The caller's own roles: the system roles held, and every space role granted to the caller, directly or through a group (via), one entry per grant.",

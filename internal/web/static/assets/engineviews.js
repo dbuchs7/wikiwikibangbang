@@ -30,7 +30,7 @@ function stylesheets(key, hrefs) {
   })));
   return sheets[key];
 }
-const loadForm = async () => (await Promise.all([import("/vendor/form-viewer.js"), stylesheets("form", ["/vendor/form/form-js.css"])]))[0].Form;
+export const loadForm = async () => (await Promise.all([import("/vendor/form-viewer.js"), stylesheets("form", ["/vendor/form/form-js.css"])]))[0].Form;
 const loadDMN = async () => (await Promise.all([import("/vendor/dmn-viewer.js"), stylesheets("dmn", ["/vendor/dmn/diagram-js.css",
   "/vendor/dmn/dmn-js-shared.css", "/vendor/dmn/dmn-js-drd.css", "/vendor/dmn/dmn-js-decision-table.css", "/vendor/dmn/dmn-js-literal-expression.css",
   "/vendor/dmn/dmn-js-boxed-expression.css", "/vendor/dmn/dmn-font/css/dmn.css"])]))[0].Viewer;

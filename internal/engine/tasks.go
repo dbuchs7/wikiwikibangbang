@@ -50,6 +50,41 @@ type Task struct {
 	Wizard string
 }
 
+// wireTask is a user task as the engine answers it.
+type wireTask struct {
+	Key                uint64 `json:"key"`
+	ProcessInstanceKey uint64 `json:"processInstanceKey"`
+	ElementInstanceKey uint64 `json:"elementInstanceKey"`
+	ProcessID          string `json:"processId"`
+	ElementID          string `json:"elementId"`
+	Name               string `json:"name"`
+	Assignee           string `json:"assignee"`
+	CandidateGroups    string `json:"candidateGroups"`
+	FormID             string `json:"formId"`
+	Priority           int    `json:"priority"`
+	DueDate            int64  `json:"dueDate"`
+	CreatedAt          int64  `json:"createdAt"`
+	Wizard             string `json:"wizard"`
+}
+
+func (it wireTask) task() Task {
+	t := Task{Key: it.Key, ProcessInstanceKey: it.ProcessInstanceKey, ElementInstanceKey: it.ElementInstanceKey,
+		Process: it.ProcessID, Element: it.ElementID, Name: strings.TrimSpace(it.Name), Assignee: it.Assignee,
+		Form: it.FormID, Priority: it.Priority, Wizard: it.Wizard}
+	for _, g := range strings.Split(it.CandidateGroups, ",") {
+		if g = strings.TrimSpace(g); g != "" {
+			t.Groups = append(t.Groups, g)
+		}
+	}
+	if it.DueDate > 0 {
+		t.Due = time.UnixMilli(it.DueDate).UTC()
+	}
+	if it.CreatedAt > 0 {
+		t.Created = time.UnixMilli(it.CreatedAt).UTC()
+	}
+	return t
+}
+
 // tasksPage is how many tasks one request of the list asks for.
 const tasksPage = 500
 
@@ -80,23 +115,9 @@ func (r *Reader) openTasks(ctx context.Context, e site.Engine, bearer string) (t
 			q.Set("before", before)
 		}
 		var page struct {
-			Items []struct {
-				Key                uint64 `json:"key"`
-				ProcessInstanceKey uint64 `json:"processInstanceKey"`
-				ElementInstanceKey uint64 `json:"elementInstanceKey"`
-				ProcessID          string `json:"processId"`
-				ElementID          string `json:"elementId"`
-				Name               string `json:"name"`
-				Assignee           string `json:"assignee"`
-				CandidateGroups    string `json:"candidateGroups"`
-				FormID             string `json:"formId"`
-				Priority           int    `json:"priority"`
-				DueDate            int64  `json:"dueDate"`
-				CreatedAt          int64  `json:"createdAt"`
-				Wizard             string `json:"wizard"`
-			} `json:"items"`
-			Truncated  bool   `json:"truncated"`
-			NextCursor string `json:"nextCursor"`
+			Items      []wireTask `json:"items"`
+			Truncated  bool       `json:"truncated"`
+			NextCursor string     `json:"nextCursor"`
 		}
 		rq := request{method: http.MethodGet, path: "/api/v1/tasks?" + q.Encode(), accept: "application/json", tokenVar: TaskListVar(e.ID), bearer: bearer}
 		if err := r.call(ctx, e, rq, func(_ string, body io.Reader) error { return json.NewDecoder(body).Decode(&page) }); err != nil {
@@ -109,21 +130,7 @@ func (r *Reader) openTasks(ctx context.Context, e site.Engine, bearer string) (t
 			if len(tasks) == limit {
 				return tasks, false, nil
 			}
-			t := Task{Key: it.Key, ProcessInstanceKey: it.ProcessInstanceKey, ElementInstanceKey: it.ElementInstanceKey,
-				Process: it.ProcessID, Element: it.ElementID, Name: strings.TrimSpace(it.Name), Assignee: it.Assignee,
-				Form: it.FormID, Priority: it.Priority, Wizard: it.Wizard}
-			for _, g := range strings.Split(it.CandidateGroups, ",") {
-				if g = strings.TrimSpace(g); g != "" {
-					t.Groups = append(t.Groups, g)
-				}
-			}
-			if it.DueDate > 0 {
-				t.Due = time.UnixMilli(it.DueDate).UTC()
-			}
-			if it.CreatedAt > 0 {
-				t.Created = time.UnixMilli(it.CreatedAt).UTC()
-			}
-			tasks = append(tasks, t)
+			tasks = append(tasks, it.task())
 		}
 		if !page.Truncated || page.NextCursor == "" {
 			return tasks, true, nil

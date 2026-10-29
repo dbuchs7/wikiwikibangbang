@@ -16,6 +16,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -59,10 +60,23 @@ type Engine struct {
 	Tasks     []map[string]any
 	ListToken string
 	Sees      map[string][]uint64
+	// Forms are the forms by ID, their schemas; Values the variables of
+	// every task's scope. Completed records each completion: the task's
+	// key, who completed it and the variables sent.
+	Forms     map[string]map[string]any
+	Values    map[string]any
+	Completed []Completion
 
 	codes   map[string]code
 	refresh map[string]string // refresh token -> person ID
 	access  map[string]string // access token -> person ID
+}
+
+// Completion is a task completed at the fake engine.
+type Completion struct {
+	Key       string
+	Person    string
+	Variables map[string]any
 }
 
 type code struct {
@@ -168,24 +182,117 @@ func (e *Engine) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"items": items, "truncated": false})
 	case "/api/v1/auth/me":
-		person, ok := e.access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
-		if !ok {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		if person != e.Person.ID {
-			writeJSON(w, http.StatusOK, map[string]any{"authEnabled": true, "user": map[string]any{"id": person, "username": person, "groups": []any{}}})
-			return
-		}
-		groups := []map[string]string{}
-		for i, g := range e.Person.Groups {
-			groups = append(groups, map[string]string{"id": "g" + string(rune('1'+i)), "name": g})
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"authEnabled": true, "user": map[string]any{"id": e.Person.ID, "username": e.Person.Username,
-			"email": e.Person.Email, "displayName": e.Person.DisplayName, "roles": []string{"user"}, "groups": groups}})
+		e.me(w, r)
 	default:
+		if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			e.work(w, r)
+			return
+		}
 		http.NotFound(w, r)
 	}
+}
+
+// person is whose access token a request carries.
+func (e *Engine) person(r *http.Request) (string, bool) {
+	p, ok := e.access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+	return p, ok
+}
+
+// work answers a person's work on a task, as atlas does: a task one may
+// not see is 404, one held by another is 403, completing it ends it.
+func (e *Engine) work(w http.ResponseWriter, r *http.Request) {
+	person, ok := e.person(r)
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/v1/"), "/")
+	switch {
+	case len(parts) == 2 && parts[0] == "forms" && r.Method == http.MethodGet:
+		f, ok := e.Forms[parts[1]]
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no form with that id"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"id": parts[1], "name": "Form " + parts[1], "schema": f})
+		return
+	case len(parts) == 3 && parts[0] == "instances" && parts[2] == "variables":
+		writeJSON(w, http.StatusOK, e.Values)
+		return
+	case len(parts) < 2 || parts[0] != "tasks":
+		http.NotFound(w, r)
+		return
+	}
+	var task map[string]any
+	idx := -1
+	for i, t := range e.Tasks {
+		if k, _ := t["key"].(int); strconv.Itoa(k) == parts[1] && slices.Contains(e.Sees[person], uint64(k)) {
+			task, idx = t, i
+		}
+	}
+	if task == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no open task with that key"})
+		return
+	}
+	if len(parts) == 2 {
+		writeJSON(w, http.StatusOK, task)
+		return
+	}
+	if a, _ := task["assignee"].(string); a != "" && a != e.usernameOf(person) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "this task is assigned to somebody else; ask them, or an operator, to act on it"})
+		return
+	}
+	switch parts[2] {
+	case "claim":
+		task["assignee"] = e.usernameOf(person)
+	case "unclaim":
+		delete(task, "assignee")
+	case "complete":
+		var body struct {
+			Variables map[string]any `json:"variables"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Variables["approved"] == "maybe" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "approved: not a value of the list", "code": "invalid_value"})
+			return
+		}
+		e.Completed = append(e.Completed, Completion{Key: parts[1], Person: person, Variables: body.Variables})
+		e.Tasks = slices.Delete(e.Tasks, idx, idx+1)
+		writeJSON(w, http.StatusOK, map[string]any{"taskKey": task["key"]})
+		return
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	a, _ := task["assignee"].(string)
+	writeJSON(w, http.StatusOK, map[string]any{"taskKey": task["key"], "assignee": a})
+}
+
+// usernameOf is the username of the person with the ID: Person's, or the
+// ID itself for the others.
+func (e *Engine) usernameOf(id string) string {
+	if id == e.Person.ID {
+		return e.Person.Username
+	}
+	return id
+}
+
+func (e *Engine) me(w http.ResponseWriter, r *http.Request) {
+	person, ok := e.person(r)
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	if person != e.Person.ID {
+		writeJSON(w, http.StatusOK, map[string]any{"authEnabled": true, "user": map[string]any{"id": person, "username": person, "groups": []any{}}})
+		return
+	}
+	groups := []map[string]string{}
+	for i, g := range e.Person.Groups {
+		groups = append(groups, map[string]string{"id": "g" + string(rune('1'+i)), "name": g})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"authEnabled": true, "user": map[string]any{"id": e.Person.ID, "username": e.Person.Username,
+		"email": e.Person.Email, "displayName": e.Person.DisplayName, "roles": []string{"user"}, "groups": groups}})
 }
 
 // authorize is the consent: the person approves at once, or refuses.
