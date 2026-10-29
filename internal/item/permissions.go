@@ -571,7 +571,11 @@ func (x *Session) CreateEmbedded(host ID, n NewItem) (Item, error) {
 
 // SetTitle renames an editable item.
 func (x *Session) SetTitle(id ID, title string) error {
-	if _, err := x.editable(id); err != nil {
+	it, err := x.editable(id)
+	if err != nil {
+		return err
+	}
+	if err := linkedRefusal(it, "its title is the task's name there"); err != nil {
 		return err
 	}
 	return x.s.SetTitle(x.who, id, title)
@@ -633,16 +637,30 @@ func (x *Session) labels(space string, tasks bool) []LabelCount {
 
 // SetProperty sets a property of an editable item.
 func (x *Session) SetProperty(id ID, field string, value any) error {
-	if _, err := x.editable(id); err != nil {
+	it, err := x.editable(id)
+	if err != nil {
 		return err
+	}
+	if slices.Contains(it.LinkedFields, field) {
+		if err := linkedRefusal(it, "the engine sets "+field); err != nil {
+			return err
+		}
 	}
 	return x.s.SetProperty(x.who, id, field, value)
 }
 
 // Transition moves an editable item along its workflow.
 func (x *Session) Transition(id ID, name string) error {
-	if _, err := x.editable(id); err != nil {
+	it, err := x.editable(id)
+	if err != nil {
 		return err
+	}
+	// A linked task is finished at its engine, which decides whether it may
+	// be (ADR-0151); its other states are the wiki's.
+	if td, _ := x.s.latest(it.Type); it.Linked != "" && td.Workflow != nil {
+		if tr, ok := td.Workflow.transition(name); ok && td.Workflow.Finished(tr.To) {
+			return linkedRefusal(it, "it is completed at the engine")
+		}
 	}
 	return x.s.Transition(x.who, id, name)
 }
@@ -674,6 +692,9 @@ func (x *Session) Move(id ID, toSpace string, newParent ID) error {
 	if err := x.editableAll(id); err != nil {
 		return err
 	}
+	if err := x.keepsLinkedTasks(id, toSpace); err != nil {
+		return err
+	}
 	if err := x.canCreateIn(toSpace, newParent); err != nil {
 		return err
 	}
@@ -687,6 +708,9 @@ func (x *Session) Place(id ID, toSpace string, newParent, before ID) error {
 	if err := x.editableAll(id); err != nil {
 		return err
 	}
+	if err := x.keepsLinkedTasks(id, toSpace); err != nil {
+		return err
+	}
 	if err := x.canCreateIn(toSpace, newParent); err != nil {
 		return err
 	}
@@ -696,6 +720,33 @@ func (x *Session) Place(id ID, toSpace string, newParent, before ID) error {
 		}
 	}
 	return x.s.Place(x.who, id, toSpace, newParent, before)
+}
+
+// openTaskBelow refuses removing an item when it, or an item below it, is
+// a linked task its engine has not ended (ADR-0151).
+func (x *Session) openTaskBelow(id ID) error {
+	for _, sub := range x.s.subtree(id) {
+		it := x.s.items[sub]
+		if td, _ := x.s.latest(it.Type); it.Presence == Live && it.Linked != "" && !td.Workflow.Finished(it.State) {
+			return linkedRefusal(it, "it is open there; it can be removed once the engine has ended it")
+		}
+	}
+	return nil
+}
+
+// keepsLinkedTasks refuses moving an item to another space when it, or an
+// item below it, is a linked task: its space is where the engine's
+// readers were given their role (ADR-0151).
+func (x *Session) keepsLinkedTasks(id ID, toSpace string) error {
+	if it := x.s.items[id]; it == nil || it.Space == toSpace {
+		return nil
+	}
+	for _, sub := range x.s.subtree(id) {
+		if it := x.s.items[sub]; it.Presence == Live && it.Linked != "" {
+			return linkedRefusal(it, "it stays in its space")
+		}
+	}
+	return nil
 }
 
 // TreeNode is one readable child in a page tree. Item is its summary,
@@ -769,6 +820,9 @@ func (x *Session) Trash(id ID) error {
 	if err := x.editableAll(id); err != nil {
 		return err
 	}
+	if err := x.openTaskBelow(id); err != nil {
+		return err
+	}
 	if refs := x.s.referrers(id); len(refs) > 0 {
 		var named []string
 		hidden := 0
@@ -810,7 +864,7 @@ func (x *Session) Restore(id ID) error {
 
 // MayTrash reports whether the principal may trash an item with what is
 // below it, as Trash checks it.
-func (x *Session) MayTrash(id ID) bool { return x.editableAll(id) == nil }
+func (x *Session) MayTrash(id ID) bool { return x.editableAll(id) == nil && x.openTaskBelow(id) == nil }
 
 // MayRestore reports whether the principal may restore an item from the
 // trash: it is the item the trash started from, and the principal may
@@ -861,6 +915,9 @@ func (x *Session) Restrict(id ID, r Restriction) error {
 		return err
 	}
 	it := x.s.items[id]
+	if err := linkedRefusal(it, "who reads it, the engine decides"); err != nil {
+		return err
+	}
 	if err := x.MayRestrictIn(it.Space, r); err != nil {
 		return fmt.Errorf("%w of %s", err, it.Key)
 	}

@@ -35,6 +35,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
 	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
 	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
+	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
 	"github.com/dbuchs7/wikiwikibangbang/internal/item"
 	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
 	"github.com/dbuchs7/wikiwikibangbang/internal/mcp"
@@ -43,6 +44,7 @@ import (
 	"github.com/dbuchs7/wikiwikibangbang/internal/server"
 	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
 	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/wikiwikibangbang/internal/tasklink"
 	"github.com/dbuchs7/wikiwikibangbang/internal/web"
 )
 
@@ -263,6 +265,14 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	catalogDone := make(chan struct{})
 	go func() { catalog.Loop(catalogCtx); close(catalogDone) }()
 	defer func() { stopCatalog(); <-catalogDone; catalog.Close() }()
+	// The user tasks of process engines become linked tasks by the rules
+	// set under Administration, read every minute (ADR-0151).
+	engines := engine.NewReader(nil, nil)
+	taskLinks := tasklink.New(db, engines, log)
+	linksCtx, stopLinks := context.WithCancel(ctx)
+	linksDone := make(chan struct{})
+	go func() { taskLinks.Loop(linksCtx); close(linksDone) }()
+	defer func() { stopLinks(); <-linksDone }()
 	// The free space of the data directory is measured every few minutes;
 	// below the thresholds administrators are told, uploads refused and,
 	// at the floor, the wiki only reads (ADR-0150).
@@ -271,7 +281,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	diskDone := make(chan struct{})
 	go func() { disk.Loop(diskCtx); close(diskDone) }()
 	defer func() { stopDisk(); <-diskDone }()
-	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration, Backups: backups, Connectors: catalog, Disk: disk})
+	routes := server.Routes(server.Deps{UI: web.FS(), DB: db, Log: log, SSO: providers, Collab: live, LinkCheck: links, Messages: messages, OAuthRegistration: registration, Backups: backups, Connectors: catalog, Engines: engines, TaskLinks: taskLinks, Disk: disk})
 	if err := server.Serve(ctx, ln, server.BehindProxies(proxies, server.WithPublicURL(notifier.PublicURL(), server.Handler(routes, db.Accounts))), log); err != nil {
 		log.Error("server failed", "err", err)
 		return 1

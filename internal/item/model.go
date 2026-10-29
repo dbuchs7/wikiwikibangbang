@@ -292,6 +292,11 @@ type Item struct {
 	Origin *Origin
 	// Managed is the tag of the one-way sync that owns the item, or empty.
 	Managed string
+	// Linked names the process engine whose user task the item is, or is
+	// empty (ADR-0151). The engine owns the item's title and LinkedFields;
+	// who reads it, and whether it is finished, the engine decides.
+	Linked       string
+	LinkedFields []string
 	// Comments are the item's comments in the order written (ADR-0035).
 	Comments []Comment
 	// Labels are the item's labels, sorted and unique (ADR-0044).
@@ -474,25 +479,27 @@ type Event struct {
 	Relation   *Relation
 	Members    []ID // ItemTrashed, ItemRestored, ItemPurged, SpacePurged: every item affected; SecretErased: the comments whose anchor quoted the passage
 
-	Group       string       // GroupMemberAdded, GroupMemberRemoved
-	Principal   string       // GroupMemberAdded, RoleGranted, SystemRoleGranted, and their revocations
-	Role        Role         // RoleGranted
-	SystemRole  string       // SystemRoleGranted
-	Restriction *Restriction // RestrictionSet
-	Reason      string       // ItemRedacted
-	Origin      *Origin      // ItemImported
-	Key         string       // ItemImported: the source key to keep, if free
-	Managed     string       // ItemImported, ItemReleased
-	Comment     ID           // CommentAdded, CommentEdited, CommentDeleted, CommentResolved, CommentReopened
-	Text        string       // CommentAdded, CommentEdited
-	Anchor      *Anchor      // CommentAdded: the text an inline comment is on (ADR-0047)
-	Reply       ID           // CommentAdded: the comment a reply answers (ADR-0047)
-	Labels      []string     // LabelsSet: the item's labels after the event
-	Attachment  *Attachment  // AttachmentAdded; AttachmentDeleted: only its ID
-	Hold        *Hold        // HoldSet: the hold as it is after the event
-	Outcome     string       // HoldReleased: HoldRestricted or HoldFalseAlarm; Text holds the reason
-	Kanban      *Kanban      // KanbanSet; KanbanRemoved and KanbanCardPlaced: only its ID
-	Secret      *Secret      // SecretSet; the other secret kinds: only its ID
+	Group        string       // GroupMemberAdded, GroupMemberRemoved
+	Principal    string       // GroupMemberAdded, RoleGranted, SystemRoleGranted, and their revocations
+	Role         Role         // RoleGranted
+	SystemRole   string       // SystemRoleGranted
+	Restriction  *Restriction // RestrictionSet
+	Reason       string       // ItemRedacted
+	Origin       *Origin      // ItemImported
+	Key          string       // ItemImported: the source key to keep, if free
+	Managed      string       // ItemImported, ItemReleased
+	Linked       string       // ItemImported: the engine whose user task the item is (ADR-0151)
+	LinkedFields []string     // ItemImported: the fields that engine owns
+	Comment      ID           // CommentAdded, CommentEdited, CommentDeleted, CommentResolved, CommentReopened
+	Text         string       // CommentAdded, CommentEdited
+	Anchor       *Anchor      // CommentAdded: the text an inline comment is on (ADR-0047)
+	Reply        ID           // CommentAdded: the comment a reply answers (ADR-0047)
+	Labels       []string     // LabelsSet: the item's labels after the event
+	Attachment   *Attachment  // AttachmentAdded; AttachmentDeleted: only its ID
+	Hold         *Hold        // HoldSet: the hold as it is after the event
+	Outcome      string       // HoldReleased: HoldRestricted or HoldFalseAlarm; Text holds the reason
+	Kanban       *Kanban      // KanbanSet; KanbanRemoved and KanbanCardPlaced: only its ID
+	Secret       *Secret      // SecretSet; the other secret kinds: only its ID
 
 	// Erased is set on an event whose content (title, properties, body, raw
 	// source) was removed because its item was purged or redacted. The
@@ -544,6 +551,7 @@ func (it *Item) clone() Item {
 	c.Body = it.Body.clone()
 	c.Comments = slices.Clone(it.Comments)
 	c.Labels = slices.Clone(it.Labels)
+	c.LinkedFields = slices.Clone(it.LinkedFields)
 	c.Attachments = slices.Clone(it.Attachments)
 	c.ErasedSecrets = slices.Clone(it.ErasedSecrets)
 	c.Secrets = make([]Secret, len(it.Secrets))

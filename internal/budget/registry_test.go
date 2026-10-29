@@ -51,9 +51,11 @@ var classified = map[string]string{
 		"it guards against a host that names a next page for ever",
 	"internal/connector.maxPages": "how many pages of a JSON source's list a connector reads (ADR-0127, ADR-0135), not a caller's input to this server; " +
 		"it guards the connector against a source that names a next page for ever",
-	"internal/connector.maxCell":  "the shape of a generated catalog page (ADR-0080): how long one value of the source may be on it, like the length of a title",
-	"internal/site.maxConnectors": "the shape of the site's settings (ADR-0077): how many connectors an administrator keeps, like the number of regulations",
-	"internal/site.maxEngines":    "the shape of the site's settings (ADR-0129): how many process engines an administrator keeps, like the number of connectors",
+	"internal/connector.maxCell":    "the shape of a generated catalog page (ADR-0080): how long one value of the source may be on it, like the length of a title",
+	"internal/site.maxConnectors":   "the shape of the site's settings (ADR-0077): how many connectors an administrator keeps, like the number of regulations",
+	"internal/site.maxEngines":      "the shape of the site's settings (ADR-0129): how many process engines an administrator keeps, like the number of connectors",
+	"internal/tasklink.maxProblems": "the shape of a round's report (ADR-0151): how many problems it names before it counts the rest, held for one engine at a time",
+	"internal/site.maxTaskRules":    "the shape of the site's settings (ADR-0151): how many task link rules an administrator keeps per engine, like the number of engines",
 	"internal/connector.maxDatasets": "the size of one connector's run (ADR-0075), so a misbehaving source cannot make it endless; " +
 		"not memory a caller of this server can claim",
 	"internal/item.maxColumns":       "the shape of a kanban (ADR-0076), like the length of its name; a definition of the space, not memory a caller claims",

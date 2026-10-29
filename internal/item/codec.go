@@ -94,7 +94,10 @@ import (
 //   - 35: the block kind startform, the block fields Link and Prefill, and
 //     a form block's View and Process (ADR-0148). Versions 1 to 34 are
 //     still read.
-const CodecVersion = 35
+//   - 36: an imported item may carry Linked and LinkedFields, the process
+//     engine whose user task it is and the fields that engine owns
+//     (ADR-0151). Versions 1 to 35 are still read.
+const CodecVersion = 36
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
@@ -188,50 +191,52 @@ func DecodeBatchSealed(data []byte, sl Sealer) ([]Event, error) {
 // structs (TypeDef, Doc, Relation, Restriction, Origin) are encoded with
 // their Go field names, which the golden test in testdata pins.
 type wireEvent struct {
-	V           int                   `json:"v"`
-	Seq         int                   `json:"seq"`
-	At          time.Time             `json:"at"`
-	Actor       string                `json:"actor,omitempty"`
-	Kind        EventKind             `json:"kind"`
-	Item        ID                    `json:"item,omitempty"`
-	Batch       int                   `json:"batch,omitempty"`
-	TypeDef     *TypeDef              `json:"typeDef,omitempty"`
-	Space       string                `json:"space,omitempty"`
-	SpaceName   string                `json:"spaceName,omitempty"`
-	TypeName    string                `json:"typeName,omitempty"`
-	TypeVersion int                   `json:"typeVersion,omitempty"`
-	Parent      ID                    `json:"parent,omitempty"`
-	Order       []ID                  `json:"order,omitempty"`
-	Title       string                `json:"title,omitempty"`
-	Props       map[string]*wireValue `json:"props,omitempty"`
-	Field       string                `json:"field,omitempty"`
-	Value       *wireValue            `json:"value,omitempty"`
-	Transition  string                `json:"transition,omitempty"`
-	From        string                `json:"from,omitempty"`
-	To          string                `json:"to,omitempty"`
-	Body        *Doc                  `json:"body,omitempty"`
-	Relation    *Relation             `json:"relation,omitempty"`
-	Members     []ID                  `json:"members,omitempty"`
-	Group       string                `json:"group,omitempty"`
-	Principal   string                `json:"principal,omitempty"`
-	Role        string                `json:"role,omitempty"`
-	SystemRole  string                `json:"systemRole,omitempty"`
-	Restriction *Restriction          `json:"restriction,omitempty"`
-	Reason      string                `json:"reason,omitempty"`
-	Origin      *Origin               `json:"origin,omitempty"`
-	Key         string                `json:"key,omitempty"`
-	Managed     string                `json:"managed,omitempty"`
-	Comment     ID                    `json:"comment,omitempty"`
-	Text        string                `json:"text,omitempty"`
-	Labels      []string              `json:"labels,omitempty"`
-	Attachment  *Attachment           `json:"attachment,omitempty"`
-	Anchor      *Anchor               `json:"anchor,omitempty"`
-	Reply       ID                    `json:"reply,omitempty"`
-	Hold        *Hold                 `json:"hold,omitempty"`
-	Outcome     string                `json:"outcome,omitempty"`
-	Kanban      *Kanban               `json:"kanban,omitempty"`
-	Secret      *Secret               `json:"secret,omitempty"`
-	Erased      bool                  `json:"erased,omitempty"`
+	V            int                   `json:"v"`
+	Seq          int                   `json:"seq"`
+	At           time.Time             `json:"at"`
+	Actor        string                `json:"actor,omitempty"`
+	Kind         EventKind             `json:"kind"`
+	Item         ID                    `json:"item,omitempty"`
+	Batch        int                   `json:"batch,omitempty"`
+	TypeDef      *TypeDef              `json:"typeDef,omitempty"`
+	Space        string                `json:"space,omitempty"`
+	SpaceName    string                `json:"spaceName,omitempty"`
+	TypeName     string                `json:"typeName,omitempty"`
+	TypeVersion  int                   `json:"typeVersion,omitempty"`
+	Parent       ID                    `json:"parent,omitempty"`
+	Order        []ID                  `json:"order,omitempty"`
+	Title        string                `json:"title,omitempty"`
+	Props        map[string]*wireValue `json:"props,omitempty"`
+	Field        string                `json:"field,omitempty"`
+	Value        *wireValue            `json:"value,omitempty"`
+	Transition   string                `json:"transition,omitempty"`
+	From         string                `json:"from,omitempty"`
+	To           string                `json:"to,omitempty"`
+	Body         *Doc                  `json:"body,omitempty"`
+	Relation     *Relation             `json:"relation,omitempty"`
+	Members      []ID                  `json:"members,omitempty"`
+	Group        string                `json:"group,omitempty"`
+	Principal    string                `json:"principal,omitempty"`
+	Role         string                `json:"role,omitempty"`
+	SystemRole   string                `json:"systemRole,omitempty"`
+	Restriction  *Restriction          `json:"restriction,omitempty"`
+	Reason       string                `json:"reason,omitempty"`
+	Origin       *Origin               `json:"origin,omitempty"`
+	Key          string                `json:"key,omitempty"`
+	Managed      string                `json:"managed,omitempty"`
+	Linked       string                `json:"linked,omitempty"`
+	LinkedFields []string              `json:"linkedFields,omitempty"`
+	Comment      ID                    `json:"comment,omitempty"`
+	Text         string                `json:"text,omitempty"`
+	Labels       []string              `json:"labels,omitempty"`
+	Attachment   *Attachment           `json:"attachment,omitempty"`
+	Anchor       *Anchor               `json:"anchor,omitempty"`
+	Reply        ID                    `json:"reply,omitempty"`
+	Hold         *Hold                 `json:"hold,omitempty"`
+	Outcome      string                `json:"outcome,omitempty"`
+	Kanban       *Kanban               `json:"kanban,omitempty"`
+	Secret       *Secret               `json:"secret,omitempty"`
+	Erased       bool                  `json:"erased,omitempty"`
 	// Sealed holds the encrypted content (wireContent) when a Sealer was
 	// used; the plaintext content fields are then empty.
 	Sealed []byte `json:"sealed,omitempty"`
@@ -422,7 +427,7 @@ func toWire(e Event) (wireEvent, error) {
 		TypeVersion: e.TypeVersion, Parent: e.Parent, Order: e.Order, Title: e.Title, Field: e.Field,
 		Transition: e.Transition, From: e.From, To: e.To, Body: e.Body, Relation: e.Relation,
 		Members: e.Members, Group: e.Group, Principal: e.Principal, SystemRole: e.SystemRole,
-		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed,
+		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed, Linked: e.Linked, LinkedFields: e.LinkedFields,
 		Comment: e.Comment, Text: e.Text, Labels: e.Labels, Attachment: e.Attachment, Erased: e.Erased,
 		Anchor: e.Anchor, Reply: e.Reply, Hold: e.Hold, Outcome: e.Outcome, Kanban: e.Kanban, Secret: e.Secret,
 	}
@@ -461,7 +466,7 @@ func fromWire(w wireEvent) (Event, error) {
 		TypeVersion: w.TypeVersion, Parent: w.Parent, Order: w.Order, Title: w.Title, Field: w.Field,
 		Transition: w.Transition, From: w.From, To: w.To, Body: w.Body, Relation: w.Relation,
 		Members: w.Members, Group: w.Group, Principal: w.Principal, SystemRole: w.SystemRole,
-		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed,
+		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed, Linked: w.Linked, LinkedFields: w.LinkedFields,
 		Comment: w.Comment, Text: w.Text, Labels: w.Labels, Attachment: w.Attachment, Erased: w.Erased,
 		Anchor: w.Anchor, Reply: w.Reply, Hold: w.Hold, Outcome: w.Outcome, Kanban: w.Kanban, Secret: w.Secret,
 	}
