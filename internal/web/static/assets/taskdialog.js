@@ -5,7 +5,7 @@
 // dialog, which draws the task's form with the values it opens with and
 // sends it to the engine. Only once the engine accepts does the item move.
 // The engine decides whether one may; its refusal is shown in its words.
-import { h } from "./dom.js";
+import { h, when } from "./dom.js";
 import { get, post } from "./api.js";
 import { t } from "./i18n.js";
 import { engineOnly } from "./taskparts.js";
@@ -17,6 +17,35 @@ const errorBox = (err) => h("p", { class: "error", role: "alert", text: err inst
 // connectHint offers to connect one's account to the engine.
 const connectHint = (got) => h("p", { class: "notice" }, t("enginetask.connect", { engine: got.engine.name }), " ",
   h("a", { href: "#/account", text: t("enginetask.connectLink") }));
+
+// freshLine says when the engine's tasks were last read, and warns when
+// that is so long ago that they may be out of date; empty before the
+// first round.
+function freshLine(fresh, engine) {
+  if (!fresh?.readAt) return "";
+  return h("p", { class: fresh.stale ? "notice warning task-fresh" : "muted task-fresh", "data-stale": String(Boolean(fresh.stale)),
+    text: t(fresh.stale ? "enginetask.stale" : "enginetask.fresh", { engine, when: when(fresh.readAt) }) });
+}
+
+// freshNotice says, for a board, when the engines of its linked cards were
+// last read; nothing when it holds none.
+export function freshNotice(items) {
+  const engines = [...new Set((items || []).filter((it) => it.linked).map((it) => it.linked))].sort();
+  const box = h("div", { class: "task-freshness", id: "task-freshness" });
+  if (!engines.length) return box;
+  (async () => {
+    const lines = await Promise.all(engines.map(async (id) => {
+      try {
+        const got = await get("/api/engines/" + encodeURIComponent(id) + "/tasks-read");
+        return freshLine(got.fresh, got.engine.name);
+      } catch {
+        return "";
+      }
+    }));
+    box.replaceChildren(...lines);
+  })();
+  return box;
+}
 
 // taskDialog completes the task of a linked item, moving it to state; it
 // resolves to whether the engine completed it. A state other than the one
@@ -119,7 +148,7 @@ export function taskPanel(it, reload) {
       panel.replaceChildren(errorBox(err));
       return;
     }
-    const head = h("h2", { text: t("enginetask.panel", { engine: got.engine.name }) });
+    const head = h("div", {}, h("h2", { text: t("enginetask.panel", { engine: got.engine.name }) }), freshLine(got.fresh, got.engine.name));
     const app = h("a", { href: got.taskApp, target: "_blank", rel: "noopener noreferrer", text: t("enginetask.openApp", { engine: got.engine.name }) });
     if (!got.connected) return panel.replaceChildren(head, connectHint(got), h("p", {}, app));
     if (!got.open) return panel.replaceChildren(head, h("p", { text: t("enginetask.notOpen", { engine: got.engine.name }) }));

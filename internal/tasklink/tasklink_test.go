@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +27,38 @@ type fakeLister struct {
 	// a person's list.
 	sees  map[string][]uint64
 	asErr map[string]error
+	// events switches the feed on: feed is its facts, a cursor the index
+	// after the last one read; a cursor below pruned is gone. A page holds
+	// two facts.
+	events bool
+	feed   []engine.TaskFact
+	pruned int
+	reads  int
+}
+
+func (f *fakeLister) HasEventsCredential(string) bool { return f.events }
+
+func (f *fakeLister) TaskFacts(_ context.Context, _ site.Engine, after string) ([]engine.TaskFact, string, bool, error) {
+	f.reads++
+	at := 0
+	if after != "" {
+		at, _ = strconv.Atoi(after)
+		if at < f.pruned {
+			return nil, "", false, engine.ErrCursorGone
+		}
+	}
+	at = max(at, f.pruned)
+	end := min(at+2, len(f.feed))
+	return slices.Clone(f.feed[at:end]), strconv.Itoa(end), end < len(f.feed), nil
+}
+
+func (f *fakeLister) OpenTask(_ context.Context, _ site.Engine, key uint64) (engine.Task, error) {
+	for _, t := range f.tasks {
+		if t.Key == key {
+			return t, nil
+		}
+	}
+	return engine.Task{}, engine.ErrNotFound
 }
 
 func (f *fakeLister) OpenTasks(ctx context.Context, _ site.Engine) ([]engine.Task, bool, error) {
@@ -417,5 +450,120 @@ func TestEachLinkedTaskIsReadByThoseTheEngineShowsItTo(t *testing.T) {
 	// A dry round reads no person's list.
 	if rep, _ := f.r.Run(context.Background(), "atlas-prod", true); rep.Visible {
 		t.Error("a dry round read the people's lists")
+	}
+}
+
+// TestTheFeedTellsACancelledTaskFromACompletedOne covers ADR-0151's
+// following of the facts: the first round moves to the feed's end without
+// applying what the comparison tells, and compares; later rounds apply the
+// facts after the cursor — a task opened is linked, a completed one goes to
+// the rule's completed state, a cancelled one to its cancelled state, a
+// task taken on has its readers read again; facts read twice change
+// nothing; a cursor the feed no longer holds, changed rules and
+// CompareEvery compare again; the cursor survives a restart; the engine's
+// freshness and failed rounds are told.
+func TestTheFeedTellsACancelledTaskFromACompletedOne(t *testing.T) {
+	f := setup(t)
+	now := time.Date(2026, 10, 29, 8, 0, 0, 0, time.UTC)
+	f.r.now = func() time.Time { return now }
+	f.l.events = true
+	fact := func(kind string, key uint64) engine.TaskFact {
+		return engine.TaskFact{Kind: kind, Key: key, Process: "urlaub", Element: "genehmigen", Groups: []string{"hr"}}
+	}
+	f.l.tasks = []engine.Task{holidayTask(1), holidayTask(2), holidayTask(3)}
+	f.l.feed = []engine.TaskFact{fact(engine.FactCreated, 9), fact(engine.FactCompleted, 9), fact(engine.FactCreated, 1), fact(engine.FactCreated, 2), fact(engine.FactCreated, 3)}
+
+	rep, err := f.r.Run(context.Background(), "atlas-prod", false)
+	if err != nil || !rep.Compared || rep.Facts != 0 || rep.Linked != 3 {
+		t.Fatalf("the first round = %+v %v; it moves to the feed's end and compares", rep, err)
+	}
+	if c := f.r.cursor["atlas-prod"]; c != "5" {
+		t.Fatalf("cursor %q, want the feed's end", c)
+	}
+
+	// Task 4 opens, 1 is cancelled, 2 completed, 3 taken on.
+	f.l.tasks = []engine.Task{holidayTask(3), holidayTask(4)}
+	f.l.feed = append(f.l.feed, fact(engine.FactCreated, 4), fact(engine.FactCancelled, 1), fact(engine.FactCompleted, 2), fact(engine.FactAssigned, 3))
+	rep, err = f.r.Run(context.Background(), "atlas-prod", false)
+	if err != nil || rep.Compared || rep.Facts != 4 || rep.Linked != 1 || rep.Ended != 2 {
+		t.Fatalf("the round that follows = %+v %v", rep, err)
+	}
+	states := func() map[string]string {
+		out := map[string]string{}
+		for _, it := range f.linked(t) {
+			out[it.Origin.ExternalKey] = it.State
+		}
+		return out
+	}
+	if got := states(); got["1"] != "cancelled" || got["2"] != "done" || got["3"] != "open" || got["4"] != "open" {
+		t.Fatalf("states = %v", got)
+	}
+	if !f.r.due["atlas-prod"] {
+		t.Error("a task taken on does not have its readers read again")
+	}
+
+	// Read again from an older cursor: nothing changes.
+	f.r.cursor["atlas-prod"] = "5"
+	var seq int
+	f.db.Read(func(s *item.Store) { seq = s.Seq() })
+	if rep, err = f.r.Run(context.Background(), "atlas-prod", false); err != nil || rep.Linked+rep.Updated+rep.Ended != 0 {
+		t.Errorf("facts read twice = %+v %v", rep, err)
+	}
+	f.db.Read(func(s *item.Store) {
+		if s.Seq() != seq {
+			t.Errorf("facts read twice wrote %d events", s.Seq()-seq)
+		}
+	})
+
+	// The cursor survives a restart.
+	again := New(f.db, f.l, nil)
+	if c := again.cursor["atlas-prod"]; c != "9" {
+		t.Errorf("after a restart the cursor is %q", c)
+	}
+
+	// The feed dropped what follows the cursor: compare.
+	f.l.pruned = 10
+	f.l.feed = append(f.l.feed, fact(engine.FactCreated, 5), fact(engine.FactCreated, 6))
+	rep, err = f.r.Run(context.Background(), "atlas-prod", false)
+	if err != nil || !rep.Compared || !strings.Contains(strings.Join(rep.Problems, "\n"), "no longer holds") {
+		t.Fatalf("a round after the cursor was dropped = %+v %v", rep, err)
+	}
+
+	// Within CompareEvery nothing is compared; after it, or after the
+	// rules changed, it is.
+	if rep, _ = f.r.Run(context.Background(), "atlas-prod", false); rep.Compared {
+		t.Error("compared again at once")
+	}
+	f.r.Changed("atlas-prod")
+	if rep, _ = f.r.Run(context.Background(), "atlas-prod", false); !rep.Compared {
+		t.Error("changed rules are not compared")
+	}
+	now = now.Add(CompareEvery)
+	if rep, _ = f.r.Run(context.Background(), "atlas-prod", false); !rep.Compared {
+		t.Error("not compared after CompareEvery")
+	}
+
+	if at, stale, ok := f.r.Freshness("atlas-prod"); !ok || stale || !at.Equal(now) {
+		t.Errorf("freshness = %v %v %v", at, stale, ok)
+	}
+	now = now.Add(Stale + time.Second)
+	if _, stale, _ := f.r.Freshness("atlas-prod"); !stale {
+		t.Error("not stale after Stale")
+	}
+	f.l.err = errors.New("the engine is away")
+	f.r.Changed("atlas-prod")
+	if _, err := f.r.Run(context.Background(), "atlas-prod", false); err == nil {
+		t.Fatal("a round against an engine that is away succeeded")
+	}
+	if st := f.r.Stats(); len(st) != 1 || st[0].Failed != 1 || st[0].Read.IsZero() {
+		t.Errorf("stats = %+v", st)
+	}
+
+	f.r.Forget("atlas-prod")
+	if _, ok := f.r.cursor["atlas-prod"]; ok {
+		t.Error("a forgotten engine keeps its cursor")
+	}
+	if c, _ := f.db.TaskCursors(); c["atlas-prod"] != "" {
+		t.Errorf("the saved cursors still name it: %v", c)
 	}
 }

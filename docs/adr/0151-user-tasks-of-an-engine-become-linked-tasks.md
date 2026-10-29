@@ -171,7 +171,15 @@ Step 5: the task dialog.
 - `internal/web` (`assets/taskdialog.js`): the item's page shows the task as the engine shows it to oneself — who holds it, *Take on*, *Give back*, *Complete…*, and the engine's own app. Moving a linked card to a finished state — on a board or kanban, in the item's or a card's state bar, in the task list — opens the task dialog instead of the transition: the form drawn by form-js with the values it opens with, checked as form-js checks it, sent to the engine as oneself; a task without a form asks to confirm. A move to any other finished state than the rule's completed one is refused there: only the engine cancels. A form with parts only the engine draws — atlas's e-mail view, a field that searches a directory (`atlasDataSource`), or any type the vendored viewer does not know — is not sent from here: the dialog names them and links to the engine's app.
 - Not an MCP tool (`internal/mcp/tools.go` says so).
 
-Not built yet: following the facts, the task list's query and how current a linked task is.
+Step 6: following the facts, and how current a linked task is.
+
+- `internal/engine`: `TaskFacts` reads a page of the feed (`GET /api/v1/events?after=`) with `WWBB_ENGINE_<ID>_EVENTS_TOKEN` and answers its task facts, passing over the other events; a cursor the feed no longer holds (410) is `ErrCursorGone`. `OpenTask` reads one open task with the task list credential.
+- `internal/tasklink`: with an events credential, a round follows the feed after its cursor, up to 20 pages: `created` reads the task once and links it as a comparison would (a public form's step never), `assigned` and `unassigned` have the people's lists read again, `completed` and `cancelled` move an open item to the rule's completed or **cancelled** state. Facts about an item already ended change nothing, so the feed may be read again. The feed is read before a comparison, so a cancelled task is cancelled before the comparison would close it as completed. A round compares as well after a start — first moving the cursor to the feed's end without applying what the comparison tells —, when the feed no longer holds the cursor, after the rules changed, and every `CompareEvery` (15 minutes); without an events credential every round compares, as before. Removing an engine or changing its address forgets its cursor.
+- **The cursors are kept in a small file of the data directory**, `taskcursors.json`, replaced at once when one moved, rather than with the engine's settings in `site.wal`, which a cursor moving every minute would make grow without end. The file is not backed up: a restored instance compares and follows each feed from its end.
+- How current: `GET /api/engines/{id}/tasks-read`, for anyone signed in, answers when the engine's tasks were last read in full and whether that is longer ago than `Stale` (5 minutes); the task panel, every board and kanban with linked cards, and the engine's page under Administration say so, with a warning once stale.
+- Metrics (ADR-0016): `wwbb_tasklinks_last_read_timestamp_seconds`, `wwbb_tasklinks_failed_rounds` and `wwbb_engine_connections`, each by engine.
+
+Not built yet: the task list's query.
 
 ### Consequences
 

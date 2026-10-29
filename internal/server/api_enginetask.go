@@ -133,6 +133,8 @@ type engineTaskJSON struct {
 	// Completed and Cancelled are the item's states for an ended task.
 	Completed string `json:"completed,omitempty"`
 	Cancelled string `json:"cancelled,omitempty"`
+	// Fresh is when the engine's tasks were last read in full.
+	Fresh freshJSON `json:"fresh"`
 }
 
 type taskJSON struct {
@@ -149,7 +151,8 @@ func (h engineTaskHandlers) get(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	out := engineTaskJSON{Engine: map[string]string{"id": lt.e.ID, "name": lt.e.Name}, Connected: lt.linked, TaskApp: engine.TaskURL(lt.e, lt.key)}
+	out := engineTaskJSON{Engine: map[string]string{"id": lt.e.ID, "name": lt.e.Name}, Connected: lt.linked, TaskApp: engine.TaskURL(lt.e, lt.key),
+		Fresh: freshOf(h.d, lt.e.ID)}
 	if lt.ruled {
 		out.Completed, out.Cancelled = lt.rule.Completed, lt.rule.Cancelled
 	}

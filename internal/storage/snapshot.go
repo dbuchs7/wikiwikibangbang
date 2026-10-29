@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -37,6 +38,9 @@ var NotBackedUp = map[string]string{
 	BackupStateFile: "which automatic backup the next incremental one builds on (ADR-0073); " +
 		"a restored instance starts with a full backup",
 	BackupStateFile + ".tmp": "the state of automatic backups while it is replaced",
+	TaskCursorsFile: "how far each engine's feed was followed (ADR-0151); a restored instance compares the open tasks " +
+		"and follows each feed from its end, as after a cursor the feed no longer holds",
+	TaskCursorsFile + ".tmp": "the cursors of the engines' feeds while they are replaced",
 	ConnectionsFile: "people's grants at process engines (ADR-0151): a refresh token is a credential of its person, replaced on every use; " +
 		"a restored or copied server must not act as people at an engine, and a backup's token would be spent already, so people connect again",
 }
@@ -216,8 +220,42 @@ func (db *DB) BackupState() ([]byte, error) {
 
 // SetBackupState replaces the state of automatic backups; a crash leaves
 // the old state or the new one.
-func (db *DB) SetBackupState(data []byte) error {
-	path := filepath.Join(db.dir, BackupStateFile)
+func (db *DB) SetBackupState(data []byte) error { return db.writeState(BackupStateFile, data) }
+
+// TaskCursorsFile records how far the feed of each process engine was
+// followed (ADR-0151).
+const TaskCursorsFile = "taskcursors.json"
+
+// TaskCursors returns the cursors of the engines' feeds, by engine, or
+// nil before the first.
+func (db *DB) TaskCursors() (map[string]string, error) {
+	data, err := os.ReadFile(filepath.Join(db.dir, TaskCursorsFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out map[string]string
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("storage: %s: %w", TaskCursorsFile, err)
+	}
+	return out, nil
+}
+
+// SetTaskCursors replaces the cursors of the engines' feeds; a crash
+// leaves the old ones or the new ones.
+func (db *DB) SetTaskCursors(cursors map[string]string) error {
+	data, err := json.Marshal(cursors)
+	if err != nil {
+		return err
+	}
+	return db.writeState(TaskCursorsFile, data)
+}
+
+// writeState replaces a small state file of the data directory at once.
+func (db *DB) writeState(name string, data []byte) error {
+	path := filepath.Join(db.dir, name)
 	f, err := os.OpenFile(path+".tmp", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err

@@ -158,6 +158,11 @@ function engineSource() {
   let reached = true;
   const starts = [];
   const grants = { codes: new Map(), access: new Set(), refresh: new Set(), revoked: 0, completed: [] };
+  // The feed of task facts (ADR-0151): a cursor is the position after the
+  // last fact read.
+  const facts = [];
+  const fact = (type, t) => facts.push({ type: "atlas.task." + type, data: { taskKey: t.key, processInstanceKey: t.processInstanceKey,
+    elementInstanceKey: t.elementInstanceKey, processId: t.processId, elementId: t.elementId, name: t.name, candidateGroups: t.candidateGroups, assigned: Boolean(t.assignee) } });
   const openTasks = [
     { key: 4711, processInstanceKey: 1, elementInstanceKey: 2, processId: "urlaub", elementId: "genehmigen", name: "Approve holidays", candidateGroups: "hr", dueDate: 1793000000000, formId: "approve-holidays" },
     { key: 4712, processInstanceKey: 3, elementInstanceKey: 4, processId: "onboarding", elementId: "laptop", name: "Prepare the laptop" },
@@ -253,6 +258,7 @@ function engineSource() {
           grants.completed.push({ key: task.key, variables: JSON.parse(body || "{}").variables });
           openTasks.splice(openTasks.indexOf(task), 1);
         }
+        fact(work[2] === "claim" ? "assigned" : work[2] === "unclaim" ? "unassigned" : "completed", task);
         json({ taskKey: task.key, assignee: task.assignee || "" });
       });
       return;
@@ -280,6 +286,16 @@ function engineSource() {
     // The open user tasks (ADR-0151): one of the process urlaub, one of a
     // process no rule names, and a public wizard's step, never linked.
     if (req.url.startsWith("/api/v1/tasks?")) return res.end(JSON.stringify({ truncated: false, items: openTasks }));
+    const one = /^\/api\/v1\/tasks\/(\d+)$/.exec(path);
+    if (one) {
+      const task = openTasks.find((t) => String(t.key) === one[1]);
+      return task ? res.end(JSON.stringify(task)) : json({ error: "no open task with that key" }, 404);
+    }
+    if (path === "/api/v1/events") {
+      const after = Number(new URL(req.url, self).searchParams.get("after") || 0);
+      return res.end(JSON.stringify({ events: facts.slice(after).map((f, i) => ({ specversion: "1.0", id: String(after + i + 1), type: f.type, data: f.data })),
+        next: String(facts.length), more: false }));
+    }
     if (req.url === "/api/v1/public-links") {
       return res.end(JSON.stringify([{ token: startLink, processId: "order", formId: "report", createdAt: 1 }, { token: wizardLink, processId: "approve", formId: "leave", createdAt: 2 }]));
     }
@@ -330,6 +346,13 @@ function engineSource() {
   server.reach = (on) => { reached = on; };
   server.starts = starts;
   server.grants = grants;
+  // A task opens at the engine, or is cancelled there, and the feed says so.
+  server.openTask = (task) => { openTasks.push(task); fact("created", task); };
+  server.cancelTask = (key) => {
+    const task = openTasks.find((t) => t.key === key);
+    openTasks.splice(openTasks.indexOf(task), 1);
+    fact("cancelled", task);
+  };
   return server;
 }
 
@@ -2832,6 +2855,22 @@ function gitSource() {
       check(engine.grants.completed.length === 1 && engine.grants.completed[0].variables.approved === "yes" &&
         engine.grants.completed[0].variables.comment === "Ben's two weeks", "the engine completed the task with the form's values");
       check((await (await page.request.get(base + "/api/items/" + approval.id)).json()).item.state === "done", "the item is done once the engine completed its task");
+      await page.waitForSelector("#task-freshness .task-fresh >> text=Tasks of Atlas test read at"); // the board says how current its linked cards are
+
+      step("the feed: a task opened at the engine is linked, and one cancelled there goes to the state of a cancelled task, which no comparison could tell (ADR-0151)");
+      engine.openTask({ key: 4714, processInstanceKey: 7, elementInstanceKey: 8, processId: "urlaub", elementId: "genehmigen", name: "Approve the trip", candidateGroups: "hr" });
+      check((await page.request.post(base + "/api/engines/atlas/task-links/run")).ok(), "a round runs");
+      const trip = async () => (await (await page.request.get(base + "/api/items?type=approval")).json()).items.find((it) => it.title === "Approve the trip");
+      check((await trip())?.state === "open", "the task the feed told of is linked");
+      engine.cancelTask(4714);
+      const round = await (await page.request.post(base + "/api/engines/atlas/task-links/run")).json();
+      check((await trip()).state === "cancelled", "the cancelled task goes to the state of a cancelled one: " + JSON.stringify(round));
+      await page.goto(base + "/#/item/" + (await trip()).key);
+      await page.waitForSelector("#engine-task >> text=This task is no longer open at Atlas test, or not yours to see.");
+      await page.waitForSelector("#engine-task .task-fresh[data-stale=false]");
+      await page.goto(base + "/#/admin");
+      await page.click("#engine-list tr[data-engine=atlas] button:has-text('Edit')");
+      await page.waitForSelector("#task-links-events >> text=WWBB_ENGINE_ATLAS_EVENTS_TOKEN; it is set");
       await page.goto(base + "/#/item/" + flow.item.key); // where the drawing begins
       await page.waitForSelector("#edit");
 
