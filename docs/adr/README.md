@@ -164,3 +164,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0149](0149-the-editors-toolbar-follows-the-cursor-and-stays-in-view.md) | The editor's toolbar follows the cursor and stays in view | Accepted | Landed |
 | [0150](0150-the-wiki-watches-its-storage.md) | The wiki watches its storage | Accepted | Landed |
 | [0151](0151-user-tasks-of-an-engine-become-linked-tasks.md) | User tasks of a process engine become linked tasks, and the engine decides who completes them | Proposed | Partial |
+| [0152](0152-a-process-engine-is-connected-with-one-approval.md) | A process engine is connected with one approval, and its people follow without a step of their own | Proposed | Not started |
