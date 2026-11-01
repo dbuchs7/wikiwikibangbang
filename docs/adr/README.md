@@ -168,3 +168,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0153](0153-the-product-is-renamed-orbithek.md) | The product is renamed Orbithek | Accepted | Landed |
 | [0154](0154-the-mark-is-a-library-in-orbit.md) | The mark is a library in orbit | Accepted | Landed |
 | [0155](0155-sealed-data-keeps-its-former-binding.md) | Sealed data keeps its binding to the former name | Accepted | Landed |
+| [0156](0156-a-personal-cockpit-look.md) | A personal cockpit look | Accepted | Landed |

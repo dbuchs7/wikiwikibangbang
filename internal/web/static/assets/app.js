@@ -11,7 +11,7 @@ import { personalNotes } from "./notes.js";
 import { isDrawing } from "./drawing.js";
 import { albumBrowser, retentionCard } from "./album.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
-import { applyTheme, setTheme, isDark } from "./theme.js";
+import { applyTheme, setTheme, isDark, chosenTheme } from "./theme.js";
 import { filtered, serverFilter, filterParams, norm } from "./filter.js";
 import { taskLinksCard } from "./tasklinks.js";
 import { connectionsCard } from "./engineconn.js";
@@ -4657,6 +4657,12 @@ async function accountView() {
       setLanguage(me.language);
       route();
     }),
+    // The look of this browser, the cockpit among them (ADR-0156).
+    darkOffered ? h("div", { class: "card", id: "look" },
+      field(t("account.look"), h("select", { name: "look", id: "look-select", onchange: (ev) => setTheme(ev.target.value) },
+        [["", t("account.lookSystem")], ["light", t("account.lookLight")], ["dark", t("account.lookDark")], ["cockpit", t("account.lookCockpit")]]
+          .map(([v, label]) => h("option", { value: v, text: label, selected: chosenTheme() === v })))),
+      h("p", { class: "muted", text: t("account.lookHint") })) : null,
     form({ class: "card", id: "password" }, [
       h("h2", { text: t("account.password") }),
       field(t("account.current"), h("input", { name: "current", type: "password", autocomplete: "current-password", required: true })),

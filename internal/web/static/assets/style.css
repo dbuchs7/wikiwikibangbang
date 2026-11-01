@@ -1824,3 +1824,124 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
 #storage-thresholds .form-row { display: flex; flex-wrap: wrap; gap: 10px; }
 #storage-thresholds .form-row .field { flex: 1 1 140px; }
 #storage-thresholds button + button { margin-left: 8px; }
+
+/* ===== Cockpit — a personal, gamified look (ADR-0156, after atlas ADR-0509) ====
+   A third look beside light and dark, chosen on the account page and kept in
+   the browser, never selected by the system. It rides the dark look: the dark
+   stylesheet is on, and this block answers its palette tokens in a deep-space,
+   cyan-HUD key (it outranks dark.css's :root by specificity, not by order).
+   The backdrop is decorative only: fixed, inert, behind the content. All
+   motion stops under prefers-reduced-motion; the static palette stays. */
+:root[data-look="cockpit"] {
+  --bg: #060a12;
+  --surface: #0c1622;
+  --surface-2: #0f1b29;
+  --border: #16344a;
+  --border-strong: #24506b;
+  --text: #d7eef3;
+  --muted: #7ba3ac;
+  --accent: #31e1e6;
+  --accent-hover: color-mix(in srgb, #31e1e6 82%, #ffffff);
+  --accent-soft: color-mix(in srgb, #31e1e6 18%, #0c1622);
+  --accent-ink: #052226;
+  --danger: #ff6b6b;
+  --danger-soft: #2a1317;
+  --success: #39d98a;
+  --success-soft: color-mix(in srgb, #39d98a 14%, #0c1622);
+  --warning: #ffb648;
+  --warning-soft: #2a2110;
+  --row-hover: #102030;
+  --shadow: 0 0 0 1px rgba(49, 225, 230, 0.08), 0 2px 12px rgba(0, 0, 0, 0.55), 0 0 26px rgba(49, 225, 230, 0.06);
+  --shadow-lg: 0 0 0 1px rgba(49, 225, 230, 0.12), 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 32px rgba(49, 225, 230, 0.08);
+  color-scheme: dark;
+}
+/* Deep space: a radial nebula over near-black. */
+:root[data-look="cockpit"] body {
+  background:
+    radial-gradient(1200px 680px at 78% -10%, rgba(49, 225, 230, 0.10), transparent 60%),
+    radial-gradient(900px 600px at 12% 108%, rgba(90, 120, 255, 0.10), transparent 60%),
+    radial-gradient(100% 100% at 50% 40%, #0a1424 0%, #060a12 70%, #03060d 100%);
+  background-attachment: fixed;
+}
+/* A drifting starfield. */
+:root[data-look="cockpit"] body::before {
+  content: "";
+  position: fixed;
+  inset: -300px 0 0 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.4px 1.4px at 40px 60px, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1.4px 1.4px at 160px 140px, rgba(185, 245, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 240px 40px, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 90px 220px, rgba(255, 255, 255, 0.6), transparent);
+  background-size: 300px 300px, 300px 300px, 180px 180px, 180px 180px;
+  opacity: 0.9;
+  animation: cockpit-stars 140s linear infinite;
+}
+/* Faint scanlines and a glow from the top: a thin, static instrument overlay. */
+:root[data-look="cockpit"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(49, 225, 230, 0.11), transparent 140px),
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.28) 0 1px, transparent 1px 3px);
+  opacity: 0.6;
+  mix-blend-mode: overlay;
+}
+/* The content above the two backdrop layers. */
+:root[data-look="cockpit"] main,
+:root[data-look="cockpit"] .footer { position: relative; z-index: 1; }
+/* Glass header with a cyan hairline. */
+:root[data-look="cockpit"] .top {
+  background: linear-gradient(180deg, rgba(12, 22, 34, 0.92), rgba(6, 10, 18, 0.86));
+  border-bottom-color: rgba(49, 225, 230, 0.35);
+  box-shadow: 0 1px 0 rgba(49, 225, 230, 0.15), 0 6px 18px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+}
+/* The logo's planet glows like a reactor. */
+:root[data-look="cockpit"] .brand img { animation: cockpit-reactor 3.4s ease-in-out infinite; }
+/* Glowing actions, tiles and module symbols. */
+:root[data-look="cockpit"] :is(button.primary, .button.primary, button[type=submit]:not(.link):not(.secondary):not(.danger)) { box-shadow: 0 0 16px rgba(49, 225, 230, 0.42); }
+:root[data-look="cockpit"] :is(button.primary, .button.primary, button[type=submit]:not(.link):not(.secondary):not(.danger)):hover { box-shadow: 0 0 24px rgba(49, 225, 230, 0.62); }
+:root[data-look="cockpit"] :is(.home-tile, .space-tile, .card):hover { border-color: rgba(49, 225, 230, 0.35); }
+:root[data-look="cockpit"] .module-icon { box-shadow: 0 0 14px color-mix(in srgb, var(--module, #31e1e6) 55%, transparent); }
+:root[data-look="cockpit"] .welcome { border-color: rgba(49, 225, 230, 0.25); }
+/* An online light on one's own avatar, and telemetry lights on the counts. */
+:root[data-look="cockpit"] .account-button { position: relative; }
+:root[data-look="cockpit"] .account-button::after {
+  content: "";
+  position: absolute;
+  right: 0; bottom: 0;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--success);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 8px var(--success);
+  animation: cockpit-blink 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+:root[data-look="cockpit"] .home-stat { position: relative; padding-left: 14px; }
+:root[data-look="cockpit"] .home-stat::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 50%;
+  width: 7px; height: 7px; margin-top: -3px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(49, 225, 230, 0.8);
+  animation: cockpit-blink 1.8s ease-in-out infinite;
+}
+@keyframes cockpit-stars { from { transform: translateY(0); } to { transform: translateY(300px); } }
+@keyframes cockpit-reactor {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(49, 225, 230, 0.45)); }
+  50% { filter: drop-shadow(0 0 9px rgba(49, 225, 230, 0.9)); }
+}
+@keyframes cockpit-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) {
+  :root[data-look="cockpit"] body::before,
+  :root[data-look="cockpit"] .brand img,
+  :root[data-look="cockpit"] .account-button::after,
+  :root[data-look="cockpit"] .home-stat::before { animation: none; }
+}
+/* ===== end cockpit ========================================================== */
