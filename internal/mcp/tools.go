@@ -182,6 +182,12 @@ var tools = []tool{
 			{"space", str, inPath, true, "The space key."},
 			{"parent", str, inQuery, false, "The ID of the page whose children to list; absent for the top of the space."},
 		}, paging...)},
+	{Name: "get_starmap", Description: "The starmap of a space (ADR-0157): its readable items, their pictures and the labels at least two of them share, as nodes, " +
+		"with containment (parent), relations, mentions, embeds, pictures and their originals (copy) and labels as edges; readable items of other spaces " +
+		"related to the space are nodes marked outside. truncated says the map was cut at the server's budget, the space's items kept first.",
+		Method: "GET", Path: "/api/spaces/{space}/starmap", Params: []param{
+			{"space", str, inPath, true, "The space key."},
+		}},
 	{Name: "set_labels", Description: "Replace an item's labels, e.g. [\"runbook\", \"ops\"]: lower case words, digits and dashes.",
 		Method: "PUT", Path: "/api/items/{ref}/labels", Params: []param{refParam, {"labels", array, inBody, true, "All labels the item carries afterwards."}}},
 	{Name: "set_title", Description: "Change an item's title.", Method: "PUT", Path: "/api/items/{ref}/title",

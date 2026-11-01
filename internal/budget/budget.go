@@ -94,6 +94,10 @@ type Budgets struct {
 	// Markdown file of a repository reads and holds, together (ADR-0138);
 	// the pictures beyond it stay links.
 	MarkdownPictureBytes int64
+	// StarmapNodes bounds the nodes of one starmap of a space (ADR-0157):
+	// items, pictures and labels together. Beyond it the map keeps the
+	// space's items first and says it is truncated.
+	StarmapNodes int
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
@@ -124,6 +128,7 @@ func Default() Budgets {
 		EngineOpenTasks:       20_000,
 		EngineConnectsPending: 10_000,
 		MarkdownPictureBytes:  50 << 20,
+		StarmapNodes:          600,
 	}
 }
 

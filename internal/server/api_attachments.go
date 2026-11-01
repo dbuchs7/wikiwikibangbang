@@ -278,8 +278,15 @@ func (h itemHandlers) albumLabels(w http.ResponseWriter, r *http.Request) {
 }
 
 // inlineTypes are the image formats a browser shows without running
-// anything. SVG is not among them: it can hold scripts (ADR-0014).
-var inlineTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
+// anything, item.ImageTypes. SVG is not among them: it can hold scripts
+// (ADR-0014).
+var inlineTypes = func() map[string]bool {
+	m := map[string]bool{}
+	for _, t := range item.ImageTypes {
+		m[t] = true
+	}
+	return m
+}()
 
 func (h itemHandlers) listAttachments(w http.ResponseWriter, r *http.Request) {
 	h.read(w, r, func(x *item.Session) (any, error) {

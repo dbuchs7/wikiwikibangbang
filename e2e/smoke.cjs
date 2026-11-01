@@ -880,7 +880,7 @@ function gitSource() {
     await page.click("#app-switcher");
     await page.waitForSelector("#drawer:not([hidden])");
     const modules = (await page.locator("#drawer-apps a").allTextContents()).join(",");
-    check(modules === "Rooms,Create,Tasks,Comments,Album,AI access,Governance,Account,Administration", "the modules of an administrator: " + modules);
+    check(modules === "Rooms,Create,Tasks,Comments,Album,Starmap,AI access,Governance,Account,Administration", "the modules of an administrator: " + modules);
     await page.keyboard.press("Escape");
     await page.waitForSelector("#drawer", { state: "hidden" });
     await page.click("#app-switcher");
@@ -1546,6 +1546,55 @@ function gitSource() {
     await page.click("#edit-done");
     await page.waitForSelector("#body.reading");
     check(await page.locator(`#attachments li:has-text('.drawing.png') .att-origin a:has-text('${drawingKey}')`).count() >= 3, "each pasted picture is a copy that names its original");
+
+    step("starmap: a room's items, pictures and shared labels in their context; the search narrows, a kind is hidden, a node shows its panel (ADR-0157)");
+    // PLAT holds pages and tasks related by hand and by a mention, pictures
+    // and their copies; a label both first items carry makes a label node.
+    // The relation made by hand earlier was taken back; one is made here.
+    await page.evaluate(async () => {
+      const ids = [];
+      for (const key of ["PLAT-1", "PLAT-2"]) {
+        const { item } = await (await fetch(`/api/items/${key}`)).json();
+        ids.push(item.id);
+        await fetch(`/api/items/${key}/labels`, { method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ labels: [...(item.labels || []), "constellation"] }) });
+      }
+      await fetch("/api/relations", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "depends-on", from: ids[1], to: ids[0] }) });
+    });
+    await page.goto(base + "/#/starmap/PLAT");
+    await page.waitForSelector("#starmap-canvas .star-node");
+    check(await page.inputValue("#starmap-space") === "PLAT", "the room of the address is chosen");
+    check((await page.getAttribute("#starmap-canvas", "aria-label")).includes("PLAT"), "the canvas is named");
+    for (const sel of [".star-node.kind-item[data-key='PLAT-1']", ".star-node.kind-item[data-key='PLAT-2']", ".star-node.kind-picture",
+      ".star-node.kind-label[data-id='label:constellation']", ".star-link[data-kind=mentions]", ".star-link[data-kind=relation]",
+      ".star-link[data-kind=parent]", ".star-link[data-kind=picture]", ".star-link[data-kind=copy]", ".star-link[data-kind=label]"]) {
+      check(await page.locator("#starmap-canvas " + sel).count() > 0, "the starmap draws " + sel);
+    }
+    check(await page.getAttribute(".star-node[data-key='PLAT-2']", "tabindex") === "0" && await page.getAttribute(".star-node[data-key='PLAT-2']", "role") === "button", "a node is a button one reaches by keyboard");
+    const shown = () => page.locator("#starmap-canvas .star-node:not([hidden])").count();
+    const all = await shown();
+    await page.fill("#starmap-search", "constellation");
+    await page.waitForFunction(() => document.querySelectorAll("#starmap-canvas .star-node.match").length === 3);
+    const narrowed = await shown();
+    check(narrowed < all && narrowed >= 3, `the search narrows the map to its matches and their neighbours: ${narrowed} of ${all}`);
+    await page.fill("#starmap-search", "");
+    await page.waitForFunction((n) => document.querySelectorAll("#starmap-canvas .star-node:not([hidden])").length === n, all);
+    await page.uncheck("#starmap-kinds [data-filter=picture] input");
+    check(await page.locator("#starmap-canvas .star-node.kind-picture:not([hidden])").count() === 0 && await shown() < all, "pictures are hidden by their switch");
+    await page.check("#starmap-kinds [data-filter=picture] input");
+    await page.click(".star-node[data-key='PLAT-2']");
+    await page.waitForSelector("#starmap-panel:not([hidden])");
+    check((await page.getAttribute("#starmap-open", "href")) === "#/item/PLAT-2", "the panel links the item");
+    check(await page.locator(".star-node.dim").count() > 0 && await page.locator(".star-node.focused[data-key='PLAT-2']").count() === 1, "the node's neighbourhood stands out, the rest is dimmed");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#starmap-panel", { state: "hidden" });
+    check(await page.locator(".star-node.dim").count() === 0, "Escape clears the focus");
+    await page.focus(".star-node.kind-label[data-id='label:constellation']");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#starmap-panel:not([hidden]) #starmap-open[href='#/label/constellation']");
+    await page.click("#starmap-open");
+    await page.waitForURL(/#\/label\/constellation$/);
 
     step("markdown: Markdown copied as text is pasted with Ctrl+V as formatted, editable blocks between two paragraphs, and kept after a reload (ADR-0133)");
     const mdItem = await page.evaluate(async () => {
