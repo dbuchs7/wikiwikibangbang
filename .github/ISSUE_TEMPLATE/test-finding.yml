@@ -5,15 +5,15 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for testing. One finding per issue, please. The [test guide](https://github.com/dbuchs7/wikiwikibangbang/blob/main/docs/testing/test-guide.md) says what to look at first.
+        Thank you for testing. One finding per issue, please. The [test guide](https://github.com/dbuchs7/orbithek/blob/main/docs/testing/test-guide.md) says what to look at first.
 
         **Security findings** (seeing or doing what your role should not allow, a script running from content, a password or token showing up) do not belong here: use private vulnerability reporting on the *Security* tab.
   - type: input
     id: version
     attributes:
       label: Version
-      description: The output of `wikiwikibangbang version`, or the container tag.
-      placeholder: wikiwikibangbang 0.1.0 go1.26.0 linux/amd64
+      description: The output of `orbithek version`, or the container tag.
+      placeholder: orbithek 0.1.0 go1.26.0 linux/amd64
     validations:
       required: true
   - type: dropdown

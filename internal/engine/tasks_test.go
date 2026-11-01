@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // fakeTaskList answers GET /api/v1/tasks as atlas does for the token
@@ -72,7 +72,7 @@ func joinJSON(parts []string) string {
 // other one, page after page, and each is read as the engine gives it.
 func TestOpenTasksReadsEveryPageWithTheTaskListCredential(t *testing.T) {
 	srv, asked := fakeTaskList(t, []uint64{9, 7, 5, 3, 1})
-	env := map[string]string{"WWBB_ENGINE_ATLAS_PROD_TASKLIST_TOKEN": "lister", "WWBB_ENGINE_ATLAS_PROD_TOKEN": "diagrams"}
+	env := map[string]string{"OT_ENGINE_ATLAS_PROD_TASKLIST_TOKEN": "lister", "OT_ENGINE_ATLAS_PROD_TOKEN": "diagrams"}
 	r := NewReader(func(k string) string { return env[k] }, srv.Client())
 	e := site.Engine{ID: "atlas-prod", Kind: site.EngineAtlas, BaseURL: srv.URL}
 
@@ -116,7 +116,7 @@ func TestOpenTasksStopsAtItsBudget(t *testing.T) {
 	budget.Set(b)
 	t.Cleanup(func() { budget.Set(budget.Default()) })
 	srv, _ := fakeTaskList(t, []uint64{9, 7, 5, 3, 1})
-	r := NewReader(func(k string) string { return map[string]string{"WWBB_ENGINE_ATLAS_PROD_TASKLIST_TOKEN": "lister"}[k] }, srv.Client())
+	r := NewReader(func(k string) string { return map[string]string{"OT_ENGINE_ATLAS_PROD_TASKLIST_TOKEN": "lister"}[k] }, srv.Client())
 	tasks, complete, err := r.OpenTasks(context.Background(), site.Engine{ID: "atlas-prod", Kind: site.EngineAtlas, BaseURL: srv.URL})
 	if err != nil || complete || len(tasks) != 3 {
 		t.Fatalf("OpenTasks = %d tasks, complete %v, %v", len(tasks), complete, err)
@@ -128,11 +128,11 @@ func TestOpenTasksStopsAtItsBudget(t *testing.T) {
 func TestOpenTasksNeedsItsOwnCredential(t *testing.T) {
 	srv, asked := fakeTaskList(t, []uint64{1})
 	e := site.Engine{ID: "atlas-prod", Kind: site.EngineAtlas, BaseURL: srv.URL}
-	r := NewReader(func(k string) string { return map[string]string{"WWBB_ENGINE_ATLAS_PROD_TOKEN": "diagrams"}[k] }, srv.Client())
+	r := NewReader(func(k string) string { return map[string]string{"OT_ENGINE_ATLAS_PROD_TOKEN": "diagrams"}[k] }, srv.Client())
 	if _, _, err := r.OpenTasks(context.Background(), e); !errors.Is(err, ErrNoCredential) || len(*asked) != 0 {
 		t.Fatalf("without the variable: %v, asked %v", err, *asked)
 	}
-	r = NewReader(func(k string) string { return map[string]string{"WWBB_ENGINE_ATLAS_PROD_TASKLIST_TOKEN": "wrong"}[k] }, srv.Client())
+	r = NewReader(func(k string) string { return map[string]string{"OT_ENGINE_ATLAS_PROD_TASKLIST_TOKEN": "wrong"}[k] }, srv.Client())
 	if _, _, err := r.OpenTasks(context.Background(), e); !errors.Is(err, ErrRefused) {
 		t.Fatalf("with a wrong token: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestOpenTasksRefusesAListThatDoesNotMove(t *testing.T) {
 		_, _ = w.Write([]byte(`{"items":[{"key":5}],"truncated":true,"nextCursor":"5"}`))
 	}))
 	t.Cleanup(srv.Close)
-	r := NewReader(func(k string) string { return map[string]string{"WWBB_ENGINE_ATLAS_PROD_TASKLIST_TOKEN": "x"}[k] }, srv.Client())
+	r := NewReader(func(k string) string { return map[string]string{"OT_ENGINE_ATLAS_PROD_TASKLIST_TOKEN": "x"}[k] }, srv.Client())
 	if _, _, err := r.OpenTasks(context.Background(), site.Engine{ID: "atlas-prod", Kind: site.EngineAtlas, BaseURL: srv.URL}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("a list that does not move: %v", err)
 	}

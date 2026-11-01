@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
-	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/collab"
+	"github.com/dbuchs7/orbithek/internal/diskspace"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // Live editing sessions (ADR-0010): the server sends a session's events

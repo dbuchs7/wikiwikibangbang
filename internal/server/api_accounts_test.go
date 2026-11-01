@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 func TestAccountRequestsThroughTheAPI(t *testing.T) {

@@ -17,11 +17,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/site"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // The data sets as the portal might answer them, in the shapes its fields
@@ -638,7 +638,7 @@ func TestRunsReportWhatTheSourceAnswered(t *testing.T) {
 	cfg.CKAN.BaseURL = srv.URL
 	f.db.Site.SetConnector("admin", cfg)
 	f.r.getenv = allowPrivate(func(k string) string {
-		if k == "WWBB_CONNECTOR_OPENDATA_SWISS_TOKEN" {
+		if k == "OT_CONNECTOR_OPENDATA_SWISS_TOKEN" {
 			return "secret-token"
 		}
 		return ""
@@ -651,7 +651,7 @@ func TestRunsReportWhatTheSourceAnswered(t *testing.T) {
 	if auth != "secret-token" {
 		t.Errorf("the credential was not sent: %q", auth)
 	}
-	if st := f.r.Status(id); !st.Credential || st.CredentialVar != "WWBB_CONNECTOR_OPENDATA_SWISS_TOKEN" {
+	if st := f.r.Status(id); !st.Credential || st.CredentialVar != "OT_CONNECTOR_OPENDATA_SWISS_TOKEN" {
 		t.Errorf("status of the credential %+v", st)
 	}
 	answer = `{"success":true,"result":{"count":0,"results":[]}}`
@@ -713,7 +713,7 @@ func TestSeveralConnectors(t *testing.T) {
 	if st := f.r.Status("second"); len(st.History) != 0 {
 		t.Errorf("not forgotten: %+v", st)
 	}
-	if TokenVar("geo.admin-ch") != "WWBB_CONNECTOR_GEO_ADMIN_CH_TOKEN" {
+	if TokenVar("geo.admin-ch") != "OT_CONNECTOR_GEO_ADMIN_CH_TOKEN" {
 		t.Errorf("token variable %s", TokenVar("geo.admin-ch"))
 	}
 	f.db.Site.SetConnector("admin", site.Connector{ID: "odd", Name: "Odd", Kind: site.KindCKAN, IntervalHours: 1, CKAN: other.CKAN})

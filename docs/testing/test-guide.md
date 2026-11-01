@@ -1,6 +1,6 @@
 # Test guide
 
-wikiwikibangbang is an early prototype. This guide is for people who try a release and report what they find. It says what to look at first, because a few open questions in the ADRs can only be answered by people using the product, and how to report a finding so it can be acted on.
+Orbithek is an early prototype. This guide is for people who try a release and report what they find. It says what to look at first, because a few open questions in the ADRs can only be answered by people using the product, and how to report a finding so it can be acted on.
 
 **Do not put real or confidential data into a test installation.** The prototype makes no promise that a later version reads today's data directory.
 
@@ -9,19 +9,19 @@ wikiwikibangbang is an early prototype. This guide is for people who try a relea
 From a release archive (Linux shown; macOS and Windows work the same way):
 
 ```bash
-tar xzf wikiwikibangbang_<version>_linux_amd64.tar.gz
-cd wikiwikibangbang_<version>_linux_amd64
-WWBB_ADMIN_PASSWORD='a long password of your own' ./wikiwikibangbang serve -addr :8080
+tar xzf orbithek_<version>_linux_amd64.tar.gz
+cd orbithek_<version>_linux_amd64
+OT_ADMIN_PASSWORD='a long password of your own' ./orbithek serve -addr :8080
 ```
 
 Or as a container:
 
 ```bash
-docker run -p 8080:8080 -v wwbb-data:/data \
-  -e WWBB_ADMIN_PASSWORD='a long password of your own' ghcr.io/dbuchs7/wikiwikibangbang:<version>
+docker run -p 8080:8080 -v ot-data:/data \
+  -e OT_ADMIN_PASSWORD='a long password of your own' ghcr.io/dbuchs7/orbithek:<version>
 ```
 
-Open <http://localhost:8080> and sign in as `admin`. `./wikiwikibangbang version` prints the version to quote in a report.
+Open <http://localhost:8080> and sign in as `admin`. `./orbithek version` prints the version to quote in a report.
 
 ## Set up a playground
 
@@ -74,9 +74,9 @@ An item's body can **embed** another item (toolbar: *Embed*, with the other item
 2. Stop the server and restore into a new directory:
 
    ```bash
-   WWBB_BACKUP_PASSPHRASE='the passphrase' ./wikiwikibangbang restore -from backup.wwbb -data-dir restored
-   ./wikiwikibangbang check -data-dir restored
-   ./wikiwikibangbang serve -data-dir restored
+   OT_BACKUP_PASSPHRASE='the passphrase' ./orbithek restore -from backup.orbithek -data-dir restored
+   ./orbithek check -data-dir restored
+   ./orbithek serve -data-dir restored
    ```
 
 3. Is everything there — items, bodies, history, users?
@@ -86,7 +86,7 @@ An item's body can **embed** another item (toolbar: *Embed*, with the other item
 Create an API token under your account (scope `read` for an agent that may only read) and connect an MCP client, e.g. Claude Code:
 
 ```bash
-claude mcp add wikiwikibangbang --env WWBB_TOKEN=<token> -- ./wikiwikibangbang mcp -url http://localhost:8080
+claude mcp add orbithek --env OT_TOKEN=<token> -- ./orbithek mcp -url http://localhost:8080
 ```
 
 Ask it to summarise a space, create tasks from notes, or finish a task. It acts with exactly your rights; moving, trashing and deleting items is deliberately not offered to agents.
@@ -110,7 +110,7 @@ On a space's page, *Board: task* shows the space's tasks as columns, one per wor
 
 ### 8. Link check (ADR-0039)
 
-Only if the server runs with `WWBB_LINKCHECK=on`. Put links into a body, some working, some not, and one to an address in your home network. As a space administrator, open *Link check* on the space's page and start a check.
+Only if the server runs with `OT_LINKCHECK=on`. Put links into a body, some working, some not, and one to an address in your home network. As a space administrator, open *Link check* on the space's page and start a check.
 
 - Does the list name the right items and the person who edited them last?
 - Is a page reported as broken that works in your browser? Say which one; some sites turn away automated checks.
@@ -133,7 +133,7 @@ Copy Markdown from an assistant, a README or a code editor and paste it into a p
 
 ### 11. Markdown from Git repositories (ADR-0138)
 
-Under *Administration → Connectors*, start *New connector (Git)*, give it a space and the address of a folder of a public repository as its host shows it, e.g. `https://github.com/owner/repository/tree/main/docs`, and run it. With `WWBB_GIT_FILES=on`, edit a page, paste the address of a Markdown file and choose *Show the file's content* in the link's bubble, or use *Insert… → Markdown file from a repository…*.
+Under *Administration → Connectors*, start *New connector (Git)*, give it a space and the address of a folder of a public repository as its host shows it, e.g. `https://github.com/owner/repository/tree/main/docs`, and run it. With `OT_GIT_FILES=on`, edit a page, paste the address of a Markdown file and choose *Show the file's content* in the link's bubble, or use *Insert… → Markdown file from a repository…*.
 
 - Do the pages read as the files do at the host? Report what looks different and how it looks there.
 - Do links between the files lead to their pages, and are the pictures there?
@@ -145,9 +145,9 @@ Search, item history, relations, mentions (toolbar: *Mention*), formatting, the 
 
 ## Report a finding
 
-Open an issue with the **Test finding** template: <https://github.com/dbuchs7/wikiwikibangbang/issues/new/choose>. One finding per issue. The template asks for:
+Open an issue with the **Test finding** template: <https://github.com/dbuchs7/orbithek/issues/new/choose>. One finding per issue. The template asks for:
 
-- the version (`wikiwikibangbang version`) and the platform or container;
+- the version (`orbithek version`) and the platform or container;
 - the steps, starting from a fresh server where you can;
 - what you expected, and what happened instead;
 - the server's log lines around the moment, if any.

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // labels are the words a generated page uses, by language (ADR-0080).

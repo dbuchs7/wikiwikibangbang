@@ -14,7 +14,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/auth"
 )
 
 // fakeSMTP is a mail server that takes every message.

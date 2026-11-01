@@ -24,7 +24,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // System names a backup in the origin of every item a restore writes.

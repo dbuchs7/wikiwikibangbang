@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // fakeConfluence serves the parts of the Confluence Cloud REST API the

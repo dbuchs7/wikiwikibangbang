@@ -19,7 +19,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
+	"github.com/dbuchs7/orbithek/internal/diskspace"
 )
 
 // Journal makes one record durable before it is applied.

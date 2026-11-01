@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth/engineauthtest"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/engineauth"
+	"github.com/dbuchs7/orbithek/internal/engineauth/engineauthtest"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // TestAPersonWorksALinkedTaskAtItsEngine covers ADR-0151's working of a

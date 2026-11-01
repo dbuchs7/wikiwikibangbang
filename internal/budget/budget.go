@@ -11,7 +11,7 @@
 // that wrote a file and the one that reads it. The test in this package
 // fails when a new input ceiling appears without being one or the other.
 //
-// [FromEnv] reads one variable per field, WWBB_BUDGET_ plus the field name
+// [FromEnv] reads one variable per field, OT_BUDGET_ plus the field name
 // in upper snake case. A variable that is unset or empty leaves the
 // default; one that is not a positive number in range is reported and
 // leaves the default too, so a typo cannot remove a ceiling.
@@ -128,7 +128,7 @@ func Default() Budgets {
 }
 
 // EnvPrefix starts the name of every budget's environment variable.
-const EnvPrefix = "WWBB_BUDGET_"
+const EnvPrefix = "OT_BUDGET_"
 
 // Names returns the field names, in declaration order.
 func Names() []string {

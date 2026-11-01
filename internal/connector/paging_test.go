@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // pagedSource answers a list of n entries a page at a time, by a page

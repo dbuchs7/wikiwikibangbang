@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // fakeTaskEngine lists one open user task for the task list credential
@@ -34,7 +34,7 @@ func fakeTaskEngine(t *testing.T) *httptest.Server {
 // both are answered with their report, the real one audited.
 func TestTaskLinksThroughTheAPI(t *testing.T) {
 	srv := fakeTaskEngine(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TASKLIST_TOKEN": "lister"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TASKLIST_TOKEN": "lister"}
 	w := newWorld(t, func(d *Deps) { d.Engines = engine.NewReader(func(k string) string { return env[k] }, srv.Client()) })
 	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusCreated)
 
@@ -44,7 +44,7 @@ func TestTaskLinksThroughTheAPI(t *testing.T) {
 	w.admin.expect("GET", "/api/engines/nope/task-links", "", http.StatusNotFound)
 
 	got := w.admin.expect("GET", "/api/engines/atlas/task-links", "", http.StatusOK)
-	if got["enabled"] != false || got["credentialVar"] != "WWBB_ENGINE_ATLAS_TASKLIST_TOKEN" || got["credential"] != true || got["last"] != nil {
+	if got["enabled"] != false || got["credentialVar"] != "OT_ENGINE_ATLAS_TASKLIST_TOKEN" || got["credential"] != true || got["last"] != nil {
 		t.Fatalf("links before any = %v", got)
 	}
 
@@ -105,8 +105,8 @@ func TestTaskLinksThroughTheAPI(t *testing.T) {
 	}
 
 	// A round that cannot read the engine says why, in its report.
-	delete(env, "WWBB_ENGINE_ATLAS_TASKLIST_TOKEN")
-	if failed := w.admin.expect("POST", "/api/engines/atlas/task-links/run", "", http.StatusOK); !strings.Contains(failed["error"].(string), "WWBB_ENGINE_ATLAS_TASKLIST_TOKEN") {
+	delete(env, "OT_ENGINE_ATLAS_TASKLIST_TOKEN")
+	if failed := w.admin.expect("POST", "/api/engines/atlas/task-links/run", "", http.StatusOK); !strings.Contains(failed["error"].(string), "OT_ENGINE_ATLAS_TASKLIST_TOKEN") {
 		t.Errorf("a round without the credential = %v", failed)
 	}
 }
@@ -117,7 +117,7 @@ func TestTaskLinksThroughTheAPI(t *testing.T) {
 // metrics count each engine's rounds and connected people.
 func TestHowCurrentLinkedTasksAreIsTold(t *testing.T) {
 	srv := fakeTaskEngine(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TASKLIST_TOKEN": "lister"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TASKLIST_TOKEN": "lister"}
 	w := newWorld(t, func(d *Deps) { d.Engines = engine.NewReader(func(k string) string { return env[k] }, srv.Client()) })
 	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusCreated)
 	w.bert.expect("GET", "/api/engines/nope/tasks-read", "", http.StatusNotFound)
@@ -126,7 +126,7 @@ func TestHowCurrentLinkedTasksAreIsTold(t *testing.T) {
 		t.Fatalf("before a round = %v", got)
 	}
 	links := w.admin.expect("GET", "/api/engines/atlas/task-links", "", http.StatusOK)
-	if links["eventsVar"] != "WWBB_ENGINE_ATLAS_EVENTS_TOKEN" || links["events"] != false {
+	if links["eventsVar"] != "OT_ENGINE_ATLAS_EVENTS_TOKEN" || links["events"] != false {
 		t.Errorf("events = %v %v", links["eventsVar"], links["events"])
 	}
 	w.admin.expect("POST", "/api/engines/atlas/task-links/run", "", http.StatusOK)
@@ -135,14 +135,14 @@ func TestHowCurrentLinkedTasksAreIsTold(t *testing.T) {
 		t.Errorf("after a round = %v", fresh)
 	}
 	rec := w.admin.do("GET", "/metrics", "")
-	for _, want := range []string{`wwbb_tasklinks_last_read_timestamp_seconds{engine="atlas"}`, `wwbb_tasklinks_failed_rounds{engine="atlas"} 0`} {
+	for _, want := range []string{`ot_tasklinks_last_read_timestamp_seconds{engine="atlas"}`, `ot_tasklinks_failed_rounds{engine="atlas"} 0`} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("the metrics lack %s", want)
 		}
 	}
-	delete(env, "WWBB_ENGINE_ATLAS_TASKLIST_TOKEN")
+	delete(env, "OT_ENGINE_ATLAS_TASKLIST_TOKEN")
 	w.admin.expect("POST", "/api/engines/atlas/task-links/run", "", http.StatusOK)
-	if rec := w.admin.do("GET", "/metrics", ""); !strings.Contains(rec.Body.String(), `wwbb_tasklinks_failed_rounds{engine="atlas"} 1`) {
+	if rec := w.admin.do("GET", "/metrics", ""); !strings.Contains(rec.Body.String(), `ot_tasklinks_failed_rounds{engine="atlas"} 1`) {
 		t.Error("a failed round is not counted")
 	}
 }

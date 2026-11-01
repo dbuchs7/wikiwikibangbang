@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // maxPages bounds how many pages of a list a JSON source is read in, so

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // TestAlbumRetentionThroughTheAPI: administrators set the album's default

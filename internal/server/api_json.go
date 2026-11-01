@@ -4,8 +4,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/connector"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // The JSON shapes of the item API (ADR-0028). They are separate from the

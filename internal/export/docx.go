@@ -14,7 +14,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // Document is what an export writes: one page, or a page with the pages
@@ -659,7 +659,7 @@ const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
 
 const coreProps = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
 	`<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/">` +
-	`<dc:title>%s</dc:title><dc:creator>wikiwikibangbang</dc:creator></cp:coreProperties>`
+	`<dc:title>%s</dc:title><dc:creator>Orbithek</dc:creator></cp:coreProperties>`
 
 const documentHead = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
 	`<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" ` +

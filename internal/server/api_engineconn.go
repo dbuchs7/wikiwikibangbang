@@ -9,16 +9,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engineconn"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/engineauth"
+	"github.com/dbuchs7/orbithek/internal/engineconn"
+	"github.com/dbuchs7/orbithek/internal/site"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // connectCookie binds a begun connection to an engine to the browser that
 // began it, as the single sign-on's state cookie does (ADR-0030).
-const connectCookie = "wwbb_engine_state"
+const connectCookie = "ot_engine_state"
 
 // engineConnRoutes connect a person's account to a process engine, so the
 // engine's tasks are read and worked with the person's own grant

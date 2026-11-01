@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/migrate"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/migrate"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // atlassianSite answers the requests of the Atlassian Cloud readers: one
@@ -177,10 +177,10 @@ func TestAtlassianRunsThatCannotWork(t *testing.T) {
 	f, c, _ := atlassianSetup(t)
 	ctx := context.Background()
 	f.r.getenv = allowPrivate(func(string) string { return "" })
-	if _, err := f.r.Run(ctx, "acme", true, "admin"); !errors.Is(err, ErrNoCredential) || !strings.Contains(err.Error(), "WWBB_CONNECTOR_ACME_EMAIL") {
+	if _, err := f.r.Run(ctx, "acme", true, "admin"); !errors.Is(err, ErrNoCredential) || !strings.Contains(err.Error(), "OT_CONNECTOR_ACME_EMAIL") {
 		t.Errorf("no credential: %v", err)
 	}
-	if st := f.r.Status("acme"); st.EmailVar != "WWBB_CONNECTOR_ACME_EMAIL" || st.Email || st.Credential {
+	if st := f.r.Status("acme"); st.EmailVar != "OT_CONNECTOR_ACME_EMAIL" || st.Email || st.Credential {
 		t.Errorf("status %+v", st)
 	}
 	f.r.getenv = allowPrivate(func(k string) string {

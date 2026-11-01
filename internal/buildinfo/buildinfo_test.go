@@ -13,7 +13,7 @@ func TestStringNamesVersionRevisionAndPlatform(t *testing.T) {
 		{Key: "vcs.modified", Value: "true"},
 	}})
 	got := in.String()
-	for _, want := range []string{"wikiwikibangbang dev", "(0123456789ab+dirty)", runtime.Version(), runtime.GOOS + "/" + runtime.GOARCH} {
+	for _, want := range []string{"orbithek dev", "(0123456789ab+dirty)", runtime.Version(), runtime.GOOS + "/" + runtime.GOARCH} {
 		if !strings.Contains(got, want) {
 			t.Errorf("String() = %q, want it to contain %q", got, want)
 		}

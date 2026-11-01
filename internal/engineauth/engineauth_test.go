@@ -11,10 +11,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth/engineauthtest"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engineconn"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/engineauth/engineauthtest"
+	"github.com/dbuchs7/orbithek/internal/engineconn"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // plainSealer keeps tokens as they are; internal/storage seals them.

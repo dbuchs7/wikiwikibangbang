@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/notes"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/notes"
 )
 
 // TestNotesAreSealedAndGoWithTheirItem: a personal note is sealed with its

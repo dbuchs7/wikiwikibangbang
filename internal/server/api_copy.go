@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // copyRoutes copy a page, with its child pages if asked (ADR-0067).

@@ -30,9 +30,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/connector"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // Errors of a read. Use errors.Is; the message says more, never the
@@ -65,13 +65,13 @@ const Timeout = 15 * time.Second
 // own network. As for connectors (ADR-0127), it is the operator's decision,
 // so it comes from the environment; without it an engine must be on the
 // public internet.
-const AllowPrivateVar = "WWBB_ENGINE_ALLOW_PRIVATE"
+const AllowPrivateVar = "OT_ENGINE_ALLOW_PRIVATE"
 
 // TokenVar names the environment variable that holds an engine's
-// credential, e.g. WWBB_ENGINE_ATLAS_PROD_TOKEN: the ID in capitals, other
+// credential, e.g. OT_ENGINE_ATLAS_PROD_TOKEN: the ID in capitals, other
 // characters as _, named as a connector's (ADR-0077).
 func TokenVar(id string) string {
-	return "WWBB_ENGINE_" + strings.Map(func(r rune) rune {
+	return "OT_ENGINE_" + strings.Map(func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z':
 			return r - 'a' + 'A'

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/engine"
 )
 
 // fakeEngine answers as an atlas engine does, for the credential "secret".
@@ -64,14 +64,14 @@ func fakeEngine(t *testing.T) *httptest.Server {
 // only counts; the credential is never answered.
 func TestProcessesFromAnEngine(t *testing.T) {
 	srv := fakeEngine(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TOKEN": "secret"}
 	w := newWorld(t, func(d *Deps) { d.Engines = engine.NewReader(func(k string) string { return env[k] }, srv.Client()) })
 
 	w.bert.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusForbidden)
 	w.admin.expect("PUT", "/api/engines/Atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusBadRequest)
 	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"ftp://x"}`, http.StatusBadRequest)
 	set := w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`/"}`, http.StatusCreated)
-	if set["credentialVar"] != "WWBB_ENGINE_ATLAS_TOKEN" || set["credential"] != true || set["baseURL"] != srv.URL {
+	if set["credentialVar"] != "OT_ENGINE_ATLAS_TOKEN" || set["credential"] != true || set["baseURL"] != srv.URL {
 		t.Fatalf("set %v", set)
 	}
 	w.admin.expect("PUT", "/api/engines/test", `{"name":"Test","kind":"atlas","baseURL":"http://127.0.0.1:1"}`, http.StatusCreated)
@@ -100,7 +100,7 @@ func TestProcessesFromAnEngine(t *testing.T) {
 	}
 	w.vera.expect("GET", "/api/engines/atlas/processes/nothing", "", http.StatusNotFound)
 	w.vera.expect("GET", "/api/engines/gone/processes", "", http.StatusNotFound)
-	if r := w.vera.do("GET", "/api/engines/test/processes", ""); r.Code != http.StatusBadGateway || !strings.Contains(r.Body.String(), "WWBB_ENGINE_TEST_TOKEN") {
+	if r := w.vera.do("GET", "/api/engines/test/processes", ""); r.Code != http.StatusBadGateway || !strings.Contains(r.Body.String(), "OT_ENGINE_TEST_TOKEN") {
 		t.Fatalf("an engine without credential: %d %s", r.Code, r.Body)
 	}
 
@@ -118,7 +118,7 @@ func TestProcessesFromAnEngine(t *testing.T) {
 		t.Fatalf("operations %v", ops)
 	}
 
-	env["WWBB_ENGINE_ATLAS_TOKEN"] = "wrong"
+	env["OT_ENGINE_ATLAS_TOKEN"] = "wrong"
 	if r := w.vera.do("GET", "/api/engines/atlas/processes", ""); r.Code != http.StatusBadGateway || strings.Contains(r.Body.String(), "wrong") || strings.Contains(r.Body.String(), "secret") {
 		t.Fatalf("a refused credential: %d %s", r.Code, r.Body)
 	}
@@ -144,7 +144,7 @@ func TestProcessesFromAnEngine(t *testing.T) {
 // server.
 func TestFormsAndDecisionsFromAnEngine(t *testing.T) {
 	srv := fakeEngine(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TOKEN": "secret"}
 	w := newWorld(t, func(d *Deps) { d.Engines = engine.NewReader(func(k string) string { return env[k] }, srv.Client()) })
 	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusCreated)
 
@@ -177,7 +177,7 @@ func TestFormsAndDecisionsFromAnEngine(t *testing.T) {
 	w.vera.expect("GET", "/api/engines/gone/forms", "", http.StatusNotFound)
 	w.vera.expect("GET", "/api/engines/gone/decisions/x", "", http.StatusNotFound)
 
-	env["WWBB_ENGINE_ATLAS_TOKEN"] = "wrong"
+	env["OT_ENGINE_ATLAS_TOKEN"] = "wrong"
 	for _, path := range []string{"/api/engines/atlas/forms", "/api/engines/atlas/forms/travel", "/api/engines/atlas/decisions", "/api/engines/atlas/decisions/Decision%201"} {
 		if r := w.vera.do("GET", path, ""); r.Code != http.StatusBadGateway || strings.Contains(r.Body.String(), "wrong") {
 			t.Errorf("%s with a refused credential: %d %s", path, r.Code, r.Body)
@@ -193,7 +193,7 @@ func TestFormsAndDecisionsFromAnEngine(t *testing.T) {
 // answered.
 func TestArchitectureSketchesFromAnEngine(t *testing.T) {
 	srv := fakeEngine(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TOKEN": "secret"}
 	w := newWorld(t, func(d *Deps) { d.Engines = engine.NewReader(func(k string) string { return env[k] }, srv.Client()) })
 	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusCreated)
 
@@ -245,7 +245,7 @@ func TestArchitectureSketchesFromAnEngine(t *testing.T) {
 		t.Errorf("an unsafe picture says why: %s", rec.Body)
 	}
 
-	env["WWBB_ENGINE_ATLAS_TOKEN"] = "wrong"
+	env["OT_ENGINE_ATLAS_TOKEN"] = "wrong"
 	for _, path := range []string{"/api/engines/atlas/architectures", "/api/engines/atlas/architectures/c46e/newest"} {
 		if r := w.vera.do("GET", path, ""); r.Code != http.StatusBadGateway || strings.Contains(r.Body.String(), "wrong") || !strings.Contains(r.Body.String(), "engine atlas: the engine refused the credential") {
 			t.Errorf("%s with a refused credential: %d %s", path, r.Code, r.Body)

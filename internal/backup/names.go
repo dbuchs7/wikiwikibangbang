@@ -10,8 +10,11 @@ import (
 
 // The file name of a stored backup tells which chain it belongs to and
 // where in it (ADR-0073), so a destination can be read without decrypting
-// anything: wikiwikibangbang-<when>-<chain>-<seq>-full|inc.wwbb.
-var namePattern = regexp.MustCompile(`^wikiwikibangbang-(\d{8}T\d{6}Z)-([0-9a-f]{16})-(\d{3,6})-(full|inc)\.wwbb$`)
+// anything: orbithek-<when>-<chain>-<seq>-full|inc.orbithek. Backups
+// stored before the product was renamed (ADR-0153) are named
+// wikiwikibangbang-…-full|inc.wwbb; they are read alike, so a chain begun
+// under the old name goes on under the new one.
+var namePattern = regexp.MustCompile(`^(?:orbithek-(\d{8}T\d{6}Z)-([0-9a-f]{16})-(\d{3,6})-(full|inc)\.orbithek|wikiwikibangbang-(\d{8}T\d{6}Z)-([0-9a-f]{16})-(\d{3,6})-(full|inc)\.wwbb)$`)
 
 const nameTime = "20060102T150405Z"
 
@@ -29,7 +32,7 @@ func FileName(at time.Time, chain string, seq int) string {
 	if seq == 0 {
 		kind = "full"
 	}
-	return fmt.Sprintf("wikiwikibangbang-%s-%s-%03d-%s.wwbb", at.UTC().Format(nameTime), chain, seq, kind)
+	return fmt.Sprintf("orbithek-%s-%s-%03d-%s.orbithek", at.UTC().Format(nameTime), chain, seq, kind)
 }
 
 // ParseName reads a stored backup's file name; ok is false for any other
@@ -38,6 +41,9 @@ func ParseName(file string) (n Name, ok bool) {
 	p := namePattern.FindStringSubmatch(file)
 	if p == nil {
 		return n, false
+	}
+	if p[1] == "" {
+		p = p[4:]
 	}
 	at, err := time.Parse(nameTime, p[1])
 	if err != nil {

@@ -23,11 +23,11 @@ func TestMetricsAreForAdministratorsAndScrapers(t *testing.T) {
 	}
 	body := rec.Body.String()
 	for _, want := range []string{
-		`wwbb_items{presence="live"} 1`,
-		`wwbb_http_requests_total{code="201",method="POST",route="/api/items"} 1`,
-		`wwbb_search_duration_seconds_count 1`,
-		`wwbb_storage_bytes{file="events.wal"}`,
-		`wwbb_live_sessions 0`,
+		`ot_items{presence="live"} 1`,
+		`ot_http_requests_total{code="201",method="POST",route="/api/items"} 1`,
+		`ot_search_duration_seconds_count 1`,
+		`ot_storage_bytes{file="events.wal"}`,
+		`ot_live_sessions 0`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %s", want)
@@ -39,7 +39,7 @@ func TestMetricsAreForAdministratorsAndScrapers(t *testing.T) {
 	w.bert.expect("POST", "/api/tokens", `{"name":"scraper","scope":"metrics","days":30}`, http.StatusForbidden)
 	tok := w.admin.expect("POST", "/api/tokens", `{"name":"scraper","scope":"metrics","days":30}`, http.StatusCreated)
 	scraper := &client{t: t, h: w.admin.h, bearer: tok["secret"].(string)}
-	if rec := scraper.do("GET", "/metrics", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "wwbb_build_info") {
+	if rec := scraper.do("GET", "/metrics", ""); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), "ot_build_info") {
 		t.Fatalf("scraper: %d", rec.Code)
 	}
 	for _, c := range []struct{ method, path, body string }{

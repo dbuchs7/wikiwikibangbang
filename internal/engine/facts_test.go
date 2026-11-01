@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // TestTaskFactsReadTheFeedWithTheEventsCredential covers ADR-0151's

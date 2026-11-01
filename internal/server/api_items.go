@@ -15,14 +15,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/notes"
-	querylang "github.com/dbuchs7/wikiwikibangbang/internal/query"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/diskspace"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/notes"
+	querylang "github.com/dbuchs7/orbithek/internal/query"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // itemRoutes are the item API (ADR-0028). Every handler acts through

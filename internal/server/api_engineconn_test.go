@@ -6,11 +6,11 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth/engineauthtest"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/engineauth"
+	"github.com/dbuchs7/orbithek/internal/engineauth/engineauthtest"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // connectWorld is a world whose engine atlas is the fake engine, with this
@@ -124,7 +124,7 @@ func TestAPersonConnectsTheirAccountToAnEngine(t *testing.T) {
 
 	links := w.admin.expect("GET", "/api/engines/atlas/task-links", "", http.StatusOK)["connect"].(map[string]any)
 	if links["configured"] != true || links["connected"] != float64(1) || links["callback"] != "http://wiki.test/api/engines/atlas/connect/callback" ||
-		links["clientIdVar"] != "WWBB_ENGINE_ATLAS_CLIENT_ID" || links["clientSecretVar"] != "WWBB_ENGINE_ATLAS_CLIENT_SECRET" {
+		links["clientIdVar"] != "OT_ENGINE_ATLAS_CLIENT_ID" || links["clientSecretVar"] != "OT_ENGINE_ATLAS_CLIENT_SECRET" {
 		t.Errorf("the administrators' view = %v", links)
 	}
 

@@ -25,8 +25,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // The session, participant and block budgets are in internal/budget

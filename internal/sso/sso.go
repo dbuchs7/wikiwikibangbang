@@ -22,7 +22,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 // Config names the provider and this application's registration there.

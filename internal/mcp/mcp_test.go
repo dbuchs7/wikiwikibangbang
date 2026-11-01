@@ -80,7 +80,7 @@ func TestInitializeNegotiatesTheVersion(t *testing.T) {
 	if r["protocolVersion"] != "2025-03-26" {
 		t.Errorf("a supported version is echoed, got %v", r["protocolVersion"])
 	}
-	if r["serverInfo"].(map[string]any)["name"] != "wikiwikibangbang" {
+	if r["serverInfo"].(map[string]any)["name"] != "orbithek" {
 		t.Errorf("serverInfo: %v", r["serverInfo"])
 	}
 	if _, ok := r["capabilities"].(map[string]any)["tools"]; !ok {
@@ -266,12 +266,12 @@ func TestHTTPAPISendsTheCallersCredentialOnly(t *testing.T) {
 		w.Write([]byte(`{"item":{}}`))
 	}))
 	defer srv.Close()
-	api := HTTPAPI{Base: srv.URL + "/", Header: http.Header{"Authorization": {"Bearer wwbb_secret"}}}
+	api := HTTPAPI{Base: srv.URL + "/", Header: http.Header{"Authorization": {"Bearer ot_secret"}}}
 	status, answer, err := api.Call(context.Background(), "POST", "/api/items", []byte(`{"title":"x"}`))
 	if err != nil || status != http.StatusCreated || string(answer) != `{"item":{}}` {
 		t.Fatalf("status %d, answer %s, err %v", status, answer, err)
 	}
-	if got.URL.Path != "/api/items" || got.Header.Get("Authorization") != "Bearer wwbb_secret" ||
+	if got.URL.Path != "/api/items" || got.Header.Get("Authorization") != "Bearer ot_secret" ||
 		got.Header.Get("Content-Type") != "application/json" || gotBody != `{"title":"x"}` {
 		t.Fatalf("request %s %s, headers %v, body %q", got.Method, got.URL, got.Header, gotBody)
 	}

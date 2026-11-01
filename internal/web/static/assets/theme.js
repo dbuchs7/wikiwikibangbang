@@ -5,7 +5,7 @@
 // @media rules of the design's own stylesheet (ADR-0070), so a theme
 // with a dark look of its own follows the choice too.
 
-const key = "wwbb.theme";
+const key = "ot.theme";
 const system = window.matchMedia("(prefers-color-scheme: dark)");
 // original holds each rewritten rule's or element's media as written.
 const original = new WeakMap();

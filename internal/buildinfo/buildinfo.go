@@ -9,7 +9,7 @@ import (
 
 // Version is the release version, stamped at build time:
 //
-//	go build -ldflags "-X github.com/dbuchs7/wikiwikibangbang/internal/buildinfo.Version=1.2.3"
+//	go build -ldflags "-X github.com/dbuchs7/orbithek/internal/buildinfo.Version=1.2.3"
 //
 // An unstamped build reports "dev".
 var Version = "dev"
@@ -47,7 +47,7 @@ func from(bi *debug.BuildInfo) Info {
 }
 
 // String renders the information on one line, e.g.
-// "wikiwikibangbang 1.2.3 (abc123def456) go1.26.0 linux/amd64".
+// "orbithek 1.2.3 (abc123def456) go1.26.0 linux/amd64".
 func (in Info) String() string {
 	rev := ""
 	if in.Revision != "" {
@@ -60,5 +60,5 @@ func (in Info) String() string {
 		}
 		rev = " (" + r + ")"
 	}
-	return fmt.Sprintf("wikiwikibangbang %s%s %s %s/%s", in.Version, rev, in.Go, in.OS, in.Arch)
+	return fmt.Sprintf("orbithek %s%s %s %s/%s", in.Version, rev, in.Go, in.OS, in.Arch)
 }

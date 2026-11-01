@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // kanbanIconRoutes give a kanban a picture or logo (ADR-0087), shown on

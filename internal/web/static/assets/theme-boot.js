@@ -3,7 +3,7 @@
 // rest once the app runs.
 (function () {
   var v = "";
-  try { v = localStorage.getItem("wwbb.theme") || ""; } catch (e) { /* follow the system */ }
+  try { v = localStorage.getItem("ot.theme") || ""; } catch (e) { /* follow the system */ }
   var link = document.getElementById("dark-css");
   if (link && (v === "dark" || v === "light")) {
     link.setAttribute("data-media", link.media);

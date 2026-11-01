@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 const (
@@ -114,12 +114,12 @@ func fakeAtlas(t *testing.T) (*httptest.Server, *[]string) {
 
 func TestTheNewestVersionAndItsOperations(t *testing.T) {
 	srv, asked := fakeAtlas(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_PROD_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_PROD_TOKEN": "secret"}
 	r := NewReader(func(k string) string { return env[k] }, srv.Client())
 	e := site.Engine{ID: "atlas-prod", Name: "Atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}
 	ctx := context.Background()
 
-	if TokenVar("atlas-prod.v2") != "WWBB_ENGINE_ATLAS_PROD_V2_TOKEN" || !r.HasCredential("atlas-prod") || r.HasCredential("other") {
+	if TokenVar("atlas-prod.v2") != "OT_ENGINE_ATLAS_PROD_V2_TOKEN" || !r.HasCredential("atlas-prod") || r.HasCredential("other") {
 		t.Fatal("credential variables")
 	}
 	list, err := r.Processes(ctx, e)
@@ -156,15 +156,15 @@ func TestTheNewestVersionAndItsOperations(t *testing.T) {
 			t.Errorf("asked elsewhere: %v", *asked)
 		}
 	}
-	env["WWBB_ENGINE_ATLAS_PROD_TOKEN"] = "wrong"
+	env["OT_ENGINE_ATLAS_PROD_TOKEN"] = "wrong"
 	if _, err := r.Processes(ctx, e); !errors.Is(err, ErrRefused) || strings.Contains(err.Error(), "wrong") {
 		t.Errorf("a refused credential: %v", err)
 	}
-	delete(env, "WWBB_ENGINE_ATLAS_PROD_TOKEN")
-	if _, err := r.Processes(ctx, e); !errors.Is(err, ErrNoCredential) || !strings.Contains(err.Error(), "WWBB_ENGINE_ATLAS_PROD_TOKEN") {
+	delete(env, "OT_ENGINE_ATLAS_PROD_TOKEN")
+	if _, err := r.Processes(ctx, e); !errors.Is(err, ErrNoCredential) || !strings.Contains(err.Error(), "OT_ENGINE_ATLAS_PROD_TOKEN") {
 		t.Errorf("no credential: %v", err)
 	}
-	env["WWBB_ENGINE_ATLAS_PROD_TOKEN"] = "secret"
+	env["OT_ENGINE_ATLAS_PROD_TOKEN"] = "secret"
 	if _, err := r.Processes(ctx, site.Engine{ID: "atlas-prod", Kind: "other", BaseURL: e.BaseURL}); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("an unknown kind: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestTheNewestVersionAndItsOperations(t *testing.T) {
 // model it is deployed in (ADR-0144).
 func TestFormsAndDecisions(t *testing.T) {
 	srv, asked := fakeAtlas(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TOKEN": "secret"}
 	r := NewReader(func(k string) string { return env[k] }, srv.Client())
 	e := site.Engine{ID: "atlas", Name: "Atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}
 	ctx := context.Background()
@@ -230,7 +230,7 @@ func TestFormsAndDecisions(t *testing.T) {
 	if _, err := r.DecisionModel(ctx, e, "nothing"); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "decision nothing") {
 		t.Errorf("an unknown decision: %v", err)
 	}
-	delete(env, "WWBB_ENGINE_ATLAS_TOKEN")
+	delete(env, "OT_ENGINE_ATLAS_TOKEN")
 	if _, err := r.Forms(ctx, e); !errors.Is(err, ErrNoCredential) {
 		t.Errorf("forms without credential: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestFormsAndDecisions(t *testing.T) {
 // is the newest (ADR-0146).
 func TestArchitectureSketches(t *testing.T) {
 	srv, asked := fakeAtlas(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TOKEN": "secret"}
 	r := NewReader(func(k string) string { return env[k] }, srv.Client())
 	e := site.Engine{ID: "atlas", Name: "Atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}
 	ctx := context.Background()
@@ -325,14 +325,14 @@ func TestArchitectureSketches(t *testing.T) {
 
 	// A token whose reach names no application lists none; a sketch then
 	// points the administrator at the token's reach.
-	env["WWBB_ENGINE_ATLAS_TOKEN"] = "unreached"
+	env["OT_ENGINE_ATLAS_TOKEN"] = "unreached"
 	if apps, err := r.Architectures(ctx, e); err != nil || apps == nil || len(apps) != 0 {
 		t.Errorf("a token that reaches no application: %v %v", apps, err)
 	}
 	if _, _, err := r.ArchitectureSketch(ctx, e, "c46e", 0, nil); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "reach") || strings.Contains(err.Error(), "unreached") {
 		t.Errorf("a sketch with a token that reaches no application: %v", err)
 	}
-	delete(env, "WWBB_ENGINE_ATLAS_TOKEN")
+	delete(env, "OT_ENGINE_ATLAS_TOKEN")
 	if _, err := r.Architectures(ctx, e); !errors.Is(err, ErrNoCredential) {
 		t.Errorf("architectures without credential: %v", err)
 	}
@@ -395,12 +395,12 @@ func TestAnAnswerBeyondTheBudgetIsRefused(t *testing.T) {
 
 // TestEnginesAreKeptToPublicAddresses: as connectors (ADR-0127), a reader
 // reaches only addresses on the public internet unless the operator sets
-// WWBB_ENGINE_ALLOW_PRIVATE=on, which an engine in the organisation's own
+// OT_ENGINE_ALLOW_PRIVATE=on, which an engine in the organisation's own
 // network needs (ADR-0129).
 func TestEnginesAreKeptToPublicAddresses(t *testing.T) {
 	srv, _ := fakeAtlas(t)
 	e := site.Engine{ID: "atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TOKEN": "secret"}
 	_, err := NewReader(func(k string) string { return env[k] }, nil).Processes(context.Background(), e)
 	if !errors.Is(err, ErrUnavailable) || !strings.Contains(err.Error(), AllowPrivateVar+"=on") || strings.Contains(err.Error(), "connector") {
 		t.Fatalf("an engine on the loopback address: %v", err)

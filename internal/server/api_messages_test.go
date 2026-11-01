@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/notify"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/notify"
 )
 
 // outbox keeps the mail a test server would have sent.

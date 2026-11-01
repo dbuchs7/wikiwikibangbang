@@ -28,8 +28,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/site"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // maxAnswer bounds what is read of one answer of the CKAN API: a page of
@@ -547,7 +547,7 @@ func (c Client) get(ctx context.Context, path string, v any) error {
 		return err
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "wikiwikibangbang connector")
+	req.Header.Set("User-Agent", "orbithek connector")
 	if c.Token != "" {
 		req.Header.Set("Authorization", c.Token)
 	}

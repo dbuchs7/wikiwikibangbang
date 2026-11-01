@@ -112,7 +112,7 @@ func fake(t *testing.T) *http.Client {
 		http.NotFound(w, nil)
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("User-Agent") != "wikiwikibangbang" {
+		if r.Header.Get("User-Agent") != "orbithek" {
 			t.Errorf("%s: no user agent", r.URL)
 		}
 		host, p, q := r.Host, r.URL.EscapedPath(), r.URL.Query()

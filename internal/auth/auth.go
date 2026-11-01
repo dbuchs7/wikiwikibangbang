@@ -86,7 +86,11 @@ func (e *ThrottledError) Is(target error) bool { return target == ErrThrottled }
 
 // TokenPrefix starts every API token secret, so secret scanners can find
 // leaked tokens.
-const TokenPrefix = "wwbb_"
+const TokenPrefix = "ot_"
+
+// LegacyTokenPrefix started the API tokens issued before the product was
+// renamed (ADR-0153). They stay valid until they expire or are revoked.
+const LegacyTokenPrefix = "wwbb_"
 
 // SessionLifetime is how long a login lasts.
 const SessionLifetime = 12 * time.Hour
@@ -710,7 +714,7 @@ func (a *Accounts) RevokeToken(user UserID, tokenID string) error {
 
 // TokenPrincipal resolves an API token secret.
 func (a *Accounts) TokenPrincipal(secret string) (Principal, bool) {
-	if !strings.HasPrefix(secret, TokenPrefix) {
+	if !strings.HasPrefix(secret, TokenPrefix) && !strings.HasPrefix(secret, LegacyTokenPrefix) {
 		return Principal{}, false
 	}
 	a.mu.Lock()

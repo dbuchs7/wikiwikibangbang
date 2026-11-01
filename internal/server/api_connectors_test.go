@@ -10,7 +10,7 @@ import (
 )
 
 func TestConnectorsThroughTheAPI(t *testing.T) {
-	t.Setenv("WWBB_CONNECTOR_ALLOW_PRIVATE", "on") // the fake source is on the loopback address
+	t.Setenv("OT_CONNECTOR_ALLOW_PRIVATE", "on") // the fake source is on the loopback address
 	ckan := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"success":true,"result":{"count":1,"facets":{"res_format":{"API":1,"CSV":4}},"results":[{"id":"d1","name":"wetter","title":{"de":"Wetter"},
 			"organization":{"name":"meteo","title":{"de":"Meteo"}},"resources":[{"id":"r1","format":"API","url":"https://api.example/v1"}]}]}}`)
@@ -78,7 +78,7 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	if h := status["history"].([]any)[0].(map[string]any); h["new"].(float64) != 1 || h["error"] != nil || h["connector"] != "wetter" || h["problems"] == nil {
 		t.Fatalf("run %s", jsonOf(h))
 	}
-	if status["credentialVar"] != "WWBB_CONNECTOR_WETTER_TOKEN" || status["credential"] != false {
+	if status["credentialVar"] != "OT_CONNECTOR_WETTER_TOKEN" || status["credential"] != false {
 		t.Errorf("credential %s", jsonOf(status))
 	}
 	// The data set is an ordinary page (ADR-0093), which its steward
@@ -148,7 +148,7 @@ func TestConnectorsThroughTheAPI(t *testing.T) {
 	w.admin.expect("POST", "/api/connectors", atlassian("nobody"), http.StatusBadRequest)
 	w.admin.expect("POST", "/api/connectors", atlassian("bert"), http.StatusCreated)
 	listed = w.admin.expect("GET", "/api/connectors", "", http.StatusOK)
-	if !strings.Contains(jsonOf(listed["connectors"]), `"emailVar":"WWBB_CONNECTOR_ACME_EMAIL"`) {
+	if !strings.Contains(jsonOf(listed["connectors"]), `"emailVar":"OT_CONNECTOR_ACME_EMAIL"`) {
 		t.Errorf("the e-mail address's variable %s", jsonOf(listed["connectors"]))
 	}
 	w.bert.expect("POST", "/api/connectors/acme/release", "", http.StatusForbidden)

@@ -47,7 +47,7 @@ var detectors = []detector{
 			`|\bgithub_pat_[A-Za-z0-9_]{50,}` +
 			`|\bxox[abprs]-[A-Za-z0-9-]{10,}` + // chat bot tokens
 			`|\bsk-[A-Za-z0-9_-]{20,}` + // API secret keys
-			`|\bwwbb_[A-Za-z0-9+/_=-]{20,}` + // this server's own API tokens
+			`|\b(?:ot|wwbb)_[A-Za-z0-9+/_=-]{20,}` + // this server's own API tokens, also from before ADR-0153
 			`|\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`)}, // signed tokens
 	{kind: "iban", valid: validIBAN, may: mayHoldIBAN,
 		re: regexp.MustCompile(`\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]){11,30}\b`)},
@@ -174,7 +174,7 @@ func mayHoldPassword(t string) bool {
 
 // tokenStarts begin every kind of access token the pattern knows.
 var tokenStarts = []string{"AKIA", "ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_",
-	"xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "sk-", "wwbb_", "eyJ"}
+	"xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "sk-", "ot_", "wwbb_", "eyJ"}
 
 func mayHoldToken(t string) bool {
 	for _, s := range tokenStarts {

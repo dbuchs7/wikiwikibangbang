@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // A Reader reads one kind of source into entries (ADR-0127). Scheduling,

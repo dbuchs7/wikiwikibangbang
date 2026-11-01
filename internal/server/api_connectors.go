@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/connector"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // connectorRoutes set up the connectors that keep catalog spaces in step

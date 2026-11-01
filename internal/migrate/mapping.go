@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // Mapping says how source concepts become items. It is configuration, not

@@ -59,14 +59,14 @@ func New(src Sources) *Metrics {
 	m := &Metrics{
 		reg: reg,
 		requests: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "wwbb_http_requests_total", Help: "HTTP requests by route pattern, method and status code.",
+			Name: "ot_http_requests_total", Help: "HTTP requests by route pattern, method and status code.",
 		}, []string{"route", "method", "code"}),
 		duration: prometheus.NewHistogramVec(prometheus.HistogramOpts{
-			Name: "wwbb_http_request_duration_seconds", Help: "Time to answer an HTTP request, by route pattern; event streams are not included.",
+			Name: "ot_http_request_duration_seconds", Help: "Time to answer an HTTP request, by route pattern; event streams are not included.",
 			Buckets: prometheus.DefBuckets,
 		}, []string{"route"}),
 		search: prometheus.NewHistogram(prometheus.HistogramOpts{
-			Name: "wwbb_search_duration_seconds", Help: "Time to scan the state for one search (ADR-0033).",
+			Name: "ot_search_duration_seconds", Help: "Time to scan the state for one search (ADR-0033).",
 			Buckets: []float64{.001, .0025, .005, .01, .025, .05, .1, .25, .5, 1, 2.5},
 		}),
 	}
@@ -74,13 +74,13 @@ func New(src Sources) *Metrics {
 		collectors.NewGoCollector(),
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-			Name: "wwbb_build_info", Help: "Always 1; the label names the running version.",
+			Name: "ot_build_info", Help: "Always 1; the label names the running version.",
 			ConstLabels: prometheus.Labels{"version": src.Build},
 		}, func() float64 { return 1 }),
 	)
 	if src.Items != nil {
 		reg.MustRegister(&mapGauge{
-			desc: prometheus.NewDesc("wwbb_items", "Items by presence state.", []string{"presence"}, nil),
+			desc: prometheus.NewDesc("ot_items", "Items by presence state.", []string{"presence"}, nil),
 			read: func() map[string]float64 {
 				out := map[string]float64{}
 				for k, v := range src.Items() {
@@ -92,7 +92,7 @@ func New(src Sources) *Metrics {
 	}
 	if src.Storage != nil {
 		reg.MustRegister(&mapGauge{
-			desc: prometheus.NewDesc("wwbb_storage_bytes", "Bytes of each data file.", []string{"file"}, nil),
+			desc: prometheus.NewDesc("ot_storage_bytes", "Bytes of each data file.", []string{"file"}, nil),
 			read: func() map[string]float64 {
 				out := map[string]float64{}
 				for k, v := range src.Storage() {
@@ -104,13 +104,13 @@ func New(src Sources) *Metrics {
 	}
 	if src.Disk != nil {
 		reg.MustRegister(
-			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_disk_free_bytes", Help: "Free bytes of the data directory's file system (ADR-0150)."},
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "ot_disk_free_bytes", Help: "Free bytes of the data directory's file system (ADR-0150)."},
 				func() float64 { f, _, _, _ := src.Disk(); return float64(f) }),
-			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_disk_total_bytes", Help: "Size in bytes of the data directory's file system."},
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "ot_disk_total_bytes", Help: "Size in bytes of the data directory's file system."},
 				func() float64 { _, t, _, _ := src.Disk(); return float64(t) }),
-			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_disk_level", Help: "How close the file system is to full: 0 ok, 1 warning, 2 critical (uploads refused), 3 full (read-only)."},
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "ot_disk_level", Help: "How close the file system is to full: 0 ok, 1 warning, 2 critical (uploads refused), 3 full (read-only)."},
 				func() float64 { _, _, l, _ := src.Disk(); return float64(l) }),
-			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_attachments_bytes", Help: "Bytes of the attachment files kept, album versions included."},
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "ot_attachments_bytes", Help: "Bytes of the attachment files kept, album versions included."},
 				func() float64 { _, _, _, a := src.Disk(); return float64(a) }),
 		)
 	}
@@ -125,24 +125,24 @@ func New(src Sources) *Metrics {
 			}
 		}
 		reg.MustRegister(
-			&mapGauge{desc: prometheus.NewDesc("wwbb_tasklinks_last_read_timestamp_seconds", "When each engine's tasks were last read in full, as Unix time (ADR-0151); 0 before the first round.", []string{"engine"}, nil),
+			&mapGauge{desc: prometheus.NewDesc("ot_tasklinks_last_read_timestamp_seconds", "When each engine's tasks were last read in full, as Unix time (ADR-0151); 0 before the first round.", []string{"engine"}, nil),
 				read: by(func(e EngineRounds) float64 {
 					if e.Read.IsZero() {
 						return 0
 					}
 					return float64(e.Read.Unix())
 				})},
-			&mapGauge{desc: prometheus.NewDesc("wwbb_tasklinks_failed_rounds", "Failed task link rounds of each engine since the start.", []string{"engine"}, nil),
+			&mapGauge{desc: prometheus.NewDesc("ot_tasklinks_failed_rounds", "Failed task link rounds of each engine since the start.", []string{"engine"}, nil),
 				read: by(func(e EngineRounds) float64 { return float64(e.Failed) })},
-			&mapGauge{desc: prometheus.NewDesc("wwbb_engine_connections", "People whose accounts are connected to each engine.", []string{"engine"}, nil),
+			&mapGauge{desc: prometheus.NewDesc("ot_engine_connections", "People whose accounts are connected to each engine.", []string{"engine"}, nil),
 				read: by(func(e EngineRounds) float64 { return float64(e.Connected) })},
 		)
 	}
 	if src.Live != nil {
 		reg.MustRegister(
-			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_live_sessions", Help: "Open live editing sessions (ADR-0010)."},
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "ot_live_sessions", Help: "Open live editing sessions (ADR-0010)."},
 				func() float64 { s, _ := src.Live(); return float64(s) }),
-			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "wwbb_live_clients", Help: "Connections in live editing sessions."},
+			prometheus.NewGaugeFunc(prometheus.GaugeOpts{Name: "ot_live_clients", Help: "Connections in live editing sessions."},
 				func() float64 { _, c := src.Live(); return float64(c) }),
 		)
 	}

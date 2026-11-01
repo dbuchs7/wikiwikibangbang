@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/notify"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/notify"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // Messenger sends messages to people over the channels on their accounts

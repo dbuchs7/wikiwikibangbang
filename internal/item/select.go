@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/query"
+	"github.com/dbuchs7/orbithek/internal/query"
 )
 
 // QueryEnv is what a query of the query language reads besides the items

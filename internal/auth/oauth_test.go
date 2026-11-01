@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 const (
@@ -208,7 +208,7 @@ func TestOAuthEdges(t *testing.T) {
 	if _, err := a.IssueCode("nobody", cl.ID, callback, challengeOf(verifier), resource, ScopeFull); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown user: %v", err)
 	}
-	if _, err := a.IssueCode(u.ID, "wwbb-none", callback, challengeOf(verifier), resource, ScopeFull); !errors.Is(err, ErrInvalidClient) {
+	if _, err := a.IssueCode(u.ID, "ot-none", callback, challengeOf(verifier), resource, ScopeFull); !errors.Is(err, ErrInvalidClient) {
 		t.Fatalf("unknown client: %v", err)
 	}
 	// A public client needs no secret; PKCE alone binds the code.
@@ -236,10 +236,10 @@ func TestOAuthEdges(t *testing.T) {
 	if _, _, ok := a.OAuthPrincipal(tok.Access); ok {
 		t.Fatal("an expired access token still counts")
 	}
-	if err := a.RevokeGrant(u.ID, "wwbb-none"); !errors.Is(err, ErrNotFound) {
+	if err := a.RevokeGrant(u.ID, "ot-none"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("revoke unknown: %v", err)
 	}
-	if err := a.RemoveOAuthClient("wwbb-none"); !errors.Is(err, ErrNotFound) {
+	if err := a.RemoveOAuthClient("ot-none"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("remove unknown: %v", err)
 	}
 }

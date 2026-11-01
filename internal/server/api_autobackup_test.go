@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/autobackup"
-	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
+	"github.com/dbuchs7/orbithek/internal/autobackup"
+	"github.com/dbuchs7/orbithek/internal/backup"
 )
 
 func TestAutomaticBackupsThroughTheAPI(t *testing.T) {
@@ -64,7 +64,7 @@ func TestAutomaticBackupsThroughTheAPI(t *testing.T) {
 		t.Fatalf("versions %v", versions)
 	}
 	entries, _ := os.ReadDir(dir)
-	if len(entries) != 1 || !strings.HasSuffix(entries[0].Name(), "-000-full.wwbb") {
+	if len(entries) != 1 || !strings.HasSuffix(entries[0].Name(), "-000-full.orbithek") {
 		t.Fatalf("stored %v", entries)
 	}
 	audit := w.admin.expect("GET", "/api/audit", "", http.StatusOK)

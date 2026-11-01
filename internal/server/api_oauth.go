@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 // OAuth for AI assistants (ADR-0068): the MCP endpoint is an OAuth
@@ -32,7 +32,7 @@ const (
 )
 
 // Realm names this server in WWW-Authenticate.
-const Realm = "wikiwikibangbang"
+const Realm = "orbithek"
 
 func oauthRoutes(d Deps) []Route {
 	h := oauthHandlers{authHandlers{d: d}}
@@ -62,7 +62,7 @@ type oauthHandlers struct{ authHandlers }
 
 type publicKey struct{}
 
-// WithPublicURL makes public (WWBB_PUBLIC_URL, e.g.
+// WithPublicURL makes public (OT_PUBLIC_URL, e.g.
 // https://wiki.example.org) the address this server names itself by in
 // OAuth; empty leaves the address each request arrived at (ADR-0068).
 func WithPublicURL(public string, h http.Handler) http.Handler {
@@ -109,7 +109,7 @@ func (h oauthHandlers) resourceMetadata(w http.ResponseWriter, r *http.Request) 
 		"resource":                 resource(r),
 		"authorization_servers":    []string{origin(r)},
 		"bearer_methods_supported": []string{"header"},
-		"resource_name":            "wikiwikibangbang",
+		"resource_name":            "Orbithek",
 	})
 }
 

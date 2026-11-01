@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
-	"github.com/dbuchs7/wikiwikibangbang/internal/tasklink"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/site"
+	"github.com/dbuchs7/orbithek/internal/tasklink"
 )
 
 // taskLinkRoutes set the rules by which an engine's user tasks become

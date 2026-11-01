@@ -10,8 +10,8 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/wal"
 )
 
 // KeysFile holds one AES-256 key per item (ADR-0026). It is kept apart from

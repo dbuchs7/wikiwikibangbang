@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
+	"github.com/dbuchs7/orbithek/internal/buildinfo"
 )
 
 // openAPI describes the routes it is given as an OpenAPI 3.1 document. It
@@ -42,7 +42,7 @@ func openAPI(routes []Route) http.Handler {
 	}
 	doc := map[string]any{
 		"openapi": "3.1.0",
-		"info":    map[string]string{"title": "wikiwikibangbang", "version": buildinfo.Version},
+		"info":    map[string]string{"title": "Orbithek", "version": buildinfo.Version},
 		"paths":   paths,
 		"components": map[string]any{"securitySchemes": map[string]any{
 			"session": map[string]string{"type": "apiKey", "in": "cookie", "name": SessionCookie},

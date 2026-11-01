@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // changeRoutes are the change feed and the query of one's own roles

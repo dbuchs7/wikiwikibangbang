@@ -17,8 +17,8 @@ const fileURL = (p) => `/api/items/${p.item.id}/attachments/${p.attachment.id}`;
 // the picture, beside the picture itself as PNG for other programs; this
 // browser keeps the last picture copied, for Insert… → Copied picture where
 // the clipboard cannot be written.
-const CLIP = "wwbb.albumClip";
-export const clipMark = /data-wwbb-album="([A-Za-z0-9_-]{1,64})\/([0-9a-f]{32})"/;
+const CLIP = "ot.albumClip";
+export const clipMark = /data-ot-album="([A-Za-z0-9_-]{1,64})\/([0-9a-f]{32})"/;
 
 // copiedPicture is the picture last copied in this browser, or null.
 export function copiedPicture() {
@@ -47,7 +47,7 @@ export async function copyPicture(p) {
   const clip = { item: { id: p.item.id, key: p.item.key, title: p.item.title }, attachment: { id: p.attachment.id, name: p.attachment.name, type: p.attachment.type } };
   try { localStorage.setItem(CLIP, JSON.stringify(clip)); } catch { /* the system clipboard alone */ }
   if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") return false;
-  const mark = `<img data-wwbb-album="${p.item.id}/${p.attachment.id}">`;
+  const mark = `<img data-ot-album="${p.item.id}/${p.attachment.id}">`;
   try {
     // The picture's bytes are fetched inside the promise, so the click
     // that copies still counts as the user's gesture.

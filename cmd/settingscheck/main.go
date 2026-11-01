@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/settingsdrift"
+	"github.com/dbuchs7/orbithek/internal/settingsdrift"
 )
 
 func main() {

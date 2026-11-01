@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/site"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // checkEvery is how often the schedule is looked at; a run is due a check
@@ -91,7 +91,7 @@ func New(db *storage.DB, log *slog.Logger) *Runner {
 }
 
 // TokenVar is the environment variable that holds a connector's
-// credential, e.g. WWBB_CONNECTOR_OPENDATA_SWISS_TOKEN. Credentials are
+// credential, e.g. OT_CONNECTOR_OPENDATA_SWISS_TOKEN. Credentials are
 // never kept in the settings (ADR-0077).
 func TokenVar(id string) string { return envVar(id, "TOKEN") }
 
@@ -101,7 +101,7 @@ func TokenVar(id string) string { return envVar(id, "TOKEN") }
 func EmailVar(id string) string { return envVar(id, "EMAIL") }
 
 func envVar(id, what string) string {
-	return "WWBB_CONNECTOR_" + strings.Map(func(r rune) rune {
+	return "OT_CONNECTOR_" + strings.Map(func(r rune) rune {
 		if r >= 'a' && r <= 'z' {
 			return r - 'a' + 'A'
 		}

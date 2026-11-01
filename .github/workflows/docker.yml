@@ -91,7 +91,7 @@ jobs:
           context: .
           platforms: linux/amd64
           load: true
-          tags: wikiwikibangbang:ci
+          tags: orbithek:ci
           build-args: VERSION=${{ steps.version.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -100,14 +100,14 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           set -euo pipefail
-          docker run --rm wikiwikibangbang:ci version
-          docker run -d --name wwbb -p 8080:8080 -e WWBB_ADMIN_PASSWORD=ci-admin-password wikiwikibangbang:ci
+          docker run --rm orbithek:ci version
+          docker run -d --name orbithek -p 8080:8080 -e OT_ADMIN_PASSWORD=ci-admin-password orbithek:ci
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8080/healthz; then ok=1; break; fi
             sleep 1
           done
-          docker exec wwbb /wikiwikibangbang healthcheck
-          docker exec wwbb /wikiwikibangbang check -data-dir /data
+          docker exec orbithek /orbithek healthcheck
+          docker exec orbithek /orbithek check -data-dir /data
           # The API refuses anonymous callers and accepts the administrator.
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/me)" = 401
           curl -fsS -c /tmp/cookies -H 'Content-Type: application/json' \
@@ -118,12 +118,12 @@ jobs:
           curl -fsS -b /tmp/cookies -H "$j" -d '{"key":"CI","name":"CI"}' http://127.0.0.1:8080/api/spaces
           curl -fsS -b /tmp/cookies -H "$j" -d '{"name":"page","body":true,"fields":[]}' http://127.0.0.1:8080/api/types
           curl -fsS -b /tmp/cookies -H "$j" -d '{"space":"CI","type":"page","title":"survives"}' http://127.0.0.1:8080/api/items
-          docker restart wwbb
+          docker restart orbithek
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
           curl -fsS -c /tmp/cookies -H "$j" -d '{"username":"admin","password":"ci-admin-password"}' http://127.0.0.1:8080/api/login
           curl -fsS -b /tmp/cookies http://127.0.0.1:8080/api/items/CI-1 | grep -q '"title":"survives"'
-          docker logs wwbb
-          docker rm -f wwbb
+          docker logs orbithek
+          docker rm -f orbithek
           [ "${ok:-0}" = 1 ]
 
       - name: Build and push

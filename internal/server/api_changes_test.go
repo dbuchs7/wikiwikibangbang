@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 // readToken gives a client of c's account that holds a token of scope read.

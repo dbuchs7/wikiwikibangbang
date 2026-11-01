@@ -59,7 +59,7 @@ func TestOAuthMetadataAndChallenge(t *testing.T) {
 	h, _ := setupAuth(t)
 	anon := &client{t: t, h: h}
 	rec := anon.do("POST", MCPPath, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
-	want := `Bearer realm="wikiwikibangbang", resource_metadata="http://example.com/.well-known/oauth-protected-resource/mcp"`
+	want := `Bearer realm="orbithek", resource_metadata="http://example.com/.well-known/oauth-protected-resource/mcp"`
 	if rec.Code != http.StatusUnauthorized || rec.Header().Get("WWW-Authenticate") != want {
 		t.Fatalf("anonymous MCP call: %d, WWW-Authenticate %q", rec.Code, rec.Header().Get("WWW-Authenticate"))
 	}
@@ -194,7 +194,7 @@ func TestOAuthTokenEndpointIsThrottled(t *testing.T) {
 	bad := url.Values{"grant_type": {"authorization_code"}, "code": {"nope"}, "code_verifier": {oauthVerifier}}
 	var rec *httptest.ResponseRecorder
 	for range 11 {
-		rec, _ = form(t, h, TokenPath, bad, "wwbb-unknown", "secret")
+		rec, _ = form(t, h, TokenPath, bad, "ot-unknown", "secret")
 	}
 	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
 		t.Fatalf("after many failures: %d", rec.Code)
@@ -278,7 +278,7 @@ func TestOAuthRefusals(t *testing.T) {
 	}
 	// Without a name, the redirect host names it; Basic means a secret.
 	out := anon.expect("POST", RegisterPath, `{"redirect_uris":["`+oauthCallback+`"],"token_endpoint_auth_method":"client_secret_basic"}`, http.StatusCreated)
-	if out["client_name"] != "claude.ai" || !strings.HasPrefix(out["client_secret"].(string), "wwbbc_") {
+	if out["client_name"] != "claude.ai" || !strings.HasPrefix(out["client_secret"].(string), "otc_") {
 		t.Fatalf("registration without a name: %v", out)
 	}
 }

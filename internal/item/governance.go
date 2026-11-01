@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/governance"
+	"github.com/dbuchs7/orbithek/internal/governance"
 )
 
 // GovernanceActor is the actor of the restrictions the store sets on its

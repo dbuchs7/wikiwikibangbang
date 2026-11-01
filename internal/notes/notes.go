@@ -17,7 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // Limits of notes, the shape of what a person types.
@@ -101,7 +101,7 @@ func New(records [][]byte, journal func([]byte) error, sealer item.Sealer, newID
 }
 
 func aad(r record) []byte {
-	return []byte("wikiwikibangbang note " + r.Owner + " " + string(r.Item) + " " + r.Note)
+	return []byte("orbithek note " + r.Owner + " " + string(r.Item) + " " + r.Note)
 }
 
 func (n *Notes) apply(r record) error {

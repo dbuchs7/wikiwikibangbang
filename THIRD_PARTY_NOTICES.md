@@ -1,6 +1,6 @@
 # Third-party notices
 
-wikiwikibangbang is licensed under AGPL-3.0-only (see `LICENSE`). The binary includes the following third-party modules. Their licenses are compatible with AGPL-3.0 (Apache-2.0, BSD-3-Clause and MIT may be combined with GPLv3-family licenses). `internal/repoconfig` checks that this file names every module in `go.mod`.
+Orbithek is licensed under AGPL-3.0-only (see `LICENSE`). The binary includes the following third-party modules. Their licenses are compatible with AGPL-3.0 (Apache-2.0, BSD-3-Clause and MIT may be combined with GPLv3-family licenses). `internal/repoconfig` checks that this file names every module in `go.mod`.
 
 | Module | Version | License |
 |---|---|---|

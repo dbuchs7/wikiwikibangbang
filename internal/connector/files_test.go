@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // filesSetup is a runner that reads files, a forge, and a host page that

@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/linkcheck"
 )
 
 // runLimit bounds one link check run as a whole.
@@ -43,7 +43,7 @@ type linkReport struct {
 func linkCheckRoutes(h itemHandlers) []Route {
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/spaces/{space}/linkcheck", Summary: "The latest link check of a space: its broken links that one may read", Handler: http.HandlerFunc(h.linkReport)},
-		{Method: http.MethodPost, Pattern: "/api/spaces/{space}/linkcheck", Summary: "Check the web links of a space (space administrators; off unless WWBB_LINKCHECK=on)", Handler: http.HandlerFunc(h.startLinkCheck)},
+		{Method: http.MethodPost, Pattern: "/api/spaces/{space}/linkcheck", Summary: "Check the web links of a space (space administrators; off unless OT_LINKCHECK=on)", Handler: http.HandlerFunc(h.startLinkCheck)},
 	}
 }
 
@@ -67,7 +67,7 @@ func (h itemHandlers) startLinkCheck(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "space administrators only")
 		return
 	case lc == nil:
-		writeError(w, http.StatusConflict, "link checking is switched off; set WWBB_LINKCHECK=on")
+		writeError(w, http.StatusConflict, "link checking is switched off; set OT_LINKCHECK=on")
 		return
 	}
 	// Distinct addresses, in the order they appear, up to the budget.

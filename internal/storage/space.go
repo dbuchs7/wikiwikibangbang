@@ -5,7 +5,7 @@ import (
 	"io/fs"
 	"path/filepath"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
+	"github.com/dbuchs7/orbithek/internal/diskspace"
 )
 
 // ErrNoSpace refuses a change because the data directory's file system is

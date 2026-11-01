@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/wal"
 )
 
 func mustOpen(t *testing.T, dir string) (*DB, Recovery) {

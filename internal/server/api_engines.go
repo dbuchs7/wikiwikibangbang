@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // engineRoutes name the process engines whose processes pages show, and
@@ -34,7 +34,7 @@ func engineRoutes(d Deps) []Route {
 	}
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/engines", Summary: "The process engines whose processes pages show: ID, name and whether their operations may be shown; administrators also see the kind, the address and whether the credential is set (ADR-0129)", Handler: http.HandlerFunc(h.engines)},
-		{Method: http.MethodPut, Pattern: "/api/engines/{id}", Summary: "Add or change a process engine: name, kind, address and whether its operations may be shown; its credential is the environment variable WWBB_ENGINE_<ID>_TOKEN (administrators)", Handler: http.HandlerFunc(h.setEngine)},
+		{Method: http.MethodPut, Pattern: "/api/engines/{id}", Summary: "Add or change a process engine: name, kind, address and whether its operations may be shown; its credential is the environment variable OT_ENGINE_<ID>_TOKEN (administrators)", Handler: http.HandlerFunc(h.setEngine)},
 		{Method: http.MethodDelete, Pattern: "/api/engines/{id}", Summary: "Remove a process engine; the blocks that show its processes stay (administrators)", Handler: http.HandlerFunc(h.removeEngine)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes", Summary: "The newest version of each process the engine lets its credential read, read from the engine now", Handler: http.HandlerFunc(h.processes)},
 		{Method: http.MethodGet, Pattern: "/api/engines/{id}/processes/{process}", Summary: "The newest version of a process with its BPMN model, read from the engine now", Handler: http.HandlerFunc(h.process)},

@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
-	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/backup"
+	"github.com/dbuchs7/orbithek/internal/buildinfo"
 )
 
 // backup streams an encrypted backup of the data directory (ADR-0016,
@@ -39,7 +39,7 @@ func (h authHandlers) backup(w http.ResponseWriter, r *http.Request) {
 	h.record(audit.Entry{Event: audit.BackupCreated, Actor: string(p.User), Addr: clientAddr(r)})
 	hd := w.Header()
 	hd.Set("Content-Type", "application/octet-stream")
-	hd.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="wikiwikibangbang-%s.wwbb"`, now.Format("2006-01-02T1504Z")))
+	hd.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="orbithek-%s.orbithek"`, now.Format("2006-01-02T1504Z")))
 	hd.Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	// A large backup outlasts the server's write timeout; each chunk

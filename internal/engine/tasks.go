@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // TaskListVar names the environment variable that holds the credential an
 // engine's open user tasks are listed with (ADR-0151), e.g.
-// WWBB_ENGINE_ATLAS_PROD_TASKLIST_TOKEN. On atlas it is a token of the
+// OT_ENGINE_ATLAS_PROD_TASKLIST_TOKEN. On atlas it is a token of the
 // scope tasklist an administrator minted, so it lists every open task and
 // can do nothing else.
 func TaskListVar(id string) string {
@@ -149,7 +149,7 @@ func TaskURL(e site.Engine, key uint64) string {
 
 // ClientIDVar and ClientSecretVar name the environment variables of this
 // server's registration as an OAuth client at an engine (ADR-0151), e.g.
-// WWBB_ENGINE_ATLAS_PROD_CLIENT_ID: people connect to the engine through
+// OT_ENGINE_ATLAS_PROD_CLIENT_ID: people connect to the engine through
 // it.
 func ClientIDVar(id string) string {
 	return strings.TrimSuffix(TokenVar(id), "_TOKEN") + "_CLIENT_ID"

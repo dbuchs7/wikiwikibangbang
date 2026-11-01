@@ -467,8 +467,8 @@ function withTree(tree, ...content) {
 // The page tree and an item's side column fold away to give the content
 // room (ADR-0100); the choice is kept in this browser, for every page.
 const folded = {
-  get(col) { try { return localStorage.getItem("wwbb.fold." + col) === "1"; } catch { return false; } },
-  set(col, on) { try { localStorage.setItem("wwbb.fold." + col, on ? "1" : ""); } catch { /* for this page only */ } },
+  get(col) { try { return localStorage.getItem("ot.fold." + col) === "1"; } catch { return false; } },
+  set(col, on) { try { localStorage.setItem("ot.fold." + col, on ? "1" : ""); } catch { /* for this page only */ } },
   apply() { for (const col of ["tree", "side"]) document.documentElement.classList.toggle(col + "-folded", folded.get(col)); },
 };
 folded.apply();
@@ -862,11 +862,11 @@ function face(id, size = 24) {
 // --- navigation ------------------------------------------------------------
 
 // renderFooter names the running release for signed-in users, e.g.
-// "wikiwikibangbang 0.5.4"; the commit it was built from is its tooltip.
+// "Orbithek 0.5.4"; the commit it was built from is its tooltip.
 function renderFooter() {
   const footer = document.getElementById("footer");
   if (!me || !me.version) return footer.replaceChildren();
-  footer.replaceChildren(h("span", { title: me.revision ? t("home.revision", { revision: me.revision }) : null, text: `wikiwikibangbang ${me.version}` }));
+  footer.replaceChildren(h("span", { title: me.revision ? t("home.revision", { revision: me.revision }) : null, text: `Orbithek ${me.version}` }));
 }
 
 // --- module switcher ---------------------------------------------------------
@@ -1204,7 +1204,7 @@ function expandIcon() {
 
 // localLanguage is the language chosen in this browser before signing in.
 function localLanguage() {
-  try { return localStorage.getItem("wwbb.language") || ""; } catch { return ""; }
+  try { return localStorage.getItem("ot.language") || ""; } catch { return ""; }
 }
 
 // switchLanguage changes the UI's language: a signed-in user's is saved
@@ -1214,7 +1214,7 @@ async function switchLanguage(code) {
     await put("/api/me/language", { language: code });
     me.language = code;
   } else {
-    try { localStorage.setItem("wwbb.language", code); } catch { /* for this page only */ }
+    try { localStorage.setItem("ot.language", code); } catch { /* for this page only */ }
   }
   setLanguage(code);
   route();
@@ -1413,11 +1413,11 @@ async function route() {
     // An assistant's consent page survives signing in, single sign-on
     // included, which returns to the start page (ADR-0068).
     if (!me) {
-      if (section === "oauth") try { sessionStorage.setItem("wwbb-after-login", location.hash); } catch { /* not kept */ }
+      if (section === "oauth") try { sessionStorage.setItem("ot-after-login", location.hash); } catch { /* not kept */ }
       return loginView();
     }
     let after = null;
-    try { after = sessionStorage.getItem("wwbb-after-login"); sessionStorage.removeItem("wwbb-after-login"); } catch { /* not kept */ }
+    try { after = sessionStorage.getItem("ot-after-login"); sessionStorage.removeItem("ot-after-login"); } catch { /* not kept */ }
     if (after && after !== location.hash) {
       location.hash = after;
       return;
@@ -1468,7 +1468,7 @@ async function chooseLanguage() {
 
 // The start page's picture, by the address the page gives it, which
 // changes with its content.
-const welcomeArt = document.querySelector("meta[name=wwbb-welcome]")?.content || "/assets/brand/welcome.svg";
+const welcomeArt = document.querySelector("meta[name=ot-welcome]")?.content || "/assets/brand/welcome.svg";
 
 // ownWelcome is the design's picture for the start page, and in the dark
 // look its picture for the dark look, when it has one (ADR-0109).
@@ -1499,7 +1499,7 @@ async function applyBranding(reload = false) {
     // A logo for the dark look comes in as the product's does, by the
     // system's scheme, which applyTheme below rewrites for a chosen look
     // (ADR-0109).
-    const logo = h("img", { src: "/branding/logo?v=" + encodeURIComponent(b.assets.logo), alt: b.name || "wikiwikibangbang", class: "brand-logo" });
+    const logo = h("img", { src: "/branding/logo?v=" + encodeURIComponent(b.assets.logo), alt: b.name || "Orbithek", class: "brand-logo" });
     brand.replaceChildren(b.assets["logo-dark"]
       ? h("picture", {}, h("source", { srcset: "/branding/logo-dark?v=" + encodeURIComponent(b.assets["logo-dark"]), media: "(prefers-color-scheme: dark)" }), logo)
       : logo);
@@ -1513,7 +1513,7 @@ async function applyBranding(reload = false) {
   document.getElementById("theme-toggle")?.toggleAttribute("hidden", !darkOffered);
   applyTheme();
   // The browser's tab names the instance (ADR-0097).
-  document.title = b.name || "wikiwikibangbang";
+  document.title = b.name || "Orbithek";
   if (reload) {
     document.getElementById("branding-css").href = "/branding.css?v=" + Date.now();
     document.getElementById("dark-css").href = "/theme-dark.css?v=" + Date.now();
@@ -1549,7 +1549,7 @@ async function loginView() {
   // ask instead.
   const signIn = () => card.replaceChildren(
     h("h1", { text: t("login.title") }),
-    h("p", { class: "muted login-lead", text: t("login.lead", { name: brand.name || "wikiwikibangbang" }) }),
+    h("p", { class: "muted login-lead", text: t("login.lead", { name: brand.name || "Orbithek" }) }),
     params.get("login_error") ? h("p", { class: "error", role: "alert", text: params.get("login_error") === "domain" ? t("login.domain") : t("login.failed") }) : "",
     providers.length ? h("div", { class: "login-sso-list" }, ...providers.map((p) =>
       h("a", { class: "button login-sso login-sso-" + (p.kind || "generic"), id: "login-sso-" + p.id, href: "/api/oidc/login?provider=" + encodeURIComponent(p.id) },
@@ -1926,7 +1926,7 @@ async function homeView() {
   // A greeting by the time of day, the reader's own clock.
   const hour = new Date().getHours();
   const greeting = hour < 11 ? t("home.morning") : hour < 18 ? t("home.day") : t("home.evening");
-  const name = brand.name || "wikiwikibangbang";
+  const name = brand.name || "Orbithek";
   const quick = (href, title, text, id, extra) => h("a", { class: "home-tile", href, id }, h("strong", { text: title }), h("span", { class: "muted", text }), extra || null);
   // How much the wiki holds that one may read: pages, tasks (open and
   // done) and pictures in the album. Counted after the page is shown.
@@ -2007,8 +2007,8 @@ function spaceIcon(s, size) {
 // spacesLayout is how the start page shows the spaces, as tiles or as a
 // list; each reader's own choice, kept in the browser.
 const spacesLayout = {
-  get() { try { return localStorage.getItem("wwbb.spaces") === "list" ? "list" : "tiles"; } catch { return "tiles"; } },
-  set(v) { try { localStorage.setItem("wwbb.spaces", v); } catch { /* the choice lasts for this page only */ } },
+  get() { try { return localStorage.getItem("ot.spaces") === "list" ? "list" : "tiles"; } catch { return "tiles"; } },
+  set(v) { try { localStorage.setItem("ot.spaces", v); } catch { /* the choice lasts for this page only */ } },
 };
 
 // spacesOverview shows the spaces as tiles or as a list, with a switch.
@@ -2352,7 +2352,7 @@ function viewSection(type, items, status, make, keep, heading) {
   const ways = (from, to) => wf.transitions.filter((tr) => tr.to === to && tr.from.includes(from));
   const transition = (it, name) => post(`/api/items/${it.id}/transitions`, { name });
   return {
-    type, items, heading, foldKey: `wwbb.${keep}.folded`, laneKey: `wwbb.${keep}.lanes`,
+    type, items, heading, foldKey: `ot.${keep}.folded`, laneKey: `ot.${keep}.lanes`,
     columns: wf.states.map((state) => ({ id: state, name: state, state, cards: items.filter((it) => it.state === state).map((it) => it.id) })),
     place: (it, col) => {
       const to = ways(it.state, col.state);
@@ -2383,7 +2383,7 @@ function viewSection(type, items, status, make, keep, heading) {
 function viewOptions(types, lead, keep, home) {
   const [at, query = ""] = location.hash.split("?");
   const q = new URLSearchParams(query);
-  const key = `wwbb.${keep}.view`;
+  const key = `ot.${keep}.view`;
   let mine = {};
   try { mine = JSON.parse(localStorage.getItem(key) || "{}") || {}; } catch { mine = {}; }
   const named = (kinds) => [...new Set(types.flatMap((ty) => ty.fields.filter((f) => kinds.includes(f.kind)).map((f) => f.name)))].sort();
@@ -2917,7 +2917,7 @@ async function kanbanView(space, id) {
   const layout = await cardBoard({
     id: "kanban", status, label: k.label, mayEdit: () => canEdit,
     sections: [{ type, items: cards.items, columns: board.columns, place, takes, create, ordered: true,
-      foldKey: `wwbb.kanban.folded.${space}/${id}`, laneKey: `wwbb.kanban.lanes.${space}/${id}` }],
+      foldKey: `ot.kanban.folded.${space}/${id}`, laneKey: `ot.kanban.lanes.${space}/${id}` }],
     cardFields: () => k.cardFields,
     colorField: colorField ? colorField.name : "", colorValues: colorField ? colorField.values : [],
     toneOf: (v) => k.colors?.[v] || kanbanTones[Math.max(0, colorField.values.indexOf(v)) % kanbanTones.length],
@@ -4872,9 +4872,9 @@ async function mcpView() {
   // Local clients: an API token.
   const token = "<TOKEN>";
   const snippets = (tok) => [
-    [t("mcp.claudeCode"), `claude mcp add --transport http wikiwikibangbang ${endpoint} --header "Authorization: Bearer ${tok}"`],
-    [t("mcp.json"), JSON.stringify({ mcpServers: { wikiwikibangbang: { type: "http", url: endpoint, headers: { Authorization: `Bearer ${tok}` } } } }, null, 2)],
-    [t("mcp.stdio"), `WWBB_TOKEN=${tok} wikiwikibangbang mcp -url ${location.origin}`],
+    [t("mcp.claudeCode"), `claude mcp add --transport http orbithek ${endpoint} --header "Authorization: Bearer ${tok}"`],
+    [t("mcp.json"), JSON.stringify({ mcpServers: { orbithek: { type: "http", url: endpoint, headers: { Authorization: `Bearer ${tok}` } } } }, null, 2)],
+    [t("mcp.stdio"), `OT_TOKEN=${tok} orbithek mcp -url ${location.origin}`],
   ];
   const setup = h("div", { id: "mcp-setup" });
   const fill = (tok) => setup.replaceChildren(...snippets(tok).map(([label, text]) => h("section", {}, h("h3", { text: label }), copyable(text))));
@@ -5191,7 +5191,7 @@ async function adminView() {
 
   const importSection = section("import", t("admin.import"),
     h("p", { text: t("admin.importText") }),
-    h("pre", { class: "snippet", text: "wikiwikibangbang import -help" }));
+    h("pre", { class: "snippet", text: "orbithek import -help" }));
 
   // The trail is paged, so the server filters it (ADR-0098).
   const auditRows = h("tbody");
@@ -5437,19 +5437,19 @@ function envHelp(id) {
     h("p", { class: "muted", text: t("envhelp.compose") }),
     snippet([
       "services:",
-      "  wikiwikibangbang:",
-      "    image: ghcr.io/dbuchs7/wikiwikibangbang:latest",
+      "  orbithek:",
+      "    image: ghcr.io/dbuchs7/orbithek:latest",
       "    environment:",
-      "      WWBB_PUBLIC_URL: https://wiki.example.org",
-      "      WWBB_SMTP_HOST: smtp.example.org",
-      "      WWBB_SMTP_PORT: \"587\"",
-      "      WWBB_SMTP_USERNAME: wiki@example.org",
-      "      WWBB_SMTP_PASSWORD: \"…\"",
-      "      WWBB_SMTP_FROM: \"Wiki <wiki@example.org>\"",
-      "      WWBB_BACKUP_PASSPHRASE: \"…\"",
+      "      OT_PUBLIC_URL: https://wiki.example.org",
+      "      OT_SMTP_HOST: smtp.example.org",
+      "      OT_SMTP_PORT: \"587\"",
+      "      OT_SMTP_USERNAME: wiki@example.org",
+      "      OT_SMTP_PASSWORD: \"…\"",
+      "      OT_SMTP_FROM: \"Wiki <wiki@example.org>\"",
+      "      OT_BACKUP_PASSPHRASE: \"…\"",
     ].join("\n")),
     h("h4", { text: "docker run" }),
-    snippet("docker run -d -p 8080:8080 -v wikiwikibangbang-data:/data \\\n  -e WWBB_PUBLIC_URL=https://wiki.example.org \\\n  -e WWBB_SMTP_HOST=smtp.example.org -e WWBB_SMTP_PORT=587 \\\n  -e WWBB_SMTP_USERNAME=wiki@example.org -e WWBB_SMTP_PASSWORD='…' \\\n  -e WWBB_SMTP_FROM='Wiki <wiki@example.org>' \\\n  ghcr.io/dbuchs7/wikiwikibangbang:latest"),
+    snippet("docker run -d -p 8080:8080 -v orbithek-data:/data \\\n  -e OT_PUBLIC_URL=https://wiki.example.org \\\n  -e OT_SMTP_HOST=smtp.example.org -e OT_SMTP_PORT=587 \\\n  -e OT_SMTP_USERNAME=wiki@example.org -e OT_SMTP_PASSWORD='…' \\\n  -e OT_SMTP_FROM='Wiki <wiki@example.org>' \\\n  ghcr.io/dbuchs7/orbithek:latest"),
     h("h4", { text: t("envhelp.variables") }),
     h("ul", { class: "env-vars" },
       h("li", {}, h("strong", { text: t("envhelp.mail") }), " ", t("envhelp.mailVars")),
@@ -6022,7 +6022,7 @@ function autoBackupCard() {
       h("details", {},
         h("summary", { text: t("autobackup.restoreTitle") }),
         h("p", { class: "muted", text: t("autobackup.restoreHelp") }),
-        h("pre", { class: "snippet", text: `${data.passphraseEnv}='…' wikiwikibangbang restore -from ${s.destination || "/path/to/backups"} -data-dir data-restored` })),
+        h("pre", { class: "snippet", text: `${data.passphraseEnv}='…' orbithek restore -from ${s.destination || "/path/to/backups"} -data-dir data-restored` })),
     );
     if (st.running) timer = setTimeout(load, 2000);
   };
