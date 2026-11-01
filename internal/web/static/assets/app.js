@@ -977,6 +977,39 @@ function labelChrome() {
   }
 }
 
+// moduleIcon draws the symbol of a module of the start page's space
+// station (docs/brand/source/welcome.py): a white glyph that sits on the
+// module's colour, so a tile and its module look alike.
+const moduleGlyphs = {
+  tasks: [["path", { d: "M7 12.5l3.5 3.5 7-8", fill: "none", stroke: "#fff", "stroke-width": "2.6", "stroke-linecap": "round", "stroke-linejoin": "round" }]],
+  conversations: [
+    ["path", { d: "M5 5.5h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7.5l-4 3.5v-3.5H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2z", fill: "#fff" }],
+    ["circle", { cx: "8", cy: "11", r: "1.4", class: "module-ink" }], ["circle", { cx: "12", cy: "11", r: "1.4", class: "module-ink" }], ["circle", { cx: "16", cy: "11", r: "1.4", class: "module-ink" }]],
+  page: [
+    ["rect", { x: "6", y: "3.5", width: "12", height: "17", rx: "2", fill: "#fff" }],
+    ["rect", { x: "8.5", y: "7", width: "6", height: "2", rx: "1", class: "module-ink" }],
+    ["rect", { x: "8.5", y: "11", width: "7", height: "1.5", rx: ".75", class: "module-ink", opacity: ".55" }],
+    ["rect", { x: "8.5", y: "14", width: "5.5", height: "1.5", rx: ".75", class: "module-ink", opacity: ".55" }]],
+  pictures: [
+    ["rect", { x: "3.5", y: "5", width: "17", height: "14", rx: "2.5", fill: "none", stroke: "#fff", "stroke-width": "1.8" }],
+    ["path", { d: "M5 17.5l4.5-4.5 3.5 3 3-2.5 3.5 4z", fill: "#fff" }],
+    ["circle", { cx: "15.5", cy: "9", r: "1.8", fill: "#fff" }]],
+  protection: [
+    ["path", { d: "M12 3l7 3v5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6z", fill: "#fff" }],
+    ["path", { d: "M8.8 11.8l2.3 2.3 4.2-4.4", fill: "none", class: "module-stroke", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" }]],
+};
+function moduleIcon(kind) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", width: "22", height: "22", "aria-hidden": "true" })) svg.setAttribute(k, v);
+  for (const [tag, attrs] of moduleGlyphs[kind]) {
+    const el = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+    svg.append(el);
+  }
+  return h("span", { class: "module-icon module-" + kind }, svg);
+}
+
 // lockIcon draws a padlock, closed or open, as SVG.
 function lockIcon(closed) {
   const ns = "http://www.w3.org/2000/svg";
@@ -1927,7 +1960,10 @@ async function homeView() {
   const hour = new Date().getHours();
   const greeting = hour < 11 ? t("home.morning") : hour < 18 ? t("home.day") : t("home.evening");
   const name = brand.name || "Orbithek";
-  const quick = (href, title, text, id, extra) => h("a", { class: "home-tile", href, id }, h("strong", { text: title }), h("span", { class: "muted", text }), extra || null);
+  // Each tile wears the symbol and colour of its module on the station of
+  // the start page's picture.
+  const quick = (href, title, text, id, extra, module) => h("a", { class: "home-tile", href, id },
+    module ? moduleIcon(module) : null, h("strong", { text: title }), h("span", { class: "muted", text }), extra || null);
   // How much the wiki holds that one may read: pages, tasks (open and
   // done) and pictures in the album. Counted after the page is shown.
   const stats = h("p", { class: "home-stats", id: "home-stats", "aria-live": "polite" });
@@ -1972,13 +2008,13 @@ async function homeView() {
       t("storage.free", { free: sizeText(storage.free), total: sizeText(storage.total), share: storage.total ? Math.round((storage.free * 1000) / storage.total) / 10 : "?" })) : "",
     h("section", { class: "home-tiles", "aria-label": t("home.quick") },
       quick("#/tasks", t("nav.tasks"), t("home.tasksText"), "home-tasks",
-        requests.length ? h("span", { class: "chip", text: t("nav.requestsWaiting", { n: requests.length }) }) : null),
+        requests.length ? h("span", { class: "chip", text: t("nav.requestsWaiting", { n: requests.length }) }) : null, "tasks"),
       quick("#/notifications", t("nav.notifications"), notes.unread ? t("home.notesUnread", { n: notes.unread }) : t("home.notesNone"), "home-notes",
-        findings ? h("span", { class: "chip", text: t("nav.findingsOpen", { n: findings }) }) : null),
+        findings ? h("span", { class: "chip", text: t("nav.findingsOpen", { n: findings }) }) : null, "conversations"),
       // One's personal notes, wherever they were made (ADR-0113).
-      quick("#/my-notes", t("note.title"), mine.notes.length ? t("home.myNotesText", { n: mine.notes.length }) : t("home.myNotesNone"), "home-my-notes"),
-      quick("#/album", t("nav.album"), t("home.albumText"), "home-album"),
-      quick("#/mcp", t("nav.mcp"), t("home.mcpText"), "home-mcp")),
+      quick("#/my-notes", t("note.title"), mine.notes.length ? t("home.myNotesText", { n: mine.notes.length }) : t("home.myNotesNone"), "home-my-notes", null, "page"),
+      quick("#/album", t("nav.album"), t("home.albumText"), "home-album", null, "pictures"),
+      quick("#/mcp", t("nav.mcp"), t("home.mcpText"), "home-mcp", null, "protection")),
     h("h2", { text: t("spaces.title") }),
     spaces.length === 0
       ? h("div", { class: "card first-steps" },
