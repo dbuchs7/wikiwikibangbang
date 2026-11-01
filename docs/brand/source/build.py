@@ -1,12 +1,12 @@
 """Build the Orbithek logo set.
 
-Everything is generated: the mark from its traced paths (mark.json, made
-by trace.py from mark-template.png), the wordmark from Inter Display
-outlines (OFL-1.1), so every SVG is pure paths with no font dependency.
+Everything is generated: the mark from circles and ellipses (shapely),
+the wordmark from Inter Display outlines (OFL-1.1), so every SVG is pure
+paths with no font dependency.
 Each artwork comes for light ground ("-black") and dark ground ("-white").
 Output: OUT/svg, OUT/pdf, OUT/png, OUT/favicon.
 """
-import json, os, shutil, subprocess, sys
+import os, shutil, subprocess, sys
 import uharfbuzz as hb
 from fontTools.ttLib import TTFont
 from fontTools.pens.svgPathPen import SVGPathPen
@@ -17,20 +17,69 @@ FONT_DIR = os.environ.get("INTER_DIR", "/usr/share/fonts/opentype/inter")
 BLACK, WHITE = "#000000", "#FFFFFF"
 
 # ---------------------------------------------------------------- mark
-# A question mark above a ticked box, in three colours: for light ground the
-# template's own, for dark ground lighter ones of the same hues.
-MARK = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "mark.json")))
+# A planet whose body is three book spines, a library, with a ring around it
+# and a moon on the ring: a library in orbit. It is drawn here from circles
+# and ellipses with shapely; the ring passes in front of the books with a
+# gap cut into them, and its far side shows only left of the planet.
+import math
+from shapely.geometry import Point, Polygon, box
+from shapely.ops import unary_union
+
+def _band(cx, cy, rx, ry, rot, w, a0, a1, n=240):
+    """A band of width w along an ellipse, from angle a0 to a1."""
+    outer, inner = [], []
+    for k in range(n + 1):
+        t = a0 + (a1 - a0) * k / n
+        x, y = rx * math.cos(t), ry * math.sin(t)
+        nx, ny = math.cos(t) / rx, math.sin(t) / ry
+        l = math.hypot(nx, ny)
+        nx, ny = nx / l, ny / l
+        outer.append((x + nx * w / 2, y + ny * w / 2))
+        inner.append((x - nx * w / 2, y - ny * w / 2))
+    a = math.radians(rot)
+    turn = lambda q: (cx + q[0] * math.cos(a) - q[1] * math.sin(a), cy + q[0] * math.sin(a) + q[1] * math.cos(a))
+    return Polygon([turn(q) for q in outer + inner[::-1]]).buffer(0), turn
+
+def _d(g):
+    polys = [g] if g.geom_type == "Polygon" else [q for q in getattr(g, "geoms", []) if q.geom_type == "Polygon"]
+    out = []
+    for poly in polys:
+        for ring in (poly.exterior, *poly.interiors):
+            c = list(ring.coords)[:-1]
+            out.append("M" + " L".join(f"{x:.2f},{y:.2f}" for x, y in c) + "Z")
+    return "".join(out)
+
+def _mark():
+    cx, cy, R = 50, 50, 30          # the planet
+    W, GAP, SLOT = 6.5, 3.4, 4.2    # ring width, gaps, space between spines
+    rx, ry, rot = 44, 13, -24       # the ring's ellipse
+    planet = Point(cx, cy).buffer(R, quad_segs=32)
+    books = planet.difference(unary_union([box(cx + dx - SLOT / 2, 0, cx + dx + SLOT / 2, 100) for dx in (-R / 3, R / 3)]))
+    front, turn = _band(cx, cy, rx, ry, rot, W, 0, math.pi)
+    back, _ = _band(cx, cy, rx, ry, rot, W, math.pi, 2 * math.pi)
+    books = books.difference(front.buffer(GAP))
+    books = unary_union([g for g in getattr(books, "geoms", [books]) if g.area > 20])  # no slivers under the ring
+    back = back.difference(planet.buffer(GAP))
+    back = unary_union([g for g in getattr(back, "geoms", [back]) if g.centroid.x < cx])
+    moon = Point(turn((rx * math.cos(math.radians(-14)), ry * math.sin(math.radians(-14))))).buffer(6, quad_segs=16)
+    ring = unary_union([back, front]).difference(moon.buffer(GAP * 0.9))
+    parts = {"ring": ring, "books": books, "moon": moon}
+    b = [g.bounds for g in parts.values()]
+    bbox = [min(q[0] for q in b), min(q[1] for q in b), max(q[2] for q in b), max(q[3] for q in b)]
+    return {k: _d(v) for k, v in parts.items()} | {"bbox": bbox}
+
+MARK = _mark()
 MX0, MY0, MX1, MY1 = MARK["bbox"]
 MW, MH = MX1 - MX0, MY1 - MY0
-ON_LIGHT = {"question": "#000000", "box": "#0E2A38", "check": "#333333"}
-ON_DARK = {"question": "#FFFFFF", "box": "#8FB8CC", "check": "#D0D0D0"}
+ON_LIGHT = {"books": "#000000", "ring": "#0E2A38", "moon": "#0E2A38"}
+ON_DARK = {"books": "#FFFFFF", "ring": "#8FB8CC", "moon": "#8FB8CC"}
 
 def mark_body(colours, height, x=0, y=0, classes=False):
     """The mark, height units tall, its top left at (x, y)."""
     k = height / MH
     paths = "".join(
         f'<path{" class=" + chr(34) + part + chr(34) if classes else ""} fill="{colours[part]}" fill-rule="evenodd" d="{MARK[part]}"/>'
-        for part in ("box", "check", "question"))
+        for part in ("books", "ring", "moon"))
     return f'<g transform="translate({x - MX0 * k:.3f} {y - MY0 * k:.3f}) scale({k:.5f})">{paths}</g>'
 
 # ---------------------------------------------------------------- wordmark
@@ -121,7 +170,7 @@ def icon(colours, bg, safe, radius=0, classes=False):
     square its height takes; radius rounds the square's corners (0: full
     bleed)."""
     S = 512
-    h = S * safe
+    h = S * safe * min(1, MH / MW)  # the mark is wider than tall: its width sets the size
     rect = f'<rect width="{S}" height="{S}" rx="{radius}" fill="{bg}"/>'
     return svg(S, S, rect + mark_body(colours, h, (S - MW * h / MH) / 2, (S - h) / 2, classes))
 
@@ -148,8 +197,8 @@ def main():
     # favicon.svg follows the tab colour scheme: the mark on white in a
     # light browser theme, in its light colours on dark in a dark one.
     fav_svg = icon(ON_LIGHT, WHITE, 0.88, radius=96, classes=True).replace('role="img">', 'role="img"><style>'
-        f'@media (prefers-color-scheme:dark){{rect{{fill:{DARK_GROUND}}}.question{{fill:{ON_DARK["question"]}}}'
-        f'.box{{fill:{ON_DARK["box"]}}}.check{{fill:{ON_DARK["check"]}}}}}</style>', 1)
+        f'@media (prefers-color-scheme:dark){{rect{{fill:{DARK_GROUND}}}.books{{fill:{ON_DARK["books"]}}}'
+        f'.ring{{fill:{ON_DARK["ring"]}}}.moon{{fill:{ON_DARK["moon"]}}}}}</style>', 1)
     open(os.path.join(OUT, "favicon", "favicon.svg"), "w").write(fav_svg)
 
     from playwright.sync_api import sync_playwright
