@@ -1706,11 +1706,16 @@ function gitSource() {
     check(await page.locator("#starmap-canvas .star-link.walk").count() > 0, "the edges the walk followed are marked");
     await page.click("#starmap-impact-direction [data-direction=dependson]");
     await page.waitForFunction(() => location.hash === "#/starmap/PLAT/PLAT-2?impact=dependson&depth=2");
-    await page.waitForSelector("#starmap-impact-list li:has-text('PLAT-1')");
+    // The view is drawn anew once the other direction's walk has arrived; its
+    // pressed button says so. ':has-text' matches parts of words, and
+    // 'PLAT-1' is part of 'PLAT-10' on the list being left, so the key is
+    // matched as a whole word.
+    await page.waitForSelector("#starmap-impact-direction [data-direction=dependson][aria-pressed=true]");
+    await page.waitForSelector("#starmap-impact-list li a:text-matches('^PLAT-1 ')");
     check(await page.locator("#starmap-impact-list li:has-text('Impact one')").count() === 0, "what PLAT-2 depends on is not what depends on it");
     await page.reload();
     await page.waitForSelector("#starmap-impact-direction [data-direction=dependson][aria-pressed=true]");
-    check(await page.inputValue("#starmap-impact-depth") === "2" && await page.locator("#starmap-impact-list li:has-text('PLAT-1')").count() > 0,
+    check(await page.inputValue("#starmap-impact-depth") === "2" && await page.locator("#starmap-impact-list li a:text-matches('^PLAT-1 ')").count() > 0,
       "a reload keeps the direction and the depth");
     await settled();
     await page.keyboard.press("Escape");
