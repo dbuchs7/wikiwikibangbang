@@ -167,3 +167,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0152](0152-a-process-engine-is-connected-with-one-approval.md) | A process engine is connected with one approval, and its people follow without a step of their own | Proposed | Not started |
 | [0153](0153-the-product-is-renamed-orbithek.md) | The product is renamed Orbithek | Accepted | Landed |
 | [0154](0154-the-mark-is-a-library-in-orbit.md) | The mark is a library in orbit | Accepted | Landed |
+| [0155](0155-sealed-data-keeps-its-former-binding.md) | Sealed data keeps its binding to the former name | Accepted | Landed |
