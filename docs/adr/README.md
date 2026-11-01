@@ -170,3 +170,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0155](0155-sealed-data-keeps-its-former-binding.md) | Sealed data keeps its binding to the former name | Accepted | Landed |
 | [0156](0156-a-personal-cockpit-look.md) | A personal cockpit look | Accepted | Landed |
 | [0157](0157-a-starmap-of-a-space.md) | A starmap of a space | Accepted | Landed |
+| [0158](0158-the-starmap-moves-live-physics-and-separating-a-neighbourhood.md) | The starmap moves: live physics and separating a neighbourhood | Accepted | Landed |

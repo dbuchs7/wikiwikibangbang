@@ -1866,6 +1866,28 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
 .star-node.match .star-caption { font-weight: 600; }
 .star-node.focused .star-shape { stroke: var(--accent); stroke-width: 5; }
 .star-node.dim, .star-link.dim { opacity: 0.25; }
+/* The live map (ADR-0158): a node held by the pointer, the separated
+   node at the end of the drill path, the neighbourhood the pointer or the
+   keyboard lights, and the captions that fade with the zoom. */
+.star-node, .star-link, .star-caption, .star-edge-label { transition: opacity 0.18s ease; }
+.star-node.dragging { cursor: grabbing; }
+.star-node.root .star-shape { stroke: var(--accent); stroke-width: 4.5; fill: var(--accent-soft); }
+.star-node.hover .star-shape { stroke-width: 4; }
+.star-link.lit .star-edge { stroke: var(--accent); stroke-width: 2.4; }
+.starmap-canvas.hovering .star-node:not(.lit), .starmap-canvas.hovering .star-link:not(.lit) { opacity: 0.18; }
+.starmap-canvas.hovering .star-node.lit, .starmap-canvas.hovering .star-link.lit { opacity: 1; }
+.starmap-canvas.hovering .star-node.lit .star-caption { font-weight: 600; }
+.starmap-canvas.zoom-far .star-node:not(.lit, .focused, .match, .root) .star-caption,
+.starmap-canvas.zoom-mid .star-node:not(.kind-item, .lit, .focused, .match, .root) .star-caption,
+.starmap-canvas:is(.zoom-far, .zoom-mid) .star-link:not(.lit) .star-edge-label { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .star-node, .star-link, .star-caption, .star-edge-label { transition: none; }
+}
+.starmap-depth { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.starmap-trail ol { display: flex; flex-wrap: wrap; align-items: center; list-style: none; margin: 0 0 8px; padding: 0; font-size: 14px; }
+.starmap-trail li + li::before { content: "›"; margin: 0 8px; color: var(--muted); }
+.starmap-crumb.here { font-weight: 600; }
+.starmap-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .star-edge { stroke: var(--border-strong); stroke-width: 1.4; fill: none; }
 .star-edge.edge-parent { stroke: var(--muted); stroke-width: 2; }
 .star-edge.edge-relation { stroke: var(--accent); stroke-width: 1.6; }

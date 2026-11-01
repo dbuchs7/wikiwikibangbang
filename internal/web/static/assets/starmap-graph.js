@@ -1,10 +1,10 @@
-// The starmap's graph without a browser (ADR-0157): which kind and group a
-// node and an edge belong to, what the filters keep, a node's
-// neighbourhood, and the layout. The layout is a force simulation with a
-// fixed seed and a fixed number of steps, as atlas's panorama has it: the
-// same map lands in the same place on every load, so a reload never looks
-// like a change. It is computed once for the whole map; the filters only
-// hide, so what stays keeps its place.
+// The starmap's graph without a browser (ADR-0157, ADR-0158): which kind
+// and group a node and an edge belong to, what the filters keep, a node's
+// neighbourhood at a depth, the drill path, which captions a zoom shows,
+// the frame that fits a set of points, and the seeded layout. The seeded
+// layout is a force simulation with a fixed seed and a fixed number of
+// steps, as atlas's panorama has it: the same map starts in the same place
+// on every load. The live simulation (starmap-sim.js) takes it from there.
 //
 // Plain functions over plain data, so node --test runs them
 // (internal/web/jstest/starmap.test.mjs).
@@ -88,13 +88,94 @@ export function filter(graph, { query = "", hidden = new Set() } = {}) {
 
 // neighbourhood is a node and every node one shown edge joins to it.
 export function neighbourhood(graph, id, edges = graph.edges.map((_, i) => i)) {
-  const out = new Set([id]);
+  return around(graph, id, 1, edges);
+}
+
+// around is a node and every node at most depth shown edges away from it,
+// in either direction.
+export function around(graph, id, depth = 1, edges = graph.edges.map((_, i) => i)) {
+  const next = new Map();
+  const link = (a, b) => { if (next.has(a)) next.get(a).push(b); else next.set(a, [b]); };
   for (const i of edges) {
     const e = graph.edges[i];
-    if (e.from === id) out.add(e.to);
-    if (e.to === id) out.add(e.from);
+    link(e.from, e.to);
+    link(e.to, e.from);
+  }
+  const out = new Set([id]);
+  let frontier = [id];
+  for (let d = 0; d < depth && frontier.length; d++) {
+    const found = [];
+    for (const n of frontier) for (const m of next.get(n) || []) if (!out.has(m)) { out.add(m); found.push(m); }
+    frontier = found;
   }
   return out;
+}
+
+// DEPTHS are the reaches a separated neighbourhood may have.
+export const DEPTHS = [1, 2, 3];
+
+// drillInto is the drill path after separating id: appended, or cut back
+// to id when id is on the path already, so the path never holds a node
+// twice (as atlas's drilldown has it).
+export function drillInto(trail, id) {
+  const seen = trail.indexOf(id);
+  return seen >= 0 ? trail.slice(0, seen + 1) : [...trail, id];
+}
+
+// drillBack is the drill path one step back, or back to the station at
+// index to (-1 for the whole room).
+export function drillBack(trail, to = trail.length - 2) {
+  return to < 0 ? [] : trail.slice(0, to + 1);
+}
+
+// visible is what the map shows: the filters' choice (filter), narrowed,
+// when the drill path is not empty, to the neighbourhood of its last
+// station at the given depth. The neighbourhood follows the edges the
+// switches leave on, the query aside, so a search inside a separated
+// neighbourhood narrows it rather than reaching out of it.
+export function visible(graph, { query = "", hidden = new Set(), trail = [], depth = 1 } = {}) {
+  const shown = filter(graph, { query, hidden });
+  const at = trail[trail.length - 1];
+  if (at === undefined) return shown;
+  const base = filter(graph, { hidden });
+  const near = base.nodes.has(at) ? around(graph, at, depth, base.edges) : new Set();
+  const nodes = new Set([...shown.nodes].filter((id) => near.has(id)));
+  const edges = shown.edges.filter((i) => nodes.has(graph.edges[i].from) && nodes.has(graph.edges[i].to));
+  const matches = new Set([...shown.matches].filter((id) => nodes.has(id)));
+  return { nodes, edges, matches };
+}
+
+// zoomBand names how close the reader looks: far, where only the
+// captions that matter now show (the node under the pointer or focus, its
+// neighbours, the chosen node, the matches), mid, where the items' captions
+// join them, and near, where every caption shows.
+export function zoomBand(zoom) {
+  if (zoom < 0.6) return "far";
+  if (zoom < 1.2) return "mid";
+  return "near";
+}
+
+// captionShown says whether a caption shows at a band; lit is a node that
+// matters now (see zoomBand). The style sheet holds the same rule.
+export function captionShown(band, { kind = "item", lit = false } = {}) {
+  if (lit || band === "near") return true;
+  return band === "mid" && kind === "item";
+}
+
+// fitView is the zoom and pan that fit the points into a canvas of width
+// w and height h with a margin pad on every side, centred; the zoom stays
+// within [min, max].
+export function fitView(points, w, h, { pad = 48, min = 0.1, max = 2.5 } = {}) {
+  if (!points.length) return { zoom: 1, panX: w / 2, panY: h / 2 };
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of points) {
+    if (p.x < x0) x0 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.x > x1) x1 = p.x;
+    if (p.y > y1) y1 = p.y;
+  }
+  const zoom = Math.min(max, Math.max(min, Math.min((w - 2 * pad) / Math.max(x1 - x0, 1), (h - 2 * pad) / Math.max(y1 - y0, 1))));
+  return { zoom, panX: w / 2 - zoom * (x0 + x1) / 2, panY: h / 2 - zoom * (y0 + y1) / 2 };
 }
 
 // mulberry32 is a small seeded random number generator.
