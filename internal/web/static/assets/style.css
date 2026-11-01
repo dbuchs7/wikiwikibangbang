@@ -1045,6 +1045,16 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .home-tile, .space-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 10px; background: var(--surface);
   border: 1px solid var(--border); color: var(--text); text-decoration: none; box-shadow: var(--shadow); }
 .home-tile:hover, .space-tile:hover { border-color: var(--accent); text-decoration: none; }
+/* The symbol and colour of a tile's module on the start page's station. */
+.module-icon { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px;
+  background: var(--module); margin-bottom: 6px; flex: none; align-self: flex-start; box-shadow: 0 2px 6px color-mix(in srgb, var(--module) 35%, transparent); }
+.module-icon .module-ink { fill: var(--module-ink, var(--module)); }
+.module-icon .module-stroke { stroke: var(--module-ink, var(--module)); }
+.module-tasks { --module: #14b8a6; }
+.module-conversations { --module: #0b5cff; }
+.module-pictures { --module: #f59e0b; }
+.module-protection { --module: #7c5cff; }
+.module-page { --module: linear-gradient(135deg, #0b5cff, #7c5cff); --module-ink: #3f5cf0; background: linear-gradient(135deg, #0b5cff, #7c5cff); box-shadow: 0 2px 6px rgba(63, 92, 240, .35); }
 .home-tile .chip { align-self: flex-start; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #fff4e5; color: #8a5300; }
 .space-tiles { list-style: none; margin: 0 0 22px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
 .space-key { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--accent); }

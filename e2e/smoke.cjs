@@ -515,6 +515,7 @@ function gitSource() {
     await page.waitForSelector("#welcome img.welcome-art");
     await page.waitForSelector("#welcome #home-version:has-text('Version')");
     check(await page.locator(".home-tiles a").count() === 5, "five quick accesses, one's notes among them");
+    check(await page.locator(".home-tiles a .module-icon svg").count() === 5, "each quick access wears the symbol of its module on the station");
 
     step("the footer names the running version");
     await page.waitForSelector("footer.footer:has-text('Orbithek')");
