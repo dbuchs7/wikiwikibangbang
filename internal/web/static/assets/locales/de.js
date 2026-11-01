@@ -884,6 +884,7 @@ export default {
   "home.tasksText": "Offene Arbeit in Ihren Räumen",
   "home.notesUnread": {"one": "{n} ungelesene Änderung", "other": "{n} ungelesene Änderungen"},
   "home.notesNone": "Nichts Neues",
+  "home.starmapText": "Ihre Räume als Karte der Zusammenhänge",
   "home.albumText": "Bilder und Zeichnungen",
   "home.myNotesText": { "one": "1 Notiz, nur für Sie", "other": "{n} Notizen, nur für Sie" },
   "home.myNotesNone": "Noch keine; nur Sie sehen sie",

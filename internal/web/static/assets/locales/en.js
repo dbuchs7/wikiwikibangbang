@@ -886,6 +886,7 @@ export default {
   "home.tasksText": "Open work across your rooms",
   "home.notesUnread": {"one": "{n} unread change", "other": "{n} unread changes"},
   "home.notesNone": "Nothing new",
+  "home.starmapText": "Your rooms as a map of connections",
   "home.albumText": "Images and drawings",
   "home.myNotesText": { "one": "1 note, only for you", "other": "{n} notes, only for you" },
   "home.myNotesNone": "None yet; only you see them",

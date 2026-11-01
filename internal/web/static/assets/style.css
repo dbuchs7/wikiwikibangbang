@@ -1054,6 +1054,7 @@ section.hold .chip, #governance .chip { font-size: 11px; padding: 1px 8px; borde
 .module-conversations { --module: #0b5cff; }
 .module-pictures { --module: #f59e0b; }
 .module-protection { --module: #7c5cff; }
+.module-starmap { --module: #0ea5e9; }
 .module-page { --module: linear-gradient(135deg, #0b5cff, #7c5cff); --module-ink: #3f5cf0; background: linear-gradient(135deg, #0b5cff, #7c5cff); box-shadow: 0 2px 6px rgba(63, 92, 240, .35); }
 .home-tile .chip { align-self: flex-start; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #fff4e5; color: #8a5300; }
 .space-tiles { list-style: none; margin: 0 0 22px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }

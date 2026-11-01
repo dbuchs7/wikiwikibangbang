@@ -514,8 +514,15 @@ function gitSource() {
     await page.waitForSelector("#welcome h1:has-text('admin')");
     await page.waitForSelector("#welcome img.welcome-art");
     await page.waitForSelector("#welcome #home-version:has-text('Version')");
-    check(await page.locator(".home-tiles a").count() === 5, "five quick accesses, one's notes among them");
-    check(await page.locator(".home-tiles a .module-icon svg").count() === 5, "each quick access wears the symbol of its module on the station");
+    check(await page.locator(".home-tiles a").count() === 6, "six quick accesses, one's notes and the starmap among them");
+    check(await page.locator(".home-tiles a .module-icon svg").count() === 6, "each quick access wears the symbol of its module on the station");
+    check(await page.getAttribute(".home-tiles a:first-child", "id") === "home-starmap" && await page.getAttribute("#home-starmap", "href") === "#/starmap"
+      && await page.locator("#home-starmap .module-icon.module-starmap").count() === 1, "the starmap is the first quick access, with its module's symbol");
+    await page.click("#home-starmap");
+    await page.waitForSelector("h1:has-text('Starmap')");
+    check(page.url().endsWith("#/starmap"), "the starmap tile leads to the starmap: " + page.url());
+    await page.goBack();
+    await page.waitForSelector("#home-starmap");
 
     step("the footer names the running version");
     await page.waitForSelector("footer.footer:has-text('Orbithek')");
