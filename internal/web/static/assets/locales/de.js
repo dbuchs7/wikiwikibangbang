@@ -737,6 +737,8 @@ export default {
   "album.newFolder": "Neuer Ordner",
   "album.folderName": "Name des Ordners",
   "album.create": "Anlegen",
+  "album.folderSpace": "Raum des Ordners",
+  "album.folderSpacePick": "Raum des Ordners…",
   "album.chooseSpace": "Zuerst einen Raum für den Ordner wählen.",
   "album.upload": "Hochladen",
   "album.uploadHint": "Zum Hochladen einen Ordner öffnen oder anlegen.",

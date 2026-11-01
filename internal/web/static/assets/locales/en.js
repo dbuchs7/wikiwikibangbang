@@ -739,6 +739,8 @@ export default {
   "album.newFolder": "New folder",
   "album.folderName": "Name of the folder",
   "album.create": "Create",
+  "album.folderSpace": "Room of the folder",
+  "album.folderSpacePick": "Room of the folder…",
   "album.chooseSpace": "Choose a room for the folder first.",
   "album.upload": "Upload",
   "album.uploadHint": "Open or create a folder to upload pictures into it.",
