@@ -166,3 +166,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0151](0151-user-tasks-of-an-engine-become-linked-tasks.md) | User tasks of a process engine become linked tasks, and the engine decides who completes them | Proposed | Partial |
 | [0152](0152-a-process-engine-is-connected-with-one-approval.md) | A process engine is connected with one approval, and its people follow without a step of their own | Proposed | Not started |
 | [0153](0153-the-product-is-renamed-orbithek.md) | The product is renamed Orbithek | Accepted | Landed |
+| [0154](0154-the-mark-is-a-library-in-orbit.md) | The mark is a library in orbit | Accepted | Landed |

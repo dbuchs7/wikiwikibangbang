@@ -92,3 +92,4 @@ Strongest form: no trace of the old name remains anywhere.
 
 - relates to ADR-0015 (budgets), ADR-0016 (metrics), ADR-0024 (single binary and container image), ADR-0025 (event log), ADR-0034 (backups), ADR-0040 (sensitive data), ADR-0073 (automatic backups and their names), ADR-0142 (processes in drawings)
 - the logo: [`docs/brand/README.md`](../brand/README.md)
+- amended by [ADR-0154](0154-the-mark-is-a-library-in-orbit.md) (the mark is a library in orbit)
