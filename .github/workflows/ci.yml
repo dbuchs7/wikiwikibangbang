@@ -81,7 +81,7 @@ jobs:
           for target in linux/amd64 linux/arm64 linux/arm darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             echo "::group::${target}"
             GOOS="${target%/*}" GOARCH="${target#*/}" GOARM=6 \
-              go build -trimpath -o /dev/null ./cmd/wikiwikibangbang
+              go build -trimpath -o /dev/null ./cmd/orbithek
             echo "::endgroup::"
           done
 
@@ -116,7 +116,7 @@ jobs:
       - name: Run the UI smoke test against the binary
         run: |
           set -euo pipefail
-          go build -o "$RUNNER_TEMP/wwbb" ./cmd/wikiwikibangbang
+          go build -o "$RUNNER_TEMP/orbithek" ./cmd/orbithek
           # Mail goes to the smoke test's own mail sink (ADR-0064); automatic
           # backups go to a directory of the runner (ADR-0073); connectors
           # may reach the smoke test's own sources on the loopback address
@@ -126,25 +126,25 @@ jobs:
           # too, and people connecting to it by OAuth (ADR-0151); editors may
           # have the server read Markdown files of repositories (ADR-0138).
           mkdir -p "$RUNNER_TEMP/autobackup"
-          WWBB_ADMIN_PASSWORD=e2e-admin-password WWBB_PUBLIC_URL=http://127.0.0.1:8080 \
-            WWBB_SMTP_HOST=127.0.0.1 WWBB_SMTP_PORT=2525 WWBB_SMTP_SECURITY=none WWBB_SMTP_FROM=wiki@example.org \
-            WWBB_BACKUP_PASSPHRASE="a long backup passphrase" WWBB_CONNECTOR_ALLOW_PRIVATE=on \
-            WWBB_CONNECTOR_ACME_EMAIL=e2e@acme.example WWBB_CONNECTOR_ACME_TOKEN=e2e-atlassian-token \
-            WWBB_ENGINE_ATLAS_TOKEN=e2e-engine-token WWBB_ENGINE_ATLAS_TASKLIST_TOKEN=e2e-engine-token WWBB_ENGINE_ATLAS_EVENTS_TOKEN=e2e-engine-token \
-            WWBB_ENGINE_ATLAS_CLIENT_ID=e2e-client WWBB_ENGINE_ATLAS_CLIENT_SECRET=e2e-client-secret WWBB_ENGINE_ALLOW_PRIVATE=on WWBB_GIT_FILES=on \
-            "$RUNNER_TEMP/wwbb" serve -addr 127.0.0.1:8080 -data-dir "$RUNNER_TEMP/data" > "$RUNNER_TEMP/server.log" 2>&1 &
+          OT_ADMIN_PASSWORD=e2e-admin-password OT_PUBLIC_URL=http://127.0.0.1:8080 \
+            OT_SMTP_HOST=127.0.0.1 OT_SMTP_PORT=2525 OT_SMTP_SECURITY=none OT_SMTP_FROM=wiki@example.org \
+            OT_BACKUP_PASSPHRASE="a long backup passphrase" OT_CONNECTOR_ALLOW_PRIVATE=on \
+            OT_CONNECTOR_ACME_EMAIL=e2e@acme.example OT_CONNECTOR_ACME_TOKEN=e2e-atlassian-token \
+            OT_ENGINE_ATLAS_TOKEN=e2e-engine-token OT_ENGINE_ATLAS_TASKLIST_TOKEN=e2e-engine-token OT_ENGINE_ATLAS_EVENTS_TOKEN=e2e-engine-token \
+            OT_ENGINE_ATLAS_CLIENT_ID=e2e-client OT_ENGINE_ATLAS_CLIENT_SECRET=e2e-client-secret OT_ENGINE_ALLOW_PRIVATE=on OT_GIT_FILES=on \
+            "$RUNNER_TEMP/orbithek" serve -addr 127.0.0.1:8080 -data-dir "$RUNNER_TEMP/data" > "$RUNNER_TEMP/server.log" 2>&1 &
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8080/healthz && break; sleep 1; done
-          cd e2e && SMTP_SINK_PORT=2525 ENGINE_TOKEN=e2e-engine-token BACKUP_OUT="$RUNNER_TEMP/backup.wwbb" AUTOBACKUP_DIR="$RUNNER_TEMP/autobackup" BASE_URL=http://127.0.0.1:8080 ADMIN_PASSWORD=e2e-admin-password node smoke.cjs
+          cd e2e && SMTP_SINK_PORT=2525 ENGINE_TOKEN=e2e-engine-token BACKUP_OUT="$RUNNER_TEMP/backup.orbithek" AUTOBACKUP_DIR="$RUNNER_TEMP/autobackup" BASE_URL=http://127.0.0.1:8080 ADMIN_PASSWORD=e2e-admin-password node smoke.cjs
 
       # ADR-0016, ADR-0073: the backups the browser downloaded and started
       # restore and open.
       - name: Restore the downloaded backup
         run: |
           set -euo pipefail
-          WWBB_BACKUP_PASSPHRASE="a long backup passphrase" "$RUNNER_TEMP/wwbb" restore -from "$RUNNER_TEMP/backup.wwbb" -data-dir "$RUNNER_TEMP/restored"
-          "$RUNNER_TEMP/wwbb" check -data-dir "$RUNNER_TEMP/restored"
-          WWBB_BACKUP_PASSPHRASE="a long backup passphrase" "$RUNNER_TEMP/wwbb" restore -from "$RUNNER_TEMP/autobackup" -data-dir "$RUNNER_TEMP/restored-auto"
-          "$RUNNER_TEMP/wwbb" check -data-dir "$RUNNER_TEMP/restored-auto"
+          OT_BACKUP_PASSPHRASE="a long backup passphrase" "$RUNNER_TEMP/orbithek" restore -from "$RUNNER_TEMP/backup.orbithek" -data-dir "$RUNNER_TEMP/restored"
+          "$RUNNER_TEMP/orbithek" check -data-dir "$RUNNER_TEMP/restored"
+          OT_BACKUP_PASSPHRASE="a long backup passphrase" "$RUNNER_TEMP/orbithek" restore -from "$RUNNER_TEMP/autobackup" -data-dir "$RUNNER_TEMP/restored-auto"
+          "$RUNNER_TEMP/orbithek" check -data-dir "$RUNNER_TEMP/restored-auto"
 
       - name: Keep the evidence of a failure
         if: failure()

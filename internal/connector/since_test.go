@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // changingSource answers its entries, or with ?changed= only those it

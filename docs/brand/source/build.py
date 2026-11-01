@@ -1,4 +1,4 @@
-"""Build the wikiwikibangbang logo set.
+"""Build the Orbithek logo set.
 
 Everything is generated: the mark from its traced paths (mark.json, made
 by trace.py from mark-template.png), the wordmark from Inter Display
@@ -60,45 +60,22 @@ def metrics(ff, size):
     tt = TTFont(os.path.join(FONT_DIR, ff)); upm = tt["head"].unitsPerEm; os2 = tt["OS/2"]
     return os2.sxHeight * size / upm, os2.sCapHeight * size / upm
 
-WORD = [("wikiwiki", "InterDisplay-Medium.otf"), ("bangbang", "InterDisplay-Black.otf")]
+WORD = ("orbithek", "InterDisplay-SemiBold.otf")
 
-# The name is set in two lines: "bangbang" below "wikiwiki", both as wide.
-# "wikiwiki" is the narrower line; it is brought to the width of
-# "bangbang" by FIT: "scale" enlarges it, "track" spaces its letters,
-# "mix" does half of each.
-LEADING = 0.98  # baseline to baseline, in font sizes of the second line
-FIT = os.environ.get("WWBB_FIT", "track")
+# The name is set in one line, all lower case, in Inter Display SemiBold.
 
-def first_line(size, words=WORD):
-    """The size and tracking of the first line so it is as wide as the
-    second."""
-    target = text_path([words[1]], size, 0, 0)[1]
-    natural = text_path([words[0]], size, 0, 0)[1]
-    n = len(words[0][0])
-    if natural > target:  # wider: never tighter than set, only smaller
-        return size * target / natural, -0.012
-    if FIT == "track":
-        return size, -0.012 + (target - natural) / (n - 1) / size
-    if FIT == "mix":
-        k = (target / natural) ** 0.5
-        w = text_path([words[0]], size * k, 0, 0)[1]
-        return size * k, -0.012 + (target - w) / (n - 1) / (size * k)
-    return size * target / natural, -0.012
-
-def word_lines(size, x, baseline, centre=None, words=WORD):
-    """Both lines, as wide, left-aligned at x or centred on centre, the
-    first with its baseline at baseline. Returns (svg path d, width, top
-    of the first line above baseline, baseline of the second line)."""
-    s1, tr1 = first_line(size, words)
-    _, cap1 = metrics(words[0][1], s1)
-    _, w = text_path([words[1]], size, 0, 0)
+def word_lines(size, x, baseline, centre=None, word=WORD):
+    """The name, left-aligned at x or centred on centre, with its baseline
+    at baseline. Returns (svg path d, width, top of the ascenders above the
+    baseline, baseline)."""
+    _, w = text_path([word], size, 0, 0)
+    _, cap = metrics(word[1], size)
     lx = x if centre is None else centre - w / 2
-    second = baseline + LEADING * size
-    d = text_path([words[0]], s1, lx, baseline, tracking=tr1)[0] + text_path([words[1]], size, lx, second)[0]
-    return d, w, cap1 * 1.04, second
+    d = text_path([word], size, lx, baseline)[0]
+    return d, w, cap * 1.04, baseline
 
 # ---------------------------------------------------------------- svg writers
-def svg(w, h, body, bg=None, title="wikiwikibangbang"):
+def svg(w, h, body, bg=None, title="Orbithek"):
     rect = f'<rect width="{w}" height="{h}" fill="{bg}"/>' if bg else ""
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w:.2f} {h:.2f}" width="{w:.2f}" height="{h:.2f}" role="img">'
             f'<title>{title}</title>{rect}{body}</svg>\n')
@@ -115,12 +92,12 @@ def lockups(fg, colours):
     size = 100
     xh, cap = metrics("InterDisplay-Medium.otf", size)
     desc = size * 0.24
-    # wordmark only: two lines as wide
+    # wordmark only
     d, w, asc, last = word_lines(size, 0, 0)
     res["wordmark"] = svg(w + 4, asc + last + desc, f'<g transform="translate(2 {asc:.2f})">{p(d, fg)}</g>')
 
-    # horizontal: the mark spans both lines, from the top of the first to
-    # the bottom of the second.
+    # horizontal: the mark spans the line, from the top of the ascenders
+    # to half the descenders.
     mh = asc + last + desc * 0.5
     mw = MW * mh / MH
     gap = cap * 0.36
@@ -128,7 +105,7 @@ def lockups(fg, colours):
     body = mark_body(colours, mh) + f'<g transform="translate(0 {asc:.2f})">{p(d, fg)}</g>'
     res["horizontal"] = svg(mw + gap + w + 2, asc + last + desc, body)
 
-    # stacked: mark above, the lines centred below it
+    # stacked: mark above, the name centred below it
     mh2 = size * 1.8
     mw2 = MW * mh2 / MH
     _, w, asc, _ = word_lines(size, 0, 0)
@@ -155,16 +132,16 @@ def main():
     files = {}
     for tone, fg, colours in (("black", BLACK, ON_LIGHT), ("white", WHITE, ON_DARK)):
         for name, s in lockups(fg, colours).items():
-            files[f"wwbb-{name}-{tone}"] = s
+            files[f"orbithek-{name}-{tone}"] = s
     # The icons are the mark on a rounded square, white or, inverted, dark;
     # the maskable one is full bleed, as the platform cuts its own shape,
     # with the mark inside the 80 % safe circle.
     DARK_GROUND = "#16181D"
-    files["wwbb-app-icon"] = icon(ON_LIGHT, WHITE, 0.72, radius=112)
-    files["wwbb-app-icon-inverted"] = icon(ON_DARK, DARK_GROUND, 0.72, radius=112)
-    files["wwbb-maskable"] = icon(ON_LIGHT, WHITE, 0.56)
+    files["orbithek-app-icon"] = icon(ON_LIGHT, WHITE, 0.72, radius=112)
+    files["orbithek-app-icon-inverted"] = icon(ON_DARK, DARK_GROUND, 0.72, radius=112)
+    files["orbithek-maskable"] = icon(ON_LIGHT, WHITE, 0.56)
     # For 16 to 48 px the mark fills more of the square.
-    files["wwbb-favicon"] = icon(ON_LIGHT, WHITE, 0.88, radius=96)
+    files["orbithek-favicon"] = icon(ON_LIGHT, WHITE, 0.88, radius=96)
     for n, s in files.items():
         open(os.path.join(OUT, "svg", n + ".svg"), "w").write(s)
 
@@ -200,9 +177,9 @@ def main():
             pg.pdf(path=path, width=f"{W:.2f}px", height=f"{H:.2f}px", print_background=True, page_ranges="1")
 
         for n, s in files.items():
-            if not n.startswith(("wwbb-app", "wwbb-maskable", "wwbb-favicon")):
+            if not n.startswith(("orbithek-app", "orbithek-maskable", "orbithek-favicon")):
                 pdf(s, os.path.join(OUT, "pdf", n + ".pdf"))
-            if n.startswith(("wwbb-app", "wwbb-maskable", "wwbb-favicon")):
+            if n.startswith(("orbithek-app", "orbithek-maskable", "orbithek-favicon")):
                 for px in (1024, 512, 192):
                     png(s, os.path.join(OUT, "png", f"{n}-{px}.png"), width=px)
             elif "-mark-" in n:
@@ -214,16 +191,16 @@ def main():
 
         fav = os.path.join(OUT, "favicon")
         for px in (16, 32, 48):
-            png(files["wwbb-favicon"], os.path.join(fav, f"favicon-{px}.png"), width=px)
-        png(files["wwbb-app-icon"], os.path.join(fav, "apple-touch-icon.png"), width=180)
-        png(files["wwbb-app-icon"], os.path.join(fav, "icon-192.png"), width=192)
-        png(files["wwbb-app-icon"], os.path.join(fav, "icon-512.png"), width=512)
-        png(files["wwbb-maskable"], os.path.join(fav, "icon-maskable-512.png"), width=512)
+            png(files["orbithek-favicon"], os.path.join(fav, f"favicon-{px}.png"), width=px)
+        png(files["orbithek-app-icon"], os.path.join(fav, "apple-touch-icon.png"), width=180)
+        png(files["orbithek-app-icon"], os.path.join(fav, "icon-192.png"), width=192)
+        png(files["orbithek-app-icon"], os.path.join(fav, "icon-512.png"), width=512)
+        png(files["orbithek-maskable"], os.path.join(fav, "icon-maskable-512.png"), width=512)
         br.close()
     subprocess.run(["convert", *(os.path.join(fav, f"favicon-{px}.png") for px in (16, 32, 48)),
                     os.path.join(fav, "favicon.ico")], check=True)
     open(os.path.join(fav, "site.webmanifest"), "w").write(
-        '{\n  "name": "wikiwikibangbang",\n  "short_name": "wwbb",\n  "icons": [\n'
+        '{\n  "name": "Orbithek",\n  "short_name": "Orbithek",\n  "icons": [\n'
         '    {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"},\n'
         '    {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"},\n'
         '    {"src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}\n'

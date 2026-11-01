@@ -3,7 +3,7 @@ package server
 import (
 	"net/http"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // secretRoutes protect passages of a body and decide who reads them

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/engine"
 )
 
 const startLink = "8f14e45fceea167a5a36dedd4bea2543a4c1b5e2f0d6c7b8a9e0f1d2c3b4a596"
@@ -75,7 +75,7 @@ func fakeStartEngine(t *testing.T) (*httptest.Server, *[]string) {
 // engine; the start is audited, the link only by its first digits.
 func TestStartFormsThroughTheAPI(t *testing.T) {
 	srv, seen := fakeStartEngine(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TOKEN": "secret"}
 	w := newWorld(t, func(d *Deps) { d.Engines = engine.NewReader(func(k string) string { return env[k] }, srv.Client()) })
 	w.admin.expect("PUT", "/api/engines/atlas", `{"name":"Atlas","kind":"atlas","baseURL":"`+srv.URL+`"}`, http.StatusCreated)
 
@@ -138,7 +138,7 @@ func TestStartFormsThroughTheAPI(t *testing.T) {
 	w.vera.expect("POST", "/api/engines/gone/public-links/"+startLink+"/start", `{"variables":{}}`, http.StatusNotFound)
 
 	// The public routes need no credential.
-	delete(env, "WWBB_ENGINE_ATLAS_TOKEN")
+	delete(env, "OT_ENGINE_ATLAS_TOKEN")
 	if pub := field(w.vera.expect("GET", "/api/engines/atlas/public-links/"+startLink+"?process=incident", "", http.StatusOK), "form").(map[string]any); pub["wizard"] != nil {
 		t.Errorf("a public form without credential: %v", pub)
 	}

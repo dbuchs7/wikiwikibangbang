@@ -162,7 +162,7 @@ func (c *Checker) request(ctx context.Context, method, link string) Result {
 	if err != nil {
 		return Result{Problem: "not a web link"}
 	}
-	req.Header.Set("User-Agent", "wikiwikibangbang-linkcheck")
+	req.Header.Set("User-Agent", "orbithek-linkcheck")
 	resp, err := c.client.Do(req)
 	switch {
 	case errors.Is(err, errInternal):

@@ -11,9 +11,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/wal"
+	"github.com/dbuchs7/orbithek/internal/wal"
 )
 
 // BackupFiles are the files of a data directory that a backup contains

@@ -7,7 +7,7 @@ import (
 
 	"github.com/yuin/goldmark/ast"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // HTML in Markdown never becomes markup (ADR-0014, ADR-0138): comments,

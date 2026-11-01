@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 func governanceRoutes(h itemHandlers) []Route {

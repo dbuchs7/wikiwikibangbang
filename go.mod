@@ -1,4 +1,4 @@
-module github.com/dbuchs7/wikiwikibangbang
+module github.com/dbuchs7/orbithek
 
 go 1.26.0
 

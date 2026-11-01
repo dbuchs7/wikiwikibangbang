@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 func TestAccountRequestApproved(t *testing.T) {

@@ -9,15 +9,21 @@ import (
 func TestNamesAndVersions(t *testing.T) {
 	at := time.Date(2026, 10, 1, 2, 3, 4, 0, time.FixedZone("CEST", 2*3600))
 	full := FileName(at, "0123456789abcdef", 0)
-	if full != "wikiwikibangbang-20261001T000304Z-0123456789abcdef-000-full.wwbb" {
+	if full != "orbithek-20261001T000304Z-0123456789abcdef-000-full.orbithek" {
 		t.Fatalf("name %s", full)
 	}
 	n, ok := ParseName(full)
 	if !ok || !n.At.Equal(at) || n.Chain != "0123456789abcdef" || n.Seq != 0 {
 		t.Fatalf("parsed %+v %v", n, ok)
 	}
-	for _, bad := range []string{"backup.wwbb", "wikiwikibangbang-20261001T000304Z-0123456789abcdef-001-full.wwbb",
-		"wikiwikibangbang-20261001T000304Z-0123456789abcdef-000-inc.wwbb", "wikiwikibangbang-20261399T000304Z-0123456789abcdef-000-full.wwbb"} {
+	// A backup stored before the rename (ADR-0153) is read alike.
+	if old, ok := ParseName("wikiwikibangbang-20261001T000304Z-0123456789abcdef-002-inc.wwbb"); !ok || !old.At.Equal(at) || old.Chain != "0123456789abcdef" || old.Seq != 2 {
+		t.Fatalf("old name %+v %v", old, ok)
+	}
+	for _, bad := range []string{"backup.orbithek", "orbithek-20261001T000304Z-0123456789abcdef-001-full.orbithek",
+		"orbithek-20261001T000304Z-0123456789abcdef-000-inc.orbithek", "orbithek-20261399T000304Z-0123456789abcdef-000-full.orbithek",
+		"wikiwikibangbang-20261001T000304Z-0123456789abcdef-001-full.wwbb", "orbithek-20261001T000304Z-0123456789abcdef-000-full.wwbb",
+		"wikiwikibangbang-20261001T000304Z-0123456789abcdef-000-full.orbithek"} {
 		if _, ok := ParseName(bad); ok {
 			t.Errorf("parsed %s", bad)
 		}

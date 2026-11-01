@@ -9,12 +9,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 // SessionCookie carries a login session (ADR-0027).
-const SessionCookie = "wwbb_session"
+const SessionCookie = "ot_session"
 
 type principalKey struct{}
 

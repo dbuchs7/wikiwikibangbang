@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
+	"github.com/dbuchs7/orbithek/internal/linkcheck"
 )
 
 // maxHookAnswer is how much of a webhook's answer is read and dropped, so
@@ -45,7 +45,7 @@ func (h *hookClient) post(ctx context.Context, address string, payload any) erro
 		return errors.New("the address is not usable")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "wikiwikibangbang")
+	req.Header.Set("User-Agent", "orbithek")
 	resp, err := h.client.Do(req)
 	if err != nil {
 		// The address is a credential: the error names the cause only.
@@ -101,5 +101,5 @@ func teamsPayload(m Message) map[string]any {
 
 // webhookPayload is the message as plain JSON, for any other service.
 func webhookPayload(m Message) map[string]string {
-	return map[string]string{"source": "wikiwikibangbang", "subject": m.Subject, "text": m.Text, "link": m.Link}
+	return map[string]string{"source": "orbithek", "subject": m.Subject, "text": m.Text, "link": m.Link}
 }

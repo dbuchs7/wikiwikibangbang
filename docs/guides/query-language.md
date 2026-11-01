@@ -80,4 +80,4 @@ Every other name is a field of a type, as the type defines it, e.g. `priority`, 
 
 ## Mistakes
 
-A query that cannot be read is answered with the character where the mistake is, e.g. `at character 12: "urgent" is not a value of priority`; the view puts the cursor there. A field no type has, a comparison a field does not take, a type, state or choice that does not exist, and a word that is not a date are mistakes. A query is at most 2048 bytes and 64 conditions long; administrators change that with `WWBB_BUDGET_QUERY_BYTES` and `WWBB_BUDGET_QUERY_TERMS`.
+A query that cannot be read is answered with the character where the mistake is, e.g. `at character 12: "urgent" is not a value of priority`; the view puts the cursor there. A field no type has, a comparison a field does not take, a type, state or choice that does not exist, and a word that is not a date are mistakes. A query is at most 2048 bytes and 64 conditions long; administrators change that with `OT_BUDGET_QUERY_BYTES` and `OT_BUDGET_QUERY_TERMS`.

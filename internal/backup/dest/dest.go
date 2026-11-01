@@ -44,13 +44,13 @@ type Env func(string) string
 
 // The environment variables that hold a destination's credentials.
 const (
-	UsernameEnv  = "WWBB_BACKUP_USERNAME"
-	PasswordEnv  = "WWBB_BACKUP_PASSWORD"
-	AccessKeyEnv = "WWBB_BACKUP_ACCESS_KEY"
-	SecretKeyEnv = "WWBB_BACKUP_SECRET_KEY"
-	SSHKeyEnv    = "WWBB_BACKUP_SSH_KEY"
-	HostKeyEnv   = "WWBB_BACKUP_SSH_HOST_KEY"
-	CAFileEnv    = "WWBB_BACKUP_CA_FILE"
+	UsernameEnv  = "OT_BACKUP_USERNAME"
+	PasswordEnv  = "OT_BACKUP_PASSWORD"
+	AccessKeyEnv = "OT_BACKUP_ACCESS_KEY"
+	SecretKeyEnv = "OT_BACKUP_SECRET_KEY"
+	SSHKeyEnv    = "OT_BACKUP_SSH_KEY"
+	HostKeyEnv   = "OT_BACKUP_SSH_HOST_KEY"
+	CAFileEnv    = "OT_BACKUP_CA_FILE"
 )
 
 // dialTimeout bounds connecting to a remote destination.

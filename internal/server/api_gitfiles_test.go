@@ -32,8 +32,8 @@ func gitea(t *testing.T) *httptest.Server {
 // A Markdown file in a text becomes a page below the item, which its
 // editors update or pin (ADR-0138).
 func TestMarkdownFilesThroughTheAPI(t *testing.T) {
-	t.Setenv("WWBB_CONNECTOR_ALLOW_PRIVATE", "on") // the fake host is on the loopback address
-	t.Setenv("WWBB_GIT_FILES", "on")
+	t.Setenv("OT_CONNECTOR_ALLOW_PRIVATE", "on") // the fake host is on the loopback address
+	t.Setenv("OT_GIT_FILES", "on")
 	srv := gitea(t)
 	w := newWorld(t)
 	w.admin.expect("POST", "/api/types", `{"name":"page","body":true}`, http.StatusCreated)
@@ -73,6 +73,6 @@ func TestMarkdownFilesThroughTheAPI(t *testing.T) {
 	w.bert.expect("PUT", "/api/items/NOPE-1/markdown", `{"version":"this"}`, http.StatusNotFound)
 	w.bert.expect("POST", "/api/items/NOPE-1/markdown/update", ``, http.StatusNotFound)
 
-	t.Setenv("WWBB_GIT_FILES", "")
+	t.Setenv("OT_GIT_FILES", "")
 	w.bert.expect("POST", path, `{"url":"`+addr+`"}`, http.StatusConflict)
 }

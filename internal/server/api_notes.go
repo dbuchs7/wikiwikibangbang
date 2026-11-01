@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/notes"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/notes"
 )
 
 // noteRoutes are personal notes on passages of items (ADR-0107): each

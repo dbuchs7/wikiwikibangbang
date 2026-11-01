@@ -42,23 +42,23 @@ func TestMetricsCountRequestsBySourceAndRoute(t *testing.T) {
 
 	out := scrape(t, m)
 	for _, want := range []string{
-		`wwbb_http_requests_total{code="418",method="GET",route="/api/items/{ref}"} 2`,
-		`wwbb_http_request_duration_seconds_count{route="/api/items/{ref}"} 2`,
-		`wwbb_http_requests_total{code="200",method="GET",route="/api/items/{ref}/live"} 1`,
-		`wwbb_search_duration_seconds_count 1`,
-		`wwbb_items{presence="live"} 3`,
-		`wwbb_items{presence="trashed"} 1`,
-		`wwbb_live_sessions 2`,
-		`wwbb_live_clients 5`,
-		`wwbb_storage_bytes{file="events.wal"} 4096`,
-		`wwbb_build_info{version="test build"} 1`,
+		`ot_http_requests_total{code="418",method="GET",route="/api/items/{ref}"} 2`,
+		`ot_http_request_duration_seconds_count{route="/api/items/{ref}"} 2`,
+		`ot_http_requests_total{code="200",method="GET",route="/api/items/{ref}/live"} 1`,
+		`ot_search_duration_seconds_count 1`,
+		`ot_items{presence="live"} 3`,
+		`ot_items{presence="trashed"} 1`,
+		`ot_live_sessions 2`,
+		`ot_live_clients 5`,
+		`ot_storage_bytes{file="events.wal"} 4096`,
+		`ot_build_info{version="test build"} 1`,
 		`go_goroutines`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %s", want)
 		}
 	}
-	if strings.Contains(out, `wwbb_http_request_duration_seconds_count{route="/api/items/{ref}/live"}`) {
+	if strings.Contains(out, `ot_http_request_duration_seconds_count{route="/api/items/{ref}/live"}`) {
 		t.Error("an event stream is timed")
 	}
 	if strings.Contains(out, "PLAT-1") {
@@ -68,7 +68,7 @@ func TestMetricsCountRequestsBySourceAndRoute(t *testing.T) {
 
 func TestMissingSourcesAreLeftOut(t *testing.T) {
 	out := scrape(t, New(Sources{}))
-	for _, name := range []string{"wwbb_items", "wwbb_live_sessions", "wwbb_storage_bytes"} {
+	for _, name := range []string{"ot_items", "ot_live_sessions", "ot_storage_bytes"} {
 		if strings.Contains(out, name+"{") || strings.Contains(out, name+" ") {
 			t.Errorf("%s without a source", name)
 		}

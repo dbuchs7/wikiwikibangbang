@@ -24,7 +24,7 @@ func namingAllowed(path, line string) bool {
 	case strings.HasPrefix(path, "internal/migrate/"),
 		path == "internal/item/import.go", path == "internal/item/import_test.go",
 		strings.HasPrefix(path, "internal/item/testdata/"),
-		path == "cmd/wikiwikibangbang/import.go", path == "cmd/wikiwikibangbang/import_test.go",
+		path == "cmd/orbithek/import.go", path == "cmd/orbithek/import_test.go",
 		// The connector that runs the import (ADR-0128).
 		strings.HasPrefix(path, "internal/connector/atlassian"):
 		return true

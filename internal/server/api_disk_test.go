@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/diskspace"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // fakeDisk is a file system whose free space a test sets.
@@ -78,7 +78,7 @@ func TestStorageIsShownToAdministratorsAndThresholdsSet(t *testing.T) {
 		t.Errorf("the last measurement: %v", got)
 	}
 	metrics := w.admin.do("GET", "/metrics", "").Body.String()
-	for _, name := range []string{"wwbb_disk_free_bytes 1.61", "wwbb_disk_level 1", "wwbb_disk_total_bytes", "wwbb_attachments_bytes"} {
+	for _, name := range []string{"ot_disk_free_bytes 1.61", "ot_disk_level 1", "ot_disk_total_bytes", "ot_attachments_bytes"} {
 		if !strings.Contains(metrics, name) {
 			t.Errorf("metrics lack %s", name)
 		}

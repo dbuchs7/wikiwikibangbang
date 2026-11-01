@@ -26,18 +26,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/autobackup"
-	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
-	"github.com/dbuchs7/wikiwikibangbang/internal/collab"
-	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engine"
-	"github.com/dbuchs7/wikiwikibangbang/internal/engineauth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/metrics"
-	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
-	"github.com/dbuchs7/wikiwikibangbang/internal/tasklink"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/autobackup"
+	"github.com/dbuchs7/orbithek/internal/buildinfo"
+	"github.com/dbuchs7/orbithek/internal/collab"
+	"github.com/dbuchs7/orbithek/internal/connector"
+	"github.com/dbuchs7/orbithek/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/engineauth"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/metrics"
+	"github.com/dbuchs7/orbithek/internal/sso"
+	"github.com/dbuchs7/orbithek/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/tasklink"
 )
 
 // Access is a route's access class (ADR-0011). The zero value is
@@ -110,7 +110,7 @@ type Deps struct {
 	// runs its Loop.
 	TaskLinks *tasklink.Runner
 	// Connect connects people's accounts to process engines (ADR-0151);
-	// Routes creates one that reads the registration and WWBB_PUBLIC_URL
+	// Routes creates one that reads the registration and OT_PUBLIC_URL
 	// from the process environment when it is nil.
 	Connect *engineauth.Broker
 	// Disk measures the data directory's file system (ADR-0150); Routes
@@ -199,7 +199,7 @@ func Routes(d Deps) []Route {
 		d.Engines = engine.NewReader(nil, nil)
 	}
 	if d.Connect == nil && d.DB != nil {
-		d.Connect = engineauth.NewBroker(d.DB.Connections, d.Engines, engine.NewClient(os.Getenv), os.Getenv, os.Getenv("WWBB_PUBLIC_URL"))
+		d.Connect = engineauth.NewBroker(d.DB.Connections, d.Engines, engine.NewClient(os.Getenv), os.Getenv, os.Getenv("OT_PUBLIC_URL"))
 		d.Connect.OnEnded(RecordEnded(d.DB))
 	}
 	if d.TaskLinks == nil && d.DB != nil {
@@ -311,7 +311,7 @@ func index(d Deps) http.Handler {
 		}
 		out := page
 		if name := d.DB.Site.Design().Name; name != "" {
-			out = bytes.Replace(page, []byte("<title>wikiwikibangbang</title>"), []byte("<title>"+html.EscapeString(name)+"</title>"), 1)
+			out = bytes.Replace(page, []byte("<title>Orbithek</title>"), []byte("<title>"+html.EscapeString(name)+"</title>"), 1)
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-cache")

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/audit"
 )
 
 func TestParseTrustedProxies(t *testing.T) {

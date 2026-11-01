@@ -3,7 +3,7 @@ package auth
 import (
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 // Login throttling (ADR-0013): after MaxFailures failed logins within

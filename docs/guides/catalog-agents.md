@@ -1,6 +1,6 @@
 # Keeping a catalog current with agents
 
-This guide is for an AI assistant (e.g. Claude) connected to wikiwikibangbang over MCP ([ADR-0012](../adr/0012-mcp-adapter-over-http-api.md), [ADR-0068](../adr/0068-oauth-for-ai-assistants.md)). It covers work on a catalog of interfaces ([ADR-0077](../adr/0077-connectors-keep-catalogs-in-step-with-their-sources.md), [ADR-0080](../adr/0080-one-page-per-data-set-written-from-the-source.md), [ADR-0093](../adr/0093-the-interface-catalog-is-ordinary-pages.md)), and can be given to the assistant as instructions.
+This guide is for an AI assistant (e.g. Claude) connected to Orbithek over MCP ([ADR-0012](../adr/0012-mcp-adapter-over-http-api.md), [ADR-0068](../adr/0068-oauth-for-ai-assistants.md)). It covers work on a catalog of interfaces ([ADR-0077](../adr/0077-connectors-keep-catalogs-in-step-with-their-sources.md), [ADR-0080](../adr/0080-one-page-per-data-set-written-from-the-source.md), [ADR-0093](../adr/0093-the-interface-catalog-is-ordinary-pages.md)), and can be given to the assistant as instructions.
 
 ## What the catalog is
 

@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // fakeJira serves the parts of the Jira Cloud REST API the reader uses, one

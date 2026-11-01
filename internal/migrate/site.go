@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // ReadCloud reads spaces and projects of one Atlassian Cloud site into one

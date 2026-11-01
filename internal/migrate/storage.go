@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // Resolver finds the items that links in a source body point at.

@@ -15,8 +15,8 @@ function check(cond, msg) {
 }
 
 // mailSink is a mail server that keeps every message, for the server under
-// test to send to (WWBB_SMTP_HOST=127.0.0.1, WWBB_SMTP_PORT=SMTP_SINK_PORT,
-// WWBB_SMTP_SECURITY=none). Without SMTP_SINK_PORT there is none.
+// test to send to (OT_SMTP_HOST=127.0.0.1, OT_SMTP_PORT=SMTP_SINK_PORT,
+// OT_SMTP_SECURITY=none). Without SMTP_SINK_PORT there is none.
 function mailSink(port) {
   const mails = [];
   if (!port) return { mails, close() {} };
@@ -137,7 +137,7 @@ const sketchPicture = (version, layers) => `<?xml version="1.0" encoding="UTF-8"
 </svg>`;
 
 // engineSource answers like an atlas engine (ADR-0129), for the credential
-// ENGINE_TOKEN, which the server under test holds as WWBB_ENGINE_ATLAS_TOKEN:
+// ENGINE_TOKEN, which the server under test holds as OT_ENGINE_ATLAS_TOKEN:
 // the versions of the process "order", their models and where the
 // newest's instances are. deploy() adds a version. It also answers its
 // forms and the deployed versions of its decisions (ADR-0144); decide()
@@ -517,7 +517,7 @@ function gitSource() {
     check(await page.locator(".home-tiles a").count() === 5, "five quick accesses, one's notes among them");
 
     step("the footer names the running version");
-    await page.waitForSelector("footer.footer:has-text('wikiwikibangbang')");
+    await page.waitForSelector("footer.footer:has-text('Orbithek')");
 
     step("header: the language and the light or dark look switch from every page (ADR-0095)");
     await page.click("#lang-toggle [data-lang=de]");
@@ -590,7 +590,7 @@ function gitSource() {
     await page.fill("#backup [name=passphrase]", "a long backup passphrase");
     await page.fill("#backup [name=repeat]", "a long backup passphrase");
     const [download] = await Promise.all([page.waitForEvent("download"), page.click("#backup button[type=submit]")]);
-    check(/^wikiwikibangbang-.*\.wwbb$/.test(download.suggestedFilename()), "the backup is named " + download.suggestedFilename());
+    check(/^orbithek-.*\.orbithek$/.test(download.suggestedFilename()), "the backup is named " + download.suggestedFilename());
     const saved = require("fs").readFileSync(await download.path());
     check(saved.subarray(0, 8).toString() === "WWBBBAK1", "the download is an encrypted backup");
     if (process.env.BACKUP_OUT) require("fs").writeFileSync(process.env.BACKUP_OUT, saved);
@@ -608,7 +608,7 @@ function gitSource() {
       await page.waitForSelector("#autobackup-history td:has-text('succeeded')");
       await page.waitForSelector("#autobackup-versions tbody tr");
       const stored = require("fs").readdirSync(process.env.AUTOBACKUP_DIR);
-      check(stored.length === 1 && /-000-full\.wwbb$/.test(stored[0]), "the destination holds one full backup: " + stored.join(", "));
+      check(stored.length === 1 && /-000-full\.orbithek$/.test(stored[0]), "the destination holds one full backup: " + stored.join(", "));
     }
 
     step("create an item with a hostile title");
@@ -1512,7 +1512,7 @@ function gitSource() {
     await page.waitForFunction(() => document.querySelectorAll("#album .album-card").length === 1);
     await page.click("#album .album-card .album-copy");
     await page.waitForSelector("#album .notice:has-text('copied')");
-    check(await page.evaluate(() => Boolean(JSON.parse(localStorage.getItem("wwbb.albumClip"))?.attachment?.id)), "this browser keeps the copied picture");
+    check(await page.evaluate(() => Boolean(JSON.parse(localStorage.getItem("ot.albumClip"))?.attachment?.id)), "this browser keeps the copied picture");
     await page.goto(base + "/#/item/PLAT-2?edit");
     await page.waitForSelector("#body.editing .ProseMirror");
     const copiesBefore = await page.locator("#body .pm-image").count();
@@ -2083,7 +2083,7 @@ function gitSource() {
     await page.waitForSelector("#setup-sso.off");
     // What is not set up says where it is set: the server's environment.
     await page.click("#setup-sso .info-button");
-    await page.waitForSelector("#login-env-help[open] >> text=WWBB_SMTP_HOST");
+    await page.waitForSelector("#login-env-help[open] >> text=OT_SMTP_HOST");
     await Promise.all([page.waitForResponse((r) => r.url().endsWith("/api/settings/access") && r.request().method() === "PUT"), page.check("#requests-open")]);
     const guestCtx = await browser.newContext();
     const guest = await guestCtx.newPage();
@@ -2353,7 +2353,7 @@ function gitSource() {
     await page.waitForSelector("#aiaccess-client-secret");
     const clientId = (await page.textContent("#aiaccess-client-id")).trim();
     const clientSecret = (await page.textContent("#aiaccess-client-secret")).trim();
-    check(/^wwbbc_/.test(clientSecret) && (await page.textContent("#aiaccess-url")).trim().endsWith("/mcp"), "the secret and the MCP address are shown");
+    check(/^otc_/.test(clientSecret) && (await page.textContent("#aiaccess-url")).trim().endsWith("/mcp"), "the secret and the MCP address are shown");
     await page.waitForSelector(`#aiaccess-apps td:has-text('${clientId}')`);
 
     step("AI access: the person approves Claude on the consent page, and Claude's token works on /mcp only");
@@ -2388,9 +2388,9 @@ function gitSource() {
       const listed = (await mcp.json()).result;
       const api = await fetch("/api/me", { credentials: "omit", headers: { Authorization: "Bearer " + tok.access_token } });
       const anon = await fetch("/mcp", { method: "POST", credentials: "omit", headers: { "Content-Type": "application/json" }, body: "{}" });
-      return { prefix: (tok.access_token || "").slice(0, 6), mcp: mcp.status, spaces: listed && !listed.isError && listed.content[0].text.includes("PLAT"), api: api.status, challenge: anon.headers.get("WWW-Authenticate") };
+      return { prefix: (tok.access_token || "").slice(0, 4), mcp: mcp.status, spaces: listed && !listed.isError && listed.content[0].text.includes("PLAT"), api: api.status, challenge: anon.headers.get("WWW-Authenticate") };
     }, { code: back.searchParams.get("code"), id: clientId, secret: clientSecret, verifier, base });
-    check(oauth.prefix === "wwbba_" && oauth.mcp === 200 && oauth.spaces && oauth.api === 401, "the OAuth token reaches /mcp and nothing else: " + JSON.stringify(oauth));
+    check(oauth.prefix === "ota_" && oauth.mcp === 200 && oauth.spaces && oauth.api === 401, "the OAuth token reaches /mcp and nothing else: " + JSON.stringify(oauth));
     check((oauth.challenge || "").includes("resource_metadata="), "an anonymous MCP call points to the OAuth metadata: " + oauth.challenge);
 
     step("AI access: the person withdraws the approval; local clients still use an API token");
@@ -2400,8 +2400,8 @@ function gitSource() {
     await page.waitForSelector("#aiaccess-grants p:has-text('not approved any application')");
     await page.click("#aiaccess-token summary");
     await page.click("#mcp-token button[type=submit]");
-    await page.waitForSelector("#mcp-setup pre:has-text('Bearer wwbb_')");
-    const mcpToken = (await page.textContent("#mcp-setup pre")).match(/Bearer (wwbb_\S+?)"/)[1];
+    await page.waitForSelector("#mcp-setup pre:has-text('Bearer ot_')");
+    const mcpToken = (await page.textContent("#mcp-setup pre")).match(/Bearer (ot_\S+?)"/)[1];
     const made = await page.evaluate(async (tok) => {
       const call = async (body) => (await fetch("/mcp", { method: "POST", credentials: "omit",
         headers: { "Content-Type": "application/json", Authorization: "Bearer " + tok }, body: JSON.stringify(body) })).json();
@@ -2426,7 +2426,7 @@ function gitSource() {
     await page.fill("#new-token [name=name]", "ci");
     await page.click("#new-token button[type=submit]");
     await page.waitForSelector("text=Copy this token now");
-    check(/wwbb_[0-9a-f]{64}/.test(await page.textContent("code")), "the token secret is shown once");
+    check(/ot_[0-9a-f]{64}/.test(await page.textContent("code")), "the token secret is shown once");
 
     step("account: a profile picture replaces the initials in the header, and goes again");
     check((await page.getAttribute("#account-button .avatar", "data-initials")) === "A", "without a picture the header shows the initials");
@@ -2602,7 +2602,7 @@ function gitSource() {
     await page.click("#connector-formats label:has-text('CSV') input");
     await page.click("#connector-settings button[type=submit]");
     await page.waitForSelector("#connector-list tr[data-connector='opendata.swiss']");
-    await page.waitForSelector("#connector-credential >> text=WWBB_CONNECTOR_OPENDATA_SWISS_TOKEN");
+    await page.waitForSelector("#connector-credential >> text=OT_CONNECTOR_OPENDATA_SWISS_TOKEN");
     check(await page.getAttribute("#connector-settings [name=id]", "readonly") !== null, "a saved connector keeps its ID");
     await page.click("#connector-dry-run");
     await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('1 new')");
@@ -2738,7 +2738,7 @@ function gitSource() {
       await page.fill("#engine-settings [name=baseURL]", `http://127.0.0.1:${engine.address().port}`);
       await page.click("#engine-settings button[type=submit]");
       await page.waitForSelector("#engine-list tr[data-engine=atlas]");
-      await page.waitForSelector("#engine-credential >> text=WWBB_ENGINE_ATLAS_TOKEN; it is set");
+      await page.waitForSelector("#engine-credential >> text=OT_ENGINE_ATLAS_TOKEN; it is set");
       await page.click("#engine-check-now");
       await page.waitForSelector("#engine-check >> text=The engine answered with 2 processes.");
       await page.goto(base + "/#/item/" + flow.item.key);
@@ -2779,7 +2779,7 @@ function gitSource() {
           { name: "approve", from: ["open"], to: "done" }, { name: "drop", from: ["open"], to: "cancelled" }] } } })).ok(), "the type of linked tasks is made");
       await page.goto(base + "/#/admin");
       await page.click("#engine-list tr[data-engine=atlas] button:has-text('Edit')");
-      await page.waitForSelector("#task-links-credential >> text=WWBB_ENGINE_ATLAS_TASKLIST_TOKEN; it is set");
+      await page.waitForSelector("#task-links-credential >> text=OT_ENGINE_ATLAS_TASKLIST_TOKEN; it is set");
       await page.click("#task-rule-add");
       const rule = page.locator("#task-rules .task-rule").first();
       await rule.locator("[name=processes]").fill("urlaub");
@@ -2870,7 +2870,7 @@ function gitSource() {
       await page.waitForSelector("#engine-task .task-fresh[data-stale=false]");
       await page.goto(base + "/#/admin");
       await page.click("#engine-list tr[data-engine=atlas] button:has-text('Edit')");
-      await page.waitForSelector("#task-links-events >> text=WWBB_ENGINE_ATLAS_EVENTS_TOKEN; it is set");
+      await page.waitForSelector("#task-links-events >> text=OT_ENGINE_ATLAS_EVENTS_TOKEN; it is set");
       await page.goto(base + "/#/item/" + flow.item.key); // where the drawing begins
       await page.waitForSelector("#edit");
 
@@ -3221,7 +3221,7 @@ function gitSource() {
     await page.fill("#connector-settings [name=grants]", "bert=viewer");
     await page.click("#connector-settings button[type=submit]");
     await page.waitForSelector("#connector-list tr[data-connector='acme']");
-    await page.waitForSelector("#connector-credential:has-text('WWBB_CONNECTOR_ACME_EMAIL'):has-text('are set')");
+    await page.waitForSelector("#connector-credential:has-text('OT_CONNECTOR_ACME_EMAIL'):has-text('are set')");
     check(await page.inputValue("#connector-settings [name=spaces]") === "ENG", "the keys are kept in capitals");
     await page.click("#connector-dry-run");
     await page.waitForSelector("#connector-history .catalog-run:has-text('Dry run'):has-text('2 new')");

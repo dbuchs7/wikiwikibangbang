@@ -3,7 +3,7 @@ package site
 import (
 	"fmt"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
+	"github.com/dbuchs7/orbithek/internal/diskspace"
 )
 
 // DiskSpace returns the thresholds of free space; until an administrator

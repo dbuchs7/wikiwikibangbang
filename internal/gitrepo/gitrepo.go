@@ -333,7 +333,7 @@ func (c Client) get(ctx context.Context, a Address, req *http.Request, limit int
 
 func (c Client) do(req *http.Request, limit int64) ([]byte, error) {
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", "wikiwikibangbang")
+		req.Header.Set("User-Agent", "orbithek")
 	}
 	resp, err := c.http().Do(req)
 	if err != nil {
@@ -372,7 +372,7 @@ func (c Client) getJSON(ctx context.Context, a Address, addr string, v any, head
 		k, val := hostOf(a).auth(c.Token)
 		req.Header.Set(k, val)
 	}
-	req.Header.Set("User-Agent", "wikiwikibangbang")
+	req.Header.Set("User-Agent", "orbithek")
 	resp, err := c.http().Do(req)
 	if err != nil {
 		return err

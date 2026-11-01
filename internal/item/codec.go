@@ -265,7 +265,7 @@ type wireContent struct {
 }
 
 func aad(w *wireEvent) []byte {
-	return []byte(fmt.Sprintf("wikiwikibangbang event %d %s %s", w.Seq, w.Kind, w.Item))
+	return []byte(fmt.Sprintf("orbithek event %d %s %s", w.Seq, w.Kind, w.Item))
 }
 
 func seal(w *wireEvent, sl Sealer) error {

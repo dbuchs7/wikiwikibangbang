@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/gitrepo"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/gitrepo"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // A Markdown file in a text (ADR-0138): an editor names a file of a
@@ -32,13 +32,13 @@ const FileActor = "sync:git"
 
 // FilesVar, set to "on", lets editors have the server read files of
 // repositories; the operator decides, as for the link check (ADR-0039).
-const FilesVar = "WWBB_GIT_FILES"
+const FilesVar = "OT_GIT_FILES"
 
 // filesEvery is how often pages that follow a branch or tag are read.
 const filesEvery = time.Hour
 
 // ErrFilesOff is a file asked for while reading files is off.
-var ErrFilesOff = errors.New("connector: reading Markdown files of repositories is off; the operator sets WWBB_GIT_FILES=on")
+var ErrFilesOff = errors.New("connector: reading Markdown files of repositories is off; the operator sets OT_GIT_FILES=on")
 
 // ErrNoMarkdownFile is an address that names no Markdown file of a
 // repository.

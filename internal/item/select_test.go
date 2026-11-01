@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/query"
+	"github.com/dbuchs7/orbithek/internal/query"
 )
 
 func keysOf(items []Item) []string {

@@ -14,8 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/diskspace"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/diskspace"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // AttachmentsDir holds the content of attachments (ADR-0045), one directory
@@ -46,7 +46,7 @@ func chunkAAD(id, attachment item.ID, n uint32, last bool) []byte {
 	if last {
 		flag = 1
 	}
-	return fmt.Appendf(nil, "wikiwikibangbang attachment %s %s %d %d", id, attachment, n, flag)
+	return fmt.Appendf(nil, "orbithek attachment %s %s %d %d", id, attachment, n, flag)
 }
 
 func chunkNonce(prefix []byte, n uint32) []byte {

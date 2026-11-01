@@ -21,16 +21,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
-	"github.com/dbuchs7/wikiwikibangbang/internal/backup/dest"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/backup"
+	"github.com/dbuchs7/orbithek/internal/backup/dest"
+	"github.com/dbuchs7/orbithek/internal/site"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // PassphraseEnv names the variable that holds the passphrase of
 // automatic backups.
-const PassphraseEnv = "WWBB_BACKUP_PASSPHRASE"
+const PassphraseEnv = "OT_BACKUP_PASSPHRASE"
 
 // The intervals of the schedule. A backup is due a check interval early,
 // so a daily backup does not drift later by a check each day; after a
@@ -468,8 +468,8 @@ func (r *Runner) Check(ctx context.Context, destination string) error {
 	if err != nil {
 		return err
 	}
-	const probe = "wikiwikibangbang-check.tmp"
-	if err := t.Put(ctx, probe, strings.NewReader("wikiwikibangbang checks that it may store backups here\n")); err != nil {
+	const probe = "orbithek-check.tmp"
+	if err := t.Put(ctx, probe, strings.NewReader("orbithek checks that it may store backups here\n")); err != nil {
 		return fmt.Errorf("storing a file: %w", err)
 	}
 	files, err := t.List(ctx)

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // Markdown writes the document as Markdown text (ADR-0131), for people

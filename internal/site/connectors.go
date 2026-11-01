@@ -9,7 +9,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/gitrepo"
+	"github.com/dbuchs7/orbithek/internal/gitrepo"
 )
 
 // Connector keeps a space in step with an external source (ADR-0077,

@@ -3,14 +3,14 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
+	"github.com/dbuchs7/orbithek/internal/buildinfo"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 const adminPassword = "admin password!"
@@ -201,7 +201,7 @@ func TestTokens(t *testing.T) {
 	f.expect("GET", "/api/me", "", http.StatusUnauthorized)
 
 	// A credential that does not resolve is not replaced by the cookie.
-	both := &client{t: t, h: h, cookie: c.cookie, bearer: "wwbb_forged"}
+	both := &client{t: t, h: h, cookie: c.cookie, bearer: "ot_forged"}
 	both.expect("GET", "/api/me", "", http.StatusUnauthorized)
 	basic := httptest.NewRequest("GET", "/api/me", nil)
 	basic.Header.Set("Authorization", "Basic YWRtaW46eA==")

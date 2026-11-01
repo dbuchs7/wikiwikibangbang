@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/buildinfo"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/buildinfo"
 )
 
 // API makes one request to the HTTP API with the caller's credential and
@@ -101,8 +101,8 @@ func dispatch(ctx context.Context, api API, req request) (any, *rpcError) {
 		return map[string]any{
 			"protocolVersion": version,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "wikiwikibangbang", "version": buildinfo.Get().Version},
-			"instructions": "Tools of the wikiwikibangbang HTTP API. Every call acts with your caller's credential; " +
+			"serverInfo":      map[string]any{"name": "orbithek", "version": buildinfo.Get().Version},
+			"instructions": "Tools of the orbithek HTTP API. Every call acts with your caller's credential; " +
 				"what they may not do, the API refuses.",
 		}, nil
 	case "ping":

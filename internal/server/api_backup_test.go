@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/backup"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 func TestBackupThroughTheAPI(t *testing.T) {
@@ -22,7 +22,7 @@ func TestBackupThroughTheAPI(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body)
 	}
-	if cd := rec.Header().Get("Content-Disposition"); !strings.HasPrefix(cd, `attachment; filename="wikiwikibangbang-`) {
+	if cd := rec.Header().Get("Content-Disposition"); !strings.HasPrefix(cd, `attachment; filename="orbithek-`) {
 		t.Fatalf("content disposition %q", cd)
 	}
 	dir := filepath.Join(t.TempDir(), "restored")

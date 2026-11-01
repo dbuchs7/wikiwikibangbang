@@ -32,7 +32,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/storage"
 )
 
 // Format is the version of the archive layout. Format 1 backups, which

@@ -15,7 +15,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/query"
+	"github.com/dbuchs7/orbithek/internal/query"
 )
 
 // Store holds items, relations and the event log in memory. Commands

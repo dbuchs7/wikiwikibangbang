@@ -43,21 +43,21 @@ func exercise(t *testing.T, tg Target) {
 		t.Fatalf("an empty destination lists %v, %v", names, err)
 	}
 	big := bytes.Repeat([]byte("0123456789abcdef"), 5000) // 80 kB
-	if err := tg.Put(ctx, "a.wwbb", bytes.NewReader(big)); err != nil {
+	if err := tg.Put(ctx, "a.orbithek", bytes.NewReader(big)); err != nil {
 		t.Fatal(err)
 	}
-	if err := tg.Put(ctx, "b.wwbb", strings.NewReader("small")); err != nil {
+	if err := tg.Put(ctx, "b.orbithek", strings.NewReader("small")); err != nil {
 		t.Fatal(err)
 	}
-	if err := tg.Put(ctx, "b.wwbb", strings.NewReader("replaced")); err != nil {
+	if err := tg.Put(ctx, "b.orbithek", strings.NewReader("replaced")); err != nil {
 		t.Fatal("replacing:", err)
 	}
 	names, err := tg.List(ctx)
 	sort.Strings(names)
-	if err != nil || !slices.Equal(names, []string{"a.wwbb", "b.wwbb"}) {
+	if err != nil || !slices.Equal(names, []string{"a.orbithek", "b.orbithek"}) {
 		t.Fatalf("list %v %v", names, err)
 	}
-	for name, want := range map[string][]byte{"a.wwbb": big, "b.wwbb": []byte("replaced")} {
+	for name, want := range map[string][]byte{"a.orbithek": big, "b.orbithek": []byte("replaced")} {
 		r, err := tg.Open(ctx, name)
 		if err != nil {
 			t.Fatal(err)
@@ -71,19 +71,19 @@ func exercise(t *testing.T, tg Target) {
 		}
 	}
 	// A failing upload leaves nothing.
-	if err := tg.Put(ctx, "c.wwbb", io.MultiReader(bytes.NewReader(big), errReader{})); err == nil {
+	if err := tg.Put(ctx, "c.orbithek", io.MultiReader(bytes.NewReader(big), errReader{})); err == nil {
 		t.Fatal("a failing upload was stored")
 	}
-	if err := tg.Delete(ctx, "a.wwbb"); err != nil {
+	if err := tg.Delete(ctx, "a.orbithek"); err != nil {
 		t.Fatal(err)
 	}
-	if names, _ := tg.List(ctx); !slices.Equal(names, []string{"b.wwbb"}) {
+	if names, _ := tg.List(ctx); !slices.Equal(names, []string{"b.orbithek"}) {
 		t.Fatalf("after deleting: %v", names)
 	}
-	if _, err := tg.Open(ctx, "missing.wwbb"); err == nil {
+	if _, err := tg.Open(ctx, "missing.orbithek"); err == nil {
 		t.Error("opened a missing file")
 	}
-	if err := tg.Delete(ctx, "missing.wwbb"); err == nil {
+	if err := tg.Delete(ctx, "missing.orbithek"); err == nil {
 		t.Error("deleted a missing file")
 	}
 	for _, bad := range []string{"../x", "x.part"} {
@@ -200,7 +200,7 @@ func TestWebDAV(t *testing.T) {
 	if _, err := tg.List(context.Background()); err == nil || !strings.Contains(err.Error(), "credentials") {
 		t.Errorf("a wrong password: %v", err)
 	}
-	if err := tg.Put(context.Background(), "x.wwbb", strings.NewReader("x")); err == nil {
+	if err := tg.Put(context.Background(), "x.orbithek", strings.NewReader("x")); err == nil {
 		t.Error("stored with a wrong password")
 	}
 	env[PasswordEnv] = "secret"
@@ -336,7 +336,7 @@ func TestS3(t *testing.T) {
 	old := partSize
 	partSize = 32 << 10
 	defer func() { partSize = old }()
-	fake := &fakeS3{t: t, objects: map[string][]byte{"other/x.wwbb": nil}, uploads: map[string]map[int][]byte{}, pageMax: 1}
+	fake := &fakeS3{t: t, objects: map[string][]byte{"other/x.orbithek": nil}, uploads: map[string]map[int][]byte{}, pageMax: 1}
 	srv := httptest.NewTLSServer(fake)
 	defer srv.Close()
 	env := map[string]string{CAFileEnv: caFile(t, srv), AccessKeyEnv: "AKID", SecretKeyEnv: "SECRET"}
@@ -352,7 +352,7 @@ func TestS3(t *testing.T) {
 	if len(fake.uploads) != 0 {
 		t.Errorf("an upload was left open: %v", fake.uploads)
 	}
-	if _, ok := fake.objects["wiki/daily/b.wwbb"]; !ok {
+	if _, ok := fake.objects["wiki/daily/b.orbithek"]; !ok {
 		t.Errorf("objects %v", fake.objects)
 	}
 
@@ -361,10 +361,10 @@ func TestS3(t *testing.T) {
 	if _, err := tg.List(context.Background()); err == nil || !strings.Contains(err.Error(), "credentials") {
 		t.Errorf("a wrong key: %v", err)
 	}
-	if err := tg.Put(context.Background(), "x.wwbb", strings.NewReader("x")); err == nil {
+	if err := tg.Put(context.Background(), "x.orbithek", strings.NewReader("x")); err == nil {
 		t.Error("stored with a wrong key")
 	}
-	if err := tg.Put(context.Background(), "x.wwbb", bytes.NewReader(make([]byte, partSize+1))); err == nil {
+	if err := tg.Put(context.Background(), "x.orbithek", bytes.NewReader(make([]byte, partSize+1))); err == nil {
 		t.Error("a multipart upload with a wrong key")
 	}
 	delete(env, SecretKeyEnv)
@@ -374,10 +374,10 @@ func TestS3(t *testing.T) {
 	// A bucket without a folder.
 	env[SecretKeyEnv] = "SECRET"
 	tg, _ = Open("s3://backups?endpoint="+url.QueryEscape(srv.URL)+"&region=eu-central-1", envOf(env))
-	if err := tg.Put(context.Background(), "top.wwbb", strings.NewReader("x")); err != nil {
+	if err := tg.Put(context.Background(), "top.orbithek", strings.NewReader("x")); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := fake.objects["top.wwbb"]; !ok {
+	if _, ok := fake.objects["top.orbithek"]; !ok {
 		t.Errorf("objects %v", fake.objects)
 	}
 }

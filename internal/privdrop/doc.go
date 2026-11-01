@@ -1,7 +1,7 @@
 // Package privdrop lets the container image start as root, hand the data
 // directory to an unprivileged account and give root up for good before
 // the server does anything else (ADR-0038). Only an account named in
-// WWBB_RUN_AS is switched to; without it nothing changes.
+// OT_RUN_AS is switched to; without it nothing changes.
 package privdrop
 
 import (

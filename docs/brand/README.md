@@ -1,10 +1,10 @@
 # Logo
 
-The wikiwikibangbang logo. The mark is a question mark above a ticked box: a question asked and an answer found, as a wiki holds both. It replaced the earlier two exclamation marks ("bang bang") at the maintainer's request (2026-10-23).
+The Orbithek logo. The mark is a question mark above a ticked box: a question asked and an answer found, as a wiki holds both. It replaced the earlier two exclamation marks ("bang bang") at the maintainer's request (2026-10-23).
 
 The mark comes in its own colours: a black question mark, a box in dark petrol blue (`#0E2A38`) and a dark grey tick (`#333333`). On dark ground the same hues are lighter: a white question mark, a light blue box (`#8FB8CC`) and a light grey tick (`#D0D0D0`). The wordmark is black on light ground and white on dark ground.
 
-The wordmark sets "wikiwiki" in Inter Display Medium and, in a second line below it, "bangbang" in Inter Display Black. Both lines are as wide: "wikiwiki" is letter-spaced to the width of "bangbang". In the horizontal logo the mark spans both lines. All artwork is outlines: no file needs the font.
+The wordmark sets "orbithek" in one line, all lower case, in Inter Display SemiBold. In the horizontal logo the mark spans the line, from the top of the ascenders to half the descenders. All artwork is outlines: no file needs the font. Until the product was renamed (ADR-0153) the wordmark read "wikiwiki" over "bangbang" in two lines; the mark stayed.
 
 The icon is the mark on a rounded white square (inverted: on dark). It is the app icon and the favicon.
 
@@ -18,9 +18,9 @@ The icon is the mark on a rounded white square (inverted: on dark). It is the ap
 | `favicon/` | the icon: `favicon.ico` (16, 32, 48 px), `favicon.svg` (white square, dark in a dark browser theme), `apple-touch-icon.png` (180 px), `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `site.webmanifest` |
 | `source/` | the template (`mark-template.png`), its traced paths (`mark.json`), the tracer (`trace.py`) and the generator (`build.py`) |
 
-Each artwork comes as `-black` (on light ground) and `-white` (on dark ground):
+Each artwork is named `orbithek-<artwork>` and comes as `-black` (on light ground) and `-white` (on dark ground):
 
-- `horizontal`: the mark beside the two-line wordmark, the default;
+- `horizontal`: the mark beside the wordmark, the default;
 - `stacked`: mark above the wordmark, for square spaces;
 - `wordmark`: the name alone;
 - `mark`: the mark alone;

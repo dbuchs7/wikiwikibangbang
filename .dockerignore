@@ -7,7 +7,7 @@
 .vscode
 /dist/
 /out/
-/wikiwikibangbang
+/orbithek
 *.test
 *.out
 Dockerfile

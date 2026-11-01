@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
-	"github.com/dbuchs7/wikiwikibangbang/internal/sso/ssotest"
+	"github.com/dbuchs7/orbithek/internal/sso"
+	"github.com/dbuchs7/orbithek/internal/sso/ssotest"
 )
 
 func ssoSetup(t *testing.T) (http.Handler, Deps, *ssotest.IdP) {

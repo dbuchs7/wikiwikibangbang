@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/sso"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/sso"
 )
 
 // stateCookie binds a started single sign-on to the browser that started
 // it, so a callback cannot be replayed into another browser (login CSRF).
-const stateCookie = "wwbb_oidc_state"
+const stateCookie = "ot_oidc_state"
 
 // oidcRoutes are the single sign-on routes (ADR-0030). They are public:
 // the caller has no principal yet.

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
 const pw = "correct horse battery"
@@ -137,7 +137,7 @@ func TestTokens(t *testing.T) {
 	if !ok || p.User != anna.ID || p.Scope != ScopeRead || p.Via != "token" {
 		t.Fatalf("principal %+v %v", p, ok)
 	}
-	for _, bad := range []string{"", "wwbb_nope", secret[len(TokenPrefix):]} {
+	for _, bad := range []string{"", "ot_nope", secret[len(TokenPrefix):]} {
 		if _, ok := a.TokenPrincipal(bad); ok {
 			t.Errorf("%q resolved", bad)
 		}
@@ -145,6 +145,14 @@ func TestTokens(t *testing.T) {
 	if got := a.Tokens(anna.ID); len(got) != 1 || got[0].ID != tok.ID {
 		t.Fatalf("listing: %+v", got)
 	}
+	// A token issued before the rename (ADR-0153) still resolves.
+	legacy := LegacyTokenPrefix + "0123456789abcdefghijklmnop"
+	noErr(t, a.record(event{Kind: tokenCreated, Token: "legacy", User: anna.ID, Name: "old", Scope: ScopeRead,
+		Hash: hashSecret(legacy), Expires: c.t.Add(time.Hour).UTC()}))
+	if p, ok := a.TokenPrincipal(legacy); !ok || p.User != anna.ID {
+		t.Fatalf("legacy token %+v %v", p, ok)
+	}
+	noErr(t, a.RevokeToken(anna.ID, "legacy"))
 	if err := a.RevokeToken(bert.ID, tok.ID); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("revoking someone else's token: %v", err)
 	}

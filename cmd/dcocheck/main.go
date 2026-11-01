@@ -21,7 +21,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/dco"
+	"github.com/dbuchs7/orbithek/internal/dco"
 )
 
 func main() {

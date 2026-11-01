@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/item"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // kanbanRoutes are the kanbans of the spaces (ADR-0060): named boards on a

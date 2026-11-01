@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/audit"
-	"github.com/dbuchs7/wikiwikibangbang/internal/autobackup"
-	"github.com/dbuchs7/wikiwikibangbang/internal/backup"
-	"github.com/dbuchs7/wikiwikibangbang/internal/backup/dest"
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/audit"
+	"github.com/dbuchs7/orbithek/internal/autobackup"
+	"github.com/dbuchs7/orbithek/internal/backup"
+	"github.com/dbuchs7/orbithek/internal/backup/dest"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // autoBackupRoutes set up automatic backups and show how they went

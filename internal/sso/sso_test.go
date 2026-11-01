@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
-	"github.com/dbuchs7/wikiwikibangbang/internal/sso/ssotest"
+	"github.com/dbuchs7/orbithek/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/sso/ssotest"
 )
 
 func newProvider(t *testing.T) (*Provider, *ssotest.IdP) {

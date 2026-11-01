@@ -9,14 +9,14 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/linkcheck"
+	"github.com/dbuchs7/orbithek/internal/linkcheck"
 )
 
 // AllowPrivateVar, set to "on", lets connectors reach addresses in the
 // server's own network: a source inside the organisation (ADR-0127). It
 // is the operator's decision, so it comes from the environment, not from
 // the settings an administrator changes in the UI.
-const AllowPrivateVar = "WWBB_CONNECTOR_ALLOW_PRIVATE"
+const AllowPrivateVar = "OT_CONNECTOR_ALLOW_PRIVATE"
 
 // ErrPrivateAddress is a source whose address is not on the public
 // internet, while connectors may reach only public ones.

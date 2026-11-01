@@ -154,7 +154,7 @@ func decrypt(r io.Reader, passphrase string) (io.Reader, error) {
 	br := bufio.NewReaderSize(r, chunkSize+64)
 	header := make([]byte, headerSize)
 	if _, err := io.ReadFull(br, header); err != nil || string(header[:8]) != magic {
-		return nil, errors.New("backup: not a wikiwikibangbang backup")
+		return nil, errors.New("backup: not a orbithek backup")
 	}
 	iter := binary.BigEndian.Uint32(header[8:12])
 	if iter == 0 || iter > maxIterations {

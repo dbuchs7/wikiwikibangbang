@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/connector"
-	"github.com/dbuchs7/wikiwikibangbang/internal/gitrepo"
-	"github.com/dbuchs7/wikiwikibangbang/internal/item"
+	"github.com/dbuchs7/orbithek/internal/connector"
+	"github.com/dbuchs7/orbithek/internal/gitrepo"
+	"github.com/dbuchs7/orbithek/internal/item"
 )
 
 // filesTimeout bounds reading a Markdown file and its pictures for a
@@ -16,11 +16,11 @@ import (
 const filesTimeout = 2 * time.Minute
 
 // gitFileRoutes make pages from Markdown files of public repositories that
-// a text shows (ADR-0138). They are off unless WWBB_GIT_FILES=on.
+// a text shows (ADR-0138). They are off unless OT_GIT_FILES=on.
 func gitFileRoutes(h itemHandlers) []Route {
 	return []Route{
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/markdown", Summary: "Make a page below the item from a Markdown file of a public repository, given by its address at the host; " +
-			"version current follows the file's branch or tag every hour, this pins the commit read (off unless WWBB_GIT_FILES=on)", Handler: http.HandlerFunc(h.mirrorFile)},
+			"version current follows the file's branch or tag every hour, this pins the commit read (off unless OT_GIT_FILES=on)", Handler: http.HandlerFunc(h.mirrorFile)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/markdown/update", Summary: "Read the file of a page made from a Markdown file again now, and write the page if the file changed", Handler: http.HandlerFunc(h.updateFile)},
 		{Method: http.MethodPut, Pattern: "/api/items/{ref}/markdown", Summary: "Pin a page made from a Markdown file at the commit it shows (version this), or let it follow its branch or tag again (version current)", Handler: http.HandlerFunc(h.pinFile)},
 	}

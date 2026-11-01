@@ -64,16 +64,16 @@ func TestLocalDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tg.Put(ctx, "a.wwbb", strings.NewReader("content")); err != nil {
+	if err := tg.Put(ctx, "a.orbithek", strings.NewReader("content")); err != nil {
 		t.Fatal(err)
 	}
 	os.WriteFile(filepath.Join(dir, "left.part"), nil, 0o600)
 	os.Mkdir(filepath.Join(dir, "sub"), 0o700)
 	names, err := tg.List(ctx)
-	if err != nil || !slices.Equal(names, []string{"a.wwbb"}) {
+	if err != nil || !slices.Equal(names, []string{"a.orbithek"}) {
 		t.Fatalf("list %v %v", names, err)
 	}
-	r, err := tg.Open(ctx, "a.wwbb")
+	r, err := tg.Open(ctx, "a.orbithek")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func TestLocalDirectory(t *testing.T) {
 	if string(data) != "content" {
 		t.Fatalf("read %q", data)
 	}
-	if err := tg.Delete(ctx, "a.wwbb"); err != nil {
+	if err := tg.Delete(ctx, "a.orbithek"); err != nil {
 		t.Fatal(err)
 	}
 	for _, bad := range []string{"../x", "a/b", "", ".hidden", "x.part"} {
@@ -99,12 +99,12 @@ func TestLocalDirectory(t *testing.T) {
 
 	// A failed write leaves nothing under the name, nor a part.
 	failing := io.MultiReader(strings.NewReader("half"), errReader{})
-	if err := tg.Put(ctx, "b.wwbb", failing); err == nil {
+	if err := tg.Put(ctx, "b.orbithek", failing); err == nil {
 		t.Fatal("a failing write was stored")
 	}
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if err := tg.Put(cancelled, "c.wwbb", strings.NewReader("x")); err == nil {
+	if err := tg.Put(cancelled, "c.orbithek", strings.NewReader("x")); err == nil {
 		t.Fatal("a cancelled write was stored")
 	}
 	entries, _ := os.ReadDir(dir)
@@ -117,7 +117,7 @@ func TestLocalDirectory(t *testing.T) {
 	// A missing directory, e.g. an unmounted share, fails rather than
 	// being created.
 	gone, _ := Open(filepath.Join(dir, "missing"), nil)
-	if err := gone.Put(ctx, "a.wwbb", strings.NewReader("x")); err == nil {
+	if err := gone.Put(ctx, "a.orbithek", strings.NewReader("x")); err == nil {
 		t.Error("stored into a missing directory")
 	}
 	if _, err := gone.List(ctx); err == nil {

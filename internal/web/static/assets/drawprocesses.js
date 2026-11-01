@@ -7,7 +7,9 @@
 // shown. This module holds what both sides need and nothing that needs a
 // browser: the drawing page writes the chunk, a page reads it.
 
-// KEY names this installation's data in an element's customData.
+// KEY names this installation's data in an element's customData. It is
+// part of the stored drawings, so it keeps the product's former name
+// (ADR-0153).
 export const KEY = "wikiwikibangbang";
 
 // PADDING is the margin around a drawing in its picture, Excalidraw's own
@@ -22,6 +24,7 @@ const CHUNK = "wkPr";
 
 // KEYWORD named the text chunk that listed the regions in pictures saved
 // before CHUNK. Those are still read, and lose it when opened for editing.
+// It, too, is stored data and keeps the former name (ADR-0153).
 const KEYWORD = "wikiwikibangbang.processes";
 
 // MAX_MARGIN bounds the margin around a process's model in its picture, in

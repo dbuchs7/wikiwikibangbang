@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 // EventsVar names the environment variable of the credential an engine's
 // event feed is followed with (ADR-0151), e.g.
-// WWBB_ENGINE_ATLAS_PROD_EVENTS_TOKEN; on atlas a token of the scope
+// OT_ENGINE_ATLAS_PROD_EVENTS_TOKEN; on atlas a token of the scope
 // events.
 func EventsVar(id string) string {
 	return strings.TrimSuffix(TokenVar(id), "_TOKEN") + "_EVENTS_TOKEN"

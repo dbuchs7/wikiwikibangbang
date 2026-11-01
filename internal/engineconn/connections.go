@@ -93,7 +93,7 @@ type Connections struct {
 func id(user, engine string) string { return user + "\x00" + engine }
 
 func aad(user, engine, key string) []byte {
-	return []byte("wikiwikibangbang engine connection " + user + " " + engine + " " + key)
+	return []byte("orbithek engine connection " + user + " " + engine + " " + key)
 }
 
 // New rebuilds the connections from records and journals later changes.

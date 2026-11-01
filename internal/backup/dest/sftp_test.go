@@ -262,7 +262,7 @@ func TestSFTP(t *testing.T) {
 	if _, err := tg.List(t.Context()); err == nil {
 		t.Error("listed a missing folder")
 	}
-	if err := tg.Put(t.Context(), "x.wwbb", strings.NewReader("x")); err == nil {
+	if err := tg.Put(t.Context(), "x.orbithek", strings.NewReader("x")); err == nil {
 		t.Error("stored in a missing folder")
 	}
 	for name, env := range map[string]map[string]string{

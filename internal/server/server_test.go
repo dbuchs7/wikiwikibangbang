@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/auth"
-	"github.com/dbuchs7/wikiwikibangbang/internal/storage"
-	"github.com/dbuchs7/wikiwikibangbang/internal/web"
+	"github.com/dbuchs7/orbithek/internal/auth"
+	"github.com/dbuchs7/orbithek/internal/storage"
+	"github.com/dbuchs7/orbithek/internal/web"
 )
 
 func get(t *testing.T, h http.Handler, path string) *httptest.ResponseRecorder {
@@ -67,7 +67,7 @@ func TestPublicRoutes(t *testing.T) {
 		{"/vendor/prosemirror.js", "200", "javascript", "EditorView"},
 		{"/favicon.ico", "200", "image/", ""},
 		{"/assets/brand/favicon.svg", "200", "image/svg+xml", "prefers-color-scheme"},
-		{"/assets/brand/logo-black.svg", "200", "image/svg+xml", "<title>wikiwikibangbang</title>"},
+		{"/assets/brand/logo-black.svg", "200", "image/svg+xml", "<title>Orbithek</title>"},
 		{"/assets/brand/apple-touch-icon.png", "200", "image/png", ""},
 		{"/vendor/prosemirror.LICENSE.txt", "200", "text/plain", "MIT"},
 		{"/draw", "200", "text/html", "/assets/draw.js"},

@@ -11,10 +11,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/budget"
+	"github.com/dbuchs7/orbithek/internal/budget"
 )
 
-// OAuth for AI assistants (ADR-0068): wikiwikibangbang is the authorization
+// OAuth for AI assistants (ADR-0068): orbithek is the authorization
 // server for its own MCP endpoint. An application (a client) is registered
 // by an administrator, or registers itself when that is open; a person
 // approves it once; it then holds short-lived access tokens that act as
@@ -31,9 +31,9 @@ const (
 
 // Prefixes of the OAuth secrets, so secret scanners know them.
 const (
-	OAuthAccessPrefix  = "wwbba_"
-	OAuthRefreshPrefix = "wwbbr_"
-	OAuthSecretPrefix  = "wwbbc_"
+	OAuthAccessPrefix  = "ota_"
+	OAuthRefreshPrefix = "otr_"
+	OAuthSecretPrefix  = "otc_"
 )
 
 // Client authentication at the token endpoint.
@@ -261,7 +261,7 @@ func (a *Accounts) CreateOAuthClient(name string, redirects []string, method str
 	if err != nil {
 		return OAuthClient{}, "", err
 	}
-	id = "wwbb-" + id
+	id = "ot-" + id
 	secret, hash := "", ""
 	if method == AuthClientSecret {
 		raw, err := a.newID(32)

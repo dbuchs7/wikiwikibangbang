@@ -2,7 +2,7 @@ name: Release
 
 # Cut a release by pushing a semver tag:
 #
-#   git tag -a v0.1.0 -m "wikiwikibangbang v0.1.0" && git push origin v0.1.0
+#   git tag -a v0.1.0 -m "orbithek v0.1.0" && git push origin v0.1.0
 #
 # This builds the single binary for every supported platform (ADR-0024),
 # stamps the tag into the version string via -ldflags, and publishes a GitHub
@@ -89,13 +89,13 @@ jobs:
           else
             version="0.0.0-dev+${GITHUB_SHA::12}"
           fi
-          ldflags="-s -w -X github.com/dbuchs7/wikiwikibangbang/internal/buildinfo.Version=${version}"
+          ldflags="-s -w -X github.com/dbuchs7/orbithek/internal/buildinfo.Version=${version}"
 
-          bin="wikiwikibangbang"
-          if [ "${GOOS}" = "windows" ]; then bin="wikiwikibangbang.exe"; fi
-          go build -trimpath -ldflags "${ldflags}" -o "${bin}" ./cmd/wikiwikibangbang
+          bin="orbithek"
+          if [ "${GOOS}" = "windows" ]; then bin="orbithek.exe"; fi
+          go build -trimpath -ldflags "${ldflags}" -o "${bin}" ./cmd/orbithek
 
-          name="wikiwikibangbang_${version}_${GOOS}_${GOARCH}"
+          name="orbithek_${version}_${GOOS}_${GOARCH}"
           mkdir -p "dist/${name}" out
           cp "${bin}" LICENSE README.md THIRD_PARTY_NOTICES.md "dist/${name}/"
           if [ "${GOOS}" = "windows" ]; then
@@ -107,7 +107,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wikiwikibangbang-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: orbithek-${{ matrix.goos }}-${{ matrix.goarch }}
           path: out/*
           retention-days: 7
 
@@ -147,6 +147,6 @@ jobs:
             gh release upload "${TAG}" --repo "${GITHUB_REPOSITORY}" --clobber artifacts/*
           else
             gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" \
-              --title "wikiwikibangbang ${TAG}" --generate-notes --prerelease \
+              --title "orbithek ${TAG}" --generate-notes --prerelease \
               artifacts/*
           fi

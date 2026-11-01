@@ -23,9 +23,9 @@ func TestEveryDefaultIsPositive(t *testing.T) {
 
 func TestEnvVarNames(t *testing.T) {
 	for field, want := range map[string]string{
-		"RequestBody":      "WWBB_BUDGET_REQUEST_BODY",
-		"SearchQueryBytes": "WWBB_BUDGET_SEARCH_QUERY_BYTES",
-		"SSOPending":       "WWBB_BUDGET_SSO_PENDING",
+		"RequestBody":      "OT_BUDGET_REQUEST_BODY",
+		"SearchQueryBytes": "OT_BUDGET_SEARCH_QUERY_BYTES",
+		"SSOPending":       "OT_BUDGET_SSO_PENDING",
 	} {
 		if got := EnvVar(field); got != want {
 			t.Errorf("EnvVar(%q) = %q, want %q", field, got, want)
@@ -54,11 +54,11 @@ func TestEveryFieldIsConfigurable(t *testing.T) {
 // that is not a positive number in range keeps the default and is reported.
 func TestBadValuesKeepTheDefault(t *testing.T) {
 	b, problems := FromEnv(env(map[string]string{
-		"WWBB_BUDGET_REQUEST_BODY":       "64k",
-		"WWBB_BUDGET_PAGE_ITEMS":         "0",
-		"WWBB_BUDGET_LIVE_SESSIONS":      "-5",
-		"WWBB_BUDGET_LIVE_CLIENTS":       "99999999999999999999",
-		"WWBB_BUDGET_SEARCH_QUERY_TERMS": "  ",
+		"OT_BUDGET_REQUEST_BODY":       "64k",
+		"OT_BUDGET_PAGE_ITEMS":         "0",
+		"OT_BUDGET_LIVE_SESSIONS":      "-5",
+		"OT_BUDGET_LIVE_CLIENTS":       "99999999999999999999",
+		"OT_BUDGET_SEARCH_QUERY_TERMS": "  ",
 	}))
 	if b != Default() {
 		t.Errorf("bad values changed the budgets: %+v", b)
@@ -74,7 +74,7 @@ func TestBadValuesKeepTheDefault(t *testing.T) {
 }
 
 func TestValueIsTrimmed(t *testing.T) {
-	b, problems := FromEnv(env(map[string]string{"WWBB_BUDGET_PAGE_ITEMS": " 50 "}))
+	b, problems := FromEnv(env(map[string]string{"OT_BUDGET_PAGE_ITEMS": " 50 "}))
 	if len(problems) != 0 || b.PageItems != 50 {
 		t.Fatalf("got %d, problems %v", b.PageItems, problems)
 	}
@@ -98,7 +98,7 @@ func TestChangedListsOnlyWhatDiffers(t *testing.T) {
 	b := Default()
 	b.LiveClients = 12
 	got := b.Changed()
-	if len(got) != 1 || got[0] != "WWBB_BUDGET_LIVE_CLIENTS=12" {
+	if len(got) != 1 || got[0] != "OT_BUDGET_LIVE_CLIENTS=12" {
 		t.Fatalf("Changed() = %v", got)
 	}
 	if len(Default().Changed()) != 0 {

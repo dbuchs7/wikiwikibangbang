@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbuchs7/wikiwikibangbang/internal/site"
+	"github.com/dbuchs7/orbithek/internal/site"
 )
 
 const (
@@ -125,7 +125,7 @@ func fakePublicAtlas(t *testing.T) (*httptest.Server, *[]string) {
 // wizard, and a form read as the form of a step (ADR-0148).
 func TestTheFormsOfAProcess(t *testing.T) {
 	srv, _ := fakePublicAtlas(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TOKEN": "secret"}
 	r := NewReader(func(k string) string { return env[k] }, srv.Client())
 	e := site.Engine{ID: "atlas", Name: "Atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}
 	ctx := context.Background()
@@ -188,7 +188,7 @@ func TestTheFormsOfAProcess(t *testing.T) {
 // engine's refusals are told (ADR-0148).
 func TestPublicStartLinks(t *testing.T) {
 	srv, seen := fakePublicAtlas(t)
-	env := map[string]string{"WWBB_ENGINE_ATLAS_TOKEN": "secret"}
+	env := map[string]string{"OT_ENGINE_ATLAS_TOKEN": "secret"}
 	r := NewReader(func(k string) string { return env[k] }, srv.Client())
 	e := site.Engine{ID: "atlas", Name: "Atlas", Kind: site.EngineAtlas, BaseURL: srv.URL + "/base"}
 	ctx := context.Background()
@@ -263,7 +263,7 @@ func TestPublicStartLinks(t *testing.T) {
 	}
 
 	// The public routes need no credential; listing the links does.
-	delete(env, "WWBB_ENGINE_ATLAS_TOKEN")
+	delete(env, "OT_ENGINE_ATLAS_TOKEN")
 	if f, err := r.PublicForm(ctx, e, link, "incident", ""); err != nil || f.Wizard != nil {
 		t.Errorf("a public form without credential: %+v, %v", f, err)
 	}
@@ -273,7 +273,7 @@ func TestPublicStartLinks(t *testing.T) {
 	if _, err := r.PublicLinks(ctx, e); !errors.Is(err, ErrNoCredential) {
 		t.Errorf("links without credential: %v", err)
 	}
-	env["WWBB_ENGINE_ATLAS_TOKEN"] = "viewer"
+	env["OT_ENGINE_ATLAS_TOKEN"] = "viewer"
 	if _, err := r.PublicLinks(ctx, e); !errors.Is(err, ErrRefused) {
 		t.Errorf("links for a credential without the role: %v", err)
 	}
