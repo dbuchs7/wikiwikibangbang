@@ -533,6 +533,20 @@ function gitSource() {
     await page.click("#theme-toggle");
     await page.waitForFunction((was) => document.documentElement.dataset.theme === was, look);
 
+    step("account: the cockpit is a personal look, dark-surfaced, and the bulb leads back to light (ADR-0156)");
+    await page.goto(base + "/#/account");
+    await page.selectOption("#look-select", "cockpit");
+    await page.waitForFunction(() => document.documentElement.dataset.look === "cockpit" && document.documentElement.dataset.theme === "dark");
+    check((await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim())) === "#31e1e6", "the cockpit paints in its cyan");
+    await page.reload();
+    await page.waitForFunction(() => document.documentElement.dataset.look === "cockpit");
+    check(await page.evaluate(() => document.getElementById("dark-css").media !== "not all"), "the cockpit is drawn with the dark stylesheet from the first paint");
+    await page.click("#theme-toggle");
+    await page.waitForFunction(() => !document.documentElement.dataset.look && document.documentElement.dataset.theme === "light");
+    await page.evaluate(() => localStorage.removeItem("ot.theme"));
+    await page.reload();
+    await page.waitForSelector("#welcome, #app h1");
+
     step("administration: space, type, user, role");
     await page.click("#account-button");
     await page.click("#account-menu a[href='#/admin']");

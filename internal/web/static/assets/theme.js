@@ -1,6 +1,7 @@
 // The light or dark look (ADR-0095). It follows the system until someone
 // chooses one with the bulb in the header; the choice is kept in this
-// browser. A forced look rewrites every rule that asks for the system's
+// browser. The cockpit (ADR-0156) is a third, personal look: dark-surfaced,
+// chosen on the account page, never by the system. A forced look rewrites every rule that asks for the system's
 // scheme: the dark stylesheet's link, the logo's picture source and the
 // @media rules of the design's own stylesheet (ADR-0070), so a theme
 // with a dark look of its own follows the choice too.
@@ -10,11 +11,13 @@ const system = window.matchMedia("(prefers-color-scheme: dark)");
 // original holds each rewritten rule's or element's media as written.
 const original = new WeakMap();
 
-// chosenTheme is "dark", "light", or "" to follow the system.
+const looks = ["dark", "light", "cockpit"];
+
+// chosenTheme is "dark", "light", "cockpit", or "" to follow the system.
 export function chosenTheme() {
   try {
     const v = localStorage.getItem(key);
-    return v === "dark" || v === "light" ? v : "";
+    return looks.includes(v) ? v : "";
   } catch {
     return "";
   }
@@ -23,7 +26,12 @@ export function chosenTheme() {
 // isDark reports whether the dark look is wanted, chosen or by the system.
 export function isDark() {
   const c = chosenTheme();
-  return c ? c === "dark" : system.matches;
+  return c ? c !== "light" : system.matches;
+}
+
+// isCockpit reports whether the cockpit look is chosen.
+export function isCockpit() {
+  return chosenTheme() === "cockpit";
 }
 
 // setTheme keeps a choice ("" follows the system again) and applies it.
@@ -57,7 +65,7 @@ function rewrite(get, set, holder, choice) {
     original.set(holder, m);
   }
   const m = original.get(holder);
-  set(choice ? forced(m, choice === "dark") : m);
+  set(choice ? forced(m, choice !== "light") : m);
 }
 
 function rewriteRules(rules, choice) {
@@ -71,6 +79,8 @@ function rewriteRules(rules, choice) {
 // system's scheme.
 export function applyTheme(choice = chosenTheme()) {
   document.documentElement.dataset.theme = isDark() ? "dark" : "light";
+  if (isCockpit()) document.documentElement.dataset.look = "cockpit";
+  else delete document.documentElement.dataset.look;
   for (const el of document.querySelectorAll("link[media], source[media]")) {
     // theme-boot.js forced the dark stylesheet's link already, keeping
     // its media as written.
