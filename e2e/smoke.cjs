@@ -1417,6 +1417,12 @@ function gitSource() {
     await page.waitForSelector("#album .album-card img");
     await page.selectOption("#album select[aria-label=Room]", "PLAT");
     await page.click("#album-new-folder");
+    check(await page.inputValue("#album-folder-space") === "PLAT", "the room filter preselects the room of a new folder");
+    await page.click("#album-new-folder");
+    await page.selectOption("#album select[aria-label=Room]", "");
+    await page.click("#album-new-folder");
+    check(await page.inputValue("#album-folder-space") === "", "with all rooms shown, a new folder's room is chosen in its form");
+    await page.selectOption("#album-folder-space", "PLAT");
     await page.fill("#album-folder-name", "Logos");
     await page.click("#album .album-new-folder button[type=submit]");
     await page.click("#album .album-folder:has-text('Logos')");

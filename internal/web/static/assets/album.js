@@ -73,6 +73,9 @@ export function albumBrowser({ pick } = {}) {
   const kind = h("select", { "aria-label": t("album.kind") },
     [["", t("album.kindAll")], ["image", t("album.kindImages")], ["drawing", t("album.kindDrawings")]].map(([v, label]) => h("option", { value: v, text: label })));
   const space = h("select", { "aria-label": t("album.space") }, h("option", { value: "", text: t("album.spaceAll") }));
+  // The rooms one may see, for the filter and the room of a new folder.
+  let rooms = [];
+  const roomOptions = () => rooms.map((s) => h("option", { value: s.key, text: `${s.key} ${s.name}` }));
   const label = h("select", { "aria-label": t("album.label"), id: "album-label" }, h("option", { value: "", text: t("album.labelAll") }));
   const options = h("datalist", { id: "album-label-options" });
   const trail = h("nav", { class: "album-trail", "aria-label": t("album.folders") });
@@ -284,13 +287,20 @@ export function albumBrowser({ pick } = {}) {
   const showTools = () => {
     if (pick) return tools.replaceChildren();
     const name = h("input", { id: "album-folder-name", placeholder: t("album.folderName"), "aria-label": t("album.folderName"), required: true });
-    const make = h("form", { class: "album-new-folder", hidden: true }, name,
-      h("button", { type: "submit", class: "primary", text: t("album.create") }));
+    // A folder at the top names its room here; below a folder it is made in
+    // the parent's room. The room filter only preselects it.
+    const where = here() ? null : h("select", { id: "album-folder-space", "aria-label": t("album.folderSpace"), required: true });
+    const fillWhere = () => {
+      where.replaceChildren(h("option", { value: "", text: t("album.folderSpacePick") }), ...roomOptions());
+      where.value = space.value;
+    };
+    const make = h("form", { class: "album-new-folder", hidden: true }, ...[where, name,
+      h("button", { type: "submit", class: "primary", text: t("album.create") })].filter(Boolean));
     make.addEventListener("submit", async (e) => {
       e.preventDefault();
-      if (!here() && !space.value) return fail(new Error(t("album.chooseSpace")));
+      if (where && !where.value) return fail(new Error(t("album.chooseSpace")));
       try {
-        await post("/api/album/folders", here() ? { parent: here().id, name: name.value } : { space: space.value, name: name.value });
+        await post("/api/album/folders", here() ? { parent: here().id, name: name.value } : { space: where.value, name: name.value });
         status.replaceChildren();
         make.hidden = true;
         loadFolders();
@@ -307,7 +317,12 @@ export function albumBrowser({ pick } = {}) {
     });
     // replaceChildren, unlike h, writes null as text.
     tools.replaceChildren(...[
-      h("button", { type: "button", class: "secondary", id: "album-new-folder", text: t("album.newFolder"), onclick: () => { make.hidden = !make.hidden; if (!make.hidden) name.focus(); } }),
+      h("button", { type: "button", class: "secondary", id: "album-new-folder", text: t("album.newFolder"), onclick: () => {
+        make.hidden = !make.hidden;
+        if (make.hidden) return;
+        if (where) fillWhere();
+        (where && !where.value ? where : name).focus();
+      } }),
       here() ? h("button", { type: "button", class: "primary", id: "album-upload", text: t("album.upload"), onclick: () => files.click() }) : null,
       here() ? null : h("span", { class: "muted", text: t("album.uploadHint") }),
       files, make].filter(Boolean));
@@ -374,7 +389,10 @@ export function albumBrowser({ pick } = {}) {
   space.addEventListener("change", () => { clearTimeout(timer); loadFolders(); load(false); });
   more.addEventListener("click", () => load(true));
   // One's favourite spaces first, as everywhere a space is chosen (ADR-0145).
-  get("/api/spaces").then(({ spaces }) => space.append(...[...spaces.filter((s) => s.favourite), ...spaces.filter((s) => !s.favourite)].map((s) => h("option", { value: s.key, text: `${s.key} ${s.name}` })))).catch(() => {});
+  get("/api/spaces").then(({ spaces }) => {
+    rooms = [...spaces.filter((s) => s.favourite), ...spaces.filter((s) => !s.favourite)];
+    space.append(...roomOptions());
+  }).catch(() => {});
   loadLabels().catch(() => {});
   open();
   return h("div", { class: "album" }, h("div", { class: "album-filters filter-bar", role: "search", "aria-label": t("album.title") }, search, kind, space, label, reset), options,
