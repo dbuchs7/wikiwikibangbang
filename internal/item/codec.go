@@ -264,8 +264,11 @@ type wireContent struct {
 	Hold       *Hold                 `json:"hold,omitempty"`
 }
 
+// The prefix binds the ciphertext to its purpose. It is part of the stored
+// data and keeps the product's former name; changing it makes everything
+// sealed before unreadable (ADR-0153, ADR-0155).
 func aad(w *wireEvent) []byte {
-	return []byte(fmt.Sprintf("orbithek event %d %s %s", w.Seq, w.Kind, w.Item))
+	return []byte(fmt.Sprintf("wikiwikibangbang event %d %s %s", w.Seq, w.Kind, w.Item))
 }
 
 func seal(w *wireEvent, sl Sealer) error {

@@ -100,8 +100,11 @@ func New(records [][]byte, journal func([]byte) error, sealer item.Sealer, newID
 	return n, nil
 }
 
+// The prefix binds the ciphertext to its purpose. It is part of the stored
+// data and keeps the product's former name; changing it makes everything
+// sealed before unreadable (ADR-0153, ADR-0155).
 func aad(r record) []byte {
-	return []byte("orbithek note " + r.Owner + " " + string(r.Item) + " " + r.Note)
+	return []byte("wikiwikibangbang note " + r.Owner + " " + string(r.Item) + " " + r.Note)
 }
 
 func (n *Notes) apply(r record) error {

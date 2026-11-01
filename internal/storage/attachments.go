@@ -41,12 +41,15 @@ func attachmentPath(dir string, id, attachment item.ID) string {
 	return filepath.Join(dir, AttachmentsDir, string(id), string(attachment))
 }
 
+// The prefix binds the ciphertext to its purpose. It is part of the stored
+// data and keeps the product's former name; changing it makes everything
+// sealed before unreadable (ADR-0153, ADR-0155).
 func chunkAAD(id, attachment item.ID, n uint32, last bool) []byte {
 	flag := byte(0)
 	if last {
 		flag = 1
 	}
-	return fmt.Appendf(nil, "orbithek attachment %s %s %d %d", id, attachment, n, flag)
+	return fmt.Appendf(nil, "wikiwikibangbang attachment %s %s %d %d", id, attachment, n, flag)
 }
 
 func chunkNonce(prefix []byte, n uint32) []byte {

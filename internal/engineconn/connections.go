@@ -92,8 +92,11 @@ type Connections struct {
 
 func id(user, engine string) string { return user + "\x00" + engine }
 
+// The prefix binds the ciphertext to its purpose. It is part of the stored
+// data and keeps the product's former name; changing it makes everything
+// sealed before unreadable (ADR-0153, ADR-0155).
 func aad(user, engine, key string) []byte {
-	return []byte("orbithek engine connection " + user + " " + engine + " " + key)
+	return []byte("wikiwikibangbang engine connection " + user + " " + engine + " " + key)
 }
 
 // New rebuilds the connections from records and journals later changes.
