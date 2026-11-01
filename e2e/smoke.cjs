@@ -1590,6 +1590,67 @@ function gitSource() {
     await page.keyboard.press("Escape");
     await page.waitForSelector("#starmap-panel", { state: "hidden" });
     check(await page.locator(".star-node.dim").count() === 0, "Escape clears the focus");
+
+    step("starmap moves: the map settles, pointing lights a neighbourhood, a dragged node moves, a double-click separates a node, Escape and the trail step back, the address keeps the drill path (ADR-0158)");
+    // The map is a live simulation; the canvas says when it rests, so the
+    // steps wait for that instead of for time.
+    const settled = () => page.waitForSelector("#starmap-canvas[data-settled=true]");
+    const centre = async (key) => {
+      const box = await page.locator(`.star-node[data-key='${key}'] .star-shape`).boundingBox();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+    await settled();
+    let at = await centre("PLAT-2");
+    await page.mouse.move(at.x, at.y);
+    await page.waitForSelector("#starmap-canvas.hovering .star-node.hover[data-key='PLAT-2']");
+    check(await page.locator(".star-node.lit[data-key='PLAT-1']").count() === 1 && await page.locator(".star-link.lit").count() > 0
+      && await page.locator(".star-node.lit[data-id='label:constellation']").count() === 1, "pointing at a node lights its neighbours and their edges");
+    check(await page.locator(".star-node.lit").count() < all, "the rest of the map is not lit");
+    check(await page.isHidden("#starmap-panel"), "pointing opens no panel");
+    const placed = await page.getAttribute(".star-node[data-key='PLAT-2']", "transform");
+    await page.mouse.down();
+    await page.mouse.move(at.x + 90, at.y + 70, { steps: 10 });
+    await page.mouse.up();
+    await settled();
+    check(await page.getAttribute(".star-node[data-key='PLAT-2']", "transform") !== placed, "a dragged node moves: " + placed);
+    check(await page.isHidden("#starmap-panel"), "a drag chooses no node");
+    at = await centre("PLAT-2");
+    await page.mouse.dblclick(at.x, at.y);
+    await page.waitForSelector("#starmap-trail:not([hidden]) .starmap-crumb.here:has-text('PLAT-2')");
+    await settled();
+    const separated = await shown();
+    check(separated < all && separated >= 3, `a double-click separates a node with its neighbourhood: ${separated} of ${all}`);
+    check(await page.locator(".star-node.root[data-key='PLAT-2']").count() === 1, "the separated node is marked");
+    check(page.url().endsWith("#/starmap/PLAT/PLAT-2"), "the address holds the drill path: " + page.url());
+    await page.keyboard.press("Escape");
+    await page.waitForFunction((n) => document.querySelectorAll("#starmap-canvas .star-node:not([hidden])").length === n, all);
+    check(await page.isHidden("#starmap-trail") && page.url().endsWith("#/starmap/PLAT"), "Escape steps back to the whole room");
+    await page.goBack();
+    await page.waitForSelector("#starmap-trail:not([hidden]) .starmap-crumb.here:has-text('PLAT-2')");
+    check(await shown() === separated, "the back button returns to the separated node");
+    await page.click("#starmap-trail [data-crumb='-1']");
+    await page.waitForFunction((n) => document.querySelectorAll("#starmap-canvas .star-node:not([hidden])").length === n, all);
+    await page.focus(".star-node[data-key='PLAT-2']");
+    await page.keyboard.press("Shift+Enter");
+    await page.waitForSelector("#starmap-trail:not([hidden]) .starmap-crumb.here:has-text('PLAT-2')");
+    await page.selectOption("#starmap-depth", "2");
+    await page.waitForFunction(() => location.hash === "#/starmap/PLAT/PLAT-2?depth=2");
+    const deeper = await shown();
+    check(deeper >= separated, `a depth of two keeps more of the neighbourhood: ${deeper}`);
+    await page.reload();
+    await page.waitForSelector("#starmap-trail:not([hidden]) .starmap-crumb.here:has-text('PLAT-2')");
+    check(await shown() === deeper && await page.inputValue("#starmap-depth") === "2", "a reload keeps the drill path and its depth");
+    await settled();
+    await page.click(".star-node[data-key='PLAT-1']");
+    await page.waitForSelector("#starmap-panel:not([hidden]) #starmap-drill");
+    await page.click("#starmap-drill");
+    await page.waitForSelector("#starmap-trail .starmap-crumb.here:has-text('PLAT-1')");
+    check(await page.locator("#starmap-trail li").count() === 3, "the panel's button separates one station further");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#starmap-trail .starmap-crumb.here:has-text('PLAT-2')");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#starmap-trail", { state: "hidden" });
+    await settled();
     await page.focus(".star-node.kind-label[data-id='label:constellation']");
     await page.keyboard.press("Enter");
     await page.waitForSelector("#starmap-panel:not([hidden]) #starmap-open[href='#/label/constellation']");

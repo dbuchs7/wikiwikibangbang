@@ -1,15 +1,19 @@
-// Unit tests of the starmap's graph (starmap-graph.js, ADR-0157): the
-// node kinds and edge groups, what the filters keep with one hop of
-// context, a node's neighbourhood, and a layout that is the same for the
-// same map. They run in Node.js without a browser and without
-// dependencies:
+// Unit tests of the starmap's graph (starmap-graph.js, ADR-0157) and its
+// live physics (starmap-sim.js, ADR-0158): the node kinds and edge
+// groups, what the filters keep with one hop of context, a node's
+// neighbourhood at a depth, the drill path, the captions a zoom shows,
+// the frame that fits, a seeded layout that is the same for the same map,
+// and a simulation that cools to the same rest every time, holds a pinned
+// node and approximates the exact repulsion with its quadtree. They run in
+// Node.js without a browser and without dependencies:
 //
 //   node --test "internal/web/jstest/*.test.mjs"
 //
 // The view itself is in e2e/smoke.cjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GROUPS, filter, groupOf, kinds, kindOf, layout, matches, neighbourhood, size, toneOf } from "../static/assets/starmap-graph.js";
+import { DEPTHS, GROUPS, around, captionShown, drillBack, drillInto, filter, fitView, groupOf, kinds, kindOf, layout, matches, neighbourhood, size, toneOf, visible, zoomBand } from "../static/assets/starmap-graph.js";
+import { DEFAULTS, chargeExact, chargeTree, quadtree, simulation } from "../static/assets/starmap-sim.js";
 
 const graph = {
   nodes: [
@@ -117,3 +121,181 @@ test("the layout is the same for the same map, inside the canvas, and moves no n
 });
 
 const PINNED = { "a": [448.2, 414.4], "b": [358.2, 435.1], "c": [401, 372.5], "x": [422.5, 480.9], "picture:a/1": [334.5, 367.4], "label:runbook": [436.2, 329.2] };
+
+test("the neighbourhood at a depth follows shown edges either way, as far as the depth reaches", () => {
+  assert.deepEqual([...around(graph, "c", 1)].sort(), ["b", "c", "x"]);
+  assert.deepEqual([...around(graph, "c", 2)].sort(), ["a", "b", "c", "label:runbook", "x"]);
+  assert.deepEqual([...around(graph, "c", 3)].sort(), ["a", "b", "c", "label:runbook", "picture:a/1", "x"]);
+  assert.deepEqual([...around(graph, "c", 2, [1, 2])].sort(), ["b", "c", "x"], "only through the edges given");
+  assert.deepEqual([...around(graph, "nothing", 2)], ["nothing"]);
+  assert.deepEqual([...neighbourhood(graph, "c")].sort(), [...around(graph, "c", 1)].sort());
+  assert.deepEqual(DEPTHS, [1, 2, 3]);
+});
+
+test("the drill path grows by a station, cuts back to a station it holds, and steps back one at a time", () => {
+  let trail = drillInto([], "b");
+  assert.deepEqual(trail, ["b"]);
+  trail = drillInto(trail, "c");
+  trail = drillInto(trail, "x");
+  assert.deepEqual(trail, ["b", "c", "x"]);
+  assert.deepEqual(drillInto(trail, "c"), ["b", "c"], "a station on the path is not visited twice");
+  assert.deepEqual(drillBack(trail), ["b", "c"]);
+  assert.deepEqual(drillBack(drillBack(drillBack(trail))), []);
+  assert.deepEqual(drillBack([]), []);
+  assert.deepEqual(drillBack(trail, 0), ["b"]);
+  assert.deepEqual(drillBack(trail, -1), [], "the whole room");
+});
+
+test("a separated node shows with its neighbourhood, and the filters still apply inside it", () => {
+  const whole = visible(graph);
+  assert.equal(whole.nodes.size, graph.nodes.length);
+  const one = visible(graph, { trail: ["c"] });
+  assert.deepEqual([...one.nodes].sort(), ["b", "c", "x"]);
+  assert.deepEqual(one.edges, [1, 2]);
+  const two = visible(graph, { trail: ["b", "c"], depth: 2 });
+  assert.deepEqual([...two.nodes].sort(), ["a", "b", "c", "label:runbook", "x"], "the last station counts, at its depth");
+  const outside = visible(graph, { trail: ["c"], hidden: new Set(["outside"]) });
+  assert.deepEqual([...outside.nodes].sort(), ["b", "c"], "a switch hides inside a separated neighbourhood");
+  const relations = visible(graph, { trail: ["b"], hidden: new Set(["labels", "tree"]) });
+  assert.deepEqual([...relations.nodes].sort(), ["b", "c"], "the neighbourhood follows the edges the switches leave on");
+  const found = visible(graph, { trail: ["c"], query: "kernel" });
+  assert.deepEqual([...found.matches], ["b"]);
+  assert.deepEqual([...found.nodes].sort(), ["b", "c"], "a search narrows the neighbourhood, never reaches out of it");
+  assert.equal(visible(graph, { trail: ["c"], hidden: new Set(["type:page"]) }).nodes.size, 0, "a hidden station leaves nothing");
+});
+
+test("captions fade with the zoom: far shows only what matters now, mid the items, near everything", () => {
+  assert.equal(zoomBand(0.3), "far");
+  assert.equal(zoomBand(0.6), "mid");
+  assert.equal(zoomBand(1), "mid");
+  assert.equal(zoomBand(1.2), "near");
+  assert.equal(captionShown("far", { kind: "item" }), false);
+  assert.equal(captionShown("far", { kind: "label", lit: true }), true);
+  assert.equal(captionShown("mid", { kind: "item" }), true);
+  assert.equal(captionShown("mid", { kind: "picture" }), false);
+  assert.equal(captionShown("near", { kind: "picture" }), true);
+});
+
+test("the view fits the points into the canvas, centred, within its zoom", () => {
+  const v = fitView([{ x: 0, y: 0 }, { x: 200, y: 100 }], 500, 300, { pad: 50 });
+  assert.equal(v.zoom, 2);
+  assert.deepEqual([v.panX + v.zoom * 100, v.panY + v.zoom * 50], [250, 150], "the middle of the points is the middle of the canvas");
+  assert.equal(fitView([{ x: 5, y: 5 }], 500, 300).zoom, 2.5, "a single point is not blown up beyond the zoom's top");
+  assert.equal(fitView([{ x: 0, y: 0 }, { x: 1e6, y: 0 }], 500, 300).zoom, 0.1);
+  assert.deepEqual(fitView([], 500, 300), { zoom: 1, panX: 250, panY: 150 });
+});
+
+// A fixed start, not the seeded layout: the seeded layout uses sine and
+// cosine, whose last digits may differ between engines, while the
+// simulation uses only arithmetic and square roots, which do not.
+function grid(count, links) {
+  const x0 = [], y0 = [];
+  for (let i = 0; i < count; i++) { x0.push(300 + (i % 4) * 40 + (i % 3)); y0.push(300 + Math.floor(i / 4) * 40); }
+  return { x0, y0, links, center: { x: 360, y: 340 } };
+}
+const REST = [[0, 286.7, 301.1], [1, 335.3, 230.1], [2, 417.3, 251.3], [3, 360.5, 313.5], [4, 287.4, 380], [5, 337.2, 450.2], [6, 418.8, 427.4], [7, 360.8, 366.4]];
+const ring = grid(8, [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 0], [0, 4]]);
+
+test("the simulation comes to the same rest from the same start, nodes apart and joined ones close", () => {
+  const one = simulation(ring), two = simulation(structuredClone(ring));
+  const ticks = one.run();
+  two.run();
+  assert.ok(one.settled);
+  assert.ok(ticks > 100 && ticks <= 400, `${ticks} ticks to rest`);
+  assert.deepEqual(one.positions(), two.positions());
+  assert.deepEqual(one.positions(), REST, "pinned for the fixed input: a change of the forces shows here");
+  const at = (i) => [one.x[i], one.y[i]];
+  const d = (i, j) => Math.hypot(at(i)[0] - at(j)[0], at(i)[1] - at(j)[1]);
+  for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) assert.ok(d(i, j) >= 2 * DEFAULTS.radius - 1, `nodes ${i} and ${j} apart`);
+  assert.ok(d(0, 1) < d(2, 6), "a joined pair sits closer than an opposite one");
+  assert.equal(simulation({ x0: [], y0: [] }).run(), 300, "an empty map cools like any other, in 300 ticks as d3");
+});
+
+test("alpha cools to rest and stays warm while a target holds it; a reheat never cools", () => {
+  const sim = simulation(ring);
+  let last = sim.alpha;
+  for (let k = 0; k < 50; k++) { sim.tick(); assert.ok(sim.alpha < last); last = sim.alpha; }
+  assert.ok(!sim.settled);
+  sim.run();
+  assert.ok(sim.settled && sim.alpha < DEFAULTS.alphaMin);
+  assert.equal(sim.tick(), false, "at rest a tick reports no motion");
+  sim.reheat(0.3);
+  assert.equal(sim.alpha, 0.3);
+  sim.reheat(0.1);
+  assert.equal(sim.alpha, 0.3, "a smaller reheat does not cool");
+  sim.alphaTarget = 0.3;
+  for (let k = 0; k < 1000; k++) sim.tick();
+  assert.ok(!sim.settled && Math.abs(sim.alpha - 0.3) < 1e-6, "a held node keeps the map warm");
+  sim.alphaTarget = 0;
+  sim.run();
+  assert.ok(sim.settled);
+});
+
+test("a pinned node stays where it is put while its neighbours follow it; unpinned it moves again", () => {
+  const sim = simulation(ring);
+  sim.run();
+  const before = [sim.x[1], sim.y[1]];
+  sim.pin(0, { x: 900, y: 900 });
+  sim.reheat(0.5);
+  for (let k = 0; k < 120; k++) {
+    sim.tick();
+    assert.deepEqual([sim.x[0], sim.y[0]], [900, 900]);
+  }
+  assert.ok(sim.pinned(0));
+  assert.ok(Math.hypot(sim.x[1] - before[0], sim.y[1] - before[1]) > 100, "a neighbour is pulled along by its spring");
+  sim.unpin(0);
+  assert.ok(!sim.pinned(0));
+  sim.reheat(0.5);
+  sim.tick();
+  assert.notDeepEqual([sim.x[0], sim.y[0]], [900, 900]);
+});
+
+test("only the active nodes move and push; the rest is frozen where it is", () => {
+  const sim = simulation(ring);
+  sim.setActive((i) => i < 4, (k) => k !== 1);
+  assert.deepEqual(sim.active, [0, 1, 2, 3]);
+  assert.ok(sim.isActive(2) && !sim.isActive(5));
+  const frozen = [sim.x[5], sim.y[5]];
+  sim.run();
+  assert.deepEqual([sim.x[5], sim.y[5]], frozen);
+  assert.deepEqual(sim.positions().map((p) => p[0]), [0, 1, 2, 3]);
+});
+
+test("the quadtree's repulsion comes close to the exact one, and both push apart", () => {
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const count = 600;
+  const x = Float64Array.from({ length: count }, () => random() * 1500), y = Float64Array.from({ length: count }, () => random() * 1500);
+  x[1] = x[0]; y[1] = y[0]; // two on one spot
+  const active = Array.from({ length: count }, (_, i) => i);
+  const exact = [new Float64Array(count), new Float64Array(count)], tree = [new Float64Array(count), new Float64Array(count)];
+  chargeExact(x, y, active, ...exact);
+  chargeTree(x, y, active, ...tree);
+  let err = 0, total = 0;
+  for (let i = 0; i < count; i++) {
+    err += Math.hypot(exact[0][i] - tree[0][i], exact[1][i] - tree[1][i]);
+    total += Math.hypot(exact[0][i], exact[1][i]);
+  }
+  assert.ok(err / total < 0.03, `relative error ${err / total}`);
+  assert.ok(Math.sign(exact[0][0]) === -Math.sign(exact[0][1]) && exact[0][0] !== 0, "two on one spot part");
+  assert.ok(Math.sign(tree[0][0]) === Math.sign(exact[0][0]), "the tree parts them the same way");
+  const root = quadtree(x, y, active);
+  assert.equal(root.weight, count, "the root weighs every point");
+  assert.equal(quadtree(x, y, []), null);
+  // Beyond the cut-off, nothing pushes.
+  const far = [new Float64Array(2), new Float64Array(2)];
+  chargeExact(Float64Array.of(0, 1000), Float64Array.of(0, 0), [0, 1], ...far, { chargeMax: 500 });
+  assert.deepEqual([...far[0]], [0, 0]);
+});
+
+test("the simulation over the budget's 600 nodes uses the quadtree and comes to rest", () => {
+  const count = 600;
+  const links = [];
+  for (let i = 1; i < count; i++) links.push([Math.floor((i - 1) / 3), i]);
+  const start = grid(count, links);
+  const sim = simulation(start);
+  assert.ok(count >= DEFAULTS.exactBelow);
+  const ticks = sim.run();
+  assert.ok(sim.settled && ticks <= 400);
+  for (let i = 0; i < count; i++) assert.ok(Number.isFinite(sim.x[i]) && Number.isFinite(sim.y[i]));
+});
