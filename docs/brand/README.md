@@ -34,7 +34,7 @@ Each artwork is named `orbithek-<artwork>` and comes as `-black` (on light groun
 
 ## Where the product uses it
 
-The web UI embeds copies (ADR-0009): `internal/web/static/favicon.ico`, and in `internal/web/static/assets/brand/` the horizontal logo in black and white for the top bar, `favicon.svg` and `apple-touch-icon.png`. The start page's illustration, `welcome.svg`, holds the horizontal logo too, inline. After a change here, copy them again, and the logo into `welcome.svg`.
+The web UI embeds copies (ADR-0009): `internal/web/static/favicon.ico`, and in `internal/web/static/assets/brand/` the horizontal logo in black and white for the top bar, `favicon.svg` and `apple-touch-icon.png`. The start page's illustration, `welcome.svg`, is a space station in orbit: a hub holding a page, with docked modules for conversations, tasks, pictures, protection and processes, solar wings, the people on board and the ringed planet of the mark; it holds the horizontal logo too, inline. After a change here, copy them again, and the logo into `welcome.svg`.
 
 ## Regenerate
 
