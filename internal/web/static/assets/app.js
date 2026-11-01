@@ -1473,7 +1473,7 @@ async function route() {
       case "my-notes": return await myNotesView();
       case "comments": return await commentsView(arg);
       case "album": return albumView();
-      case "starmap": return await starmapScreen(arg || "", hash.split("?")[0].split("/").slice(3).map(decodeURIComponent), Number(params.get("depth")) || 1);
+      case "starmap": return await starmapScreen(arg || "", hash.split("?")[0].split("/").slice(3).map(decodeURIComponent), params);
       case "search": return await searchView(arg || "");
       case "query": return await queryView(params);
       case "account": return await accountView();
@@ -3587,11 +3587,12 @@ function kanbanSettings(k, type, columns, kpath) {
 
 // starmapScreen shows the starmap of a room (ADR-0157): its items,
 // pictures and shared labels in their context, filtered in the browser;
-// the rest of the address is the drill path into it (ADR-0158).
-async function starmapScreen(space, path, depth) {
+// the rest of the address is the drill path into it (ADR-0158), and its
+// parameters may ask for the impact of its last station (ADR-0159).
+async function starmapScreen(space, path, params) {
   const section = h("section", { id: "starmap" });
   screen()(h("h1", { text: t("starmap.title") }), h("p", { class: "muted", text: t("starmap.intro") }), section);
-  await starmapView(section, space, path, depth);
+  await starmapView(section, space, path, params);
 }
 
 // albumView shows the images and drawings of every item one may read

@@ -1657,6 +1657,60 @@ function gitSource() {
     await page.click("#starmap-open");
     await page.waitForURL(/#\/label\/constellation$/);
 
+    step("starmap impact: what depends on PLAT-2 and what it depends on, across rooms, to a chosen depth, kept in the address; Escape leaves it (ADR-0159)");
+    // A chain of two: Impact one depends on PLAT-2, Impact two on Impact one.
+    await page.evaluate(async () => {
+      const json = { "Content-Type": "application/json" };
+      const two = (await (await fetch("/api/items/PLAT-2")).json()).item.id;
+      const made = async (title) => (await (await fetch("/api/items", { method: "POST", headers: json,
+        body: JSON.stringify({ space: "PLAT", type: "task", title, properties: { priority: "low" } }) })).json()).item.id;
+      const first = await made("Impact one");
+      const second = await made("Impact two");
+      for (const [from, to] of [[first, two], [second, first]]) {
+        await fetch("/api/relations", { method: "POST", headers: json, body: JSON.stringify({ type: "depends-on", from, to }) });
+      }
+    });
+    await page.goto(base + "/#/starmap/PLAT");
+    await settled();
+    await page.click(".star-node[data-key='PLAT-2']");
+    await page.waitForSelector("#starmap-panel:not([hidden]) #starmap-impact-open");
+    await page.click("#starmap-impact-open");
+    await page.waitForSelector("#starmap-impact-list");
+    check(await page.evaluate(() => location.hash) === "#/starmap/PLAT/PLAT-2?impact=affected&depth=1", "the address holds the impact view: " + page.url());
+    await settled();
+    const impactNodes = () => page.locator("#starmap-canvas .star-node").count();
+    const distances = () => page.$$eval("#starmap-impact-list li", (lis) => lis.map((li) => Number(li.dataset.distance)));
+    const sorted = (list) => list.every((d, i) => i === 0 || list[i - 1] <= d);
+    const nearOnly = await impactNodes();
+    check(await page.locator(".star-node.impact-start[data-key='PLAT-2']").count() === 1, "the start is marked");
+    check(await page.locator("#starmap-impact-list li:has-text('Impact one')").count() === 1 && await page.locator("#starmap-impact-list li:has-text('Impact two')").count() === 0,
+      "depth 1 holds what depends on PLAT-2 directly");
+    check((await page.locator("#starmap-impact-count").textContent()).includes("depth 1"), "the header says the depth");
+    check((await page.getAttribute("#starmap-canvas .star-node[aria-label*='Impact one']", "aria-label")).includes("1 step away"),
+      "a node's name says its distance");
+    check(sorted(await distances()) && (await distances()).every((d) => d === 1), "the list is in the order of distance");
+    await page.selectOption("#starmap-impact-depth", "2");
+    await page.waitForFunction(() => location.hash === "#/starmap/PLAT/PLAT-2?impact=affected&depth=2");
+    await page.waitForSelector("#starmap-impact-list li:has-text('Impact two')");
+    await settled();
+    const deeperImpact = await impactNodes();
+    check(deeperImpact >= nearOnly, `depth 2 holds as much as depth 1 or more: ${deeperImpact} of ${nearOnly}`);
+    check(sorted(await distances()) && (await distances()).includes(2), "the list is sorted by distance: " + (await distances()).join(","));
+    check(await page.locator("#starmap-canvas .star-link.walk").count() > 0, "the edges the walk followed are marked");
+    await page.click("#starmap-impact-direction [data-direction=dependson]");
+    await page.waitForFunction(() => location.hash === "#/starmap/PLAT/PLAT-2?impact=dependson&depth=2");
+    await page.waitForSelector("#starmap-impact-list li:has-text('PLAT-1')");
+    check(await page.locator("#starmap-impact-list li:has-text('Impact one')").count() === 0, "what PLAT-2 depends on is not what depends on it");
+    await page.reload();
+    await page.waitForSelector("#starmap-impact-direction [data-direction=dependson][aria-pressed=true]");
+    check(await page.inputValue("#starmap-impact-depth") === "2" && await page.locator("#starmap-impact-list li:has-text('PLAT-1')").count() > 0,
+      "a reload keeps the direction and the depth");
+    await settled();
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => location.hash === "#/starmap/PLAT");
+    await page.waitForSelector("#starmap-canvas .star-node[data-id='label:constellation']");
+    check(await page.locator("#starmap-impact").count() === 0, "Escape leaves the impact view for the room's map");
+
     step("markdown: Markdown copied as text is pasted with Ctrl+V as formatted, editable blocks between two paragraphs, and kept after a reload (ADR-0133)");
     const mdItem = await page.evaluate(async () => {
       const made = (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },

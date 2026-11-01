@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,6 +75,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: get, Pattern: "/api/items/{ref}/versions/{seq}", Summary: "The body as a BodyCommitted event of the history left it", Handler: http.HandlerFunc(h.version)},
 		{Method: post, Pattern: "/api/items/{ref}/versions/{seq}/restore", Summary: "Make an earlier body the current one; the current one stays in the history", Handler: http.HandlerFunc(h.restoreVersion)},
 		{Method: get, Pattern: "/api/items/{ref}/relations", Summary: "Relations at one end of the item (direction=outgoing|incoming)", Handler: http.HandlerFunc(h.relations)},
+		{Method: get, Pattern: "/api/items/{ref}/impact", Summary: "What depends on the item (direction=affected) or what it depends on (direction=dependson), across rooms, to a depth of 1 to 5 hops or all; picture starts at one of its pictures; only readable items, never through an unreadable one; truncated beyond the budget ImpactNodes", Handler: http.HandlerFunc(h.impact)},
 		{Method: put, Pattern: "/api/items/{ref}/restriction", Summary: "Narrow who may read or edit the item and its subtree", Handler: http.HandlerFunc(h.restrict)},
 		{Method: post, Pattern: "/api/items/{ref}/trash", Summary: "Move the item and its subtree to the trash", Handler: http.HandlerFunc(h.trash)},
 		{Method: post, Pattern: "/api/items/{ref}/restore", Summary: "Restore a trashed item and its subtree", Handler: http.HandlerFunc(h.restore)},
@@ -1012,15 +1014,79 @@ func (h itemHandlers) starmap(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		nodes, edges := make([]starNodeJSON, len(m.Nodes)), make([]starEdgeJSON, len(m.Edges))
+		nodes := make([]starNodeJSON, len(m.Nodes))
 		for i, n := range m.Nodes {
-			nodes[i] = starNodeJSON{ID: n.ID, Kind: n.Kind, Key: n.Key, Title: n.Title, Type: n.Type, Space: n.Space, State: n.State,
-				Outside: n.Outside, Labels: n.Labels, Item: n.Item, Name: n.Name}
+			nodes[i] = toStarNodeJSON(n)
 		}
-		for i, e := range m.Edges {
-			edges[i] = starEdgeJSON{From: e.From, To: e.To, Kind: e.Kind, Type: e.Type}
+		return map[string]any{"nodes": nodes, "edges": toStarEdgesJSON(m.Edges), "truncated": m.Truncated}, nil
+	})
+}
+
+type impactNodeJSON struct {
+	starNodeJSON
+	Distance int            `json:"distance"`
+	Via      []starEdgeJSON `json:"via"`
+}
+
+func toStarNodeJSON(n item.StarNode) starNodeJSON {
+	return starNodeJSON{ID: n.ID, Kind: n.Kind, Key: n.Key, Title: n.Title, Type: n.Type, Space: n.Space, State: n.State,
+		Outside: n.Outside, Labels: n.Labels, Item: n.Item, Name: n.Name}
+}
+
+func toStarEdgesJSON(edges []item.StarEdge) []starEdgeJSON {
+	out := make([]starEdgeJSON, len(edges))
+	for i, e := range edges {
+		out[i] = starEdgeJSON{From: e.From, To: e.To, Kind: e.Kind, Type: e.Type}
+	}
+	return out
+}
+
+// impact answers what depends on an item or one of its pictures, or what
+// it depends on, to a depth (ADR-0159), at most the budget ImpactNodes of
+// nodes.
+func (h itemHandlers) impact(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	direction := cmp.Or(q.Get("direction"), item.ImpactAffected)
+	if direction != item.ImpactAffected && direction != item.ImpactDependsOn {
+		writeError(w, http.StatusBadRequest, "direction must be affected or dependson")
+		return
+	}
+	depth := 1
+	switch raw := q.Get("depth"); raw {
+	case "":
+	case "all":
+		depth = 0
+	default:
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 || n > 5 {
+			writeError(w, http.StatusBadRequest, "depth must be 1 to 5 or all")
+			return
 		}
-		return map[string]any{"nodes": nodes, "edges": edges, "truncated": m.Truncated}, nil
+		depth = n
+	}
+	h.read(w, r, func(x *item.Session) (any, error) {
+		it, err := resolveItem(x, r.PathValue("ref"))
+		if err != nil {
+			return nil, err
+		}
+		start := string(it.ID)
+		if pic := q.Get("picture"); pic != "" {
+			start = "picture:" + start + "/" + pic
+		}
+		m, err := x.Impact(start, direction, depth, budget.Get().ImpactNodes)
+		if err != nil {
+			return nil, err
+		}
+		nodes := make([]impactNodeJSON, len(m.Nodes))
+		for i, n := range m.Nodes {
+			nodes[i] = impactNodeJSON{starNodeJSON: toStarNodeJSON(n.StarNode), Distance: n.Distance, Via: toStarEdgesJSON(n.Via)}
+		}
+		var shownDepth any = m.Depth
+		if m.Depth == 0 {
+			shownDepth = "all"
+		}
+		return map[string]any{"start": m.Start, "space": m.Space, "direction": m.Direction, "depth": shownDepth,
+			"nodes": nodes, "edges": toStarEdgesJSON(m.Edges), "truncated": m.Truncated, "complete": m.Complete}, nil
 	})
 }
 

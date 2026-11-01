@@ -98,6 +98,10 @@ type Budgets struct {
 	// items, pictures and labels together. Beyond it the map keeps the
 	// space's items first and says it is truncated.
 	StarmapNodes int
+	// ImpactNodes bounds the nodes of one impact walk from an item
+	// (ADR-0159), the start included, across every space. Beyond it the
+	// walk keeps the nearest nodes and says it was cut.
+	ImpactNodes int
 }
 
 // Default returns the budgets the server uses unless configured otherwise.
@@ -129,6 +133,7 @@ func Default() Budgets {
 		EngineConnectsPending: 10_000,
 		MarkdownPictureBytes:  50 << 20,
 		StarmapNodes:          600,
+		ImpactNodes:           1000,
 	}
 }
 

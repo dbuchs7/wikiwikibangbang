@@ -1899,6 +1899,28 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
 .star-edge-label { fill: var(--muted); font-size: 10px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; pointer-events: none; }
 .star-marker path { fill: var(--accent); }
 .star-marker.arrow-copy path { fill: var(--warning); }
+/* The impact view (ADR-0159): the start bold, a ring that fades with the
+   distance, the edges the walk followed bold, the others faint. */
+.star-ring { fill: none; stroke: var(--accent); stroke-width: 3; pointer-events: none; }
+.star-node.dist-0 .star-ring { stroke-width: 5; }
+.star-node.dist-1 .star-ring { opacity: 0.85; }
+.star-node.dist-2 .star-ring { opacity: 0.65; stroke-dasharray: 8 3; }
+.star-node.dist-3 .star-ring { opacity: 0.5; stroke-dasharray: 5 3; }
+.star-node.dist-4 .star-ring { opacity: 0.38; stroke-dasharray: 3 3; }
+.star-node.dist-5 .star-ring, .star-node.dist-far .star-ring { opacity: 0.28; stroke-dasharray: 1.5 3; }
+.star-node.impact-start .star-shape { stroke: var(--accent); stroke-width: 5; fill: var(--accent-soft); }
+.impact-mode .star-link:not(.walk) { opacity: 0.45; }
+.star-link.walk .star-edge { stroke-width: 2.6; }
+.starmap-direction { display: inline-flex; gap: 0; }
+.starmap-direction button { border-radius: 0; }
+.starmap-direction button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.starmap-direction button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.starmap-direction button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.starmap-impact { margin-top: 12px; }
+.starmap-impact h2 { font-size: 16px; margin: 0 0 6px; }
+.starmap-impact-list { margin: 8px 0 0; padding-left: 22px; font-size: 14px; }
+.starmap-impact-list li { margin: 2px 0; }
+.starmap-impact-list li > .muted { margin-left: 8px; font-size: 13px; }
 
 /* ===== Cockpit — a personal, gamified look (ADR-0156, after atlas ADR-0509) ====
    A third look beside light and dark, chosen on the account page and kept in

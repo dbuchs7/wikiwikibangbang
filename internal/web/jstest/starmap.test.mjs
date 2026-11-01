@@ -3,8 +3,9 @@
 // groups, what the filters keep with one hop of context, a node's
 // neighbourhood at a depth, the drill path, the captions a zoom shows,
 // the frame that fits, a seeded layout that is the same for the same map,
-// and a simulation that cools to the same rest every time, holds a pinned
-// node and approximates the exact repulsion with its quadtree. They run in
+// a simulation that cools to the same rest every time, holds a pinned
+// node and approximates the exact repulsion with its quadtree, and an
+// impact walk's answer (ADR-0159) as a map, a list and an address. They run in
 // Node.js without a browser and without dependencies:
 //
 //   node --test "internal/web/jstest/*.test.mjs"
@@ -12,7 +13,8 @@
 // The view itself is in e2e/smoke.cjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEPTHS, GROUPS, around, captionShown, drillBack, drillInto, filter, fitView, groupOf, kinds, kindOf, layout, matches, neighbourhood, size, toneOf, visible, zoomBand } from "../static/assets/starmap-graph.js";
+import { DEPTHS, GROUPS, IMPACT_DEPTHS, IMPACT_DIRECTIONS, around, captionShown, distanceClass, drillBack, drillInto, filter, fitView, groupOf, impactAddress, impactGraph,
+  impactList, impactParams, impactPath, impactSummary, kinds, kindOf, layout, matches, neighbourhood, size, toneOf, visible, zoomBand } from "../static/assets/starmap-graph.js";
 import { DEFAULTS, chargeExact, chargeTree, quadtree, simulation } from "../static/assets/starmap-sim.js";
 
 const graph = {
@@ -298,4 +300,78 @@ test("the simulation over the budget's 600 nodes uses the quadtree and comes to 
   const ticks = sim.run();
   assert.ok(sim.settled && ticks <= 400);
   for (let i = 0; i < count; i++) assert.ok(Number.isFinite(sim.x[i]) && Number.isFinite(sim.y[i]));
+});
+
+// An impact walk's answer as the server gives it (ADR-0159): the start,
+// then what was reached, each with its distance and the edges that
+// reached it.
+const walk = {
+  start: "a", space: "PLAT", direction: "affected", depth: 3, truncated: false, complete: true,
+  nodes: [
+    { id: "a", kind: "item", key: "PLAT-1", title: "Home", type: "page", space: "PLAT", distance: 0, via: [] },
+    { id: "b", kind: "item", key: "PLAT-2", title: "Patch", type: "task", space: "PLAT", distance: 1, via: [{ from: "a", to: "b", kind: "parent" }] },
+    { id: "picture:a/1", kind: "picture", item: "a", name: "logo.png", space: "PLAT", distance: 1, via: [{ from: "picture:a/1", to: "a", kind: "picture" }] },
+    { id: "x", kind: "item", key: "OPS-1", title: "Ops guide", type: "page", space: "OPS", outside: true, distance: 2,
+      via: [{ from: "x", to: "b", kind: "relation", type: "depends-on" }] },
+  ],
+  edges: [
+    { from: "a", to: "b", kind: "embeds" },
+    { from: "a", to: "b", kind: "parent" },
+    { from: "picture:a/1", to: "a", kind: "picture" },
+    { from: "x", to: "b", kind: "relation", type: "depends-on" },
+    { from: "x", to: "b", kind: "relation", type: "blocks" },
+  ],
+};
+
+test("an impact view is read from the address, with depth 1 to 5 or all", () => {
+  const p = (q) => impactParams(new URLSearchParams(q));
+  assert.equal(p(""), null);
+  assert.equal(p("depth=2"), null, "a drill depth alone is no impact view");
+  assert.equal(p("impact=sideways&depth=2"), null);
+  assert.deepEqual(p("impact=affected&depth=3"), { direction: "affected", depth: 3 });
+  assert.deepEqual(p("impact=dependson&depth=all"), { direction: "dependson", depth: "all" });
+  assert.deepEqual(p("impact=affected&depth=9"), { direction: "affected", depth: 1 });
+  assert.deepEqual(p("impact=affected"), { direction: "affected", depth: 1 });
+  assert.deepEqual(IMPACT_DIRECTIONS, ["affected", "dependson"]);
+  assert.deepEqual(IMPACT_DEPTHS, [1, 2, 3, 4, 5, "all"]);
+});
+
+test("an impact view's address keeps the room, the drill path, the start, direction and depth", () => {
+  assert.equal(impactAddress("PLAT", ["PLAT-2"], { direction: "affected", depth: 3 }), "#/starmap/PLAT/PLAT-2?impact=affected&depth=3");
+  assert.equal(impactAddress("PLAT", ["PLAT-5", "picture:a/1"], { direction: "dependson", depth: "all" }),
+    "#/starmap/PLAT/PLAT-5/picture%3Aa%2F1?impact=dependson&depth=all");
+  const back = impactParams(new URLSearchParams(impactAddress("PLAT", ["PLAT-2"], { direction: "dependson", depth: 5 }).split("?")[1]));
+  assert.deepEqual(back, { direction: "dependson", depth: 5 }, "the address reads back as it was written");
+});
+
+test("the walk is asked of the item, a picture by its item and attachment", () => {
+  assert.equal(impactPath("PLAT-2", { direction: "affected", depth: 2 }), "/api/items/PLAT-2/impact?direction=affected&depth=2");
+  assert.equal(impactPath("picture:id1/att 9", { direction: "dependson", depth: "all" }), "/api/items/id1/impact?direction=dependson&depth=all&picture=att+9");
+});
+
+test("an impact walk becomes a map whose walked edges are marked", () => {
+  const g = impactGraph(walk);
+  assert.equal(g.nodes, walk.nodes);
+  assert.deepEqual(g.edges.map((e) => e.walk), [false, true, true, true, false],
+    "the embed against the walk and the second relation between the same items are not walked");
+  assert.equal(walk.edges[0].walk, undefined, "the answer itself is left as it is");
+  assert.deepEqual(impactGraph({ nodes: [{ id: "a", distance: 0 }], edges: [] }).edges, []);
+});
+
+test("a node's distance gives its class", () => {
+  assert.deepEqual([0, 1, 2, 3, 4, 5, 6, 40, -1].map(distanceClass), ["dist-0", "dist-1", "dist-2", "dist-3", "dist-4", "dist-5", "dist-far", "dist-far", "dist-0"]);
+});
+
+test("the list holds what was reached, nearest first, the server's order kept within a distance", () => {
+  const shuffled = { ...walk, nodes: [walk.nodes[3], walk.nodes[1], walk.nodes[0], walk.nodes[2]] };
+  assert.deepEqual(impactList(shuffled).map((n) => n.id), ["b", "picture:a/1", "x"]);
+  assert.deepEqual(impactList(walk).map((n) => n.distance), [1, 1, 2]);
+});
+
+test("the summary counts items and pictures apart and says when the walk ended before its depth", () => {
+  assert.deepEqual(impactSummary(walk), { items: 2, pictures: 1, farthest: 2, endedEarly: true });
+  assert.equal(impactSummary({ ...walk, depth: 2 }).endedEarly, false, "the walk reached its depth");
+  assert.equal(impactSummary({ ...walk, complete: false }).endedEarly, false, "more is reachable");
+  assert.equal(impactSummary({ ...walk, depth: "all" }).endedEarly, false, "all has no depth to end before");
+  assert.deepEqual(impactSummary({ ...walk, nodes: [walk.nodes[0]] }), { items: 0, pictures: 0, farthest: 0, endedEarly: true });
 });
