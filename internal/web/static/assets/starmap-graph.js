@@ -1,7 +1,8 @@
-// The starmap's graph without a browser (ADR-0157, ADR-0158): which kind
-// and group a node and an edge belong to, what the filters keep, a node's
-// neighbourhood at a depth, the drill path, which captions a zoom shows,
-// the frame that fits a set of points, and the seeded layout. The seeded
+// The starmap's graph without a browser (ADR-0157, ADR-0158, ADR-0159):
+// which kind and group a node and an edge belong to, what the filters
+// keep, a node's neighbourhood at a depth, the drill path, which captions
+// a zoom shows, the frame that fits a set of points, the seeded layout,
+// and an impact walk's answer as a map, a list and an address. The seeded
 // layout is a force simulation with a fixed seed and a fixed number of
 // steps, as atlas's panorama has it: the same map starts in the same place
 // on every load. The live simulation (starmap-sim.js) takes it from there.
@@ -143,6 +144,81 @@ export function visible(graph, { query = "", hidden = new Set(), trail = [], dep
   const edges = shown.edges.filter((i) => nodes.has(graph.edges[i].from) && nodes.has(graph.edges[i].to));
   const matches = new Set([...shown.matches].filter((id) => nodes.has(id)));
   return { nodes, edges, matches };
+}
+
+// IMPACT_DIRECTIONS are the ways an impact walk goes (ADR-0159):
+// affected, to what depends on the start, and dependson, to what it
+// depends on. IMPACT_DEPTHS are the depths one may choose.
+export const IMPACT_DIRECTIONS = ["affected", "dependson"];
+export const IMPACT_DEPTHS = [1, 2, 3, 4, 5, "all"];
+
+// impactParams reads an impact view from the address's parameters (a
+// URLSearchParams): its direction and depth, or null when the address
+// asks for none. A depth that is not one of IMPACT_DEPTHS is 1.
+export function impactParams(params) {
+  const direction = params.get("impact");
+  if (!IMPACT_DIRECTIONS.includes(direction)) return null;
+  const raw = params.get("depth");
+  const depth = raw === "all" ? "all" : IMPACT_DEPTHS.includes(Number(raw)) ? Number(raw) : 1;
+  return { direction, depth };
+}
+
+// impactAddress is the address of an impact view: the room, the stations
+// of the drill path it was opened from, the start last, its direction
+// and depth.
+export function impactAddress(space, stations, { direction, depth }) {
+  return "#/starmap/" + [space, ...stations].map(encodeURIComponent).join("/") + "?impact=" + direction + "&depth=" + depth;
+}
+
+// impactPath is the API path of a walk from a station: an item's key or
+// ID, or a picture's node id ("picture:<item>/<attachment>").
+export function impactPath(station, { direction, depth }) {
+  const q = new URLSearchParams({ direction, depth: String(depth) });
+  let ref = station;
+  const pic = /^picture:([^/]+)\/(.+)$/.exec(station);
+  if (pic) { ref = pic[1]; q.set("picture", pic[2]); }
+  return `/api/items/${encodeURIComponent(ref)}/impact?${q}`;
+}
+
+const edgeKey = (e) => [e.from, e.to, e.kind, e.type || ""].join("\u0000");
+
+// impactGraph turns a walk's answer into a graph the map draws: its
+// nodes as they are, each with its distance, and its edges, those the
+// walk followed marked walk.
+export function impactGraph(result) {
+  const walked = new Set();
+  for (const n of result.nodes) for (const e of n.via || []) walked.add(edgeKey(e));
+  return {
+    nodes: result.nodes,
+    edges: result.edges.map((e) => ({ ...e, walk: walked.has(edgeKey(e)) })),
+  };
+}
+
+// distanceClass is the class that grades a node by its distance from the
+// start: dist-0 for the start up to dist-5, dist-far beyond.
+export function distanceClass(distance) {
+  return distance > 5 ? "dist-far" : "dist-" + Math.max(0, distance);
+}
+
+// impactList is what the walk reached, the start left out, nearest
+// first; nodes of one distance keep the server's order.
+export function impactList(result) {
+  return result.nodes.filter((n) => n.distance > 0).map((n, i) => [n, i])
+    .sort(([a, i], [b, j]) => a.distance - b.distance || i - j).map(([n]) => n);
+}
+
+// impactSummary counts what the walk reached, the start left out: its
+// items and its pictures, the farthest distance, and whether the walk
+// ended before its depth (nothing further reachable within it).
+export function impactSummary(result) {
+  const reached = impactList(result);
+  const farthest = reached.reduce((m, n) => Math.max(m, n.distance), 0);
+  return {
+    items: reached.filter((n) => n.kind === "item").length,
+    pictures: reached.filter((n) => n.kind === "picture").length,
+    farthest,
+    endedEarly: Boolean(result.complete) && result.depth !== "all" && farthest < result.depth,
+  };
 }
 
 // zoomBand names how close the reader looks: far, where only the

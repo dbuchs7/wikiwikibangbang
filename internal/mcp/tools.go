@@ -188,6 +188,14 @@ var tools = []tool{
 		Method: "GET", Path: "/api/spaces/{space}/starmap", Params: []param{
 			{"space", str, inPath, true, "The space key."},
 		}},
+	{Name: "get_impact", Description: "The impact of an item (ADR-0159): what depends on it (direction affected: its children, the items whose relations, mentions or embeds point at it, " +
+		"its pictures and their copies) or what it depends on (direction dependson), across rooms, breadth first to a depth. Each node carries its distance in hops " +
+		"and the edges that reached it (via); nodes of another room than the item's are marked outside. Labels are no dependency. Only items your caller may read " +
+		"are walked, never through one they may not. truncated says the walk was cut at the server's budget, the nearest kept; complete that nothing further is reachable.",
+		Method: "GET", Path: "/api/items/{ref}/impact", Params: []param{refParam,
+			{"direction", str, inQuery, false, "affected (default) or dependson."},
+			{"depth", str, inQuery, false, "1 (default) to 5 hops, or all."},
+			{"picture", str, inQuery, false, "An attachment ID of the item's picture, to start at that picture instead."}}},
 	{Name: "set_labels", Description: "Replace an item's labels, e.g. [\"runbook\", \"ops\"]: lower case words, digits and dashes.",
 		Method: "PUT", Path: "/api/items/{ref}/labels", Params: []param{refParam, {"labels", array, inBody, true, "All labels the item carries afterwards."}}},
 	{Name: "set_title", Description: "Change an item's title.", Method: "PUT", Path: "/api/items/{ref}/title",

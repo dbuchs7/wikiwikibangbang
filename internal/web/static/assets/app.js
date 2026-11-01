@@ -996,6 +996,12 @@ const moduleGlyphs = {
     ["rect", { x: "3.5", y: "5", width: "17", height: "14", rx: "2.5", fill: "none", stroke: "#fff", "stroke-width": "1.8" }],
     ["path", { d: "M5 17.5l4.5-4.5 3.5 3 3-2.5 3.5 4z", fill: "#fff" }],
     ["circle", { cx: "15.5", cy: "9", r: "1.8", fill: "#fff" }]],
+  // The starmap: stars joined by lines, as its symbol behind the nine dots.
+  starmap: [
+    ["path", { d: "M5 7l7 4 7-5M12 11l-4 8M12 11l6 6", fill: "none", stroke: "#fff", "stroke-width": "1.6", "stroke-linecap": "round", "stroke-linejoin": "round" }],
+    ["circle", { cx: "5", cy: "7", r: "1.9", fill: "#fff" }], ["circle", { cx: "19", cy: "6", r: "1.9", fill: "#fff" }],
+    ["circle", { cx: "12", cy: "11", r: "2.4", fill: "#fff" }], ["circle", { cx: "8", cy: "19", r: "1.9", fill: "#fff" }],
+    ["circle", { cx: "18", cy: "17", r: "1.9", fill: "#fff" }]],
   protection: [
     ["path", { d: "M12 3l7 3v5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6z", fill: "#fff" }],
     ["path", { d: "M8.8 11.8l2.3 2.3 4.2-4.4", fill: "none", class: "module-stroke", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" }]],
@@ -1473,7 +1479,7 @@ async function route() {
       case "my-notes": return await myNotesView();
       case "comments": return await commentsView(arg);
       case "album": return albumView();
-      case "starmap": return await starmapScreen(arg || "", hash.split("?")[0].split("/").slice(3).map(decodeURIComponent), Number(params.get("depth")) || 1);
+      case "starmap": return await starmapScreen(arg || "", hash.split("?")[0].split("/").slice(3).map(decodeURIComponent), params);
       case "search": return await searchView(arg || "");
       case "query": return await queryView(params);
       case "account": return await accountView();
@@ -2010,6 +2016,9 @@ async function homeView() {
       h("strong", { text: t("storage.homeNotice", { level: storageLevel(storage.level) }) }), " ",
       t("storage.free", { free: sizeText(storage.free), total: sizeText(storage.total), share: storage.total ? Math.round((storage.free * 1000) / storage.total) / 10 : "?" })) : "",
     h("section", { class: "home-tiles", "aria-label": t("home.quick") },
+      // The starmap first: one's rooms as a map of connections (ADR-0157);
+      // the view picks the favourite or first room.
+      quick("#/starmap", t("nav.starmap"), t("home.starmapText"), "home-starmap", null, "starmap"),
       quick("#/tasks", t("nav.tasks"), t("home.tasksText"), "home-tasks",
         requests.length ? h("span", { class: "chip", text: t("nav.requestsWaiting", { n: requests.length }) }) : null, "tasks"),
       quick("#/notifications", t("nav.notifications"), notes.unread ? t("home.notesUnread", { n: notes.unread }) : t("home.notesNone"), "home-notes",
@@ -3587,11 +3596,12 @@ function kanbanSettings(k, type, columns, kpath) {
 
 // starmapScreen shows the starmap of a room (ADR-0157): its items,
 // pictures and shared labels in their context, filtered in the browser;
-// the rest of the address is the drill path into it (ADR-0158).
-async function starmapScreen(space, path, depth) {
+// the rest of the address is the drill path into it (ADR-0158), and its
+// parameters may ask for the impact of its last station (ADR-0159).
+async function starmapScreen(space, path, params) {
   const section = h("section", { id: "starmap" });
   screen()(h("h1", { text: t("starmap.title") }), h("p", { class: "muted", text: t("starmap.intro") }), section);
-  await starmapView(section, space, path, depth);
+  await starmapView(section, space, path, params);
 }
 
 // albumView shows the images and drawings of every item one may read

@@ -87,7 +87,7 @@ func (x *Session) Starmap(space string, maxNodes int) (Starmap, error) {
 	if !x.s.HasSpace(space) || x.Role(space) < Viewer {
 		return Starmap{}, notFound("space %q", space)
 	}
-	readable := func(it *Item) bool { return it != nil && it.Presence == Live && x.s.canRead(x.who, it) }
+	readable := x.liveReadable
 	b := starBuilder{max: maxNodes, kept: map[string]bool{}}
 
 	// 1. The items of the space, in tree order: depth first, siblings in
@@ -123,13 +123,7 @@ func (x *Session) Starmap(space string, maxNodes int) (Starmap, error) {
 
 	// 2. Relations of the space's items, hand-made and derived; an end in
 	// another space brings its item in as an outside node.
-	rels := make([]*Relation, 0, len(x.s.rels))
-	for _, r := range x.s.rels {
-		rels = append(rels, r)
-	}
-	slices.SortFunc(rels, func(a, b *Relation) int {
-		return cmp.Or(cmp.Compare(a.created, b.created), strings.Compare(string(a.ID), string(b.ID)))
-	})
+	rels := x.s.sortedRelations()
 	// An outside item is on the map only while a node of the space that
 	// brings it in is: its anchors.
 	var outside []*Item
@@ -151,18 +145,12 @@ func (x *Session) Starmap(space string, maxNodes int) (Starmap, error) {
 		}
 		bringIn(from, string(to.ID))
 		bringIn(to, string(from.ID))
-		e := StarEdge{From: string(r.From), To: string(r.To), Kind: StarRelation, Type: r.Type}
-		if r.Derived {
-			e = StarEdge{From: string(r.From), To: string(r.To), Kind: r.Type}
-		}
-		relEdges = append(relEdges, e)
+		relEdges = append(relEdges, relationEdge(r))
 	}
 
 	// 3. Pictures: the newest version of each file of the space's items, as
 	// the album shows it (ADR-0054, ADR-0103), and the original of a copy
 	// (ADR-0055). An original in another space brings its item in.
-	type stackKey struct{ item, first ID }
-	seen := map[stackKey]bool{}
 	var pictures []StarNode
 	var picEdges []StarEdge
 	type origin struct {
@@ -172,43 +160,23 @@ func (x *Session) Starmap(space string, maxNodes int) (Starmap, error) {
 	}
 	var originals []*origin
 	originAt := map[string]*origin{}
-	for _, p := range x.Pictures(space, IsPicture) {
-		k := stackKey{p.Item.ID, p.First}
-		if seen[k] {
-			continue // an older version of a stack shown already
-		}
-		seen[k] = true
-		it := x.s.items[p.Item.ID]
-		id := pictureNodeID(it.ID, p.Attachment.ID)
-		pictures = append(pictures, StarNode{ID: id, Kind: StarPicture, Space: it.Space, Item: it.ID, Name: p.Attachment.Name})
-		picEdges = append(picEdges, StarEdge{From: id, To: string(it.ID), Kind: StarOwner})
-		first, _ := it.attachment(p.First)
-		if first == nil || first.Source == nil || first.Source.Item == it.ID {
-			continue // no copy
-		}
-		src := x.s.items[first.Source.Item]
-		if !readable(src) {
+	for _, p := range x.starPictures(space) {
+		pictures = append(pictures, p.node)
+		picEdges = append(picEdges, p.ownerEdge())
+		if p.src == nil {
 			continue
 		}
-		srcFirst := first.Source.Attachment
-		if a, ok := src.attachment(srcFirst); ok {
-			srcFirst = firstVersion(src, *a)
-		}
-		top := latestVersion(src, srcFirst)
-		if top == nil || !IsPicture(*top) {
-			continue
-		}
-		to := pictureNodeID(src.ID, top.ID)
-		picEdges = append(picEdges, StarEdge{From: id, To: to, Kind: StarCopy})
-		if src.Space != space {
-			o := originAt[to]
+		e, _ := p.copyEdge()
+		picEdges = append(picEdges, e)
+		if p.src.Space != space {
+			o := originAt[e.To]
 			if o == nil {
-				o = &origin{owner: src, top: top}
-				originAt[to] = o
+				o = &origin{owner: p.src, top: p.srcTop}
+				originAt[e.To] = o
 				originals = append(originals, o)
 			}
-			o.copies = append(o.copies, id)
-			bringIn(src, string(it.ID))
+			o.copies = append(o.copies, p.node.ID)
+			bringIn(p.src, string(p.node.Item))
 		}
 	}
 
@@ -269,6 +237,102 @@ func (x *Session) Starmap(space string, maxNodes int) (Starmap, error) {
 		}
 	}
 	return Starmap{Nodes: b.nodes, Edges: b.edges, Truncated: b.truncated}, nil
+}
+
+// liveReadable reports whether an item is live and the principal may
+// read it: the only items a starmap or an impact walk shows or passes
+// (D10).
+func (x *Session) liveReadable(it *Item) bool {
+	return it != nil && it.Presence == Live && x.s.canRead(x.who, it)
+}
+
+// sortedRelations are the store's relations as they were made.
+func (s *Store) sortedRelations() []*Relation {
+	rels := make([]*Relation, 0, len(s.rels))
+	for _, r := range s.rels {
+		rels = append(rels, r)
+	}
+	slices.SortFunc(rels, func(a, b *Relation) int {
+		return cmp.Or(cmp.Compare(a.created, b.created), strings.Compare(string(a.ID), string(b.ID)))
+	})
+	return rels
+}
+
+// relationEdge is the edge of a relation: StarRelation with its type for
+// one made by hand, the derived type (mentions, embeds) for a derived one.
+func relationEdge(r *Relation) StarEdge {
+	if r.Derived {
+		return StarEdge{From: string(r.From), To: string(r.To), Kind: r.Type}
+	}
+	return StarEdge{From: string(r.From), To: string(r.To), Kind: StarRelation, Type: r.Type}
+}
+
+// starPicture is a picture node with what joins it to the rest: its
+// item, and for a copy whose original the principal may read, the item
+// and the newest version of that original (ADR-0055).
+type starPicture struct {
+	node   StarNode
+	src    *Item
+	srcTop *Attachment
+}
+
+// ownerEdge joins a picture to its item.
+func (p starPicture) ownerEdge() StarEdge {
+	return StarEdge{From: p.node.ID, To: string(p.node.Item), Kind: StarOwner}
+}
+
+// copyEdge joins a copy to the newest version of its original; ok is
+// false for a picture that is no copy of a readable original.
+func (p starPicture) copyEdge() (StarEdge, bool) {
+	if p.src == nil {
+		return StarEdge{}, false
+	}
+	return StarEdge{From: p.node.ID, To: pictureNodeID(p.src.ID, p.srcTop.ID), Kind: StarCopy}, true
+}
+
+// starPictures are the picture nodes of the readable live items of a
+// space, or of every space for "": the newest version of each file, as
+// the album shows it (ADR-0054, ADR-0103), newest first, each with the
+// original of a copy when the principal may read it.
+func (x *Session) starPictures(space string) []starPicture {
+	type stackKey struct{ item, first ID }
+	seen := map[stackKey]bool{}
+	var out []starPicture
+	for _, p := range x.Pictures(space, IsPicture) {
+		k := stackKey{p.Item.ID, p.First}
+		if seen[k] {
+			continue // an older version of a stack listed already
+		}
+		seen[k] = true
+		it := x.s.items[p.Item.ID]
+		sp := starPicture{node: StarNode{ID: pictureNodeID(it.ID, p.Attachment.ID), Kind: StarPicture, Space: it.Space, Item: it.ID, Name: p.Attachment.Name}}
+		sp.src, sp.srcTop = x.copyOrigin(it, p.First)
+		out = append(out, sp)
+	}
+	return out
+}
+
+// copyOrigin is the item and the newest version of the original of the
+// stack that starts with first, when that stack is a copy of a picture
+// of another item the principal may read.
+func (x *Session) copyOrigin(it *Item, first ID) (*Item, *Attachment) {
+	a, _ := it.attachment(first)
+	if a == nil || a.Source == nil || a.Source.Item == it.ID {
+		return nil, nil // no copy
+	}
+	src := x.s.items[a.Source.Item]
+	if !x.liveReadable(src) {
+		return nil, nil
+	}
+	srcFirst := a.Source.Attachment
+	if sa, ok := src.attachment(srcFirst); ok {
+		srcFirst = firstVersion(src, *sa)
+	}
+	top := latestVersion(src, srcFirst)
+	if top == nil || !IsPicture(*top) {
+		return nil, nil
+	}
+	return src, top
 }
 
 func itemNode(it *Item, outside bool) StarNode {

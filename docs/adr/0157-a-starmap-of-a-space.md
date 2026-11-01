@@ -82,5 +82,6 @@ Strongest form: a reader learns that a page has connections they cannot see, and
 ## Links
 
 - amended by [ADR-0158](0158-the-starmap-moves-live-physics-and-separating-a-neighbourhood.md) (live physics and separating a neighbourhood)
+- amended by [ADR-0159](0159-impact-of-an-item-across-rooms-to-a-chosen-depth.md) (impact of an item across rooms, to a chosen depth)
 - relates to ADR-0001 (D1, D4, D5, D6, D10), ADR-0015 (budgets), ADR-0022 (permission model), ADR-0031 (buildless UI), ADR-0036 (a view, not a stored object), ADR-0041 (sibling order), ADR-0044 (labels), ADR-0054, ADR-0055, ADR-0090, ADR-0103 (pictures, copies, picture labels, versions), ADR-0145 (favourites first), ADR-0156 (looks)
 - after atlas ADR-0211 (panorama: a derived landscape mesh), `api/web/panorama-mesh.js` in pblumer/atlas
