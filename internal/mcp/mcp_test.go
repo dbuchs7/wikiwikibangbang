@@ -150,6 +150,7 @@ func TestEachToolIsOneAPIRequest(t *testing.T) {
 		{"get_history", `{"ref":"PLAT-1"}`, call{"GET", "/api/items/PLAT-1/history", ""}},
 		{"get_relations", `{"ref":"PLAT-1","direction":"incoming"}`, call{"GET", "/api/items/PLAT-1/relations?direction=incoming", ""}},
 		{"get_embeds", `{"ref":"PLAT-1"}`, call{"GET", "/api/items/PLAT-1/embeds", ""}},
+		{"get_starmap", `{"space":"PLAT"}`, call{"GET", "/api/spaces/PLAT/starmap", ""}},
 		{"get_item_markdown", `{"ref":"PLAT-1"}`, call{"GET", "/api/items/PLAT-1/export/md", ""}},
 		{"get_item_markdown", `{"ref":"PLAT-1","children":true}`, call{"GET", "/api/items/PLAT-1/export/md?children=true", ""}},
 		{"create_item", `{"space":"PLAT","type":"task","title":"x","properties":{"priority":"low"}}`,

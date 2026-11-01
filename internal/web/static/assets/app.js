@@ -10,6 +10,7 @@ import { commentPlugin } from "./anchors.js";
 import { personalNotes } from "./notes.js";
 import { isDrawing } from "./drawing.js";
 import { albumBrowser, retentionCard } from "./album.js";
+import { starmapView } from "./starmap.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 import { applyTheme, setTheme, isDark, chosenTheme } from "./theme.js";
 import { filtered, serverFilter, filterParams, norm } from "./filter.js";
@@ -881,6 +882,7 @@ const modules = [
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban"], icon: "M9 11l3 3 8-8M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11" },
   { id: "comments", name: "nav.comments", href: "#/comments", match: ["comments"], icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
   { id: "album", name: "nav.album", href: "#/album", match: ["album"], icon: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 8h.01" },
+  { id: "starmap", name: "nav.starmap", href: "#/starmap", match: ["starmap"], icon: "M5 7l7 4 7-5M12 11l-4 8M12 11l6 6M5 7h.01M19 6h.01M12 11h.01M8 19h.01M18 17h.01" },
   { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"], icon: "M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8zM19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z" },
   { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"], icon: "M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4" },
   { id: "account", name: "nav.account", href: "#/account", match: ["account"], icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" },
@@ -1471,6 +1473,7 @@ async function route() {
       case "my-notes": return await myNotesView();
       case "comments": return await commentsView(arg);
       case "album": return albumView();
+      case "starmap": return await starmapScreen(arg || "");
       case "search": return await searchView(arg || "");
       case "query": return await queryView(params);
       case "account": return await accountView();
@@ -3580,6 +3583,14 @@ function kanbanSettings(k, type, columns, kpath) {
       h("button", { type: "button", class: "danger", id: "kanban-remove", text: t("kanban.remove"), onclick: () => confirm(t("kanban.removeConfirm", { name: k.name }))
         && action(async () => { await del(kpath); location.hash = "#/kanbans"; }, status) })));
   return dialog;
+}
+
+// starmapScreen shows the starmap of a room (ADR-0157): its items,
+// pictures and shared labels in their context, filtered in the browser.
+async function starmapScreen(space) {
+  const section = h("section", { id: "starmap" });
+  screen()(h("h1", { text: t("starmap.title") }), h("p", { class: "muted", text: t("starmap.intro") }), section);
+  await starmapView(section, space);
 }
 
 // albumView shows the images and drawings of every item one may read

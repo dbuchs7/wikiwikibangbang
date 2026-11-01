@@ -57,6 +57,7 @@ func itemRoutes(d Deps) []Route {
 
 		{Method: get, Pattern: "/api/items", Summary: "Find readable items, paged; q narrows to items whose key, title, type, state or labels hold every word; query selects and orders them in the query language", Handler: http.HandlerFunc(h.findItems)},
 		{Method: get, Pattern: "/api/spaces/{space}/tree", Summary: "The readable children of an item (parent) or the top of a space, in sibling order, paged", Handler: http.HandlerFunc(h.tree)},
+		{Method: get, Pattern: "/api/spaces/{space}/starmap", Summary: "The starmap of a space: its readable items, pictures and shared labels with their containment, relations, origins and labels, and related items of other spaces; truncated beyond the budget StarmapNodes", Handler: http.HandlerFunc(h.starmap)},
 		{Method: get, Pattern: "/api/search", Summary: "Full-text search over readable items (q; space, type, state), best first, paged", Handler: http.HandlerFunc(h.searchItems)},
 		{Method: post, Pattern: "/api/items", Summary: "Create an item", Handler: http.HandlerFunc(h.createItem)},
 		{Method: get, Pattern: "/api/items/{ref}", Summary: "Get an item by ID or key", Handler: http.HandlerFunc(h.getItem)},
@@ -979,6 +980,47 @@ func (h itemHandlers) tree(w http.ResponseWriter, r *http.Request) {
 		}
 		res["items"] = out
 		return res, nil
+	})
+}
+
+type starNodeJSON struct {
+	ID      string   `json:"id"`
+	Kind    string   `json:"kind"`
+	Key     string   `json:"key,omitempty"`
+	Title   string   `json:"title,omitempty"`
+	Type    string   `json:"type,omitempty"`
+	Space   string   `json:"space,omitempty"`
+	State   string   `json:"state,omitempty"`
+	Outside bool     `json:"outside,omitempty"`
+	Labels  []string `json:"labels,omitempty"`
+	Item    item.ID  `json:"item,omitempty"`
+	Name    string   `json:"name,omitempty"`
+}
+
+type starEdgeJSON struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+	Kind string `json:"kind"`
+	Type string `json:"type,omitempty"`
+}
+
+// starmap answers the graph of a space as the caller may read it
+// (ADR-0157), at most the budget StarmapNodes of nodes.
+func (h itemHandlers) starmap(w http.ResponseWriter, r *http.Request) {
+	h.read(w, r, func(x *item.Session) (any, error) {
+		m, err := x.Starmap(r.PathValue("space"), budget.Get().StarmapNodes)
+		if err != nil {
+			return nil, err
+		}
+		nodes, edges := make([]starNodeJSON, len(m.Nodes)), make([]starEdgeJSON, len(m.Edges))
+		for i, n := range m.Nodes {
+			nodes[i] = starNodeJSON{ID: n.ID, Kind: n.Kind, Key: n.Key, Title: n.Title, Type: n.Type, Space: n.Space, State: n.State,
+				Outside: n.Outside, Labels: n.Labels, Item: n.Item, Name: n.Name}
+		}
+		for i, e := range m.Edges {
+			edges[i] = starEdgeJSON{From: e.From, To: e.To, Kind: e.Kind, Type: e.Type}
+		}
+		return map[string]any{"nodes": nodes, "edges": edges, "truncated": m.Truncated}, nil
 	})
 }
 
