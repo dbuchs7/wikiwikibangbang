@@ -265,6 +265,8 @@ type secretJSON struct {
 	Blocks   bool     `json:"blocks,omitempty"`
 	Readers  []string `json:"readers,omitempty"`
 	Requests []string `json:"requests,omitempty"`
+	// RequestedAt: when the caller asked, while they wait (ADR-0161).
+	RequestedAt *time.Time `json:"requestedAt,omitempty"`
 }
 
 // withSecrets adds what the caller sees of an item's protected passages.
@@ -274,7 +276,12 @@ func withSecrets(x *item.Session, j itemJSON) itemJSON {
 		return j
 	}
 	for _, v := range views {
-		j.Secrets = append(j.Secrets, secretJSON{ID: v.ID, By: v.By, Readable: v.Readable, Decides: v.Decides, Requested: v.Requested, Blocks: v.Blocks, Readers: v.Readers, Requests: v.Requests})
+		sj := secretJSON{ID: v.ID, By: v.By, Readable: v.Readable, Decides: v.Decides, Requested: v.Requested, Blocks: v.Blocks, Readers: v.Readers, Requests: v.Requests}
+		if v.Requested && !v.RequestedAt.IsZero() {
+			at := v.RequestedAt
+			sj.RequestedAt = &at
+		}
+		j.Secrets = append(j.Secrets, sj)
 	}
 	all := x.ReadsAllSecrets(j.ID)
 	j.ReadsAllSecrets = &all

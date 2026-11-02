@@ -560,6 +560,9 @@ function embedLoader(chain) {
     if (chain.includes(ref)) return h("p", { class: "muted pm-embed-note", text: t("embed.cycle") });
     if (chain.length > embedDepth) return h("p", { class: "muted pm-embed-note", text: t("embed.deep") });
     const [{ item }, { embeds }] = await Promise.all([get("/api/items/" + ref), get(`/api/items/${ref}/embeds`)]);
+    // Its protections ask its own item for access (ADR-0161).
+    showSecrets(item, "/api/items/" + encodeURIComponent(item.id));
+    await learnNames((item.secrets || []).map((sc) => sc.by).filter((p) => !p.startsWith("@"))).catch(() => {});
     const resolve = async (r) => (await get("/api/items/" + encodeURIComponent(r))).item;
     const props = Object.entries(item.properties || {}).filter(([, v]) => v !== null && v !== "" && !(Array.isArray(v) && !v.length));
     return h("div", { class: "pm-embed-content", "data-embedded": item.key },
@@ -1959,11 +1962,13 @@ const mayEdit = (role) => role === "editor" || role === "space-admin";
 
 async function homeView() {
   const show = screen();
-  const [{ spaces }, { types }, notes, brand, { requests }, mine, storage] = await Promise.all([get("/api/spaces"), get("/api/types"),
+  const [{ spaces }, { types }, notes, brand, { requests }, mine, storage, access] = await Promise.all([get("/api/spaces"), get("/api/types"),
     get("/api/notifications?limit=1").catch(() => ({ unread: 0 })), get("/branding.json").catch(() => ({})),
     me.admin ? get("/api/account-requests").catch(() => ({ requests: [] })) : { requests: [] },
     get("/api/notes").catch(() => ({ notes: [] })),
-    me.admin ? get("/api/storage").catch(() => null) : null]);
+    me.admin ? get("/api/storage").catch(() => null) : null,
+    // Requests to read protected content that wait on one (ADR-0161).
+    get("/api/me/access-requests?limit=1").catch(() => ({ total: 0 }))]);
   if (me.admin) setRequests(requests.length);
   const anyEditable = spaces.some((s) => mayEdit(s.role));
   // A greeting by the time of day, the reader's own clock.
@@ -2003,7 +2008,7 @@ async function homeView() {
         stats,
         h("p", { class: "actions-row" },
           anyEditable ? link("#/new", t("home.newPage"), "button primary") : null,
-          link("#/tasks", t("home.myTasks"), "button"))),
+          link(access.total ? "#/tasks/access" : "#/tasks", access.total ? t("home.myTasksAccess", { n: access.total }) : t("home.myTasks"), "button", "home-my-tasks"))),
       // The design's own picture replaces the product's (ADR-0095).
       brand.assets?.welcome ? ownWelcome(brand) : h("img", { class: "welcome-art", id: "welcome-art", src: welcomeArt, alt: "", width: 480, height: 320 }),
       // The installed version, small, for support questions and releases.
@@ -2012,6 +2017,8 @@ async function homeView() {
     // and decided under the tasks.
     requests.length ? h("a", { class: "notice requests-notice", href: "#/tasks", id: "home-requests" },
       h("strong", { text: t("requests.waiting", { n: requests.length }) }), " ", t("requests.homeHint")) : "",
+    access.total ? h("a", { class: "notice requests-notice", href: "#/tasks/access", id: "home-access" },
+      h("strong", { text: t("accessRequest.waiting", { n: access.total }) }), " ", t("accessRequest.homeHint")) : "",
     // A storage getting full is said to administrators first (ADR-0150).
     storage && storage.level !== "ok" ? h("a", { class: "notice storage-notice storage-" + storage.level, href: "#/admin", id: "home-storage" },
       h("strong", { text: t("storage.homeNotice", { level: storageLevel(storage.level) }) }), " ",
@@ -2020,8 +2027,10 @@ async function homeView() {
       // The starmap first: one's rooms as a map of connections (ADR-0157);
       // the view picks the favourite or first room.
       quick("#/starmap", t("nav.starmap"), t("home.starmapText"), "home-starmap", null, "starmap"),
-      quick("#/tasks", t("nav.tasks"), t("home.tasksText"), "home-tasks",
-        requests.length ? h("span", { class: "chip", text: t("nav.requestsWaiting", { n: requests.length }) }) : null, "tasks"),
+      quick(access.total ? "#/tasks/access" : "#/tasks", t("nav.tasks"), t("home.tasksText"), "home-tasks",
+        requests.length || access.total ? h("span", { class: "home-chips" },
+          requests.length ? h("span", { class: "chip", text: t("nav.requestsWaiting", { n: requests.length }) }) : null,
+          access.total ? h("span", { class: "chip", id: "home-access-count", text: t("accessRequest.chip", { n: access.total }) }) : null) : null, "tasks"),
       quick("#/notifications", t("nav.notifications"), notes.unread ? t("home.notesUnread", { n: notes.unread }) : t("home.notesNone"), "home-notes",
         findings ? h("span", { class: "chip", text: t("nav.findingsOpen", { n: findings }) }) : null, "conversations"),
       // One's personal notes, wherever they were made (ADR-0113).
@@ -2550,7 +2559,8 @@ async function requestsCard() {
 
 async function tasksView(tab, params) {
   const show = screen();
-  const [{ types }, { spaces }, requests, { kanbans }] = await Promise.all([get("/api/types"), get("/api/spaces"), requestsCard(), get("/api/kanbans").catch(() => ({ kanbans: [] }))]);
+  const [{ types }, { spaces }, requests, { kanbans }, access] = await Promise.all([get("/api/types"), get("/api/spaces"), requestsCard(), get("/api/kanbans").catch(() => ({ kanbans: [] })),
+    get("/api/me/access-requests").catch(() => ({ requests: [], total: 0 }))]);
   // A label that is a kanban's links to its board: a task on a kanban is
   // in the list as well (ADR-0060).
   const kanbanOf = new Map(kanbans.map((k) => [`${k.space}\n${k.label}`, k]));
@@ -2584,8 +2594,11 @@ async function tasksView(tab, params) {
     unassigned: open.filter((it) => assigneeOf(it) === ""),
     all: open,
   };
-  const current = lists[tab] ? tab : (lists.mine.length ? "mine" : "all");
-  const shown = lists[current].filter((it) => !space || it.space === space);
+  // The requests to read protected content that one decides are a tab of
+  // their own, and a card on the others while any wait (ADR-0161).
+  const accessTab = tab === "access";
+  const current = accessTab ? "access" : lists[tab] ? tab : (lists.mine.length ? "mine" : "all");
+  const shown = (lists[current] || []).filter((it) => !space || it.space === space);
   // Overdue first, then by due date, then the most urgent, then by key.
   shown.sort((a, b) => {
     const da = dueOf(a) || "9999", db = dueOf(b) || "9999";
@@ -2714,7 +2727,9 @@ async function tasksView(tab, params) {
   const tabLink = (id, label) => link(`#/tasks/${id}${query()}`, `${label} (${lists[id].length})`, id === current ? "tab active" : "tab");
   const tabs = h("nav", { class: "tabs", "aria-label": t("tasks.title") },
     tabLink("mine", t("tasks.mine")), tabLink("unassigned", t("tasks.unassigned")), tabLink("all", t("tasks.all")),
+    link(`#/tasks/access${query()}`, `${t("accessRequest.tab")} (${access.total})`, accessTab ? "tab active" : "tab", "tab-access"),
     link("#/kanbans", t("kanban.tab"), "tab", "tab-kanbans"));
+  const accessCard = accessTab || access.total ? await accessRequestsCard(access) : "";
   // The tab links carry the filters as they change.
   const relink = () => tabs.querySelectorAll("a").forEach((a) => { a.href = a.getAttribute("href").split("?")[0] + query(); });
   show(
@@ -2728,17 +2743,47 @@ async function tasksView(tab, params) {
           })]) }) : null)),
     tabs,
     requests,
+    accessCard,
     status,
-    h("div", { class: "tasks-layout" }, h("section", { id: "tasks" }, shown.length
+    accessTab ? null : h("div", { class: "tasks-layout" }, h("section", { id: "tasks" }, shown.length
       ? [h("table", {}, h("thead", {}, h("tr", {}, [t("col.item"), t("col.title"), t("tasks.labels"), t("col.state"), t("tasks.assignee"), t("tasks.due"), t("tasks.priority"), t("col.space"), ""]
         .map((c) => h("th", { text: c }))), filterRow),
       h("tbody", {}, rows.map(([, tr]) => tr))), h("p", { class: "tasks-foot" }, count, reset), noneShown]
       : empty(current === "mine" ? t("tasks.noneMine") : t("tasks.none"))),
     labelPanel),
-    h("p", { class: "muted", text: t("tasks.conventions") }),
-    page.next ? h("p", { class: "notice warning", text: t("tasks.truncated", { n: items.length }) }) : null,
+    accessTab ? null : h("p", { class: "muted", text: t("tasks.conventions") }),
+    page.next && !accessTab ? h("p", { class: "notice warning", text: t("tasks.truncated", { n: items.length }) }) : null,
   );
   if (rows.length) apply();
+}
+
+// accessRequestsCard lists the requests to read protected content that
+// wait on the viewer (ADR-0161): one entry per person and protection, with
+// the item, which protection, when they asked, and Grant and Decline.
+// Nothing is stored for an entry: it is the request on the item, and it
+// leaves the list once answered. The protected content is not shown here.
+async function accessRequestsCard(access) {
+  const list = access.requests || [];
+  await learnNames(list.map((r) => r.principal));
+  const status = h("div", { class: "status" });
+  const decide = (r, grant) => action(() => post(`/api/items/${encodeURIComponent(r.item)}/secrets/${encodeURIComponent(r.secret)}/requests/${encodeURIComponent(r.principal)}`, { grant }), status);
+  return h("section", { class: "card access-card", id: "tasks-access" },
+    h("h2", { text: t("accessRequest.tasksTitle", { n: access.total }) }),
+    h("p", { class: "muted", text: t("accessRequest.tasksHelp") }),
+    list.length
+      ? h("table", { id: "access-requests" },
+        h("thead", {}, h("tr", {}, [t("accessRequest.who"), t("col.item"), t("accessRequest.protection"), t("requests.when"), ""].map((c) => h("th", { text: c })))),
+        h("tbody", {}, list.map((r) => h("tr", { class: "access-request", "data-principal": r.principal, "data-key": r.key, "data-secret": r.secret },
+          h("td", {}, h("strong", { text: person(r.principal) })),
+          h("td", {}, link("#/item/" + encodeURIComponent(r.key), r.key, "key"), " ", r.title, " ", h("span", { class: "muted", text: t("accessRequest.inRoom", { space: r.space }) })),
+          h("td", { text: r.blocks ? t("secret.section", { n: r.number }) : t("secret.passage", { n: r.number }) }),
+          h("td", { class: "muted", text: when(r.at) }),
+          h("td", { class: "task-actions" },
+            h("button", { type: "button", class: "primary access-grant", text: t("secret.grant"), "aria-label": t("accessRequest.grantLabel", { who: person(r.principal), key: r.key }), onclick: () => decide(r, true) }), " ",
+            h("button", { type: "button", class: "secondary access-decline", text: t("secret.decline"), "aria-label": t("accessRequest.declineLabel", { who: person(r.principal), key: r.key }), onclick: () => decide(r, false) }))))))
+      : empty(t("accessRequest.none"), "access-none"),
+    access.next ? h("p", { class: "notice warning", text: t("accessRequest.more", { n: list.length, total: access.total }) }) : null,
+    status);
 }
 
 // --- kanbans (ADR-0060) -------------------------------------------------------
@@ -4104,10 +4149,12 @@ async function itemView(ref, params = new URLSearchParams()) {
   if (type.body) {
     // Protected passages show readable or veiled; one who may change the
     // text protects a passage from what they read (ADR-0088).
-    const secretOf = new Map((item.secrets || []).map((sc) => [sc.id, sc]));
-    setSecretClass((ref) => (secretOf.get(ref)?.readable ? "secret-readable" : "secret-veiled"));
+    // Embedded items add theirs as they are drawn (ADR-0161).
+    shownSecrets.clear();
+    showSecrets(item, path);
+    setSecretClass((ref) => (shownSecrets.get(ref)?.sc.readable ? "secret-readable" : "secret-veiled"));
     // A veiled block says who decides and offers to ask (ADR-0160).
-    setVeiledContent((ref) => veiledBlockContent(path, secretOf.get(ref), status));
+    setVeiledContent((ref) => veiledBlockContent(ref));
     const protect = canEdit && readsAll && live && !editing ? (at) => protectPassageForm(protecting, path, item, at, status) : null;
     const edit = editing ? done : canEdit && readsAll ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null;
     const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit, notes, showEditors);
@@ -4235,11 +4282,19 @@ function bodySection(item, embeds, editing, threads, attachments, protect, edit,
       note: notes ? notes.start : undefined, protect: protect || undefined,
       actions: edit ? [edit] : [], embedContent: embedLoader([item.id]), tasks: taskTools(item, false) });
     const section = h("section", { id: "body", class: "reading" }, view.element);
-    // A click on a protected passage shows it in the list of passages.
+    // A click on a veiled passage or block, the item's or an embedded
+    // item's, asks for access (ADR-0161); on a readable one it shows it in
+    // the list of passages.
     const open = (ev) => {
       if (ev.target.closest?.("button")) return;
       const el = ev.target.closest?.(".pm-secret, .pm-veiled");
-      if (!el || (ev.type === "keydown" && ev.key !== "Enter")) return;
+      if (!el || (ev.type === "keydown" && ev.key !== "Enter" && ev.key !== " ")) return;
+      const shown = shownSecrets.get(el.dataset.secret);
+      if (!shown || !shown.sc.readable) {
+        ev.preventDefault();
+        if (shown) accessDialog(el.dataset.secret);
+        return;
+      }
       const entry = document.querySelector(`#secrets li[data-secret="${CSS.escape(el.dataset.secret)}"]`);
       if (!entry) return;
       entry.scrollIntoView({ block: "nearest" });
@@ -4355,16 +4410,83 @@ function blockSummary(b) {
 }
 
 // veiledBlockContent is what a veiled block shows beside its bar
-// (ADR-0160): that it is protected, who decides, and a button to ask.
-function veiledBlockContent(path, sc, status) {
+// (ADR-0160): that it is protected, who decides, and a button that asks
+// for access, or says one asked, in a dialog (ADR-0161). It serves the
+// blocks of embedded items as well as the item's own.
+function veiledBlockContent(ref) {
   const box = h("span", { class: "pm-veiled-text" }, h("strong", { text: t("secret.veiledBlock") }));
+  const sc = shownSecrets.get(ref)?.sc;
   if (!sc) return box;
-  box.append(" ", h("span", { class: "muted", text: t("secret.decidedBy", { who: sc.by.startsWith("@") ? sc.by : person(sc.by) }) }), " ");
-  box.append(sc.requested
-    ? h("span", { class: "notice", text: t("secret.waiting") })
-    : h("button", { type: "button", class: "secondary secret-request-block", text: t("secret.request"),
-      onclick: () => action(() => post(`${path}/secrets/${encodeURIComponent(sc.id)}/request`), status) }));
+  box.append(" ", h("span", { class: "muted", text: t("secret.decidedBy", { who: decidedBy(sc) }) }), " ",
+    h("button", { type: "button", class: "secondary secret-request-block" + (sc.requested ? " secret-waiting" : ""),
+      "aria-label": sc.requested ? t("accessRequest.pendingLabel") : t("accessRequest.askLabel"),
+      text: sc.requested ? t("secret.waiting") : t("accessRequest.askMore"),
+      onclick: (ev) => { ev.preventDefault(); ev.stopPropagation(); accessDialog(ref); } }));
   return box;
+}
+
+// --- access requests (ADR-0161) -------------------------------------------------
+
+// shownSecrets are the protections of what the page shows — the item's
+// and those of the items it embeds — by ID, each with its item, the API
+// path to ask at and its number in its item's list of protections, so a
+// click on a veiled one asks the right item.
+const shownSecrets = new Map();
+
+function showSecrets(item, path) {
+  (item.secrets || []).forEach((sc, i) => shownSecrets.set(sc.id, { sc, path, item, number: i + 1 }));
+}
+
+function decidedBy(sc) {
+  return sc.by.startsWith("@") ? sc.by : person(sc.by);
+}
+
+// accessDialog explains a veiled passage or block and asks for access to
+// it: what is protected, who decides, and what happens next. When one
+// asked already, it says when and for whom it waits; a request cannot be
+// withdrawn. The page is read again after a request is sent.
+async function accessDialog(ref) {
+  const shown = shownSecrets.get(ref);
+  if (!shown || shown.sc.readable || document.getElementById("access-dialog")) return;
+  const { sc, path, item, number } = shown;
+  await learnNames(sc.by.startsWith("@") ? [] : [sc.by]).catch(() => {});
+  const who = decidedBy(sc), space = item.space, title = item.title || item.key;
+  let sent = false;
+  const status = h("p", { class: "error", role: "alert", hidden: true });
+  const body = h("div", { class: "access-body" },
+    h("p", { class: "access-what" }, h("strong", { text: sc.blocks ? t("accessRequest.whatBlocks", { n: number, title }) : t("accessRequest.whatPassage", { n: number, title }) })),
+    h("p", { class: "muted", text: t("accessRequest.help") }),
+    h("p", { id: "access-deciders", text: t("accessRequest.deciders", { who, space }) }),
+    sc.requested
+      ? h("p", { class: "notice", id: "access-pending", text: t("accessRequest.pending", { date: when(sc.requestedAt), who, space }) })
+      : h("p", { class: "muted", text: t("accessRequest.next") }));
+  const close = h("button", { type: "button", class: sc.requested ? "primary" : "link", id: "access-close", text: sc.requested ? t("common.close") : t("common.cancel"), onclick: () => d.close() });
+  const ask = sc.requested ? null : h("button", { type: "button", class: "primary", id: "access-ask", text: t("accessRequest.ask"), onclick: async () => {
+    ask.disabled = true;
+    try {
+      await post(`${path}/secrets/${encodeURIComponent(sc.id)}/request`);
+      sent = true;
+      body.replaceChildren(h("p", { class: "notice success", id: "access-sent", role: "status", text: t("accessRequest.sent", { who, space }) }));
+      ask.remove();
+      close.textContent = t("common.close");
+      close.className = "primary";
+      close.focus();
+    } catch (err) {
+      status.textContent = err.message;
+      status.hidden = false;
+      ask.disabled = false;
+    }
+  } });
+  const d = h("dialog", { class: "note-dialog access-dialog", id: "access-dialog", "aria-labelledby": "access-title" },
+    h("div", { class: "drawing-bar" }, h("strong", { id: "access-title", text: t("accessRequest.title") })),
+    h("div", { class: "note-form" }, body, status, h("div", { class: "actions-row" }, ask, close)));
+  d.addEventListener("close", () => {
+    d.remove();
+    if (sent) route();
+  });
+  document.body.append(d);
+  d.showModal();
+  (ask || close).focus();
 }
 
 // secretsSection lists an item's protected passages as the reader sees
@@ -4384,8 +4506,8 @@ function secretsSection(path, item, status) {
     if (!sc.readable) {
       parts.push(h("p", { class: "muted", text: t("secret.decidedBy", { who: named(sc.by) }) }));
       parts.push(sc.requested
-        ? h("p", { class: "notice", text: t("secret.waiting") })
-        : h("button", { type: "button", class: "secondary secret-request", text: t("secret.request"), onclick: () => action(() => post(base(sc) + "/request"), status) }));
+        ? h("p", { class: "notice", text: sc.requestedAt ? t("accessRequest.askedOn", { date: when(sc.requestedAt) }) : t("secret.waiting") })
+        : h("button", { type: "button", class: "secondary secret-request", text: t("accessRequest.askMore"), onclick: () => accessDialog(sc.id) }));
     }
     if (sc.decides) {
       for (const p of sc.requests || []) {

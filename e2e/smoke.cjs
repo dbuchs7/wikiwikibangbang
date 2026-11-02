@@ -3705,8 +3705,12 @@ function gitSource() {
     const veiledText = await page.textContent("#body .ProseMirror");
     check(!veiledText.includes("Paul") && veiledText.includes("▒") && veiledText.includes("Due Friday."), "bert reads the passage veiled: " + veiledText);
     check(await page.$("#edit") === null && await page.$("#protect-selection") === null, "bert cannot change the text");
+    // A click on the veiled passage asks for access in a dialog (ADR-0161).
     await page.click("#body .pm-secret.secret-veiled");
-    await page.click("#secrets .secret-request");
+    await page.waitForSelector("#access-dialog #access-ask");
+    await page.click("#access-ask");
+    await page.waitForSelector("#access-dialog #access-sent");
+    await page.click("#access-close");
     await page.waitForSelector("#secrets .notice");
     // Admin is told, and grants it.
     await boss.goto(base + "/#/notifications");
@@ -3800,12 +3804,15 @@ function gitSource() {
     check(await page.$(`img[src*="${budget.pic}"]`) === null && !(await page.textContent("#album")).includes("salary-plan"), "the album shows bert no protected picture");
     const onMap = await page.evaluate(async (b) => JSON.stringify(await (await fetch("/api/spaces/PLAT/starmap")).json()).includes(b.pic), budget);
     check(!onMap, "the starmap shows bert no protected picture");
-    // He asks for both, from the bar and from the card.
+    // He asks for both, from each bar, in the dialog it opens (ADR-0161).
     await page.goto(base + "/#/item/" + budget.key);
-    await page.click("#body .pm-veiled .secret-request-block >> nth=0");
-    await page.waitForFunction(() => document.querySelectorAll("#body .pm-veiled .secret-request-block").length === 1);
-    await page.click("#body .pm-veiled .secret-request-block");
-    await page.waitForFunction(() => document.querySelectorAll("#body .pm-veiled .notice").length === 2);
+    for (const waiting of [1, 2]) {
+      await page.click("#body .pm-veiled .secret-request-block:not(.secret-waiting) >> nth=0");
+      await page.click("#access-dialog #access-ask");
+      await page.waitForSelector("#access-dialog #access-sent");
+      await page.click("#access-close");
+      await page.waitForFunction((n) => document.querySelectorAll("#body .pm-veiled .secret-request-block.secret-waiting").length === n, waiting);
+    }
     // Admin grants both; the page is read again, as its address is the same.
     await owner.reload();
     await owner.waitForSelector("#secrets .secret-ask .secret-grant");
@@ -3820,6 +3827,94 @@ function gitSource() {
     check(await page.$("#body .pm-veiled") === null, "granted, bert reads every block");
     const granted = (await page.request.get(`${base}/api/items/${budget.id}/attachments/${budget.pic}`)).status();
     check(granted === 200, "granted, bert fetches the picture: " + granted);
+
+    step("access requests: bert, who only reads a room, clicks a veiled block and one in an embed and asks; admin answers in Tasks; the request vanishes; bert reads it (ADR-0161)");
+    const deciderCtx = await browser.newContext();
+    const decider = await deciderCtx.newPage();
+    decider.on("pageerror", (e) => problems.push("admin's page error: " + e.message));
+    await decider.goto(base + "/");
+    await decider.fill("#login [name=username]", "admin");
+    await decider.fill("#login [name=password]", adminPassword);
+    await decider.click("#login button[type=submit]");
+    await decider.waitForSelector("#nav a");
+    const bertId = await page.evaluate(async () => (await (await fetch("/api/me")).json()).user.id);
+    const vault = await decider.evaluate(async (bert) => {
+      const call = async (method, url, body) => {
+        const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+        if (!r.ok) throw new Error(`${method} ${url}: ${r.status} ${await r.text()}`);
+        return r.status === 204 ? {} : r.json();
+      };
+      await call("POST", "/api/spaces", { key: "VAULT", name: "Vault" });
+      await call("PUT", `/api/spaces/VAULT/roles/${bert}`, { role: "viewer" });
+      const edit = (await call("POST", "/api/items", { space: "VAULT", type: "page", title: "Editortest", body: [
+        { kind: "paragraph", text: "Open notes." }, { kind: "heading", level: 2, text: "Door code" }, { kind: "paragraph", text: "The code is 4711." },
+        { kind: "paragraph", text: "The safe opens with 0815." }] })).item;
+      const first = (await call("POST", `/api/items/${edit.id}/secrets`, { fromBlock: 1, toBlock: 2 })).item.secrets[0].id;
+      const second = (await call("POST", `/api/items/${edit.id}/secrets`, { fromBlock: 3, toBlock: 3 })).item.secrets[1].id;
+      const host = (await call("POST", "/api/items", { space: "VAULT", type: "page", title: "Overview", body: [
+        { kind: "paragraph", text: "The editor test, embedded:" }, { kind: "embed", ref: edit.id }] })).item;
+      return { key: edit.key, host: host.key, first, second };
+    }, bertId);
+    // Bert reads the page in German: a click on the dark bar opens the
+    // dialog that says what is protected and who decides.
+    await page.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "de" }) }));
+    await page.goto(base + "/#/item/" + vault.key);
+    await page.reload();
+    await page.waitForSelector(`#body .pm-veiled[data-secret="${vault.first}"] .pm-veiled-bar`);
+    check(!(await page.textContent("#body .ProseMirror")).includes("4711"), "bert does not read the protected section");
+    await page.click(`#body .pm-veiled[data-secret="${vault.first}"] .pm-veiled-bar`);
+    await page.waitForSelector("#access-dialog #access-ask");
+    check((await page.textContent("#access-deciders")).includes("admin") && (await page.textContent("#access-dialog")).includes("Editortest"),
+      "the dialog names the page and who decides: " + await page.textContent("#access-dialog"));
+    await page.screenshot({ path: process.env.REQUEST_DIALOG_PNG || "request-dialog.png" });
+    await page.click("#access-ask");
+    await page.waitForSelector("#access-dialog #access-sent");
+    await page.click("#access-close");
+    await page.waitForSelector(`#body .pm-veiled[data-secret="${vault.first}"] .secret-request-block.secret-waiting`);
+    // Asked again, the dialog says since when it waits.
+    await page.click(`#body .pm-veiled[data-secret="${vault.first}"] .secret-request-block`);
+    await page.waitForSelector("#access-dialog #access-pending");
+    check(await page.$("#access-dialog #access-ask") === null, "a request already made is not made again");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#access-dialog", { state: "detached" });
+    // Inside the embed on another page, the other protection is asked
+    // for, by keyboard, at the embedded item.
+    await page.goto(base + "/#/item/" + vault.host);
+    await page.waitForSelector(`#body .pm-embed-content .pm-veiled[data-secret="${vault.second}"] .secret-request-block:not(.secret-waiting)`);
+    await page.focus(`#body .pm-embed-content .pm-veiled[data-secret="${vault.second}"] .secret-request-block`);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#access-dialog #access-ask");
+    await page.click("#access-ask");
+    await page.waitForSelector("#access-dialog #access-sent");
+    await page.click("#access-close");
+    await page.waitForSelector(`#body .pm-embed-content .pm-veiled[data-secret="${vault.second}"] .secret-request-block.secret-waiting`);
+    // Admin sees both on the start page and answers them in Tasks.
+    // The start page was drawn at sign-in, before the requests: read it again.
+    await decider.goto(base + "/#/");
+    await decider.reload();
+    await decider.waitForSelector("#home-access-count");
+    check((await decider.textContent("#home-access-count")).includes("2"), "the start page counts the requests: " + await decider.textContent("#home-access-count"));
+    await decider.click("#home-access");
+    await decider.waitForSelector("#tab-access.active");
+    await decider.waitForFunction(() => document.querySelectorAll("#access-requests tr.access-request").length === 2);
+    const row = `#access-requests tr.access-request[data-secret="${vault.first}"][data-principal="${bertId}"]`;
+    check((await decider.textContent(row)).includes("bert") && (await decider.textContent(row)).includes(vault.key) && !(await decider.textContent("#tasks-access")).includes("4711"),
+      "the request names bert and the page, not the content: " + await decider.textContent(row));
+    await decider.screenshot({ path: process.env.REQUEST_TASKS_PNG || "request-tasks.png", fullPage: true });
+    await decider.click(`${row} .access-grant`);
+    await decider.waitForFunction(() => document.querySelectorAll("#access-requests tr.access-request").length === 1);
+    await decider.click(`#access-requests tr.access-request[data-secret="${vault.second}"] .access-decline`);
+    await decider.waitForSelector("#access-none");
+    await deciderCtx.close();
+    // Bert reads the granted section; the declined block stays veiled and
+    // may be asked for again.
+    await page.goto(base + "/#/item/" + vault.key);
+    await page.waitForSelector("#body .ProseMirror .pm-block-secret >> text=The code is 4711.");
+    await page.waitForSelector(`#body .pm-veiled[data-secret="${vault.second}"] .secret-request-block:not(.secret-waiting)`);
+    const told = await page.evaluate(async () => (await (await fetch("/api/notifications")).json()).notifications.map((n) => n.kind));
+    check(told.includes("SecretGranted") && told.includes("SecretDeclined"), "bert is told both answers: " + told.join(", "));
+    await page.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "" }) }));
+    await page.reload();
 
     step("editing: Done stores the text at once, also when the server learns late that the editor was left (ADR-0010)");
     const quick = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },

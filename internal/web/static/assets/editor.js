@@ -138,7 +138,12 @@ export const schema = new Schema({
     secret: {
       attrs: { ref: {} }, inclusive: false, excludes: "",
       parseDOM: [{ tag: "span[data-secret]", getAttrs: (dom) => ({ ref: dom.getAttribute("data-secret") }) }],
-      toDOM: (m) => ["span", { class: "pm-secret " + secretClass(m.attrs.ref), "data-secret": m.attrs.ref, tabindex: "0", role: "button" }, 0],
+      // A veiled one is a button that asks for access (ADR-0161).
+      toDOM: (m) => {
+        const cls = secretClass(m.attrs.ref);
+        return ["span", { class: "pm-secret " + cls, "data-secret": m.attrs.ref, tabindex: "0", role: "button",
+          "aria-label": cls === "secret-veiled" ? t("accessRequest.askLabel") : null }, 0];
+      },
     },
   },
 });

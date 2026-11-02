@@ -111,6 +111,7 @@ Strongest form: no format change; the text of headings and paragraphs can alread
 
 ## Links
 
+- amended by [ADR-0161](0161-access-requests-are-answered-from-the-task-list.md) (veiled blocks, embedded ones too, ask for access in a dialog; requests are answered from the task list)
 - amends [ADR-0088](0088-protected-passages-of-a-body.md) (protected passages: protections of whole blocks and their files)
 - amends [ADR-0089](0089-a-protected-passage-is-erased-by-its-key.md) (erasure deletes the protected files)
 - relates to ADR-0022 and ADR-0078 (permissions), ADR-0025 and ADR-0026 (format, keys), ADR-0045 (attachments), ADR-0054, ADR-0055, ADR-0090, ADR-0103, ADR-0108 (album, provenance, folders, versions, copy and paste), ADR-0067 (copying), ADR-0071 and ADR-0131 (exports), ADR-0121 (change feed), ADR-0157 and ADR-0159 (starmap, impact), ADR-0124 (restore)
