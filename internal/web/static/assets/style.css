@@ -608,6 +608,23 @@ label.upload { display: inline-flex; align-items: center; gap: 8px; }
 .pm-doc-ops .pm-ops-badges { vertical-align: middle; }
 .pm-doc-paths { margin: 4px 0 0; padding-left: 1.2em; list-style: none; }
 .pm-doc-paths li::before { content: "› "; color: var(--muted); }
+/* Design and implementation of a process (ADR-0163): the switch, the icons
+   of the implementation types over the tasks' own markers, and the decision
+   a business rule task calls. */
+.pm-diagram-level { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.pm-diagram-level button { border: 0; border-radius: 0; padding: 2px 10px; background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.pm-diagram-level button + button { border-left: 1px solid var(--border); }
+.pm-diagram-level button[aria-pressed="true"] { background: var(--accent-soft); font-weight: 600; }
+.pm-impl-badge { display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: 50%; background: #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .15); vertical-align: middle; }
+.pm-impl-badge svg { display: block; }
+.djs-overlay .pm-impl-badge { pointer-events: auto; }
+.pm-doc-kind .pm-impl-badge { width: 16px; height: 16px; box-shadow: none; }
+.pm-doc-decision { margin: 6px 0 0; }
+.pm-doc-decision-head { margin: 0 0 4px; font-weight: 600; }
+.pm-doc-decision-status { margin: 0 0 4px; font-size: 13px; }
+.pm-doc-decision-table .pm-dmn-canvas { border: 1px solid var(--border); border-radius: 4px; }
+/* The decision's table only: its requirements graph is the decision block's. */
+.pm-doc-decision-table .view-drd { display: none; }
 @keyframes pm-doc-flash { from { background: var(--accent-soft); } to { background: transparent; } }
 .pm-doc-flash { animation: pm-doc-flash 1.6s ease-out; }
 .pm-doc-lit:not(.djs-connection) .djs-visual > :nth-child(1) { stroke: #1565c0 !important; stroke-width: 4px !important; }

@@ -94,6 +94,44 @@ const processModel = (version) => `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
+// ruleModel is a BPMN model of the process "rules", carried out as atlas
+// carries it out (ADR-0163): a service task of the Worker Type Microsoft
+// Entra ID, a Python job script, a business rule task that calls the
+// decision "Bonität" and writes its result to rating, and a decision whose
+// way out has a condition. The extension elements are written with a
+// prefix of the model's own, as a model may.
+const ruleModel = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:at="http://atlas/schema/1.0" id="defs_rules" targetNamespace="http://atlas/rules">
+  <bpmn:process id="rules" name="Credit rules" isExecutable="true">
+    <bpmn:startEvent id="start"/>
+    <bpmn:businessRuleTask id="rate" name="Rate customer"><bpmn:extensionElements><zeebe:calledDecision decisionId="Bonität" resultVariable="rating"/></bpmn:extensionElements></bpmn:businessRuleTask>
+    <bpmn:exclusiveGateway id="good" name="Good rating?" default="f_no"/>
+    <bpmn:serviceTask id="grant" name="Grant access"><bpmn:extensionElements><at:entraConnector connector="entra" operation="add-member"/></bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:scriptTask id="note" name="Write note"><bpmn:extensionElements><at:jobScript language="python"/></bpmn:extensionElements></bpmn:scriptTask>
+    <bpmn:endEvent id="end"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="start" targetRef="rate"/>
+    <bpmn:sequenceFlow id="f2" sourceRef="rate" targetRef="good"/>
+    <bpmn:sequenceFlow id="f_yes" name="yes" sourceRef="good" targetRef="grant"><bpmn:conditionExpression>=rating = "A"</bpmn:conditionExpression></bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="f_no" name="no" sourceRef="good" targetRef="note"/>
+    <bpmn:sequenceFlow id="f3" sourceRef="grant" targetRef="end"/>
+    <bpmn:sequenceFlow id="f4" sourceRef="note" targetRef="end"/>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="dia_rules"><bpmndi:BPMNPlane id="plane_rules" bpmnElement="rules">
+    <bpmndi:BPMNShape id="start_di" bpmnElement="start"><dc:Bounds x="100" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="rate_di" bpmnElement="rate"><dc:Bounds x="190" y="100" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="good_di" bpmnElement="good" isMarkerVisible="true"><dc:Bounds x="345" y="115" width="50" height="50"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="grant_di" bpmnElement="grant"><dc:Bounds x="450" y="40" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="note_di" bpmnElement="note"><dc:Bounds x="450" y="170" width="100" height="80"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNShape id="end_di" bpmnElement="end"><dc:Bounds x="612" y="122" width="36" height="36"/></bpmndi:BPMNShape>
+    <bpmndi:BPMNEdge id="f1_di" bpmnElement="f1"><di:waypoint x="136" y="140"/><di:waypoint x="190" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f2_di" bpmnElement="f2"><di:waypoint x="290" y="140"/><di:waypoint x="345" y="140"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_yes_di" bpmnElement="f_yes"><di:waypoint x="370" y="115"/><di:waypoint x="370" y="80"/><di:waypoint x="450" y="80"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f_no_di" bpmnElement="f_no"><di:waypoint x="370" y="165"/><di:waypoint x="370" y="210"/><di:waypoint x="450" y="210"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f3_di" bpmnElement="f3"><di:waypoint x="550" y="80"/><di:waypoint x="630" y="80"/><di:waypoint x="630" y="122"/></bpmndi:BPMNEdge>
+    <bpmndi:BPMNEdge id="f4_di" bpmnElement="f4"><di:waypoint x="550" y="210"/><di:waypoint x="630" y="210"/><di:waypoint x="630" y="158"/></bpmndi:BPMNEdge>
+  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>
+</bpmn:definitions>`;
+
 // decisionModel is a DMN 1.5 model, as atlas writes one, of two decisions:
 // the table "Bonität", whose rule names the version so a reader can tell
 // the versions apart, and the table "Kreditentscheid" that requires it,
@@ -154,6 +192,7 @@ const wizardLink = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789ab
 function engineSource() {
   let versions = 3;
   let decided = 2;
+  let ruled = false;
   let releases = 2;
   let reached = true;
   const starts = [];
@@ -280,7 +319,8 @@ function engineSource() {
     res.setHeader("Content-Type", "application/json");
     if (req.url === "/api/v1/processes") {
       return res.end(JSON.stringify([...Array.from({ length: versions }, (_, i) => ({ key: 100 + i, processId: "order", name: "Order to cash", version: i + 1, deployedAt: 1761400000 + i })),
-        { key: 7, processId: "approve", name: "Approve leave", version: 1, deployedAt: 1761300000 }]));
+        { key: 7, processId: "approve", name: "Approve leave", version: 1, deployedAt: 1761300000 },
+        ...(ruled ? [{ key: 9, processId: "rules", name: "Credit rules", version: 1, deployedAt: 1761300001 }] : [])]));
     }
     if (req.url === "/api/v1/forms") return res.end(JSON.stringify([{ id: "travel", name: "Travel request", projectId: "p1", savedAt: 1791795101 }]));
     // The open user tasks (ADR-0151): one of the process urlaub, one of a
@@ -330,6 +370,7 @@ function engineSource() {
     if (m && m[2] === "xml" && m[1] === "7") {
       return res.end(`<definitions xmlns:atlas="https://atlas.example/bpmn"><process id="approve"><startEvent id="s"/><subProcess id="w" atlas:wizard="public"/></process></definitions>`);
     }
+    if (m && m[2] === "xml" && m[1] === "9") return res.end(ruleModel);
     if (m && m[2] === "xml") return res.end(processModel(Number(m[1]) - 99));
     if (m) {
       return res.end(JSON.stringify({ instances: 3, finished: 12, tokens: 3, incidentTotal: 1, incidentCountsExact: true,
@@ -342,6 +383,7 @@ function engineSource() {
   server.listen(0, "127.0.0.1");
   server.deploy = () => { versions++; };
   server.decide = () => { decided++; };
+  server.rule = () => { ruled = true; };
   server.release = () => { releases++; };
   server.reach = (on) => { reached = on; };
   server.starts = starts;
@@ -2963,6 +3005,39 @@ function gitSource() {
     await page.click("#edit-done");
     await page.waitForSelector("#body.reading");
 
+    step("BPMN: a reader switches a diagram between its design and its implementation; the implementation marks each task with how atlas carries it out (ADR-0163)");
+    const rules = await (await page.request.post(base + "/api/items", { data: { space: "PLAT", type: "task", title: "Credit rules", properties: { priority: "low" } } })).json();
+    await page.goto(base + "/#/item/" + rules.item.key);
+    await page.click("#edit");
+    await page.waitForSelector("#body.editing .ProseMirror");
+    await page.locator("#body .ProseMirror").click();
+    await page.setInputFiles("#body .pm-toolbar input[type=file][accept*=bpmn]", { name: "rules.bpmn", mimeType: "application/octet-stream", buffer: Buffer.from(ruleModel) });
+    await page.waitForSelector("#body.editing .pm-diagram select.pm-diagram-view");
+    await page.locator("#body .pm-diagram select.pm-diagram-view").selectOption("both");
+    await page.click("#edit-done");
+    await page.waitForSelector("#body.reading");
+    const designed = page.locator("#body .pm-diagram");
+    await designed.scrollIntoViewIfNeeded();
+    await designed.locator(".pm-doc-step[data-element=grant]").waitFor();
+    check(await designed.locator(".pm-diagram-level-design[aria-pressed=true]").count() === 1, "a diagram opens at its design");
+    check(await designed.locator(".pm-impl-badge").count() === 0, "the design shows BPMN's own markers only");
+    check(await designed.locator(".pm-doc-step[data-element=good] .pm-doc-paths li:has-text('yes → Grant access')").textContent() === "yes → Grant access", "the design names a way out without its condition");
+    await designed.locator(".pm-doc-step[data-element=rate] .pm-doc-decision-head:has-text('Decision Bonität')").waitFor();
+    await designed.locator(".pm-doc-step[data-element=rate] .pm-doc-decision :text('a diagram from a file does not show its table')").waitFor();
+    await designed.locator(".pm-diagram-level-impl").click(); // readers switch, as they switch the operations
+    await designed.locator(".djs-overlay-pm-impl .pm-impl-badge[title='Microsoft Entra ID']").waitFor();
+    await designed.locator(".djs-overlay-pm-impl .pm-impl-badge[title='Python'] svg").waitFor();
+    check(await designed.locator(".djs-overlay-pm-impl").count() === 2, "the service task and the job script are marked, the rule task keeps its own marker");
+    check(await designed.locator(".pm-doc-step[data-element=grant] .pm-doc-kind").textContent() === " Service task · Microsoft Entra ID", "a step names its Worker Type");
+    await designed.locator(".pm-doc-step[data-element=good] .pm-doc-paths li:has-text('yes (=rating = \"A\") → Grant access')").waitFor(); // and the condition
+    await designed.locator(".pm-doc-step[data-element=rate] .pm-doc-decision-head:has-text('Decision Bonität → result in rating')").waitFor();
+    await designed.locator(".pm-diagram-level-design").click();
+    await page.waitForFunction(() => !document.querySelector("#body .pm-diagram .pm-impl-badge"));
+    await page.reload();
+    await designed.scrollIntoViewIfNeeded();
+    await designed.locator(".pm-doc-step[data-element=grant]").waitFor();
+    check(await designed.locator(".pm-diagram-level-design[aria-pressed=true]").count() === 1, "the choice is the reader's and is not kept with the page");
+
     if (process.env.ENGINE_TOKEN) {
       console.log("PROBE before-process", JSON.stringify((await (await page.request.get(base + "/api/items/" + flow.item.id)).json()).item.body.map((b) => b.kind)), (await (await page.request.get(base + "/api/items/" + flow.item.id + "/attachments")).json()).attachments.length);
       step("BPMN: a process of an engine shows its newest version and, where allowed, its operations as counts only (ADR-0129)");
@@ -3245,6 +3320,22 @@ function gitSource() {
         "the watermark of the graph stays at its corner, as dmn-js places it");
       await decisionBlock.locator("select.pm-dmn-views").selectOption({ label: "Kreditentscheid" });
       await decisionBlock.locator(".dmn-decision-table-container :text('granted')").waitFor();
+
+      step("BPMN: a business rule task of a process of an engine shows the table of the decision it calls, in its newest deployed version (ADR-0163)");
+      engine.rule();
+      const ruledMade = await page.request.post(base + "/api/items", { data: { space: "PLAT", type: "task", title: "Credit rules live", properties: { priority: "low" },
+        body: [{ kind: "process", engine: "atlas", process: "rules", text: "", view: "text" }] } });
+      check(ruledMade.status() === 201, "a page with the process is made: " + ruledMade.status());
+      await page.goto(base + "/#/item/" + (await ruledMade.json()).item.key);
+      await page.waitForSelector("h1.item-title:text-is('Credit rules live')"); // the page has changed
+      await page.locator("#body .pm-diagram").scrollIntoViewIfNeeded(); // a diagram is read when it comes into sight
+      const ruledDiagram = page.locator("#body .pm-diagram:has(.pm-diagram-info:has-text('Credit rules · version 1 · Atlas test'))");
+      await ruledDiagram.waitFor();
+      const called = ruledDiagram.locator(".pm-doc-step[data-element=rate] .pm-doc-decision");
+      await called.scrollIntoViewIfNeeded();
+      await called.locator(".dmn-decision-table-container :text('High income, rule v3')").waitFor();
+      await called.locator(".pm-doc-decision-status:has-text('Newest deployed version: 3')").waitFor();
+      check(await called.locator(".bjs-powered-by").isVisible(), "the bpmn.io watermark stays visible on the decision's table");
 
       step("architecture: a release's sketch is a picture of this site; the newest release is followed, a fixed one stays, and a token that reaches nothing says so (ADR-0146)");
       await page.click("#edit");

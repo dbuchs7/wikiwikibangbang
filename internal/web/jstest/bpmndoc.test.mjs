@@ -10,7 +10,7 @@
 // e2e/smoke.cjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { describe as describeModel, kindOf } from "../static/assets/bpmndoc.js";
+import { describe as describeModel, kindOf, implementationOf, calledDecisionOf } from "../static/assets/bpmndoc.js";
 import { docFromBlocks, blocksFromDoc } from "../static/assets/editor.js";
 
 const doc = (text) => [{ $type: "bpmn:Documentation", text }];
@@ -81,7 +81,7 @@ test("tasks and decisions in the order the flow reaches them, with what the mode
   const steps = describeModel(model())[0].steps;
   assert.deepEqual(steps.map((s) => s.id), ["review", "amount", "book", "approve", "late", "reminded", "ship", "pack"]);
   const by = Object.fromEntries(steps.map((s) => [s.id, s]));
-  assert.deepEqual(by.review, { id: "review", type: "UserTask", kind: "task", name: "Review order", lane: "Clerks", documentation: "Check the customer and\nthe items.", notes: [], paths: [], depth: 0 });
+  assert.deepEqual(by.review, { id: "review", type: "UserTask", kind: "task", name: "Review order", lane: "Clerks", documentation: "Check the customer and\nthe items.", notes: [], paths: [], implementation: null, decision: null, depth: 0 });
   assert.equal(by.book.notes[0], "Books in SAP.");
   assert.equal(by.approve.lane, "CFO", "the innermost lane names who does it");
   assert.deepEqual(by.amount.paths, [
@@ -151,4 +151,41 @@ test("the flow is read from the sequence flows, as a model without incoming and 
     flow("f1", s, check), flow("f2", check, gw), no, flow("yes", gw, approve, { name: "yes" }), flow("f5", approve, book)] }] });
   assert.deepEqual(p.steps.map((x) => x.id), ["check", "gw", "approve", "book"]);
   assert.deepEqual(p.steps[1].paths.map((w) => [w.name, w.target, w.isDefault]), [["no", "book", true], ["yes", "approve", false]]);
+});
+
+// task builds an element with extension elements as the viewer reads them
+// without atlas's and Zeebe's descriptors: each is typed by the name the
+// model writes, with the model's own prefix.
+const task = (type, ...values) => ({ $type: "bpmn:" + type, id: "t", extensionElements: { $type: "bpmn:ExtensionElements", values } });
+
+test("a step names how atlas carries it out, as atlas's Implement view marks it (ADR-0163)", () => {
+  const entra = implementationOf(task("ServiceTask", { $type: "atlas:entraConnector", connector: "aog_entra", operation: "create-group" }));
+  assert.equal(entra.id, "entra");
+  assert.equal(entra.name, "Microsoft Entra ID");
+  assert.ok(Array.isArray(entra.glyph) && entra.glyph.length, "a Worker Type has an icon");
+  assert.equal(implementationOf(task("ServiceTask", { $type: "a:MssqlConnector" })).id, "mssql", "the prefix and the case the model writes do not matter");
+  assert.equal(implementationOf(task("SendTask", { $type: "atlas:mailConnector" })).id, "mail", "a send task can carry a Worker Type");
+  assert.equal(implementationOf({ $type: "bpmn:SendTask", id: "m", messageRef: { id: "msg" } }).id, "message");
+  assert.equal(implementationOf(task("SendTask", { $type: "atlas:shopTask" })), null, "a shop task keeps BPMN's envelope");
+  assert.equal(implementationOf(task("ScriptTask", { $type: "atlas:jobScript", language: "python" })).id, "python");
+  assert.equal(implementationOf(task("ScriptTask", { $type: "atlas:jobScript" })).id, "powershell", "atlas runs a script without a language as PowerShell");
+  assert.equal(implementationOf({ $type: "bpmn:ScriptTask", id: "feel" }), null, "a FEEL script runs in the engine");
+  assert.equal(implementationOf(task("AdHocSubProcess", { $type: "atlas:agentConnector" })).id, "agent");
+  assert.equal(implementationOf({ $type: "bpmn:AdHocSubProcess", id: "plain" }), null);
+  assert.equal(implementationOf(task("ServiceTask", { $type: "zeebe:taskDefinition", type: "payment" })), null, "the plain job worker keeps BPMN's gear");
+  const unknown = implementationOf(task("ServiceTask", { $type: "atlas:ledgerConnector" }));
+  assert.deepEqual([unknown.id, unknown.name], ["other", "ledger"], "a Worker Type the list does not know is named as the model names it");
+  assert.equal(implementationOf(task("UserTask", { $type: "atlas:entraConnector" })), null, "only the kinds atlas marks are marked");
+  assert.equal(implementationOf(null), null);
+});
+
+test("a business rule task names the decision it calls and where its result goes (ADR-0163)", () => {
+  const called = { $type: "zeebe:calledDecision", decisionId: " AogGruppenregel ", resultVariable: "regel" };
+  assert.deepEqual(calledDecisionOf(task("BusinessRuleTask", { $type: "zeebe:ioMapping" }, called)), { id: "AogGruppenregel", result: "regel" });
+  assert.deepEqual(calledDecisionOf(task("BusinessRuleTask", { $type: "z:calledDecision", decisionId: "d" })), { id: "d", result: "" });
+  assert.equal(calledDecisionOf(task("BusinessRuleTask", { $type: "zeebe:taskDefinition", type: "rules" })), null, "a rule a job worker applies calls no decision");
+  assert.equal(calledDecisionOf(task("ServiceTask", called)), null);
+  const [p] = describeModel({ rootElements: [{ $type: "bpmn:Process", id: "p", flowElements: [{ ...task("BusinessRuleTask", called), name: "Apply rule" }] }] });
+  assert.deepEqual(p.steps[0].decision, { id: "AogGruppenregel", result: "regel" });
+  assert.equal(p.steps[0].implementation, null);
 });

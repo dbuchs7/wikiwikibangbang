@@ -305,6 +305,46 @@ export function decisionView(node, view, getPos) {
   });
 }
 
+// decisionTable shows, inside the description of a process, the decision
+// a business rule task calls (ADR-0163): the newest deployed version of
+// decision id of the engine, opened at its table or expression, read
+// through the same route as a decision block. It is read and drawn when
+// show is first called. It returns {dom, show, destroy}.
+export function decisionTable(engine, id) {
+  const canvas = h("div", { class: "pm-dmn-canvas" });
+  const status = h("p", { class: "muted pm-doc-decision-status", role: "status", text: t("bpmn.loading") });
+  const dom = h("div", { class: "pm-dmn pm-doc-decision-table" }, status, canvas);
+  let viewer = null;
+  let started = false;
+  let gone = false;
+  const show = async () => {
+    if (started) return;
+    started = true;
+    try {
+      const [{ decision: d }, Viewer] = await Promise.all([get(pathOf("decisions", engine, id)), loadDMN()]);
+      if (gone) return;
+      viewer = new Viewer({ container: canvas });
+      const { xml, upgraded } = asDMN13(d.xml);
+      const { warnings } = await viewer.importXML(xml);
+      const own = viewOf(viewer.getViews(), d.decision);
+      if (own && own !== viewer.getActiveView()) await viewer.open(own);
+      status.classList.remove("error");
+      status.textContent = [t("bpmn.docDecisionVersion", { version: d.version }),
+        warnings.length ? t("decision.partly", { n: warnings.length }) : upgraded ? t("decision.asDMN13") : ""].filter(Boolean).join(" · ");
+    } catch (err) {
+      status.classList.add("error");
+      status.textContent = t("decision.notShown", { error: err.message });
+    }
+  };
+  return {
+    dom, show,
+    destroy: () => {
+      gone = true;
+      viewer?.destroy();
+    },
+  };
+}
+
 // pickFromEngine lets the editor choose a form ("forms") or a decision
 // ("decisions") of a process engine; it resolves to {engine, id, name,
 // process} or to null when closed. It is the process picker of ADR-0129

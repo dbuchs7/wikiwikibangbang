@@ -8,7 +8,8 @@
 import { h } from "./dom.js";
 import { get } from "./api.js";
 import { t } from "./i18n.js";
-import { describe as describeModel } from "./bpmndoc.js";
+import { describe as describeModel, implementationOf } from "./bpmndoc.js";
+import { decisionTable } from "./engineviews.js";
 import { MARGIN } from "./drawprocesses.js";
 
 // BPMN ends the name of a model's file.
@@ -66,6 +67,45 @@ function badgesOf(el) {
     badge("pm-ops-incidents", el.incidents, t("bpmn.opsIncidents", { n: el.incidents })));
 }
 
+// iconOf draws the icon of an implementation type (workertypes.js), data
+// of an SVG in a 16 × 16 box, as elements (ADR-0014).
+const svgNS = "http://www.w3.org/2000/svg";
+function iconOf(glyph) {
+  const make = ([tag, attrs, ...children]) => {
+    const el = document.createElementNS(svgNS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
+    for (const c of children) el.append(Array.isArray(c) ? make(c) : String(c));
+    return el;
+  };
+  return make(["svg", { viewBox: "0 0 16 16", width: "14", height: "14", "aria-hidden": "true" }, ...glyph]);
+}
+
+// implName names an implementation type in the UI's language; a Worker
+// Type the list does not know keeps the name the model gives it.
+function implName(type) {
+  if (type.id === "other") return t("bpmn.impl.other", { name: type.name });
+  const key = "bpmn.impl." + type.id;
+  const label = t(key);
+  return label === key ? type.name : label;
+}
+
+// implBadge is the icon of an implementation type with its name as a tip.
+const implBadge = (type) => h("span", { class: "pm-impl-badge", title: implName(type) }, iconOf(type.glyph));
+
+// markImplementation marks, while on, every element of a drawn process
+// that has an implementation type with that type's icon, over the generic
+// marker of the task, as atlas's Implement view does (ADR-0163).
+function markImplementation(viewer, on) {
+  const overlays = viewer.get("overlays");
+  overlays.remove({ type: "pm-impl" });
+  if (!on) return;
+  viewer.get("elementRegistry").forEach((el) => {
+    if (el.labelTarget || el.type === "label") return;
+    const type = implementationOf(el.businessObject);
+    if (type) overlays.add(el.id, "pm-impl", { position: { top: 2, left: 2 }, html: implBadge(type) });
+  });
+}
+
 // The views of a diagram (ADR-0143): its diagram alone, the diagram and
 // its description, or the description alone.
 const views = () => [["", t("bpmn.viewDiagram")], ["both", t("bpmn.viewBoth")], ["text", t("bpmn.viewText")]];
@@ -78,10 +118,10 @@ function kindLabel(type) {
   return label === key ? type : label;
 }
 
-// pathText says where a decision's way leads: its name and condition, or
-// that it is the default.
-function pathText(w) {
-  const label = [w.name, w.condition ? `(${w.condition})` : ""].filter(Boolean).join(" ") || t("bpmn.docPath");
+// pathText says where a decision's way leads: its name, its condition
+// when the implementation is shown (ADR-0163), or that it is the default.
+function pathText(w, impl) {
+  const label = [w.name, impl && w.condition ? `(${w.condition})` : ""].filter(Boolean).join(" ") || t("bpmn.docPath");
   return t(w.isDefault ? "bpmn.docPathDefault" : "bpmn.docPathTo", { label, target: w.target || w.targetId });
 }
 
@@ -115,6 +155,16 @@ export function diagramView(node, view, getPos, files) {
   const entries = new Map();
   let lit = null;
   let counts = null;
+  // impl is the reader's choice between the design and the implementation
+  // of the process (ADR-0163), not kept with the block; tables are the
+  // decisions shown in the description, by step and decision, kept while
+  // the same model is shown.
+  let impl = false;
+  const tables = new Map();
+  const dropTables = () => {
+    for (const d of tables.values()) d.destroy();
+    tables.clear();
+  };
 
   const source = () => (isProcess() ? `p:${node.attrs.engine}/${node.attrs.process}` : `f:${node.attrs.ref}`);
   // fit shows the whole diagram. A canvas out of sight has no size to fit
@@ -158,7 +208,9 @@ export function diagramView(node, view, getPos, files) {
       await viewer.importXML(got);
       xml = got;
       lit = null;
+      dropTables();
       model = describeModel(viewer.getDefinitions());
+      markImplementation(viewer, impl);
       showDoc();
       if (mode() !== "text") fit();
       dom.classList.add("pm-diagram-drawn");
@@ -203,6 +255,28 @@ export function diagramView(node, view, getPos, files) {
     ops.textContent = "";
   };
 
+  // setLevel shows the design or the implementation of the process
+  // (ADR-0163): the icons of the implementation types in the diagram, and
+  // in the description the types and the conditions of the ways out.
+  const setLevel = (on) => {
+    impl = on;
+    if (viewer && drawn) markImplementation(viewer, impl);
+    if (model) showDoc();
+    render();
+  };
+
+  // decisionPart shows the decision a business rule task calls (ADR-0163):
+  // its ID, where its result goes when the implementation is shown, and
+  // for a process of an engine its table, as the engine has it now.
+  const decisionPart = (s) => {
+    const d = s.decision;
+    const head = h("p", { class: "pm-doc-decision-head", text: impl && d.result ? t("bpmn.docDecisionResult", { id: d.id, result: d.result }) : t("bpmn.docDecision", { id: d.id }) });
+    if (!isProcess()) return h("div", { class: "pm-doc-decision" }, head, h("p", { class: "muted", text: t("bpmn.docDecisionNoEngine") }));
+    const key = `${s.id}\u0000${d.id}`;
+    if (!tables.has(key)) tables.set(key, decisionTable(node.attrs.engine, d.id));
+    return h("div", { class: "pm-doc-decision" }, head, tables.get(key).dom);
+  };
+
   // showDoc lists the processes and their tasks and decisions (ADR-0143).
   // With the diagram beside it, a title shows its element there, and an
   // element clicked there shows its entry here.
@@ -224,10 +298,12 @@ export function diagramView(node, view, getPos, files) {
         const li = h("li", { class: "pm-doc-step pm-doc-" + s.kind, "data-element": s.id },
           h("div", { class: "pm-doc-head" },
             linked ? h("button", { type: "button", class: "link pm-doc-title", text: name, onclick: () => highlight(s.id, true) }) : h("strong", { class: "pm-doc-title", text: name }),
-            " ", h("span", { class: "pm-doc-kind", text: [kindLabel(s.type), s.lane].filter(Boolean).join(" · ") }), tally),
+            " ", h("span", { class: "pm-doc-kind" }, impl && s.implementation ? [implBadge(s.implementation), " "] : "",
+              [kindLabel(s.type), impl && s.implementation ? implName(s.implementation) : "", s.lane].filter(Boolean).join(" · ")), tally),
           s.documentation ? h("p", { class: "pm-doc-text", text: s.documentation }) : s.kind === "task" ? h("p", { class: "muted pm-doc-text", text: t("bpmn.docNone") }) : "",
           s.notes.map((n) => h("p", { class: "pm-doc-note", text: t("bpmn.docNote", { note: n }) })),
-          s.paths.length ? h("ul", { class: "pm-doc-paths" }, s.paths.map((w) => h("li", { text: pathText(w) }))) : "");
+          s.paths.length ? h("ul", { class: "pm-doc-paths" }, s.paths.map((w) => h("li", { text: pathText(w, impl) }))) : "",
+          s.decision ? decisionPart(s) : "");
         if (s.depth) li.style.marginLeft = `${s.depth * 1.5}em`;
         entries.set(s.id, { li, tally });
         return li;
@@ -235,6 +311,7 @@ export function diagramView(node, view, getPos, files) {
     }
     docs.replaceChildren(...parts);
     markSteps(counts);
+    for (const d of tables.values()) if (d.dom.isConnected) d.show();
   };
   // markSteps shows the operations' counts at the entries too.
   const markSteps = (o) => {
@@ -293,7 +370,7 @@ export function diagramView(node, view, getPos, files) {
   let shown = null;
   let shownMode = null;
   const render = () => {
-    const key = [source(), node.attrs.text, view.editable, drawn, engine?.operations, opsOn, mode()].join("\u0000");
+    const key = [source(), node.attrs.text, view.editable, drawn, engine?.operations, opsOn, mode(), impl].join("\u0000");
     if (shown === key) return;
     shown = key;
     if (!isProcess()) info.textContent = t("bpmn.fileInfo");
@@ -314,6 +391,9 @@ export function diagramView(node, view, getPos, files) {
           render(shown = null);
         }
       } }, views().map(([v, label]) => h("option", { value: v, text: label, selected: v === mode() })))) : "",
+      drawn ? h("span", { class: "pm-diagram-level", role: "group", "aria-label": t("bpmn.level") },
+        [[false, t("bpmn.levelDesign")], [true, t("bpmn.levelImpl")]].map(([on, label]) =>
+          h("button", { type: "button", class: "pm-diagram-level-" + (on ? "impl" : "design"), "aria-pressed": String(impl === on), text: label, onclick: () => setLevel(on) }))) : "",
       mode() !== "text" ? h("button", { type: "button", class: "link pm-diagram-fit", text: t("bpmn.fit"), disabled: !drawn, onclick: fit }) : "",
       isProcess() ? h("button", { type: "button", class: "link pm-diagram-refresh", text: t("bpmn.refresh"), onclick: () => draw(true) }) : "",
       isProcess() && engine?.operations ? h("label", { class: "check pm-diagram-operations" },
@@ -375,6 +455,7 @@ export function diagramView(node, view, getPos, files) {
       sight.disconnect();
       clearTimeout(opsTimer);
       opsOn = false;
+      dropTables();
       viewer?.destroy();
     },
   };

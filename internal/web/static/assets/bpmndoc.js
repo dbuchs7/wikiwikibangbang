@@ -5,6 +5,11 @@
 // as bpmn-js does (moddle objects: $type, references as the objects they
 // name), so the description and the diagram come from one reading. The
 // same prose is what atlas's process documentation is made of.
+//
+// A step also says how atlas carries it out (ADR-0163): its implementation
+// type, read from its extension elements as atlas's Implement view reads
+// it, and, for a business rule task, the decision it calls.
+import { agent, languages, message, other, workers } from "./workertypes.js";
 
 const activities = new Set(["Task", "UserTask", "ServiceTask", "ScriptTask", "SendTask", "ReceiveTask", "ManualTask",
   "BusinessRuleTask", "CallActivity", "SubProcess", "Transaction", "AdHocSubProcess"]);
@@ -17,6 +22,52 @@ const isFlowNode = (e) => {
   const k = kindOf(e?.$type);
   return activities.has(k) || k.endsWith("Gateway") || k.endsWith("Event");
 };
+// localOf names an extension element by its local name in lower case:
+// "entraconnector" for <a:entraConnector>. The viewer reads extension
+// elements without atlas's or Zeebe's descriptor, so their type is the
+// name as the model writes it, with whatever prefix the model chose.
+const localOf = (type) => (typeof type === "string" ? type.slice(type.indexOf(":") + 1).toLowerCase() : "");
+const extensionsOf = (n) => (Array.isArray(n?.extensionElements?.values) ? n.extensionElements.values : []);
+const extensionOf = (n, local) => extensionsOf(n).find((v) => localOf(v?.$type) === local) || null;
+
+// implementationOf returns the implementation type of an element as
+// atlas's Implement view marks it, {id, name, glyph} from workertypes.js,
+// or null where atlas draws BPMN's own marker: a service or send task's
+// Worker Type, a send task's message, a job script's language (atlas runs
+// one it does not know as PowerShell) and the agent of an ad hoc
+// sub-process. A Worker Type the list does not know, an extension element
+// whose name ends in "Connector", is named as the model names it.
+export function implementationOf(n) {
+  const type = kindOf(n?.$type);
+  if (type === "AdHocSubProcess") return extensionOf(n, "agentconnector") ? agent : null;
+  if (type === "ScriptTask") {
+    const script = extensionOf(n, "jobscript");
+    return script ? languages.find((l) => l.id === script.language) || languages[0] : null;
+  }
+  if (type !== "ServiceTask" && type !== "SendTask") return null;
+  // A send task's shop badge sits beside its envelope in atlas, not over it.
+  if (type === "SendTask" && extensionOf(n, "shoptask")) return null;
+  if (type === "SendTask" && n.messageRef) return message;
+  for (const v of extensionsOf(n)) {
+    const known = workers.find((w) => w.tag === localOf(v?.$type));
+    if (known) return known;
+  }
+  const unknown = extensionsOf(n).find((v) => /.connector$/.test(localOf(v?.$type)));
+  if (!unknown) return null;
+  const local = unknown.$type.slice(unknown.$type.indexOf(":") + 1);
+  return { ...other, name: local.replace(/connector$/i, "") };
+}
+
+// calledDecisionOf returns the decision a business rule task calls,
+// {id, result}: the decision's ID and the variable its result is written
+// to (zeebe:calledDecision), or null.
+export function calledDecisionOf(n) {
+  if (kindOf(n?.$type) !== "BusinessRuleTask") return null;
+  const called = extensionOf(n, "calleddecision");
+  const id = typeof called?.decisionId === "string" ? called.decisionId.trim() : "";
+  return id ? { id, result: typeof called.resultVariable === "string" ? called.resultVariable : "" } : null;
+}
+
 const textOf = (docs) => (Array.isArray(docs) ? docs.map((d) => (d?.text || "").trim()).filter(Boolean).join("\n\n") : "");
 
 // lanesOf maps each flow node's ID to the name of the innermost lane that
@@ -120,6 +171,7 @@ function steps(container, depth, lanes, notes, inheritedLane) {
           name: f.name || "", condition: (f.conditionExpression?.body || "").trim(),
           target: f.targetRef?.name || "", targetId: f.targetRef?.id || "", isDefault: n.default === f,
         })) : [],
+        implementation: implementationOf(n), decision: calledDecisionOf(n),
         depth,
       });
     }
@@ -131,10 +183,12 @@ function steps(container, depth, lanes, notes, inheritedLane) {
 // describe returns the processes of a model's definitions, each
 // {id, name, documentation, steps}, a pool's name before its process's.
 // A step is {id, type, kind ("task", "decision" or "event"), name, lane,
-// documentation, notes, paths, depth}: every activity, every decision
-// with more than one way out, and any other element the model describes;
-// paths are a decision's ways out, {name, condition, target, targetId,
-// isDefault}; depth counts the sub-processes around it.
+// documentation, notes, paths, implementation, decision, depth}: every
+// activity, every decision with more than one way out, and any other
+// element the model describes; paths are a decision's ways out, {name,
+// condition, target, targetId, isDefault}; implementation is what
+// implementationOf says and decision what calledDecisionOf says; depth
+// counts the sub-processes around it.
 export function describe(definitions) {
   const roots = definitions?.rootElements || [];
   const collaborations = roots.filter((r) => kindOf(r.$type) === "Collaboration");

@@ -175,3 +175,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0160](0160-protected-blocks-and-pictures-of-a-page.md) | Protected blocks and pictures of a page | Accepted | Landed |
 | [0161](0161-access-requests-are-answered-from-the-task-list.md) | Access requests are answered from the task list | Superseded by ADR-0162 | Superseded |
 | [0162](0162-an-access-request-becomes-a-task-for-the-pages-owner.md) | An access request becomes a task for the page's owner | Accepted | Landed |
+| [0163](0163-a-process-shows-its-design-or-its-implementation.md) | A process shows its design or its implementation, and a business rule task its decision | Proposed | Partial |
