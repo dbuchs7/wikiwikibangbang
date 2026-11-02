@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dbuchs7/orbithek/internal/diskspace"
 	"github.com/dbuchs7/orbithek/internal/gitrepo"
 	"github.com/dbuchs7/orbithek/internal/item"
 	"github.com/dbuchs7/orbithek/internal/site"
@@ -90,7 +91,10 @@ type Result struct {
 	Unchanged int      `json:"unchanged"`
 	Withdrawn int      `json:"withdrawn"`
 	// Removed counts the entries of before ADR-0093 the run erased.
-	Removed  int      `json:"removed"`
+	Removed int `json:"removed"`
+	// Paused counts the new entries not written because the storage is
+	// almost full (ADR-0163); the next run with room writes them.
+	Paused   int      `json:"paused,omitempty"`
 	Problems []string `json:"problems"`
 	// Examples are the first changes, to judge a dry run by.
 	Examples []Change `json:"examples"`
@@ -250,6 +254,14 @@ func apply(db *storage.DB, cfg site.Connector, entries []Entry, dry, partial boo
 	for _, e := range entries {
 		seen[e.SourceID] = true
 		old, had := existing[e.SourceID]
+		// Nothing new is made while the storage is almost full (ADR-0163);
+		// what exists is still kept in step. The entry is not read, and
+		// the next run reads the source again, so it is written then.
+		if !had && !dry && db.Space() >= diskspace.Critical {
+			res.Paused++
+			res.retry = true
+			continue
+		}
 		e, c, write, err := loadEntry(e, old, had)
 		if err != nil {
 			res.problem("%s: %v", cmp.Or(e.Title, e.SourceID), err)
@@ -296,6 +308,11 @@ func apply(db *storage.DB, cfg site.Connector, entries []Entry, dry, partial boo
 		key := old.Key
 		if !dry {
 			it, err := writeEntry(db, cfg, u, labels, newLabels, body, newBody, c.Pictures)
+			if !had && errors.Is(err, storage.ErrNothingNew) {
+				res.Paused++ // the storage filled up during the run
+				res.retry = true
+				continue
+			}
 			if err != nil {
 				res.problem("%s (%s): %v", e.Title, cmp.Or(e.Dataset, e.SourceID), err)
 				res.retry = true
@@ -312,6 +329,9 @@ func apply(db *storage.DB, cfg site.Connector, entries []Entry, dry, partial boo
 			}
 		}
 		res.count(kind, key, e.Title)
+	}
+	if res.Paused > 0 {
+		res.problem("%d new entries are not written while the storage is almost full; existing ones are kept in step, and the new ones follow once there is room", res.Paused)
 	}
 	// A page that links to pages made after it in this run names them now.
 	for _, p := range later {

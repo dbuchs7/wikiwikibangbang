@@ -1442,6 +1442,73 @@ function screen() {
 let leaving = [];
 function onLeave(fn) { leaving.push(fn); }
 
+// --- storage level (ADR-0163) ---------------------------------------------------
+
+// From the critical level on nothing new is made: every signed-in person
+// sees a slim banner under the top bar, and the controls that would make
+// a page, a task, a folder, a kanban or a room are paused with a hint.
+// Reading and editing go on; at full the wiki only reads (ADR-0150).
+let storageNow = "ok";
+const makesNew = "#nav-new, a[href^='#/new'], #space-new-page, #album-new-folder, .column-add, " +
+  "#new-kanban button[type=submit], #create-space button[type=submit], #new-space button[type=submit]";
+
+// pauseCreating pauses or resumes every control that makes something new
+// that the page shows now.
+function pauseCreating(paused) {
+  for (const el of document.querySelectorAll(paused ? makesNew : "[data-paused]")) {
+    if (paused === el.hasAttribute("data-paused")) continue;
+    if (paused) {
+      el.setAttribute("data-paused", el.getAttribute("title") ?? "");
+      el.setAttribute("aria-disabled", "true");
+      el.title = t("storage.pausedHint");
+      if (el.tagName === "BUTTON") el.disabled = true;
+    } else {
+      const was = el.getAttribute("data-paused");
+      if (was) el.title = was; else el.removeAttribute("title");
+      el.removeAttribute("data-paused");
+      el.removeAttribute("aria-disabled");
+      if (el.tagName === "BUTTON") el.disabled = false;
+    }
+  }
+}
+
+// A paused link does not lead anywhere.
+document.addEventListener("click", (ev) => {
+  if (ev.target instanceof Element && ev.target.closest("[data-paused]")) {
+    ev.preventDefault();
+    ev.stopPropagation();
+  }
+}, true);
+
+// What a view renders later is paused too while the level says so.
+new MutationObserver(() => { if (storageNow === "critical" || storageNow === "full") pauseCreating(true); })
+  .observe(document.body, { childList: true, subtree: true });
+
+// showStorage shows the storage's level as GET /api/status answers it.
+function showStorage(level) {
+  storageNow = level || "ok";
+  const paused = storageNow === "critical" || storageNow === "full";
+  let banner = document.getElementById("storage-banner");
+  if (!paused) {
+    banner?.remove();
+  } else {
+    if (!banner) {
+      banner = h("div", { id: "storage-banner", class: "storage-banner", role: "status" });
+      (document.querySelector("header.top") || document.body.firstChild).after(banner);
+    }
+    banner.className = "storage-banner storage-" + storageNow;
+    banner.textContent = storageNow === "full" ? t("storage.bannerFull") : t("storage.bannerPaused");
+  }
+  pauseCreating(paused);
+}
+
+// refreshStorage asks for the level on every view, so a banner comes and
+// goes with the storage; a failed answer keeps what is shown.
+function refreshStorage() {
+  if (!me) return showStorage("ok");
+  get("/api/status").then((s) => showStorage(s.storage)).catch(() => {});
+}
+
 async function route() {
   const hash = location.hash.replace(/^#/, "") || "/";
   for (const fn of leaving) fn();
@@ -1459,6 +1526,7 @@ async function route() {
     }
     renderNav();
     renderFooter();
+    refreshStorage();
     closeDrawer();
     const [, section, arg, arg2] = hash.split("?")[0].split("/").map(decodeURIComponent);
     const params = new URLSearchParams(hash.split("?")[1] || "");

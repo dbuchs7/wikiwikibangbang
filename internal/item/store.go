@@ -78,6 +78,10 @@ type Store struct {
 	accessTasks map[ID]accessRef
 	// accessTexts word those tasks; commands only, never replay.
 	accessTexts AccessTexts
+
+	// nothingNew refuses commands that make something new while it says
+	// so (ADR-0163); commands only, never replay.
+	nothingNew NothingNew
 }
 
 // Journal makes batches of events durable. Append returns only after the
@@ -172,6 +176,14 @@ func (s *Store) recordBatch(actor string, events ...Event) error {
 	events = append(events, s.guard(actor, events)...)
 	// Data protection indicators hold an item open to its space (ADR-0058).
 	events = append(events, s.holds(actor, events)...)
+	// Nothing new is made while the storage is almost full (ADR-0163):
+	// the whole batch is refused, so a request never stands without the
+	// task it brings.
+	if s.creates(events) {
+		if err := s.refusesNew(); err != nil {
+			return err
+		}
+	}
 	first := len(s.log) + 1
 	// UTC without a monotonic reading: the value that survives the journal.
 	at := s.now().UTC()

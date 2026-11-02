@@ -43,6 +43,10 @@ func (x *Session) CreateFolder(space string, parent ID, name string) (Item, erro
 	if err := x.canCreateIn(space, parent); err != nil {
 		return Item{}, err
 	}
+	// The folder's type is not defined for a folder that is refused.
+	if err := x.s.refusesNew(); err != nil {
+		return Item{}, err
+	}
 	switch td, ok := x.s.latest(FolderType); {
 	case !ok:
 		if err := x.s.DefineType(x.who, folderType()); err != nil {

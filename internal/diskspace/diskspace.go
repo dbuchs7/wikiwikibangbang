@@ -34,7 +34,8 @@ const (
 	OK Level = iota
 	// Warning is below the warning threshold: administrators are told.
 	Warning
-	// Critical is below the critical threshold: uploads are refused.
+	// Critical is below the critical threshold: uploads and new entries
+	// are refused (ADR-0163).
 	Critical
 	// Full is below the floor: the wiki only reads, apart from what frees
 	// space.
