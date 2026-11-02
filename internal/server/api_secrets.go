@@ -2,7 +2,10 @@ package server
 
 import (
 	"net/http"
+	"strconv"
+	"time"
 
+	"github.com/dbuchs7/orbithek/internal/budget"
 	"github.com/dbuchs7/orbithek/internal/item"
 )
 
@@ -16,7 +19,49 @@ func secretRoutes(h itemHandlers) []Route {
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/erase", Summary: "Erase a protected passage for good: its text leaves the body and its key is destroyed, so no earlier version holds it either (the one who protected it and the space's administrators; ADR-0089)", Handler: http.HandlerFunc(h.eraseSecret)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/request", Summary: "Ask to read a protected passage; the one who protected it and the space's administrators are told", Handler: http.HandlerFunc(h.requestSecret)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/requests/{principal}", Summary: "Answer a request to read a protected passage: grant true lets the one who asked read it, false declines", Handler: http.HandlerFunc(h.decideSecret)},
+		{Method: http.MethodGet, Pattern: "/api/me/access-requests", Summary: "The waiting requests to read a protected passage or protected blocks that one decides (one protected it, or administers its space), " +
+			"on items one reads, across spaces, oldest first: at most limit (the page budget if absent) after the cursor after; total counts them all, " +
+			"next continues (ADR-0161)", Handler: http.HandlerFunc(h.accessRequests)},
 	}
+}
+
+type accessRequestJSON struct {
+	Item      item.ID   `json:"item"`
+	Key       string    `json:"key"`
+	Title     string    `json:"title"`
+	Space     string    `json:"space"`
+	Secret    item.ID   `json:"secret"`
+	Number    int       `json:"number"`
+	Blocks    bool      `json:"blocks,omitempty"`
+	Principal string    `json:"principal"`
+	At        time.Time `json:"at"`
+}
+
+// accessRequests lists the requests to read a protection that wait on the
+// caller (ADR-0161): a view of the SecretRequested events, nothing stored.
+func (h itemHandlers) accessRequests(w http.ResponseWriter, r *http.Request) {
+	page := budget.Get().PageItems
+	limit, ok := queryInt(w, r, "limit", page, 1, page)
+	if !ok {
+		return
+	}
+	after, ok := queryInt(w, r, "after", 0, 0, int(^uint(0)>>1))
+	if !ok {
+		return
+	}
+	h.read(w, r, func(x *item.Session) (any, error) {
+		list, total, next := x.AccessRequests(after, limit)
+		out := make([]accessRequestJSON, 0, len(list))
+		for _, a := range list {
+			out = append(out, accessRequestJSON{Item: a.Item, Key: a.Key, Title: a.Title, Space: a.Space, Secret: a.Secret, Number: a.Number,
+				Blocks: a.Blocks, Principal: a.Principal, At: a.At})
+		}
+		res := map[string]any{"requests": out, "total": total}
+		if next > 0 {
+			res["next"] = strconv.Itoa(next)
+		}
+		return res, nil
+	})
 }
 
 // liveBusy answers 409 when the item's body is in a live session: changing

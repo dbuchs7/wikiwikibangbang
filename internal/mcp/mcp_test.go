@@ -142,6 +142,7 @@ func TestEachToolIsOneAPIRequest(t *testing.T) {
 		{"list_spaces", `{}`, call{"GET", "/api/spaces", ""}},
 		{"list_types", `{}`, call{"GET", "/api/types", ""}},
 		{"get_own_roles", `{}`, call{"GET", "/api/me/roles", ""}},
+		{"list_access_requests", `{"after":"7","limit":10}`, call{"GET", "/api/me/access-requests?after=7&limit=10", ""}},
 		{"list_changes", `{"after":12,"limit":50}`, call{"GET", "/api/changes?after=12&limit=50", ""}},
 		{"find_items", `{"space":"PLAT","type":"task","limit":20,"after":"x1"}`, call{"GET", "/api/items?after=x1&limit=20&space=PLAT&type=task", ""}},
 		{"search_items", `{"q":"kernel patch"}`, call{"GET", "/api/search?q=kernel+patch", ""}},

@@ -1,8 +1,10 @@
 package item
 
 import (
+	"maps"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -28,11 +30,23 @@ type Secret struct {
 	Requests []string `json:"-"`
 
 	since int // sequence number of the event that first protected it
+	// asked says when each one in Requests asked (ADR-0161), from the
+	// SecretRequested event, the same live and on replay; an entry of one
+	// no longer asking is not read.
+	asked map[string]askedAt
+}
+
+// askedAt is the event that made a request: its sequence number, which
+// orders the requests across items, and its time.
+type askedAt struct {
+	seq int
+	at  time.Time
 }
 
 func (sec Secret) clone() Secret {
 	sec.Readers = slices.Clone(sec.Readers)
 	sec.Requests = slices.Clone(sec.Requests)
+	sec.asked = maps.Clone(sec.asked)
 	return sec
 }
 
@@ -281,6 +295,7 @@ func (s *Store) applySecret(e Event) {
 		sec.since = e.Seq
 		if ok {
 			sec.since = it.Secrets[i].since
+			sec.asked = it.Secrets[i].asked
 			// The answer to a request is in who reads it now.
 			sec.Requests = slices.DeleteFunc(slices.Clone(it.Secrets[i].Requests), func(p string) bool { return s.readsSecret(p, sec) })
 			it.Secrets[i] = sec
@@ -315,7 +330,13 @@ func (s *Store) applySecret(e Event) {
 		}
 	case SecretRequested:
 		if ok && !slices.Contains(it.Secrets[i].Requests, e.Principal) {
-			it.Secrets[i].Requests = append(slices.Clone(it.Secrets[i].Requests), e.Principal)
+			sec := it.Secrets[i].clone()
+			sec.Requests = append(sec.Requests, e.Principal)
+			if sec.asked == nil {
+				sec.asked = map[string]askedAt{}
+			}
+			sec.asked[e.Principal] = askedAt{seq: e.Seq, at: e.At}
+			it.Secrets[i] = sec
 		}
 	case SecretGranted:
 		if ok {
@@ -348,6 +369,8 @@ type SecretView struct {
 	// Readers and Requests are told to those who read or decide it.
 	Readers  []string
 	Requests []string
+	// RequestedAt is when the reader asked, while they wait (ADR-0161).
+	RequestedAt time.Time
 }
 
 // Secrets lists the passages of a readable item as the principal sees
@@ -366,6 +389,9 @@ func (x *Session) Secrets(id ID) ([]SecretView, error) {
 		}
 		if v.Decides {
 			v.Requests = slices.Clone(sec.Requests)
+		}
+		if v.Requested {
+			v.RequestedAt = sec.asked[x.who].at
 		}
 		out = append(out, v)
 	}
