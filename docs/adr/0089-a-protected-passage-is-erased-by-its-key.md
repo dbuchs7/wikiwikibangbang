@@ -80,5 +80,6 @@ Strongest form: no new event or format.
 
 ## Links
 
+- amended by [ADR-0160](0160-protected-blocks-and-pictures-of-a-page.md) (erasing a protection of blocks deletes the files it protected)
 - amends [ADR-0088](0088-protected-passages-of-a-body.md) (protected passages)
 - relates to ADR-0025 (event log), ADR-0026 (keys per item, erasure), ADR-0043 (versions), ADR-0047 (inline comments), ADR-0067 (copying)

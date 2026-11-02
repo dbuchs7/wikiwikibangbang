@@ -172,3 +172,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0157](0157-a-starmap-of-a-space.md) | A starmap of a space | Accepted | Landed |
 | [0158](0158-the-starmap-moves-live-physics-and-separating-a-neighbourhood.md) | The starmap moves: live physics and separating a neighbourhood | Accepted | Landed |
 | [0159](0159-impact-of-an-item-across-rooms-to-a-chosen-depth.md) | Impact of an item across rooms, to a chosen depth | Accepted | Landed |
+| [0160](0160-protected-blocks-and-pictures-of-a-page.md) | Protected blocks and pictures of a page | Accepted | Landed |

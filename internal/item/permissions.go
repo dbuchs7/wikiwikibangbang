@@ -495,6 +495,10 @@ func (x *Session) RestoreBody(id ID, seq int) error {
 		if len(b.Marks) == 0 {
 			b.Marks = nil // as a decoded body has it
 		}
+		// So does a block protected then and not now (ADR-0160).
+		if _, known := it.secret(b.Secret); b.Secret != "" && !known {
+			b.Secret = ""
+		}
 		body.Blocks[i] = b
 	}
 	return x.CommitBody(id, body)
@@ -521,7 +525,7 @@ func (x *Session) Relations(id ID, dir Direction) ([]Relation, error) {
 		if dir == Incoming {
 			other = r.From
 		}
-		if x.s.canRead(x.who, x.s.items[other]) {
+		if x.s.canRead(x.who, x.s.items[other]) && x.seesRelation(&r) {
 			out = append(out, r)
 		}
 	}
@@ -531,16 +535,25 @@ func (x *Session) Relations(id ID, dir Direction) ([]Relation, error) {
 // Embeds renders a readable item's embeds; unreadable targets show as
 // restricted, without identity or title.
 func (x *Session) Embeds(host ID) ([]EmbedView, error) {
-	if _, err := x.readable(host); err != nil {
+	it, err := x.readable(host)
+	if err != nil {
 		return nil, err
 	}
-	views, err := x.s.Embeds(host)
-	for i, v := range views {
-		if !x.s.canRead(x.who, x.s.items[v.Ref]) {
-			views[i] = EmbedView{Restricted: true}
+	// The embeds of protected blocks the principal may not read are not
+	// told, not even as restricted (ADR-0160).
+	var views []EmbedView
+	for _, b := range x.s.veiled(x.who, it).Body.Blocks {
+		if b.Kind != Embed {
+			continue
 		}
+		t := x.s.items[b.Ref]
+		v := EmbedView{Ref: t.ID, Key: t.Key, Title: t.Title, Child: t.Parent == host, Presence: t.Presence}
+		if !x.s.canRead(x.who, t) {
+			v = EmbedView{Restricted: true}
+		}
+		views = append(views, v)
 	}
-	return views, err
+	return views, nil
 }
 
 // Create creates an item where the principal may create.
@@ -827,7 +840,9 @@ func (x *Session) Trash(id ID) error {
 		var named []string
 		hidden := 0
 		for _, r := range refs {
-			if x.s.canRead(x.who, r) {
+			// A referrer whose every reference lies in blocks the principal
+			// may not read is not named either (ADR-0160).
+			if x.s.canRead(x.who, r) && x.refersVisibly(r.ID, id) {
 				named = append(named, r.Key)
 			} else {
 				hidden++

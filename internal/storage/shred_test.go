@@ -3,6 +3,7 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -305,5 +306,61 @@ func TestAnErasedPassagesKeyIsDestroyed(t *testing.T) {
 	defer db.Close()
 	if rec.Shredded != 1 || hasKey(t, dir, key) {
 		t.Fatalf("the key left behind survived the start: shredded %d", rec.Shredded)
+	}
+}
+
+// Protected blocks are sealed with their protection's own key (ADR-0160):
+// the event file holds nothing of them in clear, a restart reads them
+// back, and erasing the protection destroys the key and the file of the
+// picture they showed, so no version holds the blocks any more.
+func TestProtectedBlocksHaveTheirOwnKeyOnDisk(t *testing.T) {
+	dir := t.TempDir()
+	db, _ := mustOpen(t, dir)
+	it := secretItem(t, db.Store)
+	noErr(t, db.Store.GrantRole("admin", "PLAT", "anna", item.Editor))
+	noErr(t, db.Store.GrantRole("admin", "PLAT", "bert", item.Viewer))
+	anna := db.Store.As("anna")
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte("PLANBYTES"), 30)...)
+	a, err := db.StoreAttachment(it.ID, bytes.NewReader(png), 1<<20)
+	noErr(t, err)
+	a.Name = "plan.png"
+	_, err = anna.AddAttachment(it.ID, a)
+	noErr(t, err)
+	noErr(t, anna.CommitBody(it.ID, item.Doc{Blocks: []item.Block{
+		{Kind: item.Heading, Level: 1, Text: "Heading BLOCK-SECRET-42"}, {Kind: item.Image, Ref: a.ID, Text: "caption"}, {Kind: item.Paragraph, Text: "open"}}}))
+	sec, err := anna.ProtectBlocks(it.ID, 0, 1, nil)
+	noErr(t, err)
+	protected := db.Store.History(it.ID)[len(db.Store.History(it.ID))-1].Seq
+	key := item.SecretKey(it.ID, sec.ID)
+	if !hasKey(t, dir, key) {
+		t.Fatal("no key was stored for the protected blocks")
+	}
+	if bytes.Contains(readFile(t, dir, "events.wal"), []byte("BLOCK-SECRET-42")) {
+		t.Fatal("the protected heading is in the event file in clear")
+	}
+	noErr(t, db.Close())
+
+	db, _ = mustOpen(t, dir)
+	if got, _ := db.Store.As("anna").Get(it.ID); got.Body.Blocks[0].Text != "Heading BLOCK-SECRET-42" || got.Body.Blocks[1].Ref != a.ID {
+		t.Fatalf("after a restart anna reads %+v", got.Body.Blocks)
+	}
+	if _, err := db.Store.As("bert").Attachment(it.ID, a.ID); !errors.Is(err, item.ErrNotFound) {
+		t.Fatalf("after a restart bert gets the protected picture: %v", err)
+	}
+	noErr(t, db.Store.As("anna").EraseSecret(it.ID, sec.ID))
+	if hasKey(t, dir, key) {
+		t.Fatal("the erased protection's key is still on disk")
+	}
+	if _, err := db.OpenAttachment(it.ID, a.ID); err == nil {
+		t.Fatal("the protected picture's file survives the erasure")
+	}
+	noErr(t, db.Close())
+
+	db, _ = mustOpen(t, dir)
+	defer db.Close()
+	v, err := db.Store.As("anna").BodyAt(it.ID, protected)
+	noErr(t, err)
+	if b := v.Body.Blocks; len(b) != 2 || b[0].Text != item.SecretPlaceholder || b[0].Ref != "" || b[1].Text != "open" {
+		t.Fatalf("after a restart the version that held them reads %+v", b)
 	}
 }

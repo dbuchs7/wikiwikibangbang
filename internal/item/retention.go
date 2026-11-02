@@ -143,7 +143,7 @@ func (x *Session) stackOf(id, attachment ID) (*Item, ID, error) {
 		return nil, "", err
 	}
 	a, ok := it.attachment(attachment)
-	if !ok || a.Deleted {
+	if !ok || a.Deleted || !x.s.readsFile(x.who, it, attachment) {
 		return nil, "", notFound("attachment %s of item %s", attachment, it.Key)
 	}
 	return it, firstVersion(it, *a), nil

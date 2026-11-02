@@ -874,9 +874,11 @@ func (s *Store) apply(e Event) {
 		}
 		it.Body = e.Body.clone()
 		it.Version++
+		it.noteSecretFiles(it.Body)
+		protectedBy := refSecrets(it.Body)
 		for _, ref := range it.Body.refs() {
 			id := ID(fmt.Sprintf("%s/%s/%s", it.ID, ref.Type, ref.To))
-			s.rels[id] = &Relation{ID: id, Type: ref.Type, From: it.ID, To: ref.To, Derived: true, created: e.Seq}
+			s.rels[id] = &Relation{ID: id, Type: ref.Type, From: it.ID, To: ref.To, Derived: true, created: e.Seq, secrets: protectedBy[ref.Type+"/"+string(ref.To)]}
 			touch(ref.To)
 		}
 	case RelationAdded:

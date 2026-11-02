@@ -101,7 +101,7 @@ func (x *Session) Impact(start, direction string, depth, maxNodes int) (Impact, 
 			edges = append(edges, StarEdge{From: string(it.Parent), To: string(it.ID), Kind: StarParent})
 		}
 	}
-	for _, r := range x.s.sortedRelations() {
+	for _, r := range x.visibleRelations() {
 		if x.liveReadable(x.s.items[r.From]) && x.liveReadable(x.s.items[r.To]) {
 			edges = append(edges, relationEdge(r))
 		}

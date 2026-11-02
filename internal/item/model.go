@@ -237,6 +237,11 @@ type Block struct {
 	// Query is the query of the query language a task list selects its
 	// tasks by, in place of a label (ADR-0136, ADR-0151).
 	Query string `json:",omitempty"`
+	// Secret names the item's Secret that protects the whole block
+	// (ADR-0160): its readers read it, everyone else reads a placeholder
+	// block in its place. The blocks of one Secret may be several, a
+	// section; a file the block shows is protected with it.
+	Secret ID `json:",omitempty"`
 }
 
 // The views of a bpmn or a process block besides its diagram alone
@@ -327,6 +332,10 @@ type Item struct {
 	// (ADR-0089).
 	erasedBefore int
 	trashedBy    int // sequence number of the event that trashed it, or 0
+	// secretFiles maps each file a protected block showed to the Secret
+	// that protects it (ADR-0160), until that Secret is taken off or
+	// erased. It follows from the log.
+	secretFiles map[ID]ID
 }
 
 // EmbedView is how one embed block of a body renders (ADR-0020). Child is
@@ -353,6 +362,11 @@ type Relation struct {
 	Derived bool
 
 	created int
+	// secrets are, for a derived relation, the protections of the blocks
+	// it is derived from when every such block is protected (ADR-0160):
+	// only those who read one of them learn of the relation. Empty when a
+	// block anyone reads implies it. It follows from the body (D4).
+	secrets []ID
 }
 
 // Direction selects relations by end.
@@ -558,6 +572,7 @@ func (it *Item) clone() Item {
 	c.LinkedFields = slices.Clone(it.LinkedFields)
 	c.Attachments = slices.Clone(it.Attachments)
 	c.ErasedSecrets = slices.Clone(it.ErasedSecrets)
+	c.secretFiles = maps.Clone(it.secretFiles)
 	c.Secrets = make([]Secret, len(it.Secrets))
 	for i, sec := range it.Secrets {
 		c.Secrets[i] = sec.clone()

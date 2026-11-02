@@ -2043,3 +2043,12 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
   :root[data-look="cockpit"] .home-stat::before { animation: none; }
 }
 /* ===== end cockpit ========================================================== */
+/* Protected blocks (ADR-0160): a reader sees them marked at the side; one
+   who may not read them sees one dark bar with who decides. */
+.pm-block-secret { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--warning) 70%, transparent); background: color-mix(in srgb, var(--warning) 7%, transparent); padding-left: 10px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.pm-veiled { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 8px 0; padding: 10px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--text) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--text) 25%, transparent); cursor: pointer; }
+.pm-veiled:hover, .pm-veiled:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pm-veiled-bar { flex: 0 0 auto; min-width: 9em; padding: 0 6px; border-radius: 3px; background: var(--text); color: var(--text); user-select: none; letter-spacing: 1px; }
+.pm-veiled-text { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.protect-choices { border: 0; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; }
+.protect-blocks { margin: 0 0 8px; padding-left: 18px; }

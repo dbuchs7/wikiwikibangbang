@@ -6,7 +6,7 @@
 // survives paste or input, so the editor cannot produce markup the model
 // refuses.
 import {
-  Schema, EditorState, EditorView, Plugin, keymap, baseKeymap, toggleMark, setBlockType,
+  Schema, EditorState, EditorView, Plugin, Decoration, DecorationSet, keymap, baseKeymap, toggleMark, setBlockType,
   splitBlockAs, chainCommands, history, undo, redo, inputRules, textblockTypeInputRule,
 } from "../vendor/prosemirror.js";
 import { h, safeHref } from "./dom.js";
@@ -23,8 +23,10 @@ import { markdownToBlocks, pastesAsMarkdown } from "./markdown.js";
 
 // Every block carries bid, its ID in a live session (ADR-0010); it is not
 // stored. Text blocks keep the mentions they had without a mention mark
-// (imported bodies), so saving does not drop their relations.
-const bid = { bid: { default: null } };
+// (imported bodies), so saving does not drop their relations. secret names
+// the protection of the whole block (ADR-0160); it is made and taken off
+// from the item's page, and editing keeps it.
+const bid = { bid: { default: null }, secret: { default: "" } };
 const textAttrs = { ...bid, mentions: { default: [] } };
 // Paragraphs, headings, quotes and panels can be aligned (ADR-0059). The
 // alignment is a class, as the content security policy refuses style
@@ -105,6 +107,10 @@ export const schema = new Schema({
       toDOM: (n) => ["div", { class: "pm-embed", contenteditable: "false" },
         n.attrs.href ? ["a", { href: safeHref(n.attrs.href) }, n.attrs.label] : ["span", { class: "muted" }, n.attrs.label || t("editor.hidden")]],
     },
+    // A protected block the reader may not read (ADR-0160): one dark bar
+    // in place of every block of the protection, drawn by a node view.
+    veiled: { group: "block", atom: true, selectable: true, attrs: bid,
+      toDOM: (n) => ["div", { class: "pm-veiled", "data-secret": n.attrs.secret }, ["span", { class: "pm-veiled-bar" }, "▒▒▒▒▒▒▒▒"]] },
     mention: {
       group: "inline", inline: true, atom: true, selectable: false,
       attrs: { ref: {}, label: {} },
@@ -141,6 +147,28 @@ export const schema = new Schema({
 // the reader (ADR-0088). The item's page sets it before drawing its body.
 let secretClass = () => "";
 export function setSecretClass(fn) { secretClass = fn || (() => ""); }
+
+// veiledContent draws what a veiled block says beside its bar: who decides
+// and how to ask (ADR-0160). The item's page sets it with setSecretClass.
+let veiledContent = () => h("span", { class: "pm-veiled-text", text: t("secret.veiledBlock") });
+export function setVeiledContent(fn) { veiledContent = fn || (() => h("span", { class: "pm-veiled-text", text: t("secret.veiledBlock") })); }
+
+// blockRangeOf returns the blocks of the body a selection touches, as
+// { from, to } indexes of the model's blocks, or null for none.
+export function blockRangeOf(state) {
+  const { from, to } = state.selection;
+  let first = -1, last = -1;
+  state.doc.forEach((node, offset, i) => {
+    const end = offset + node.nodeSize;
+    if (from < end && to > offset) {
+      if (first < 0) first = i;
+      last = i;
+    } else if (from === to && from >= offset && from <= end && first < 0) {
+      first = last = i;
+    }
+  });
+  return first < 0 ? null : { from: first, to: last };
+}
 
 // selectionInBlock returns the selected text as a block of the body and
 // characters of its text, as the model counts them, or null when the
@@ -182,6 +210,14 @@ export function docFromBlocks(blocks, embeds = []) {
 // nodeFromBlock makes the editor node of one model block; b.id becomes
 // its session ID.
 export function nodeFromBlock(b, embeds = []) {
+  // A protected block the reader may not read is one veiled bar
+  // (ADR-0160); the server sends it as a placeholder paragraph.
+  if (b.secret && secretClass(b.secret) === "secret-veiled") return schema.nodes.veiled.create({ bid: b.id ?? null, secret: b.secret });
+  const node = plainNode(b, embeds);
+  return b.secret ? node.type.create({ ...node.attrs, secret: b.secret }, node.content, node.marks) : node;
+}
+
+function plainNode(b, embeds) {
   const id = b.id ?? null;
   if (b.kind === "table") return schema.nodes.table.create({ bid: id, text: b.text || "" });
   if (["toc", "figures", "tables", "children", "divider"].includes(b.kind)) return schema.nodes[b.kind].create({ bid: id });
@@ -250,6 +286,13 @@ export function blocksFromDoc(doc) {
 
 // blockFromNode is the model block of one editor node.
 export function blockFromNode(node) {
+  const b = plainBlock(node);
+  if (node.attrs?.secret) b.secret = node.attrs.secret;
+  return b;
+}
+
+function plainBlock(node) {
+  if (node.type === schema.nodes.veiled) return { kind: "paragraph", text: "▒▒▒▒▒▒▒▒" };
   if (node.type === schema.nodes.embed) return { kind: "embed", ref: node.attrs.ref };
   if (node.type === schema.nodes.table) return { kind: "table", text: node.attrs.text };
   if (["toc", "figures", "tables", "children", "divider"].includes(node.type.name)) return { kind: node.type.name };
@@ -362,6 +405,8 @@ function plugins() {
       ],
     }),
     history(),
+    keepSecrets,
+    secretBlocks,
     keymap({
       "Mod-z": undo, "Mod-y": redo, "Shift-Mod-z": redo,
       "Mod-b": toggleMark(schema.marks.bold), "Mod-i": toggleMark(schema.marks.italic), "Mod-`": toggleMark(schema.marks.code),
@@ -372,6 +417,34 @@ function plugins() {
     keymap(baseKeymap),
   ];
 }
+
+// keepSecrets keeps a block's protection when its kind changes (a heading
+// made a paragraph, "# " typed at its start): ProseMirror makes a new
+// node then, with its own attributes (ADR-0160).
+const keepSecrets = new Plugin({
+  appendTransaction(trs, before, after) {
+    if (!trs.some((tr) => tr.steps.some((st) => "gapFrom" in st)) || before.doc.childCount !== after.doc.childCount) return null;
+    let tr = null;
+    after.doc.forEach((node, offset, i) => {
+      const was = before.doc.child(i).attrs.secret;
+      if (was && "secret" in node.attrs && !node.attrs.secret) tr = (tr || after.tr).setNodeMarkup(offset, null, { ...node.attrs, secret: was });
+    });
+    return tr;
+  },
+});
+
+// secretBlocks marks the protected blocks a reader reads (ADR-0160).
+const secretBlocks = new Plugin({
+  props: {
+    decorations: (state) => {
+      const decos = [];
+      state.doc.forEach((node, offset) => {
+        if (node.attrs.secret && node.type !== schema.nodes.veiled) decos.push(Decoration.node(offset, offset + node.nodeSize, { class: "pm-block-secret", "data-secret": node.attrs.secret }));
+      });
+      return DecorationSet.create(state.doc, decos);
+    },
+  },
+});
 
 // setAlign aligns the blocks of the selection that can be aligned
 // (ADR-0059); "" is the default, left.
@@ -810,6 +883,8 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
       architecture: (node, v, getPos) => architectureView(node, v, getPos),
       embed: (node) => embedView(node, embedContent),
       tasklist: (node) => taskListView(node, tasks),
+      veiled: (node) => ({ dom: h("div", { class: "pm-veiled", "data-secret": node.attrs.secret, contenteditable: "false" },
+        h("span", { class: "pm-veiled-bar", "aria-hidden": "true", text: "▒▒▒▒▒▒▒▒" }), veiledContent(node.attrs.secret)), ...selectable }),
     },
     ...viewProps,
   });
@@ -1129,12 +1204,25 @@ export function createEditor({ blocks, embeds, editable, resolve, childPages, fi
     if (!anchor) status.textContent = t("editor.noteNeedsSelection");
     else note(anchor);
   } }) : null;
-  // Protecting a passage starts from the text read (ADR-0088).
+  // Protecting starts from the text read (ADR-0088): the words selected,
+  // the blocks the selection touches, or the block last clicked, such as a
+  // picture (ADR-0160).
+  let clicked = null;
+  if (protect) {
+    view.dom.addEventListener("mousedown", (ev) => {
+      clicked = null;
+      view.state.doc.forEach((node, offset, i) => {
+        const dom = view.nodeDOM(offset);
+        if (dom && dom.contains?.(ev.target)) clicked = { from: i, to: i };
+      });
+    });
+  }
   const protectButton = protect ? h("button", { type: "button", id: "protect-selection", text: t("editor.protect"), onclick: () => {
     status.textContent = "";
-    const at = selectionInBlock(view.state);
-    if (!at) status.textContent = t("editor.protectNeedsSelection");
-    else protect(at);
+    const passage = selectionInBlock(view.state);
+    const range = view.state.selection.empty ? clicked : blockRangeOf(view.state);
+    if (!passage && !range) status.textContent = t("editor.protectNeedsSelection");
+    else protect({ passage, range });
   } }) : null;
   // The toolbar's groups; buttons that show a state (a mark, an alignment)
   // are pressed while it applies at the selection (ADR-0059).
