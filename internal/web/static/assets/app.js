@@ -16,7 +16,7 @@ import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.j
 import { applyTheme, setTheme, isDark, chosenTheme } from "./theme.js";
 import { filtered, serverFilter, filterParams, norm } from "./filter.js";
 import { taskLinksCard } from "./tasklinks.js";
-import { connectionsCard } from "./engineconn.js";
+import { connectionsCard, silentConnect } from "./engineconn.js";
 import { freshNotice, taskDialog, taskPanel } from "./taskdialog.js";
 import { finishing } from "./taskparts.js";
 
@@ -1544,6 +1544,9 @@ async function route() {
       location.hash = after;
       return;
     }
+    // Once a session, people whose engine approved them beforehand are
+    // connected to it, through the engine and back (ADR-0152).
+    if (await silentConnect()) return;
     switch (section) {
       case "new": return await newView(params);
       case "tasks": return await tasksView(arg, params);
@@ -4255,6 +4258,8 @@ async function itemView(ref, params = new URLSearchParams()) {
     h("p", { class: "crumbs" }, link("#/", t("nav.spaces")), " / ", link("#/space/" + encodeURIComponent(item.space), item.space), " / " + item.key),
     h("div", { class: "page-head" }, title, headActions),
     guarded ? h("p", { class: "notice", text: t("item.guarded") }) : null,
+    // A task its engine no longer follows is the wiki's again (ADR-0152).
+    item.detached ? h("p", { class: "notice", id: "item-detached", text: t("item.detached", { engine: item.detached }) }) : null,
     item.hold ? await holdBanner(item, path, canEdit) : null,
     h("p", { class: "muted" }, t("item.meta", { type: item.type, presence: item.presence }), item.state ? t("item.state", { state: item.state }) : "", t("item.version", { n: item.version })),
     // An item mirrored from another system says where it is kept, the
@@ -5811,7 +5816,11 @@ function infoButton(help) {
 // and checks the engine by listing its processes.
 function enginesCard() {
   const card = h("div", { id: "engines" }, h("p", { class: "muted", text: t("autobackup.loading") }));
-  let open = null;
+  // How connecting this server to an engine went, said once (ADR-0152).
+  const q = new URLSearchParams(location.search);
+  const back = { system: q.get("engine_system"), error: q.get("engine_error") };
+  if (back.system || back.error) history.replaceState(null, "", location.pathname + location.hash);
+  let open = back.system;
   const load = async () => {
     let data;
     try {
@@ -5822,6 +5831,9 @@ function enginesCard() {
     }
     const chosen = open === "new" ? { id: "", name: "", kind: data.kinds[0], baseURL: "", operations: false, isNew: true } : data.engines.find((e) => e.id === open);
     card.replaceChildren(
+      back.system ? h("p", { class: "notice success", id: "engine-system-done", text: t("engine.systemDone") }) : "",
+      back.error ? h("p", { class: "error", role: "alert", id: "engine-system-error", text: ({ config: t("engine.systemError.config"), nosystem: t("engine.systemError.nosystem"),
+        denied: t("engine.systemError.denied"), state: t("engine.systemError.state") })[back.error] || t("engine.systemError.unavailable") }) : "",
       h("p", { class: "muted", text: t("engine.note") }),
       data.engines.length ? h("table", { id: "engine-list" },
         h("thead", {}, h("tr", {}, [t("engine.name"), t("engine.kind"), t("engine.baseURL"), t("engine.operations"), t("engine.credential"), ""].map((x) => h("th", { text: x })))),
@@ -5837,6 +5849,39 @@ function enginesCard() {
   };
   load();
   return card;
+}
+
+// systemInfo is this server's connection to the engine (ADR-0152): made with
+// one approval at the engine, which then gives the credentials the
+// environment does not set; what was approved; and its end.
+function systemInfo(e, reopen) {
+  const s = e.system;
+  if (!s) return "";
+  const path = "/api/engines/" + encodeURIComponent(e.id) + "/system";
+  if (!s.available) return h("p", { class: "muted", id: "engine-system", text: t("engine.systemNoPublicURL") });
+  if (!s.connected) {
+    return h("div", { id: "engine-system" },
+      h("p", { class: "muted", text: t("engine.systemNote") }),
+      h("p", {}, h("button", { type: "button", class: "primary", id: "engine-system-connect", text: t("engine.systemConnect"),
+        onclick: () => location.assign(path + "/connect") })));
+  }
+  const caps = (s.capabilities || []).map((c) => c.projects?.length ? c.scope + " (" + c.projects.join(", ") + ")" : c.scope).join(", ");
+  const status = h("div", { class: "status" });
+  return h("div", { id: "engine-system" },
+    h("p", { class: "notice", id: "engine-system-status", text: t("engine.systemConnected", { by: s.approvedBy, when: when(s.since), caps: caps || "–" }) }),
+    s.preconsent ? h("p", { class: "muted", id: "engine-system-preconsent", text: t("engine.systemPreconsent") }) : "",
+    h("p", { class: "actions-row" },
+      h("button", { type: "button", class: "secondary", id: "engine-system-reconnect", text: t("engine.systemReconnect"), onclick: () => location.assign(path + "/connect") }),
+      h("button", { type: "button", class: "link danger", id: "engine-system-disconnect", text: t("engine.systemDisconnect"), onclick: async () => {
+        if (!confirm(t("engine.systemDisconnectConfirm", { name: e.name }))) return;
+        try {
+          await del(path);
+          reopen(e.id);
+        } catch (err) {
+          status.replaceChildren(errorBox(err));
+        }
+      } })),
+    status);
 }
 
 // engineEditor sets up one process engine; taken are the IDs in use, which
@@ -5858,7 +5903,9 @@ function engineEditor(e, kinds, taken, reopen) {
       h("p", { class: "muted", text: t("engine.publicOnly") }),
       e.isNew ? h("p", { class: "muted", text: t("engine.credentialHelpNew") })
         : h("p", { class: e.credential ? "muted" : "error", id: "engine-credential",
-          text: e.credential ? t("engine.credentialIs", { name: e.credentialVar }) : t("engine.credentialMissing", { name: e.credentialVar }) }),
+          text: e.system?.fromGrant?.diagrams ? t("engine.credentialGrant")
+            : e.credential ? t("engine.credentialIs", { name: e.credentialVar }) : t("engine.credentialMissing", { name: e.credentialVar }) }),
+      e.isNew ? "" : systemInfo(e, reopen),
       e.isNew ? "" : envHelp("engine-env-help"),
       h("div", { class: "actions-row" }, h("button", { type: "submit", class: "primary", text: t("engine.save") }),
         e.isNew ? h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => reopen(null) })

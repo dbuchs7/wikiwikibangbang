@@ -46,6 +46,11 @@ type taskLinksJSON struct {
 	// compares, and an ended task is closed as completed.
 	EventsVar string `json:"eventsVar"`
 	Events    bool   `json:"events"`
+	// ListFromGrant and EventsFromGrant say those credentials come from
+	// the engine's connection, its system grant, rather than the
+	// environment (ADR-0152).
+	ListFromGrant   bool `json:"listFromGrant"`
+	EventsFromGrant bool `json:"eventsFromGrant"`
 	freshJSON
 }
 
@@ -75,6 +80,11 @@ type connectJSON struct {
 	Configured      bool   `json:"configured"`
 	Callback        string `json:"callback"`
 	Connected       int    `json:"connected"`
+	// ByMetadata says people connect through this server's client metadata
+	// document, since the engine is connected (ADR-0152), and Preconsent
+	// that they need no page of their own.
+	ByMetadata bool `json:"byMetadata"`
+	Preconsent bool `json:"preconsent"`
 }
 
 func (h taskLinkHandlers) engine(w http.ResponseWriter, r *http.Request) (string, site.Engine, bool) {
@@ -96,6 +106,12 @@ func (h taskLinkHandlers) json(e site.Engine) taskLinksJSON {
 		Connect: connectJSON{ClientIDVar: engine.ClientIDVar(e.ID), ClientSecretVar: engine.ClientSecretVar(e.ID), Configured: h.d.Connect.Configured(e.ID),
 			Callback: h.d.Connect.Callback(e.ID), Connected: len(h.d.Connect.Connections().Of("", e.ID))},
 		EventsVar: engine.EventsVar(e.ID), Events: h.d.Engines.HasEventsCredential(e.ID), freshJSON: freshOf(h.d, e.ID)}
+	from := h.d.Engines.FromGrant(e.ID)
+	out.ListFromGrant, out.EventsFromGrant = from[engine.ScopeTaskList], from[engine.ScopeEvents]
+	if c, ok := h.d.Connect.System(e.ID); ok {
+		_, env := h.d.Connect.EnvClient(e.ID)
+		out.Connect.ByMetadata, out.Connect.Preconsent = !env, c.System.Preconsent
+	}
 	if last, ok := h.d.TaskLinks.Last(e.ID); ok {
 		out.Last = &last
 	}

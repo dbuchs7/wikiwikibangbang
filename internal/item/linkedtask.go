@@ -30,6 +30,15 @@ type LinkedTask struct {
 	Labels []string
 }
 
+// DetachedFrom names the engine whose task the item was, once the item no
+// longer follows it (ADR-0152); it is empty for any other item.
+func (it Item) DetachedFrom() string {
+	if it.Linked != "" || it.Origin == nil || it.Origin.System != LinkedSystem {
+		return ""
+	}
+	return it.Origin.Instance
+}
+
 // LinkedOrigin is the origin of the item of a task of an engine.
 func LinkedOrigin(engine, key string) Origin {
 	return Origin{System: LinkedSystem, Instance: engine, ExternalID: "task/" + key, ExternalKey: key}
@@ -139,6 +148,51 @@ func (w *Workflow) only(from, to string) (string, error) {
 		return names[0], nil
 	}
 	return "", invalid("several transitions lead from %q to %q: %s", from, to, strings.Join(names, ", "))
+}
+
+// DetachTask hands the item of a linked task back to the wiki, as the
+// trusted synchronisation, when it can no longer follow its task
+// (ADR-0152): the task left the reach the engine granted. The item keeps
+// its origin, place, state, fields, labels and readers; it is no longer
+// linked, so people work it as any item. It is recorded as the import
+// event that made it, with the link cleared, so the event format does not
+// change. An item not linked, or no longer live, is left; detached reports
+// whether it was detached.
+func (s *Store) DetachTask(actor string, id ID) (detached bool, err error) {
+	e, ok := s.detachEvent(id)
+	if !ok {
+		return false, nil
+	}
+	return true, s.record(actor, e)
+}
+
+// DetachTasks detaches the items of every task of an engine in one batch
+// (ADR-0152), as when the engine is removed or given another address; it
+// returns how many it detached.
+func (s *Store) DetachTasks(actor, engine string) (int, error) {
+	var events []Event
+	for _, it := range s.LinkedTasks(engine) {
+		if e, ok := s.detachEvent(it.ID); ok {
+			events = append(events, e)
+		}
+	}
+	if len(events) == 0 {
+		return 0, nil
+	}
+	return len(events), s.recordBatch(actor, events...)
+}
+
+// detachEvent is the event that detaches the item of a linked task: its
+// import event as it stands, without the link.
+func (s *Store) detachEvent(id ID) (Event, bool) {
+	it, ok := s.items[id]
+	if !ok || it.Presence != Live || it.Linked == "" || it.Origin == nil {
+		return Event{}, false
+	}
+	origin := *it.Origin
+	return Event{Kind: ItemImported, Item: id, Space: it.Space, TypeName: it.Type, TypeVersion: it.TypeVersion,
+		Parent: it.Parent, Title: it.Title, Props: maps.Clone(it.Properties), To: it.State, Managed: it.Managed,
+		Origin: &origin}, true
 }
 
 // LinkedTasks returns the live items of the tasks of an engine, in the

@@ -202,6 +202,11 @@ func Routes(d Deps) []Route {
 		d.Connect = engineauth.NewBroker(d.DB.Connections, d.Engines, engine.NewClient(os.Getenv), os.Getenv, os.Getenv("OT_PUBLIC_URL"))
 		d.Connect.OnEnded(RecordEnded(d.DB))
 	}
+	// A credential the environment does not set comes from the engine's
+	// system grant (ADR-0152).
+	if d.Engines != nil && d.Connect != nil {
+		d.Engines.WithSystemGrants(d.Connect)
+	}
 	if d.TaskLinks == nil && d.DB != nil {
 		d.TaskLinks = tasklink.New(d.DB, d.Engines, d.Log).WithGrants(d.Connect)
 	}

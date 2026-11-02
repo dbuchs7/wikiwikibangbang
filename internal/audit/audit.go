@@ -120,6 +120,13 @@ const (
 	EngineConnected       = "engine.connect"
 	EngineDisconnected    = "engine.disconnect"
 	EngineConnectionEnded = "engine.connection.end"
+	// EngineSystemConnected records an administrator connecting this server
+	// to a process engine with a system grant, EngineSystemDisconnected
+	// ending it, and ClientKeyReplaced a new signing key for the client
+	// metadata document (ADR-0152).
+	EngineSystemConnected    = "engine.system.connect"
+	EngineSystemDisconnected = "engine.system.disconnect"
+	ClientKeyReplaced        = "engine.clientkey.replace"
 )
 
 // Retained bounds how many recent entries the trail keeps in memory for

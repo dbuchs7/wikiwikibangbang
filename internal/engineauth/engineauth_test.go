@@ -59,7 +59,7 @@ func newSetup(t *testing.T) *setup {
 // approves at once, and back with the code.
 func (s *setup) connect(t *testing.T, user string) (engineconn.Connection, error) {
 	t.Helper()
-	authURL, state, err := s.b.Begin(context.Background(), s.e, user)
+	authURL, state, err := s.b.Begin(context.Background(), s.e, user, Flow{})
 	if err != nil {
 		return engineconn.Connection{}, err
 	}
@@ -124,12 +124,12 @@ func TestAPersonConnectsWithTheirOwnSignIn(t *testing.T) {
 // its address, and a refused consent is forgotten.
 func TestABegunConnectionIsUsedOnce(t *testing.T) {
 	s := newSetup(t)
-	_, state, err := s.b.Begin(context.Background(), s.e, "bert")
+	_, state, err := s.b.Begin(context.Background(), s.e, "bert", Flow{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if user, id, ok := s.b.Pending(state); !ok || user != "bert" || id != "atlas" {
-		t.Fatalf("Pending = %q %q %v", user, id, ok)
+	if f, ok := s.b.Pending(state); !ok || f.User != "bert" || f.Engine != "atlas" {
+		t.Fatalf("Pending = %+v %v", f, ok)
 	}
 	moved := s.e
 	moved.BaseURL = "https://elsewhere.example.org"
@@ -150,7 +150,7 @@ func TestABegunConnectionIsUsedOnce(t *testing.T) {
 	}
 
 	delete(s.env, engine.ClientSecretVar("atlas"))
-	if _, _, err := s.b.Begin(context.Background(), s.e, "bert"); !errors.Is(err, ErrNotConfigured) {
+	if _, _, err := s.b.Begin(context.Background(), s.e, "bert", Flow{}); !errors.Is(err, ErrNotConfigured) {
 		t.Errorf("Begin without the client's secret = %v", err)
 	}
 	if NewBroker(s.conns, nil, s.client, func(string) string { return "x" }, "").Configured("atlas") {
@@ -283,14 +283,14 @@ func TestTheEngineMayNotSendTokensElsewhere(t *testing.T) {
 			t.Cleanup(fake.Close)
 			base = fake.URL
 			b := NewBroker(nil, nil, fake.Client(), func(string) string { return "x" }, "https://wiki.example.org")
-			_, _, err := b.Begin(context.Background(), site.Engine{ID: "atlas", Kind: site.EngineAtlas, BaseURL: base}, "bert")
+			_, _, err := b.Begin(context.Background(), site.Engine{ID: "atlas", Kind: site.EngineAtlas, BaseURL: base}, "bert", Flow{})
 			if !errors.Is(err, ErrUnavailable) {
 				t.Errorf("Begin = %v", err)
 			}
 		})
 	}
 	b := NewBroker(nil, nil, http.DefaultClient, func(string) string { return "x" }, "https://wiki.example.org")
-	if _, _, err := b.Begin(context.Background(), site.Engine{ID: "x", Kind: "other", BaseURL: "https://x.example"}, "bert"); !errors.Is(err, ErrNotConfigured) {
+	if _, _, err := b.Begin(context.Background(), site.Engine{ID: "x", Kind: "other", BaseURL: "https://x.example"}, "bert", Flow{}); !errors.Is(err, ErrNotConfigured) {
 		t.Errorf("an engine of another kind = %v", err)
 	}
 }
