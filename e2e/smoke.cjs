@@ -3166,10 +3166,15 @@ function gitSource() {
       await silentCtx.addCookies(await page.context().cookies());
       const silentPage = await silentCtx.newPage();
       await silentPage.goto(base + "/#/tasks");
-      for (let i = 0; i < 50 && engine.system.silent === 0; i++) await silentPage.waitForTimeout(100);
+      // Away to the engine and back to the page; the connection is kept on the way.
+      const grantOf = async () => (await (await silentPage.request.get(base + "/api/me/engines")).json()).engines.find((e) => e.id === "grant");
+      let mine = await grantOf();
+      for (let i = 0; i < 50 && !mine?.connection; i++) {
+        await silentPage.waitForTimeout(200);
+        mine = await grantOf();
+      }
       await silentPage.waitForURL((u) => u.hash === "#/tasks" && u.pathname === "/");
       check(engine.system.silent === 1, "the person was connected without a page of the engine");
-      const mine = (await (await silentPage.request.get(base + "/api/me/engines")).json()).engines.find((e) => e.id === "grant");
       check(mine?.connection?.username === "anna" && mine.silent === false, "the silent connection is the person's own: " + JSON.stringify(mine));
       await silentPage.reload(); // once a session: no second round trip
       await silentPage.waitForTimeout(1000);
