@@ -1,7 +1,7 @@
 # ADR-0161: Access requests are answered from the task list
 
-- **Status:** Accepted
-- **Implementation:** Landed
+- **Status:** Superseded by ADR-0162
+- **Implementation:** Superseded
 - **Date:** 2026-11-02
 - **Deciders:** Project initiators. The maintainer asked: "When I come across a protected area, one click on the protected element should create a task for the release (access grant) addressed to the owner. Build it in, well explained for the user." They chose (2026-11-02): the request appears for those who decide as an entry of its own in *Tasks* and on the start page, with *Grant* and *Decline* right there; it is not a stored page or item but a view of the open requests the viewer may decide, which leaves the list when answered; and it works for readers without the right to edit in the room.
 - **Open question:** should a request carry a short message from the one who asks ("Why do you need it?")? It is content, so it would be sealed with the item's key, and the event that asks would change its persisted form (a new codec version); this record does without it.
@@ -79,6 +79,7 @@ Strongest form: nothing new; those who decide are already told, and the item's c
 
 ## Links
 
+- superseded by [ADR-0162](0162-an-access-request-becomes-a-task-for-the-pages-owner.md) (a request becomes a task for the page's owner; the list is removed)
 - amends [ADR-0088](0088-protected-passages-of-a-body.md) (asking from every veiled element, the list of waiting requests)
 - amends [ADR-0160](0160-protected-blocks-and-pictures-of-a-page.md) (veiled blocks of embedded items ask too)
 - relates to ADR-0036 (a board is a view, not a stored object), ADR-0049 (the task inbox), ADR-0061 (account requests decided under the tasks), ADR-0046 (notifications), ADR-0015 (paged listings), ADR-0012 (MCP adapter), ADR-0022 (permissions)

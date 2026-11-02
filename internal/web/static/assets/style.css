@@ -2053,9 +2053,8 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
 .protect-choices { border: 0; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; }
 .protect-blocks { margin: 0 0 8px; padding-left: 18px; }
 
-/* Access requests answered from the task list (ADR-0161). */
-.home-tile .home-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.access-card table { width: 100%; }
-.access-card .task-actions { white-space: nowrap; }
+/* Access requests: the dialog (ADR-0161) and the task (ADR-0162). */
 .access-dialog .access-what { margin-top: 0; }
+.access-request-card .actions-row { margin-bottom: 0; }
+.secret-ask-task, .secret-own-task { overflow-wrap: anywhere; }
 .pm-veiled .secret-request-block.secret-waiting { font-style: italic; }

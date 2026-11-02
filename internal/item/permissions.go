@@ -659,6 +659,9 @@ func (x *Session) SetProperty(id ID, field string, value any) error {
 			return err
 		}
 	}
+	if err := x.mayChangeOwner(it, field); err != nil {
+		return err
+	}
 	return x.s.SetProperty(x.who, id, field, value)
 }
 
@@ -674,6 +677,11 @@ func (x *Session) Transition(id ID, name string) error {
 		if tr, ok := td.Workflow.transition(name); ok && td.Workflow.Finished(tr.To) {
 			return linkedRefusal(it, "it is completed at the engine")
 		}
+	}
+	// Finishing the task of a waiting access request declines the request
+	// (ADR-0162).
+	if done, err := x.closeTask(it, name); done {
+		return err
 	}
 	return x.s.Transition(x.who, id, name)
 }

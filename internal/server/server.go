@@ -208,6 +208,14 @@ func Routes(d Deps) []Route {
 	if d.Metrics == nil {
 		d.Metrics = NewMetrics(d.DB, d.Collab, d.Disk, d.TaskLinks)
 	}
+	if d.DB != nil {
+		// The tasks of access requests are worded in their readers'
+		// languages (ADR-0162).
+		_ = d.DB.Write(func(s *item.Store) error {
+			s.SetAccessTexts(accessTexts{d.DB.Accounts})
+			return nil
+		})
+	}
 	files := http.FileServerFS(d.UI)
 	routes := []Route{
 		{Method: http.MethodGet, Pattern: "/healthz", Summary: "Liveness probe; reveals nothing but that the process serves", Access: Public, Handler: http.HandlerFunc(healthz)},

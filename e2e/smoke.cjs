@@ -3715,9 +3715,15 @@ function gitSource() {
     // Admin is told, and grants it.
     await boss.goto(base + "/#/notifications");
     await boss.waitForSelector("#notifications li:has-text('bert asked to read a protected passage of " + salaries + "')");
+    // The card links the request's task, where admin grants it (ADR-0162).
     await boss.goto(base + "/#/item/" + salaries);
-    await boss.click("#secrets .secret-ask[data-principal] .secret-grant");
-    await boss.waitForSelector("#secrets .secret-grant", { state: "detached" });
+    await boss.click("#secrets .secret-ask-task .secret-task-link");
+    await boss.waitForSelector("#access-request #access-grant");
+    await boss.click("#access-grant");
+    await boss.waitForSelector("#access-request #access-request-state");
+    await boss.goto(base + "/#/item/" + salaries);
+    await boss.waitForSelector("#secrets .secret-entry");
+    check(await boss.$("#secrets .secret-ask") === null, "the granted request has left the card");
     await page.reload();
     await page.waitForSelector("#body .pm-secret.secret-readable:text-is('Paul Muster')");
 
@@ -3814,12 +3820,18 @@ function gitSource() {
       await page.waitForFunction((n) => document.querySelectorAll("#body .pm-veiled .secret-request-block.secret-waiting").length === n, waiting);
     }
     // Admin grants both; the page is read again, as its address is the same.
-    await owner.reload();
-    await owner.waitForSelector("#secrets .secret-ask .secret-grant");
-    await owner.click("#secrets .secret-ask .secret-grant >> nth=0");
-    await owner.waitForFunction(() => document.querySelectorAll("#secrets .secret-grant").length === 1);
-    await owner.click("#secrets .secret-ask .secret-grant");
-    await owner.waitForSelector("#secrets .secret-grant", { state: "detached" });
+    // Each request is a task the card links; admin grants each there (ADR-0162).
+    for (const left of [1, 0]) {
+      await owner.goto(base + "/#/item/" + budget.key);
+      await owner.reload();
+      await owner.waitForSelector("#secrets .secret-ask-task .secret-task-link");
+      await owner.click("#secrets .secret-ask-task .secret-task-link >> nth=0");
+      await owner.waitForSelector("#access-request #access-grant");
+      await owner.click("#access-grant");
+      await owner.waitForSelector("#access-request #access-request-state");
+      await owner.goto(base + "/#/item/" + budget.key);
+      await owner.waitForFunction((n) => document.querySelectorAll("#secrets .secret-ask-task").length === n, left);
+    }
     await ownerCtx.close();
     await page.reload();
     await page.waitForSelector("#body .ProseMirror .pm-block-secret >> text=Paul Muster earns 9000");
@@ -3828,7 +3840,7 @@ function gitSource() {
     const granted = (await page.request.get(`${base}/api/items/${budget.id}/attachments/${budget.pic}`)).status();
     check(granted === 200, "granted, bert fetches the picture: " + granted);
 
-    step("access requests: bert, who only reads a room, clicks a veiled block and one in an embed and asks; admin answers in Tasks; the request vanishes; bert reads it (ADR-0161)");
+    step("access requests: bert, who only reads a room, clicks a veiled block and one in an embed and asks; each request is a task for the page's owner, found in Tasks; admin grants one on its task and closes the other; bert reads the granted one (ADR-0161, ADR-0162)");
     const deciderCtx = await browser.newContext();
     const decider = await deciderCtx.newPage();
     decider.on("pageerror", (e) => problems.push("admin's page error: " + e.message));
@@ -3846,7 +3858,13 @@ function gitSource() {
       };
       await call("POST", "/api/spaces", { key: "VAULT", name: "Vault" });
       await call("PUT", `/api/spaces/VAULT/roles/${bert}`, { role: "viewer" });
-      const edit = (await call("POST", "/api/items", { space: "VAULT", type: "page", title: "Editortest", body: [
+      const me = (await call("GET", "/api/me")).user.id;
+      // The page type gains the ready-made owner field, if it lacks it.
+      const pageType = (await call("GET", "/api/types")).types.find((ty) => ty.name === "page");
+      if (!pageType.fields.some((f) => f.name === "owner")) {
+        await call("POST", "/api/types", { ...pageType, version: undefined, fields: [...pageType.fields, { name: "owner", kind: "user" }] });
+      }
+      const edit = (await call("POST", "/api/items", { space: "VAULT", type: "page", title: "Editortest", properties: { owner: me }, body: [
         { kind: "paragraph", text: "Open notes." }, { kind: "heading", level: 2, text: "Door code" }, { kind: "paragraph", text: "The code is 4711." },
         { kind: "paragraph", text: "The safe opens with 0815." }] })).item;
       const first = (await call("POST", `/api/items/${edit.id}/secrets`, { fromBlock: 1, toBlock: 2 })).item.secrets[0].id;
@@ -3855,6 +3873,9 @@ function gitSource() {
         { kind: "paragraph", text: "The editor test, embedded:" }, { kind: "embed", ref: edit.id }] })).item;
       return { key: edit.key, host: host.key, first, second };
     }, bertId);
+    // Admin, the page's owner, reads German: the tasks made for him are
+    // worded so (ADR-0162).
+    await decider.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "de" }) }));
     // Bert reads the page in German: a click on the dark bar opens the
     // dialog that says what is protected and who decides.
     await page.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "de" }) }));
@@ -3888,23 +3909,46 @@ function gitSource() {
     await page.waitForSelector("#access-dialog #access-sent");
     await page.click("#access-close");
     await page.waitForSelector(`#body .pm-embed-content .pm-veiled[data-secret="${vault.second}"] .secret-request-block.secret-waiting`);
-    // Admin sees both on the start page and answers them in Tasks.
-    // The start page was drawn at sign-in, before the requests: read it again.
-    await decider.goto(base + "/#/");
+    // Each request is a task in VAULT below the page, for its owner, admin
+    // (ADR-0162): admin finds them under Tasks, assigned to him, labelled.
+    await decider.goto(base + "/#/tasks/mine");
     await decider.reload();
-    await decider.waitForSelector("#home-access-count");
-    check((await decider.textContent("#home-access-count")).includes("2"), "the start page counts the requests: " + await decider.textContent("#home-access-count"));
-    await decider.click("#home-access");
-    await decider.waitForSelector("#tab-access.active");
-    await decider.waitForFunction(() => document.querySelectorAll("#access-requests tr.access-request").length === 2);
-    const row = `#access-requests tr.access-request[data-secret="${vault.first}"][data-principal="${bertId}"]`;
-    check((await decider.textContent(row)).includes("bert") && (await decider.textContent(row)).includes(vault.key) && !(await decider.textContent("#tasks-access")).includes("4711"),
-      "the request names bert and the page, not the content: " + await decider.textContent(row));
-    await decider.screenshot({ path: process.env.REQUEST_TASKS_PNG || "request-tasks.png", fullPage: true });
-    await decider.click(`${row} .access-grant`);
-    await decider.waitForFunction(() => document.querySelectorAll("#access-requests tr.access-request").length === 1);
-    await decider.click(`#access-requests tr.access-request[data-secret="${vault.second}"] .access-decline`);
-    await decider.waitForSelector("#access-none");
+    await decider.waitForFunction(() => document.querySelectorAll("#tasks tbody tr:has(a[href*='VAULT-'])").length === 2);
+    const taskRow = await decider.textContent("#tasks tbody tr:has-text('Editortest') >> nth=0");
+    check(taskRow.includes("access-request") && taskRow.includes("Freigabe-Anfrage: bert") && !taskRow.includes("4711"),
+      "the task is in admin's list, labelled, worded in his language, without the content: " + taskRow);
+    // The page's card links the tasks; it holds no buttons.
+    await decider.goto(base + "/#/item/" + vault.key);
+    await decider.waitForSelector(`#secrets li[data-secret="${vault.first}"] .secret-ask-task .secret-task-link`);
+    check(await decider.$("#secrets .secret-grant") === null && (await decider.textContent(`#secrets li[data-secret="${vault.first}"] .secret-ask-task`)).includes("bert"),
+      "the card names who asked and links the task, without buttons: " + await decider.textContent("#secrets"));
+    await decider.locator("#secrets").screenshot({ path: process.env.PAGE_CARD_PNG || "page-card.png" });
+    // Admin opens the task of the section and grants it there.
+    await decider.click(`#secrets li[data-secret="${vault.first}"] .secret-task-link`);
+    await decider.waitForSelector("#access-request #access-grant");
+    check((await decider.textContent("#access-request")).includes("bert") && !(await decider.textContent("main")).includes("4711"),
+      "the task says who asks, not the content: " + await decider.textContent("#access-request"));
+    await decider.setViewportSize({ width: 1280, height: 1000 });
+    await decider.screenshot({ path: process.env.TASK_PAGE_PNG || "task-page.png" });
+    const firstTask = decider.url();
+    await decider.click("#access-grant");
+    await decider.waitForSelector("#access-request #access-request-state");
+    const done = await decider.evaluate(async (u) => {
+      const key = decodeURIComponent(u.split("#/item/")[1]);
+      const [{ item }, { comments }] = await Promise.all([(await fetch("/api/items/" + key)).json(), (await fetch(`/api/items/${key}/comments`)).json()]);
+      return item.state + " / " + comments.map((c) => c.text).join(" ");
+    }, firstTask);
+    check(done === "closed / Freigegeben von admin.", "granted, the task is finished by its workflow and says so: " + done);
+    // The other task, of the block in the embed, admin closes without
+    // deciding: the request is declined.
+    await decider.goto(base + "/#/item/" + vault.key);
+    await decider.click(`#secrets li[data-secret="${vault.second}"] .secret-task-link`);
+    await decider.waitForSelector("#access-request #access-grant");
+    const second = decodeURIComponent(decider.url().split("#/item/")[1]);
+    await decider.evaluate(async (k) => fetch(`/api/items/${k}/transitions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "close" }) }), second);
+    await decider.reload();
+    await decider.waitForSelector("#access-request #access-request-state");
+    await decider.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "" }) }));
     await deciderCtx.close();
     // Bert reads the granted section; the declined block stays veiled and
     // may be asked for again.

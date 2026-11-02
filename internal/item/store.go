@@ -72,6 +72,12 @@ type Store struct {
 	// findings keeps what the bell last found for each principal, until
 	// the store changes (ADR-0081).
 	findings *findingsMemo
+
+	// accessTasks are the requests to read a protection that tasks were
+	// made for, by task (ADR-0162), from the SecretRequested events.
+	accessTasks map[ID]accessRef
+	// accessTexts word those tasks; commands only, never replay.
+	accessTexts AccessTexts
 }
 
 // Journal makes batches of events durable. Append returns only after the
@@ -122,7 +128,8 @@ func NewStore(opts ...Option) *Store {
 		spaceRoles: map[string]map[string]Role{},
 		sysRoles:   map[string]map[string]bool{},
 
-		bySource: map[string]ID{},
+		bySource:    map[string]ID{},
+		accessTasks: map[ID]accessRef{},
 	}
 	for _, o := range opts {
 		o(s)
@@ -461,27 +468,37 @@ func (s *Store) SetProperty(actor string, id ID, field string, value any) error 
 
 // Transition moves an item along its type's workflow (D3).
 func (s *Store) Transition(actor string, id ID, name string) error {
-	it, err := s.live(id)
+	e, err := s.transitionEvent(id, name)
 	if err != nil {
 		return err
 	}
+	return s.record(actor, e)
+}
+
+// transitionEvent validates a transition of a live item and returns its
+// event.
+func (s *Store) transitionEvent(id ID, name string) (Event, error) {
+	it, err := s.live(id)
+	if err != nil {
+		return Event{}, err
+	}
 	td, _ := s.latest(it.Type)
 	if td.Workflow == nil {
-		return invalid("type %q has no workflow", td.Name)
+		return Event{}, invalid("type %q has no workflow", td.Name)
 	}
 	tr, ok := td.Workflow.transition(name)
 	if !ok {
-		return invalid("type %q has no transition %q", td.Name, name)
+		return Event{}, invalid("type %q has no transition %q", td.Name, name)
 	}
 	if !slices.Contains(tr.From, it.State) {
-		return invalid("transition %q is not allowed from state %q", name, it.State)
+		return Event{}, invalid("transition %q is not allowed from state %q", name, it.State)
 	}
 	for _, req := range tr.Requires {
 		if it.Properties[req] == nil {
-			return invalid("transition %q requires field %q", name, req)
+			return Event{}, invalid("transition %q requires field %q", name, req)
 		}
 	}
-	return s.record(actor, Event{Kind: Transitioned, Item: id, Transition: name, From: it.State, To: tr.To})
+	return Event{Kind: Transitioned, Item: id, Transition: name, From: it.State, To: tr.To}, nil
 }
 
 // Move changes an item's space and parent. Moving to another space moves the
