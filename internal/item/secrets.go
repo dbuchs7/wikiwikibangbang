@@ -1,8 +1,10 @@
 package item
 
 import (
+	"maps"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -28,11 +30,25 @@ type Secret struct {
 	Requests []string `json:"-"`
 
 	since int // sequence number of the event that first protected it
+	// asked says when each one in Requests asked (ADR-0161), from the
+	// SecretRequested event, the same live and on replay; an entry of one
+	// no longer asking is not read.
+	asked map[string]askedAt
+}
+
+// askedAt is the event that made a request: its sequence number, which
+// orders the requests across items, its time, and the task made for it
+// (ADR-0162), empty for a request made before tasks were or without one.
+type askedAt struct {
+	seq  int
+	at   time.Time
+	task ID
 }
 
 func (sec Secret) clone() Secret {
 	sec.Readers = slices.Clone(sec.Readers)
 	sec.Requests = slices.Clone(sec.Requests)
+	sec.asked = maps.Clone(sec.asked)
 	return sec
 }
 
@@ -281,6 +297,7 @@ func (s *Store) applySecret(e Event) {
 		sec.since = e.Seq
 		if ok {
 			sec.since = it.Secrets[i].since
+			sec.asked = it.Secrets[i].asked
 			// The answer to a request is in who reads it now.
 			sec.Requests = slices.DeleteFunc(slices.Clone(it.Secrets[i].Requests), func(p string) bool { return s.readsSecret(p, sec) })
 			it.Secrets[i] = sec
@@ -315,7 +332,16 @@ func (s *Store) applySecret(e Event) {
 		}
 	case SecretRequested:
 		if ok && !slices.Contains(it.Secrets[i].Requests, e.Principal) {
-			it.Secrets[i].Requests = append(slices.Clone(it.Secrets[i].Requests), e.Principal)
+			sec := it.Secrets[i].clone()
+			sec.Requests = append(sec.Requests, e.Principal)
+			if sec.asked == nil {
+				sec.asked = map[string]askedAt{}
+			}
+			sec.asked[e.Principal] = askedAt{seq: e.Seq, at: e.At, task: e.Task}
+			it.Secrets[i] = sec
+			if e.Task != "" {
+				s.accessTasks[e.Task] = accessRef{item: it.ID, secret: sec.ID, principal: e.Principal, at: e.At}
+			}
 		}
 	case SecretGranted:
 		if ok {
@@ -344,10 +370,31 @@ type SecretView struct {
 	// Readable: the reader reads it in clear. Decides: the reader decides
 	// who reads it. Requested: the reader asked to and waits. Blocks: it
 	// protects whole blocks of the body, not a passage (ADR-0160).
-	Readable, Decides, Requested, Blocks bool
-	// Readers and Requests are told to those who read or decide it.
+	// Answers: the reader answers the requests of others to read it, as
+	// one who decides or as the item's owner (ADR-0162).
+	Readable, Decides, Requested, Blocks, Answers bool
+	// Readers are told to those who read or decide it; Requests, who
+	// waits, to those who answer them.
 	Readers  []string
 	Requests []string
+	// Asks are the waiting requests, told to those who answer them, each
+	// with its task where the reader reads it (ADR-0162).
+	Asks []AskView
+	// RequestedAt is when the reader asked, while they wait (ADR-0161);
+	// Own is their waiting request, with its task where they read it.
+	RequestedAt time.Time
+	Own         *AskView
+}
+
+// AskView is one waiting request: who asked, when, and the task made for
+// it, named only to one who reads the task (D10) and only while it is
+// live; Assignee is who the task is assigned to.
+type AskView struct {
+	Principal string
+	At        time.Time
+	Task      ID
+	TaskKey   string
+	Assignee  string
 }
 
 // Secrets lists the passages of a readable item as the principal sees
@@ -361,15 +408,38 @@ func (x *Session) Secrets(id ID) ([]SecretView, error) {
 	for _, sec := range it.Secrets {
 		v := SecretView{ID: sec.ID, By: sec.By, Readable: x.s.readsSecret(x.who, sec), Decides: x.s.decidesSecret(x.who, it, sec),
 			Requested: slices.Contains(sec.Requests, x.who), Blocks: it.protectsBlocks(sec.ID)}
+		v.Answers = v.Decides || x.s.answersAsOwner(x.who, it)
 		if v.Readable || v.Decides {
 			v.Readers = slices.Clone(sec.Readers)
 		}
-		if v.Decides {
-			v.Requests = slices.Clone(sec.Requests)
+		if v.Answers {
+			for _, p := range sec.Requests {
+				if x.s.answersRequest(x.who, it, sec, p) {
+					v.Requests = append(v.Requests, p)
+					v.Asks = append(v.Asks, x.ask(sec, p))
+				}
+			}
+		}
+		if v.Requested {
+			v.RequestedAt = sec.asked[x.who].at
+			own := x.ask(sec, x.who)
+			v.Own = &own
 		}
 		out = append(out, v)
 	}
 	return out, nil
+}
+
+// ask is a waiting request as the reader sees it: its task only when they
+// read it and it is live.
+func (x *Session) ask(sec Secret, p string) AskView {
+	a := sec.asked[p]
+	v := AskView{Principal: p, At: a.at}
+	if t := x.s.items[a.task]; a.task != "" && t != nil && t.Presence == Live && x.s.canRead(x.who, t) {
+		v.Task, v.TaskKey = t.ID, t.Key
+		v.Assignee, _ = t.Properties[AssigneeField].(string)
+	}
+	return v
 }
 
 // ReadsAllSecrets reports whether the principal reads every passage of a
@@ -505,7 +575,16 @@ func (x *Session) SetSecretReaders(id, secret ID, readers []string) error {
 		return nil
 	}
 	set := Secret{ID: sec.ID, By: sec.By, Readers: readers}
-	return x.s.record(x.who, Event{Kind: SecretSet, Item: id, Secret: &set})
+	events := []Event{{Kind: SecretSet, Item: id, Secret: &set}}
+	// A request whose asker reads it now is granted; its task says so and
+	// is finished (ADR-0162).
+	it := x.s.items[id]
+	for _, p := range sec.Requests {
+		if x.s.readsSecret(p, set) {
+			events = append(events, x.s.endTask(it, sec, p, AccessGranted, x.who, true)...)
+		}
+	}
+	return x.s.recordBatch(x.who, events...)
 }
 
 // Unprotect takes a passage's protection off: its text reads as any other.
@@ -528,7 +607,8 @@ func (x *Session) Unprotect(id, secret ID) error {
 		}
 		body.Blocks[i] = b
 	}
-	return x.s.recordBatch(x.who, Event{Kind: SecretRemoved, Item: id, Secret: &Secret{ID: sec.ID}}, Event{Kind: BodyCommitted, Item: id, Body: &body})
+	events := []Event{{Kind: SecretRemoved, Item: id, Secret: &Secret{ID: sec.ID}}, {Kind: BodyCommitted, Item: id, Body: &body}}
+	return x.s.recordBatch(x.who, append(events, x.endTasks(it, sec)...)...)
 }
 
 // EraseSecret erases a passage for good (ADR-0089): its text leaves the
@@ -561,7 +641,17 @@ func (x *Session) EraseSecret(id, secret ID) error {
 			events = append(events, Event{Kind: AttachmentDeleted, Item: id, Attachment: &Attachment{ID: a.ID}})
 		}
 	}
-	return x.s.recordBatch(x.who, events...)
+	return x.s.recordBatch(x.who, append(events, x.endTasks(it, sec)...)...)
+}
+
+// endTasks finishes the tasks of the requests a protection taken off or
+// erased leaves without anything to decide (ADR-0162).
+func (x *Session) endTasks(it *Item, sec Secret) []Event {
+	var out []Event
+	for _, p := range sec.Requests {
+		out = append(out, x.s.endTask(it, sec, p, AccessRemoved, x.who, true)...)
+	}
+	return out
 }
 
 // cutSecrets removes the passages in cut, text and mark, from a body; the
@@ -632,24 +722,43 @@ func (x *Session) RequestSecret(id, secret ID) error {
 	case slices.Contains(sec.Requests, x.who):
 		return nil
 	}
-	return x.s.record(x.who, Event{Kind: SecretRequested, Item: id, Secret: &Secret{ID: sec.ID}, Principal: x.who})
+	// The request becomes a task for the item's owner, in the same batch,
+	// made on the asker's behalf (ADR-0162).
+	ask := Event{Kind: SecretRequested, Item: id, Secret: &Secret{ID: sec.ID}, Principal: x.who}
+	task, tid, err := x.s.requestTask(it, sec, x.who)
+	if err != nil {
+		return err
+	}
+	ask.Task = tid
+	return x.s.recordBatch(x.who, append([]Event{ask}, task...)...)
 }
 
 // DecideSecret answers a request to read a passage: grant lets the one who
-// asked read it, otherwise the request is declined.
+// asked read it, otherwise the request is declined. Those who decide about
+// the passage answer, and the item's owner the requests of others
+// (ADR-0162); the request's task records the answer and is finished.
 func (x *Session) DecideSecret(id, secret ID, principal string, grant bool) error {
-	_, sec, err := x.decidable(id, secret)
+	it, err := x.readable(id)
 	if err != nil {
 		return err
+	}
+	i, ok := it.secret(secret)
+	if !ok {
+		return notFound("protected passage %s of %s", secret, it.Key)
+	}
+	sec := it.Secrets[i]
+	if !x.s.answersRequest(x.who, it, sec, principal) {
+		return forbidden("the one who protected the passage, the item's owner and the space's administrators decide who reads it")
 	}
 	if !slices.Contains(sec.Requests, principal) {
 		return notFound("a request of %s to read the passage", principal)
 	}
-	kind := SecretDeclined
+	kind, o := SecretDeclined, AccessDeclined
 	if grant {
-		kind = SecretGranted
+		kind, o = SecretGranted, AccessGranted
 	}
-	return x.s.record(x.who, Event{Kind: kind, Item: id, Secret: &Secret{ID: sec.ID}, Principal: principal})
+	events := []Event{{Kind: kind, Item: id, Secret: &Secret{ID: sec.ID}, Principal: principal}}
+	return x.s.recordBatch(x.who, append(events, x.s.endTask(it, sec, principal, o, x.who, true)...)...)
 }
 
 // VeilAnchor hides what an inline comment quotes of a passage the

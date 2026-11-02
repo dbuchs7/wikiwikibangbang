@@ -37,6 +37,7 @@ func itemRoutes(d Deps) []Route {
 	get, post, put, del := http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete
 	routes := []Route{
 		{Method: get, Pattern: "/api/types", Summary: "List item types", Handler: http.HandlerFunc(h.listTypes)},
+		{Method: get, Pattern: "/api/types/templates", Summary: "The ready-made types an installation starts from: page, task and decision; a request to read protected content makes its task of the task type when no type can hold it (ADR-0162)", Handler: http.HandlerFunc(h.typeTemplates)},
 		{Method: post, Pattern: "/api/types", Summary: "Define a type or a new version of it (administrators)", Handler: http.HandlerFunc(h.defineType)},
 		{Method: del, Pattern: "/api/types/{name}", Summary: "Remove a type that no item and no kanban uses (administrators)", Handler: http.HandlerFunc(h.removeType)},
 		{Method: get, Pattern: "/api/spaces", Summary: "List the spaces one holds a role in", Handler: http.HandlerFunc(h.listSpaces)},
@@ -227,6 +228,14 @@ func (h itemHandlers) listTypes(w http.ResponseWriter, r *http.Request) {
 		}
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"types": nonNilSlice(out)})
+}
+
+func (h itemHandlers) typeTemplates(w http.ResponseWriter, r *http.Request) {
+	out := []typeJSON{}
+	for _, td := range item.TypeTemplates() {
+		out = append(out, toTypeJSON(td))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"templates": out})
 }
 
 func (h itemHandlers) defineType(w http.ResponseWriter, r *http.Request) {

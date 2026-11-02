@@ -1639,6 +1639,13 @@ function gitSource() {
       await fetch("/api/relations", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "depends-on", from: ids[1], to: ids[0] }) });
     });
+    // A long page, whose preview on the map is clipped (ADR-0157).
+    const longPage = await page.evaluate(async () => {
+      const body = Array.from({ length: 30 }, (_, i) => ({ kind: "paragraph", text: `Line ${i + 1} of the long star chart: the constellations rise and set.` }));
+      const r = await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ space: "PLAT", type: "task", title: "Star chart", properties: { priority: "low" }, body }) });
+      return (await r.json()).item.key;
+    });
     await page.goto(base + "/#/starmap/PLAT");
     await page.waitForSelector("#starmap-canvas .star-node");
     check(await page.inputValue("#starmap-space") === "PLAT", "the room of the address is chosen");
@@ -1663,10 +1670,42 @@ function gitSource() {
     await page.click(".star-node[data-key='PLAT-2']");
     await page.waitForSelector("#starmap-panel:not([hidden])");
     check((await page.getAttribute("#starmap-open", "href")) === "#/item/PLAT-2", "the panel links the item");
+    // The panel shows the page itself, read-only, without leaving the map.
+    const plat2Text = await page.evaluate(async () => (await (await fetch("/api/items/PLAT-2")).json()).item.body.map((b) => b.text).filter(Boolean)[0] || "");
+    await page.waitForSelector("#starmap-preview .pm-embed-content");
+    check(plat2Text === "" || (await page.textContent("#starmap-preview")).includes(plat2Text), "the panel shows the page's text: " + plat2Text);
+    check(await page.evaluate(() => document.activeElement?.id === "starmap-panel"), "the keyboard follows into the panel");
     check(await page.locator(".star-node.dim").count() > 0 && await page.locator(".star-node.focused[data-key='PLAT-2']").count() === 1, "the node's neighbourhood stands out, the rest is dimmed");
     await page.keyboard.press("Escape");
     await page.waitForSelector("#starmap-panel", { state: "hidden" });
     check(await page.locator(".star-node.dim").count() === 0, "Escape clears the focus");
+    // A long page is clipped, and Read more opens it in the panel; in
+    // German, it says Weiterlesen.
+    await page.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "de" }) }));
+    await page.reload();
+    await page.waitForSelector(`.star-node[data-key='${longPage}']`);
+    await page.click(`.star-node[data-key='${longPage}']`);
+    await page.waitForSelector("#starmap-preview #starmap-more:not([hidden])");
+    check((await page.textContent("#starmap-more")) === "Weiterlesen" && await page.locator("#starmap-preview-body.clipped").count() === 1, "a long page is clipped with Weiterlesen");
+    await page.screenshot({ path: process.env.STARMAP_PREVIEW_PNG || "starmap-preview.png" });
+    const clipped = await page.evaluate(() => document.querySelector("#starmap-preview-body").clientHeight);
+    await page.click("#starmap-more");
+    await page.waitForSelector("#starmap-preview-body:not(.clipped)");
+    check(await page.evaluate(() => document.querySelector("#starmap-preview-body").clientHeight) > clipped && (await page.textContent("#starmap-more")) === "Weniger",
+      "Read more opens the whole page in the panel");
+    await page.click("#starmap-more");
+    await page.waitForSelector("#starmap-preview-body.clipped");
+    await page.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "" }) }));
+    await page.reload();
+    // A picture shows itself in the panel, with its item.
+    await page.waitForSelector("#starmap-canvas .star-node.kind-picture");
+    // By keyboard: the picture's small mark may lie under another one.
+    await page.focus("#starmap-canvas .star-node.kind-picture >> nth=0");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#starmap-preview #starmap-picture");
+    await page.waitForFunction(() => { const img = document.querySelector("#starmap-picture"); return img && img.complete && img.naturalWidth > 0; });
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#starmap-panel", { state: "hidden" });
 
     step("starmap moves: the map settles, pointing lights a neighbourhood, a dragged node moves, a double-click separates a node, Escape and the trail step back, the address keeps the drill path (ADR-0158)");
     // The map is a live simulation; the canvas says when it rests, so the
@@ -3822,15 +3861,25 @@ function gitSource() {
     const veiledText = await page.textContent("#body .ProseMirror");
     check(!veiledText.includes("Paul") && veiledText.includes("▒") && veiledText.includes("Due Friday."), "bert reads the passage veiled: " + veiledText);
     check(await page.$("#edit") === null && await page.$("#protect-selection") === null, "bert cannot change the text");
+    // A click on the veiled passage asks for access in a dialog (ADR-0161).
     await page.click("#body .pm-secret.secret-veiled");
-    await page.click("#secrets .secret-request");
+    await page.waitForSelector("#access-dialog #access-ask");
+    await page.click("#access-ask");
+    await page.waitForSelector("#access-dialog #access-sent");
+    await page.click("#access-close");
     await page.waitForSelector("#secrets .notice");
     // Admin is told, and grants it.
     await boss.goto(base + "/#/notifications");
     await boss.waitForSelector("#notifications li:has-text('bert asked to read a protected passage of " + salaries + "')");
+    // The card links the request's task, where admin grants it (ADR-0162).
     await boss.goto(base + "/#/item/" + salaries);
-    await boss.click("#secrets .secret-ask[data-principal] .secret-grant");
-    await boss.waitForSelector("#secrets .secret-grant", { state: "detached" });
+    await boss.click("#secrets .secret-ask-task .secret-task-link");
+    await boss.waitForSelector("#access-request #access-grant");
+    await boss.click("#access-grant");
+    await boss.waitForSelector("#access-request #access-request-state");
+    await boss.goto(base + "/#/item/" + salaries);
+    await boss.waitForSelector("#secrets .secret-entry");
+    check(await boss.$("#secrets .secret-ask") === null, "the granted request has left the card");
     await page.reload();
     await page.waitForSelector("#body .pm-secret.secret-readable:text-is('Paul Muster')");
 
@@ -3917,19 +3966,28 @@ function gitSource() {
     check(await page.$(`img[src*="${budget.pic}"]`) === null && !(await page.textContent("#album")).includes("salary-plan"), "the album shows bert no protected picture");
     const onMap = await page.evaluate(async (b) => JSON.stringify(await (await fetch("/api/spaces/PLAT/starmap")).json()).includes(b.pic), budget);
     check(!onMap, "the starmap shows bert no protected picture");
-    // He asks for both, from the bar and from the card.
+    // He asks for both, from each bar, in the dialog it opens (ADR-0161).
     await page.goto(base + "/#/item/" + budget.key);
-    await page.click("#body .pm-veiled .secret-request-block >> nth=0");
-    await page.waitForFunction(() => document.querySelectorAll("#body .pm-veiled .secret-request-block").length === 1);
-    await page.click("#body .pm-veiled .secret-request-block");
-    await page.waitForFunction(() => document.querySelectorAll("#body .pm-veiled .notice").length === 2);
+    for (const waiting of [1, 2]) {
+      await page.click("#body .pm-veiled .secret-request-block:not(.secret-waiting) >> nth=0");
+      await page.click("#access-dialog #access-ask");
+      await page.waitForSelector("#access-dialog #access-sent");
+      await page.click("#access-close");
+      await page.waitForFunction((n) => document.querySelectorAll("#body .pm-veiled .secret-request-block.secret-waiting").length === n, waiting);
+    }
     // Admin grants both; the page is read again, as its address is the same.
-    await owner.reload();
-    await owner.waitForSelector("#secrets .secret-ask .secret-grant");
-    await owner.click("#secrets .secret-ask .secret-grant >> nth=0");
-    await owner.waitForFunction(() => document.querySelectorAll("#secrets .secret-grant").length === 1);
-    await owner.click("#secrets .secret-ask .secret-grant");
-    await owner.waitForSelector("#secrets .secret-grant", { state: "detached" });
+    // Each request is a task the card links; admin grants each there (ADR-0162).
+    for (const left of [1, 0]) {
+      await owner.goto(base + "/#/item/" + budget.key);
+      await owner.reload();
+      await owner.waitForSelector("#secrets .secret-ask-task .secret-task-link");
+      await owner.click("#secrets .secret-ask-task .secret-task-link >> nth=0");
+      await owner.waitForSelector("#access-request #access-grant");
+      await owner.click("#access-grant");
+      await owner.waitForSelector("#access-request #access-request-state");
+      await owner.goto(base + "/#/item/" + budget.key);
+      await owner.waitForFunction((n) => document.querySelectorAll("#secrets .secret-ask-task").length === n, left);
+    }
     await ownerCtx.close();
     await page.reload();
     await page.waitForSelector("#body .ProseMirror .pm-block-secret >> text=Paul Muster earns 9000");
@@ -3937,6 +3995,126 @@ function gitSource() {
     check(await page.$("#body .pm-veiled") === null, "granted, bert reads every block");
     const granted = (await page.request.get(`${base}/api/items/${budget.id}/attachments/${budget.pic}`)).status();
     check(granted === 200, "granted, bert fetches the picture: " + granted);
+
+    step("access requests: bert, who only reads a room, clicks a veiled block and one in an embed and asks; each request is a task for the page's owner, found in Tasks; admin grants one on its task and closes the other; bert reads the granted one (ADR-0161, ADR-0162)");
+    const deciderCtx = await browser.newContext();
+    const decider = await deciderCtx.newPage();
+    decider.on("pageerror", (e) => problems.push("admin's page error: " + e.message));
+    await decider.goto(base + "/");
+    await decider.fill("#login [name=username]", "admin");
+    await decider.fill("#login [name=password]", adminPassword);
+    await decider.click("#login button[type=submit]");
+    await decider.waitForSelector("#nav a");
+    const bertId = await page.evaluate(async () => (await (await fetch("/api/me")).json()).user.id);
+    const vault = await decider.evaluate(async (bert) => {
+      const call = async (method, url, body) => {
+        const r = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+        if (!r.ok) throw new Error(`${method} ${url}: ${r.status} ${await r.text()}`);
+        return r.status === 204 ? {} : r.json();
+      };
+      await call("POST", "/api/spaces", { key: "VAULT", name: "Vault" });
+      await call("PUT", `/api/spaces/VAULT/roles/${bert}`, { role: "viewer" });
+      const me = (await call("GET", "/api/me")).user.id;
+      // The page type gains the ready-made owner field, if it lacks it.
+      const pageType = (await call("GET", "/api/types")).types.find((ty) => ty.name === "page");
+      if (!pageType.fields.some((f) => f.name === "owner")) {
+        await call("POST", "/api/types", { ...pageType, version: undefined, fields: [...pageType.fields, { name: "owner", kind: "user" }] });
+      }
+      const edit = (await call("POST", "/api/items", { space: "VAULT", type: "page", title: "Editortest", properties: { owner: me }, body: [
+        { kind: "paragraph", text: "Open notes." }, { kind: "heading", level: 2, text: "Door code" }, { kind: "paragraph", text: "The code is 4711." },
+        { kind: "paragraph", text: "The safe opens with 0815." }] })).item;
+      const first = (await call("POST", `/api/items/${edit.id}/secrets`, { fromBlock: 1, toBlock: 2 })).item.secrets[0].id;
+      const second = (await call("POST", `/api/items/${edit.id}/secrets`, { fromBlock: 3, toBlock: 3 })).item.secrets[1].id;
+      const host = (await call("POST", "/api/items", { space: "VAULT", type: "page", title: "Overview", body: [
+        { kind: "paragraph", text: "The editor test, embedded:" }, { kind: "embed", ref: edit.id }] })).item;
+      return { key: edit.key, host: host.key, first, second };
+    }, bertId);
+    // Admin, the page's owner, reads German: the tasks made for him are
+    // worded so (ADR-0162).
+    await decider.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "de" }) }));
+    // Bert reads the page in German: a click on the dark bar opens the
+    // dialog that says what is protected and who decides.
+    await page.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "de" }) }));
+    await page.goto(base + "/#/item/" + vault.key);
+    await page.reload();
+    await page.waitForSelector(`#body .pm-veiled[data-secret="${vault.first}"] .pm-veiled-bar`);
+    check(!(await page.textContent("#body .ProseMirror")).includes("4711"), "bert does not read the protected section");
+    await page.click(`#body .pm-veiled[data-secret="${vault.first}"] .pm-veiled-bar`);
+    await page.waitForSelector("#access-dialog #access-ask");
+    check((await page.textContent("#access-deciders")).includes("admin") && (await page.textContent("#access-dialog")).includes("Editortest"),
+      "the dialog names the page and who decides: " + await page.textContent("#access-dialog"));
+    await page.screenshot({ path: process.env.REQUEST_DIALOG_PNG || "request-dialog.png" });
+    await page.click("#access-ask");
+    await page.waitForSelector("#access-dialog #access-sent");
+    await page.click("#access-close");
+    await page.waitForSelector(`#body .pm-veiled[data-secret="${vault.first}"] .secret-request-block.secret-waiting`);
+    // Asked again, the dialog says since when it waits.
+    await page.click(`#body .pm-veiled[data-secret="${vault.first}"] .secret-request-block`);
+    await page.waitForSelector("#access-dialog #access-pending");
+    check(await page.$("#access-dialog #access-ask") === null, "a request already made is not made again");
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#access-dialog", { state: "detached" });
+    // Inside the embed on another page, the other protection is asked
+    // for, by keyboard, at the embedded item.
+    await page.goto(base + "/#/item/" + vault.host);
+    await page.waitForSelector(`#body .pm-embed-content .pm-veiled[data-secret="${vault.second}"] .secret-request-block:not(.secret-waiting)`);
+    await page.focus(`#body .pm-embed-content .pm-veiled[data-secret="${vault.second}"] .secret-request-block`);
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#access-dialog #access-ask");
+    await page.click("#access-ask");
+    await page.waitForSelector("#access-dialog #access-sent");
+    await page.click("#access-close");
+    await page.waitForSelector(`#body .pm-embed-content .pm-veiled[data-secret="${vault.second}"] .secret-request-block.secret-waiting`);
+    // Each request is a task in VAULT below the page, for its owner, admin
+    // (ADR-0162): admin finds them under Tasks, assigned to him, labelled.
+    await decider.goto(base + "/#/tasks/mine");
+    await decider.reload();
+    await decider.waitForFunction(() => document.querySelectorAll("#tasks tbody tr:has(a[href*='VAULT-'])").length === 2);
+    const taskRow = await decider.textContent("#tasks tbody tr:has-text('Editortest') >> nth=0");
+    check(taskRow.includes("access-request") && taskRow.includes("Freigabe-Anfrage: bert") && !taskRow.includes("4711"),
+      "the task is in admin's list, labelled, worded in his language, without the content: " + taskRow);
+    // The page's card links the tasks; it holds no buttons.
+    await decider.goto(base + "/#/item/" + vault.key);
+    await decider.waitForSelector(`#secrets li[data-secret="${vault.first}"] .secret-ask-task .secret-task-link`);
+    check(await decider.$("#secrets .secret-grant") === null && (await decider.textContent(`#secrets li[data-secret="${vault.first}"] .secret-ask-task`)).includes("bert"),
+      "the card names who asked and links the task, without buttons: " + await decider.textContent("#secrets"));
+    await decider.locator("#secrets").screenshot({ path: process.env.PAGE_CARD_PNG || "page-card.png" });
+    // Admin opens the task of the section and grants it there.
+    await decider.click(`#secrets li[data-secret="${vault.first}"] .secret-task-link`);
+    await decider.waitForSelector("#access-request #access-grant");
+    check((await decider.textContent("#access-request")).includes("bert") && !(await decider.textContent("main")).includes("4711"),
+      "the task says who asks, not the content: " + await decider.textContent("#access-request"));
+    await decider.setViewportSize({ width: 1280, height: 1000 });
+    await decider.screenshot({ path: process.env.TASK_PAGE_PNG || "task-page.png" });
+    const firstTask = decider.url();
+    await decider.click("#access-grant");
+    await decider.waitForSelector("#access-request #access-request-state");
+    const done = await decider.evaluate(async (u) => {
+      const key = decodeURIComponent(u.split("#/item/")[1]);
+      const [{ item }, { comments }] = await Promise.all([(await fetch("/api/items/" + key)).json(), (await fetch(`/api/items/${key}/comments`)).json()]);
+      return item.state + " / " + comments.map((c) => c.text).join(" ");
+    }, firstTask);
+    check(done === "closed / Freigegeben von admin.", "granted, the task is finished by its workflow and says so: " + done);
+    // The other task, of the block in the embed, admin closes without
+    // deciding: the request is declined.
+    await decider.goto(base + "/#/item/" + vault.key);
+    await decider.click(`#secrets li[data-secret="${vault.second}"] .secret-task-link`);
+    await decider.waitForSelector("#access-request #access-grant");
+    const second = decodeURIComponent(decider.url().split("#/item/")[1]);
+    await decider.evaluate(async (k) => fetch(`/api/items/${k}/transitions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "close" }) }), second);
+    await decider.reload();
+    await decider.waitForSelector("#access-request #access-request-state");
+    await decider.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "" }) }));
+    await deciderCtx.close();
+    // Bert reads the granted section; the declined block stays veiled and
+    // may be asked for again.
+    await page.goto(base + "/#/item/" + vault.key);
+    await page.waitForSelector("#body .ProseMirror .pm-block-secret >> text=The code is 4711.");
+    await page.waitForSelector(`#body .pm-veiled[data-secret="${vault.second}"] .secret-request-block:not(.secret-waiting)`);
+    const told = await page.evaluate(async () => (await (await fetch("/api/notifications")).json()).notifications.map((n) => n.kind));
+    check(told.includes("SecretGranted") && told.includes("SecretDeclined"), "bert is told both answers: " + told.join(", "));
+    await page.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "" }) }));
+    await page.reload();
 
     step("editing: Done stores the text at once, also when the server learns late that the editor was left (ADR-0010)");
     const quick = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },

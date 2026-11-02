@@ -14,8 +14,8 @@ func secretRoutes(h itemHandlers) []Route {
 		{Method: http.MethodPut, Pattern: "/api/items/{ref}/secrets/{id}", Summary: "Set who reads a protected passage besides the one who protected it (that one and the space's administrators)", Handler: http.HandlerFunc(h.setSecretReaders)},
 		{Method: http.MethodDelete, Pattern: "/api/items/{ref}/secrets/{id}", Summary: "Take a passage's protection off (the one who protected it and the space's administrators)", Handler: http.HandlerFunc(h.unprotect)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/erase", Summary: "Erase a protected passage for good: its text leaves the body and its key is destroyed, so no earlier version holds it either (the one who protected it and the space's administrators; ADR-0089)", Handler: http.HandlerFunc(h.eraseSecret)},
-		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/request", Summary: "Ask to read a protected passage; the one who protected it and the space's administrators are told", Handler: http.HandlerFunc(h.requestSecret)},
-		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/requests/{principal}", Summary: "Answer a request to read a protected passage: grant true lets the one who asked read it, false declines", Handler: http.HandlerFunc(h.decideSecret)},
+		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/request", Summary: "Ask to read a protected passage; a task assigned to the item's owner, or else to the one who protected it, is made in the same batch, readable only by those it concerns, and those who decide are told (ADR-0162)", Handler: http.HandlerFunc(h.requestSecret)},
+		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/requests/{principal}", Summary: "Answer a request to read a protected passage: grant true lets the one who asked read it, false declines; the one who protected it, the item's owner and the space's administrators answer, and the request's task records the answer and is finished (ADR-0162)", Handler: http.HandlerFunc(h.decideSecret)},
 	}
 }
 

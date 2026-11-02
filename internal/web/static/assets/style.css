@@ -1889,6 +1889,22 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
 .starmap-trail li + li::before { content: "›"; margin: 0 8px; color: var(--muted); }
 .starmap-crumb.here { font-weight: 600; }
 .starmap-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* The panel shows the page itself, clipped until "Read more" (ADR-0157). */
+@media (min-width: 1100px) { .starmap-panel { width: min(420px, calc(100% - 24px)); } }
+.starmap-panel:focus { outline: none; }
+.starmap-panel:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 2px; }
+.starmap-facts-line { margin: 0 0 10px; font-size: 13px; overflow-wrap: anywhere; }
+.starmap-preview-box { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.starmap-preview-body { overflow-wrap: anywhere; }
+.starmap-preview-body.clipped { max-height: 18em; overflow: hidden; -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
+.starmap-preview-body img { max-width: 100%; height: auto; }
+.starmap-more { margin-top: 6px; }
+.starmap-picture figure { margin: 0 0 8px; }
+.starmap-picture img { display: block; max-width: 100%; max-height: 50vh; height: auto; border-radius: var(--radius-sm); }
+.starmap-label-items h3 { font-size: 14px; margin: 0 0 6px; }
+@media (max-width: 640px) {
+  .starmap-panel { position: fixed; inset: auto 0 0 0; width: 100%; max-height: 70dvh; border-radius: var(--radius) var(--radius) 0 0; z-index: 30; }
+}
 .star-edge { stroke: var(--border-strong); stroke-width: 1.4; fill: none; }
 .star-edge.edge-parent { stroke: var(--muted); stroke-width: 2; }
 .star-edge.edge-relation { stroke: var(--accent); stroke-width: 1.6; }
@@ -2052,3 +2068,9 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
 .pm-veiled-text { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .protect-choices { border: 0; padding: 0; margin: 0 0 8px; display: grid; gap: 4px; }
 .protect-blocks { margin: 0 0 8px; padding-left: 18px; }
+
+/* Access requests: the dialog (ADR-0161) and the task (ADR-0162). */
+.access-dialog .access-what { margin-top: 0; }
+.access-request-card .actions-row { margin-bottom: 0; }
+.secret-ask-task, .secret-own-task { overflow-wrap: anywhere; }
+.pm-veiled .secret-request-block.secret-waiting { font-style: italic; }

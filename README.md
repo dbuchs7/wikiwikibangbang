@@ -17,6 +17,8 @@ Markdown written elsewhere goes into a page as formatted, editable text with Ctr
 
 Items are selected by their fields with a query language, under *Search → Query the fields*, through `GET /api/items?query=…` and with the MCP tool `query_items`, e.g. `type = task AND assignee = currentUser() AND finished = false ORDER BY due`; the [query guide](docs/guides/query-language.md) describes it ([ADR-0136](docs/adr/0136-a-query-language-selects-items-by-their-fields.md)).
 
+Parts of a page — words, a section, a picture — can be protected for some people; everyone else sees a dark bar and asks for access with one click, and the request becomes a task for the page's owner, who grants or declines it there, as the [guide to protected content](docs/guides/protected-content.md) describes ([ADR-0088](docs/adr/0088-protected-passages-of-a-body.md), [ADR-0160](docs/adr/0160-protected-blocks-and-pictures-of-a-page.md), [ADR-0162](docs/adr/0162-an-access-request-becomes-a-task-for-the-pages-owner.md)).
+
 ## Run
 
 The product is one binary for Linux, macOS and Windows on amd64 and arm64, and 32-bit ARM Linux ([ADR-0024](docs/adr/0024-release-targets-and-container-image.md)). Download the archive for your platform from the releases page, unpack it and run:

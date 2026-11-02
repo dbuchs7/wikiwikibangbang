@@ -101,6 +101,12 @@ var (
 // text as a person reads it, protected passages veiled, with exactly the
 // caller's rights; the ZIP archive with pictures is for people.
 //
+// A request to read a protection is a task (ADR-0162): an agent finds the
+// tasks of requests as any task, with query_items or find_items by the
+// label access-request, and the list of ADR-0161 is gone with its route.
+// Granting and declining are not offered, as they change who reads
+// (ADR-0088).
+//
 // Of the change feed and the own-roles query (ADR-0121), the reads are
 // offered: list_changes without its wait, as a tool call answers at once,
 // and get_own_roles. Watching and unwatching are not offered: they are

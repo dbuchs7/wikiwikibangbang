@@ -245,6 +245,9 @@ type itemJSON struct {
 	// may change the body (ADR-0088); set on answers about one item.
 	Secrets         []secretJSON `json:"secrets,omitempty"`
 	ReadsAllSecrets *bool        `json:"readsAllSecrets,omitempty"`
+	// AccessRequest is the request to read a protection this task was
+	// made for, when the caller reads the protected item (ADR-0162).
+	AccessRequest *accessRequestJSON `json:"accessRequest,omitempty"`
 	// StateSince is when the item reached its state; CommentCount and
 	// FileCount count its comments and files, so a card tells them
 	// without reading them (ADR-0134).
@@ -268,6 +271,41 @@ type secretJSON struct {
 	Blocks   bool     `json:"blocks,omitempty"`
 	Readers  []string `json:"readers,omitempty"`
 	Requests []string `json:"requests,omitempty"`
+	// RequestedAt: when the caller asked, while they wait (ADR-0161).
+	RequestedAt *time.Time `json:"requestedAt,omitempty"`
+	// Answers: the caller answers the requests of others, as one who
+	// decides or as the item's owner; Asks are those requests, and Own
+	// the caller's own, each with its task when the caller reads it
+	// (ADR-0162).
+	Answers bool      `json:"answers,omitempty"`
+	Asks    []askJSON `json:"asks,omitempty"`
+	Own     *askJSON  `json:"own,omitempty"`
+}
+
+type askJSON struct {
+	Principal string    `json:"principal"`
+	At        time.Time `json:"at"`
+	Task      item.ID   `json:"task,omitempty"`
+	TaskKey   string    `json:"taskKey,omitempty"`
+	Assignee  string    `json:"assignee,omitempty"`
+}
+
+func toAskJSON(a item.AskView) askJSON {
+	return askJSON{Principal: a.Principal, At: a.At, Task: a.Task, TaskKey: a.TaskKey, Assignee: a.Assignee}
+}
+
+type accessRequestJSON struct {
+	Item      item.ID   `json:"item"`
+	Key       string    `json:"key"`
+	Title     string    `json:"title"`
+	Space     string    `json:"space"`
+	Secret    item.ID   `json:"secret"`
+	Number    int       `json:"number"`
+	Blocks    bool      `json:"blocks,omitempty"`
+	Principal string    `json:"principal"`
+	At        time.Time `json:"at"`
+	Waiting   bool      `json:"waiting"`
+	Answers   bool      `json:"answers"`
 }
 
 // withSecrets adds what the caller sees of an item's protected passages.
@@ -277,10 +315,27 @@ func withSecrets(x *item.Session, j itemJSON) itemJSON {
 		return j
 	}
 	for _, v := range views {
-		j.Secrets = append(j.Secrets, secretJSON{ID: v.ID, By: v.By, Readable: v.Readable, Decides: v.Decides, Requested: v.Requested, Blocks: v.Blocks, Readers: v.Readers, Requests: v.Requests})
+		sj := secretJSON{ID: v.ID, By: v.By, Readable: v.Readable, Decides: v.Decides, Requested: v.Requested, Blocks: v.Blocks, Readers: v.Readers, Requests: v.Requests,
+			Answers: v.Answers}
+		if v.Requested && !v.RequestedAt.IsZero() {
+			at := v.RequestedAt
+			sj.RequestedAt = &at
+		}
+		for _, a := range v.Asks {
+			sj.Asks = append(sj.Asks, toAskJSON(a))
+		}
+		if v.Own != nil {
+			own := toAskJSON(*v.Own)
+			sj.Own = &own
+		}
+		j.Secrets = append(j.Secrets, sj)
 	}
 	all := x.ReadsAllSecrets(j.ID)
 	j.ReadsAllSecrets = &all
+	if a, ok := x.AccessRequestOf(j.ID); ok {
+		j.AccessRequest = &accessRequestJSON{Item: a.Item, Key: a.Key, Title: a.Title, Space: a.Space, Secret: a.Secret, Number: a.Number,
+			Blocks: a.Blocks, Principal: a.Principal, At: a.At, Waiting: a.Waiting, Answers: a.Answers}
+	}
 	return j
 }
 
