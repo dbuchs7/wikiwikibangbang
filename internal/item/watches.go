@@ -292,11 +292,13 @@ func (x *Session) mentioned(e Event) bool {
 }
 
 // bodyMentions reports whether a text names username as "@username"
-// outside its protected passages, which not everyone may read (ADR-0088).
+// outside its protected passages and blocks, which not everyone may read
+// (ADR-0088, ADR-0160).
 func bodyMentions(d Doc, username string) bool {
 	want := "@" + strings.ToLower(username)
 	for _, b := range d.Blocks {
-		if !strings.Contains(strings.ToLower(b.Text), want) {
+		// Nor in its protected blocks (ADR-0160).
+		if b.Secret != "" || !strings.Contains(strings.ToLower(b.Text), want) {
 			continue
 		}
 		text := []rune(b.Text)

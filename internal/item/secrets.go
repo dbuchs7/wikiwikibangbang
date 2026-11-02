@@ -114,6 +114,8 @@ func (s *Store) veiled(principal string, it *Item) *Item {
 	}
 	c := it.clone()
 	c.Body = veil(c.Body, hide)
+	// Nor are the files of protected blocks counted (ADR-0160).
+	c.Attachments = s.veilFiles(principal, it)
 	return &c
 }
 
@@ -121,6 +123,8 @@ func (s *Store) veiled(principal string, it *Item) *Item {
 // marks keep what lies outside them; mentions and links never lie inside
 // one (checkSecrets).
 func veil(d Doc, hide map[ID]bool) Doc {
+	// Protected blocks become one placeholder per run (ADR-0160).
+	d = veilBlocks(d, hide)
 	for i, b := range d.Blocks {
 		var cut []Mark
 		for _, m := range b.Marks {
@@ -182,10 +186,19 @@ func inside(cut []Mark, m Mark) bool {
 }
 
 // secretTexts returns the clear text of each passage of a body, the parts
-// of one passage joined in the order they appear.
+// of one passage joined in the order they appear; for a protection of
+// blocks, the texts of its blocks (captions and cells included), one per
+// line.
 func secretTexts(d Doc) map[ID]string {
 	out := map[ID]string{}
 	for _, b := range d.Blocks {
+		if b.Secret != "" {
+			if out[b.Secret] != "" {
+				out[b.Secret] += "\n"
+			}
+			out[b.Secret] += b.Text
+			continue
+		}
 		runes := []rune(b.Text)
 		for _, m := range b.Marks {
 			if m.Type == MarkSecret && m.End <= len(runes) {
@@ -200,13 +213,26 @@ func secretTexts(d Doc) map[ID]string {
 // a passage the item has, passages do not overlap, and no mention or link
 // lies in one, as it would show where the passage points.
 func checkSecrets(it *Item, d Doc) error {
+	// A protection covers passages or whole blocks, never both (ADR-0160).
+	byBlock := blockSecrets(d)
 	for i, b := range d.Blocks {
+		if b.Secret != "" {
+			if _, ok := it.secret(b.Secret); !ok {
+				return wrapf(invalid("the protection %s is not one of this item's", b.Secret), "block %d", i+1)
+			}
+			if slices.ContainsFunc(b.Marks, func(m Mark) bool { return m.Type == MarkSecret }) {
+				return wrapf(invalid("a protected block holds no protected passage"), "block %d", i+1)
+			}
+		}
 		var secrets, others []Mark
 		for _, m := range b.Marks {
 			switch m.Type {
 			case MarkSecret:
 				if _, ok := it.secret(m.Ref); !ok {
 					return wrapf(invalid("the protected passage %s is not one of this item's", m.Ref), "block %d", i+1)
+				}
+				if byBlock[m.Ref] {
+					return wrapf(invalid("a protection covers passages or whole blocks, not both"), "block %d", i+1)
 				}
 				secrets = append(secrets, m)
 			case MarkLink, MarkMention:
@@ -221,7 +247,7 @@ func checkSecrets(it *Item, d Doc) error {
 			}
 		}
 	}
-	return nil
+	return checkSecretFiles(it, d)
 }
 
 // checkReaders checks who a passage names as its readers.
@@ -266,7 +292,9 @@ func (s *Store) applySecret(e Event) {
 		if ok {
 			it.Secrets = slices.Delete(slices.Clone(it.Secrets), i, i+1)
 		}
+		it.forgetSecretFiles(e.Secret.ID)
 	case SecretErased:
+		it.forgetSecretFiles(e.Secret.ID)
 		if ok {
 			// The versions from before it was protected hold its text
 			// sealed with the item's key, which stays: they are withheld.
@@ -314,8 +342,9 @@ type SecretView struct {
 	ID ID
 	By string
 	// Readable: the reader reads it in clear. Decides: the reader decides
-	// who reads it. Requested: the reader asked to and waits.
-	Readable, Decides, Requested bool
+	// who reads it. Requested: the reader asked to and waits. Blocks: it
+	// protects whole blocks of the body, not a passage (ADR-0160).
+	Readable, Decides, Requested, Blocks bool
 	// Readers and Requests are told to those who read or decide it.
 	Readers  []string
 	Requests []string
@@ -331,7 +360,7 @@ func (x *Session) Secrets(id ID) ([]SecretView, error) {
 	out := []SecretView{}
 	for _, sec := range it.Secrets {
 		v := SecretView{ID: sec.ID, By: sec.By, Readable: x.s.readsSecret(x.who, sec), Decides: x.s.decidesSecret(x.who, it, sec),
-			Requested: slices.Contains(sec.Requests, x.who)}
+			Requested: slices.Contains(sec.Requests, x.who), Blocks: it.protectsBlocks(sec.ID)}
 		if v.Readable || v.Decides {
 			v.Readers = slices.Clone(sec.Readers)
 		}
@@ -494,6 +523,9 @@ func (x *Session) Unprotect(id, secret ID) error {
 		if len(b.Marks) == 0 {
 			b.Marks = nil // as a decoded body has it
 		}
+		if b.Secret == sec.ID {
+			b.Secret = ""
+		}
 		body.Blocks[i] = b
 	}
 	return x.s.recordBatch(x.who, Event{Kind: SecretRemoved, Item: id, Secret: &Secret{ID: sec.ID}}, Event{Kind: BodyCommitted, Item: id, Body: &body})
@@ -520,14 +552,27 @@ func (x *Session) EraseSecret(id, secret ID) error {
 		}
 	}
 	body := cutSecrets(it.Body, map[ID]bool{sec.ID: true})
-	return x.s.recordBatch(x.who, Event{Kind: SecretErased, Item: id, Secret: &Secret{ID: sec.ID}, Members: quoted},
-		Event{Kind: BodyCommitted, Item: id, Body: &body})
+	events := []Event{{Kind: SecretErased, Item: id, Secret: &Secret{ID: sec.ID}, Members: quoted}, {Kind: BodyCommitted, Item: id, Body: &body}}
+	// The files of protected blocks are deleted with them, so their
+	// content leaves the data directory (ADR-0160).
+	prot := protectedFiles(it, it.secretFiles)
+	for _, a := range it.Attachments {
+		if !a.Deleted && prot[a.ID] == sec.ID {
+			events = append(events, Event{Kind: AttachmentDeleted, Item: id, Attachment: &Attachment{ID: a.ID}})
+		}
+	}
+	return x.s.recordBatch(x.who, events...)
 }
 
 // cutSecrets removes the passages in cut, text and mark, from a body; the
 // other marks keep what lies outside them.
 func cutSecrets(d Doc, cut map[ID]bool) Doc {
 	d = d.clone()
+	// Protected blocks go whole (ADR-0160).
+	d.Blocks = slices.DeleteFunc(d.Blocks, func(b Block) bool { return b.Secret != "" && cut[b.Secret] })
+	if len(d.Blocks) == 0 {
+		d.Blocks = nil
+	}
 	for i, b := range d.Blocks {
 		var gone []Mark
 		for _, m := range b.Marks {

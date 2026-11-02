@@ -3728,6 +3728,99 @@ function gitSource() {
     const erasedText = await page.textContent("#body .ProseMirror");
     check(!erasedText.includes("Paul") && !erasedText.includes("▒") && await page.$("#body .pm-secret") === null, "the erased passage is gone: " + erasedText);
 
+    step("protected blocks: admin protects a section and a picture; bert sees dark bars, no picture anywhere, asks; admin grants; bert reads them (ADR-0160)");
+    const ownerCtx = await browser.newContext();
+    const owner = await ownerCtx.newPage();
+    owner.on("pageerror", (e) => problems.push("admin's page error: " + e.message));
+    await owner.goto(base + "/");
+    await owner.fill("#login [name=username]", "admin");
+    await owner.fill("#login [name=password]", adminPassword);
+    await owner.click("#login button[type=submit]");
+    await owner.waitForSelector("#nav a");
+    // A page with a section, a picture and open text; the picture is drawn
+    // in the browser and uploaded as a file of the page.
+    const budget = await owner.evaluate(async () => {
+      const made = await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ space: "PLAT", type: "ticket", title: "Budget 2027", properties: { priority: "low" } }) })).json();
+      const canvas = document.createElement("canvas");
+      canvas.width = 240; canvas.height = 80;
+      const g = canvas.getContext("2d");
+      g.fillStyle = "#2f6f9f"; g.fillRect(0, 0, 240, 80);
+      g.fillStyle = "#ffffff"; g.font = "20px sans-serif"; g.fillText("Salary plan", 60, 48);
+      const png = await new Promise((done) => canvas.toBlob(done, "image/png"));
+      const up = await (await fetch(`/api/items/${made.item.id}/attachments?name=salary-plan.png`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: png })).json();
+      const body = { blocks: [
+        { kind: "heading", level: 1, text: "Salaries" }, { kind: "paragraph", text: "Paul Muster earns 9000 a month." },
+        { kind: "heading", level: 1, text: "Plan" }, { kind: "image", ref: up.attachment.id, text: "The salary plan" },
+        { kind: "heading", level: 1, text: "Office" }, { kind: "paragraph", text: "The office opens at eight." }] };
+      const put = await fetch(`/api/items/${made.item.id}/body`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      return { key: made.item.key, id: made.item.id, pic: up.attachment.id, put: put.status };
+    });
+    check(budget.put === 200, "the page with a picture is written: " + budget.put);
+    await owner.goto(base + "/#/item/" + budget.key);
+    await owner.waitForSelector("#body .ProseMirror h2:text-is('Salaries')");
+    // A click in the heading offers the block and its section.
+    await owner.click("#body .ProseMirror h2:text-is('Salaries')");
+    await owner.click("#protect-selection");
+    await owner.waitForSelector(".protect-passage .protect-choices");
+    await owner.click(".protect-passage .protect-choices label:has-text('Protect this section (2 blocks)') input");
+    await owner.waitForSelector(".protect-passage .protect-blocks li:has-text('Paul Muster earns 9000')");
+    await owner.click("#protect-save");
+    await owner.waitForSelector("#body .ProseMirror .pm-block-secret >> text=Paul Muster earns 9000");
+    await owner.waitForSelector("#secrets li.secret-entry:has-text('Protected blocks 1')");
+    // A click on the picture protects that block, and its file.
+    await owner.click("#body .ProseMirror figure.pm-image");
+    await owner.click("#protect-selection");
+    await owner.waitForSelector(".protect-passage h2:text-is('Protect this block')");
+    await owner.waitForSelector(".protect-passage .protect-blocks li:text-is('Picture: The salary plan')");
+    await owner.click("#protect-save");
+    await owner.waitForSelector("#secrets li.secret-entry:has-text('Protected blocks 2')");
+    await owner.waitForSelector("#body .ProseMirror .pm-block-secret figure.pm-image img, #body .ProseMirror figure.pm-image.pm-block-secret img");
+    check(await owner.locator("#body .ProseMirror .pm-block-secret").count() === 3, "admin reads the three protected blocks marked");
+    await owner.screenshot({ path: process.env.PROTECT_OWNER_PNG || "protect-owner.png", fullPage: true });
+    // Bert reads the page: two dark bars, the open text, nothing else.
+    await page.goto(base + "/#/item/" + budget.key);
+    await page.waitForSelector("#body .ProseMirror h2:text-is('Office')");
+    await page.waitForSelector("#body .pm-veiled .secret-request-block");
+    check(await page.locator("#body .pm-veiled").count() === 2, "bert sees one bar per protection");
+    const veiledBody = await page.textContent("#body .ProseMirror");
+    check(!veiledBody.includes("Paul") && !veiledBody.includes("Salaries") && !veiledBody.includes("salary plan") && veiledBody.includes("The office opens at eight.") && veiledBody.includes("Plan"),
+      "bert reads the blocks veiled: " + veiledBody);
+    check(await page.$("#body img") === null && await page.$("#edit") === null && await page.$("#protect-selection") === null, "bert sees no picture and cannot change the text");
+    await page.screenshot({ path: process.env.PROTECT_VEILED_PNG || "protect-veiled.png", fullPage: true });
+    // Fetched with bert's session from the test, so the expected 404 is no
+    // error in the page's console.
+    const fileStatus = (await page.request.get(`${base}/api/items/${budget.id}/attachments/${budget.pic}`)).status();
+    check(fileStatus === 404, "bert cannot fetch the picture: " + fileStatus);
+    const inAlbum = await page.evaluate(async (b) => JSON.stringify(await (await fetch("/api/album?limit=200")).json()).includes(b.pic), budget);
+    check(!inAlbum, "the album does not list the picture to bert");
+    await page.goto(base + "/#/album");
+    // The album has drawn its first page when it says how many it holds.
+    await page.waitForFunction(() => (document.querySelector("#album [role=status]")?.textContent || "") !== "");
+    check(await page.$(`img[src*="${budget.pic}"]`) === null && !(await page.textContent("#album")).includes("salary-plan"), "the album shows bert no protected picture");
+    const onMap = await page.evaluate(async (b) => JSON.stringify(await (await fetch("/api/spaces/PLAT/starmap")).json()).includes(b.pic), budget);
+    check(!onMap, "the starmap shows bert no protected picture");
+    // He asks for both, from the bar and from the card.
+    await page.goto(base + "/#/item/" + budget.key);
+    await page.click("#body .pm-veiled .secret-request-block >> nth=0");
+    await page.waitForFunction(() => document.querySelectorAll("#body .pm-veiled .secret-request-block").length === 1);
+    await page.click("#body .pm-veiled .secret-request-block");
+    await page.waitForFunction(() => document.querySelectorAll("#body .pm-veiled .notice").length === 2);
+    // Admin grants both; the page is read again, as its address is the same.
+    await owner.reload();
+    await owner.waitForSelector("#secrets .secret-ask .secret-grant");
+    await owner.click("#secrets .secret-ask .secret-grant >> nth=0");
+    await owner.waitForFunction(() => document.querySelectorAll("#secrets .secret-grant").length === 1);
+    await owner.click("#secrets .secret-ask .secret-grant");
+    await owner.waitForSelector("#secrets .secret-grant", { state: "detached" });
+    await ownerCtx.close();
+    await page.reload();
+    await page.waitForSelector("#body .ProseMirror .pm-block-secret >> text=Paul Muster earns 9000");
+    await page.waitForSelector("#body .ProseMirror figure.pm-image img");
+    check(await page.$("#body .pm-veiled") === null, "granted, bert reads every block");
+    const granted = (await page.request.get(`${base}/api/items/${budget.id}/attachments/${budget.pic}`)).status();
+    check(granted === 200, "granted, bert fetches the picture: " + granted);
+
     step("editing: Done stores the text at once, also when the server learns late that the editor was left (ADR-0010)");
     const quick = await page.evaluate(async () => (await (await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ space: "PLAT", type: "task", title: "Quick edit", properties: { priority: "low" }, body: [{ kind: "paragraph", text: "Typed and left at once." }] }) })).json()).item.key);

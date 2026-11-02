@@ -2,6 +2,7 @@ package item
 
 import (
 	"cmp"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -130,6 +131,20 @@ func (s *Store) applyAttachment(e Event, touch func(...ID)) {
 		a := *e.Attachment
 		a.Author, a.Created = e.Actor, e.At.Unix()
 		it.Attachments = append(it.Attachments, a)
+		// A copy of a protected file, made with its item and so with the
+		// same protection, is protected from its first moment on, before
+		// a block shows it (ADR-0160).
+		if src := a.Source; src != nil && src.Item != it.ID && s.items[src.Item] != nil {
+			if sec, ok := s.items[src.Item].fileSecret(src.Attachment); ok {
+				if _, kept := it.secret(sec); kept {
+					it.secretFiles = maps.Clone(it.secretFiles)
+					if it.secretFiles == nil {
+						it.secretFiles = map[ID]ID{}
+					}
+					it.secretFiles[a.ID] = sec
+				}
+			}
+		}
 	case AttachmentDeleted:
 		if a, ok := it.attachment(e.Attachment.ID); ok {
 			// The source stays, so later versions still trace back through
@@ -178,7 +193,9 @@ func (x *Session) Attachments(id ID) ([]Attachment, error) {
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(slices.Clone(it.Attachments), func(a Attachment) bool { return a.Deleted }), nil
+	// The files of protected blocks are listed to their readers only
+	// (ADR-0160).
+	return slices.DeleteFunc(slices.Clone(it.Attachments), func(a Attachment) bool { return a.Deleted || !x.s.readsFile(x.who, it, a.ID) }), nil
 }
 
 // Attachment returns one attachment of a readable item.
@@ -188,7 +205,7 @@ func (x *Session) Attachment(id, attachment ID) (Attachment, error) {
 		return Attachment{}, err
 	}
 	a, ok := it.attachment(attachment)
-	if !ok || a.Deleted {
+	if !ok || a.Deleted || !x.s.readsFile(x.who, it, attachment) {
 		return Attachment{}, notFound("attachment %s of item %s", attachment, id)
 	}
 	return *a, nil
@@ -220,14 +237,34 @@ func (x *Session) AddAttachment(id ID, a Attachment) (Attachment, error) {
 			return Attachment{}, err
 		}
 		from, ok := src.attachment(a.Source.Attachment)
-		if !ok || (a.Source.Item != id && from.Deleted) {
+		if !ok || (a.Source.Item != id && from.Deleted) || !x.s.readsFile(x.who, src, a.Source.Attachment) {
 			return Attachment{}, notFound("attachment %s of item %s", a.Source.Attachment, a.Source.Item)
 		}
 		if a.Source.Item != id && from.SHA256 != a.SHA256 {
 			return Attachment{}, invalid("a copy of %s must have its content", a.Source.Attachment)
 		}
+		if err := x.copiesProtection(src, a.Source.Attachment, id); err != nil {
+			return Attachment{}, err
+		}
 	}
 	return x.s.AddAttachment(x.who, id, a)
+}
+
+// copiesProtection refuses a copy of a protected file into another item
+// unless that item carries the same protection, as a copy of the whole
+// item does (CopySecrets): a protected picture never leaves its protection
+// through a copy (ADR-0160).
+func (x *Session) copiesProtection(src *Item, file, to ID) error {
+	sec, ok := src.fileSecret(file)
+	if !ok || src.ID == to {
+		return nil
+	}
+	if t := x.s.items[to]; t != nil {
+		if _, kept := t.secret(sec); kept {
+			return nil
+		}
+	}
+	return forbidden("the file is protected in %s; a copy would leave its protection, so it is copied only with its item", src.Key)
 }
 
 // FileOrigin is where a copied file came from, as its reader may know it.
@@ -250,7 +287,7 @@ func (x *Session) FileOrigin(id, attachment ID) (o FileOrigin, ok bool, err erro
 		return FileOrigin{}, false, err
 	}
 	a, found := it.attachment(attachment)
-	if !found || a.Deleted {
+	if !found || a.Deleted || !x.s.readsFile(x.who, it, attachment) {
 		return FileOrigin{}, false, notFound("attachment %s of item %s", attachment, id)
 	}
 	// A version made in the same item leads back to the copy it began as.
@@ -265,11 +302,12 @@ func (x *Session) FileOrigin(id, attachment ID) (o FileOrigin, ok bool, err erro
 		return FileOrigin{}, false, nil
 	}
 	src, err := x.readable(a.Source.Item)
-	if err != nil || src.Presence != Live {
+	// An original protected now is told to its readers only (ADR-0160).
+	if err != nil || src.Presence != Live || !x.s.readsFile(x.who, src, a.Source.Attachment) {
 		return FileOrigin{}, true, nil
 	}
 	o = FileOrigin{Readable: true, Item: Item{ID: src.ID, Key: src.Key, Title: src.Title, Space: src.Space, Type: src.Type}}
-	if latest := latestVersion(src, a.Source.Attachment); latest != nil && latest.ID != a.Source.Attachment {
+	if latest := latestVersion(src, a.Source.Attachment); latest != nil && latest.ID != a.Source.Attachment && x.s.readsFile(x.who, src, latest.ID) {
 		l := *latest
 		o.Latest = &l
 	}
@@ -300,8 +338,13 @@ func latestVersion(it *Item, from ID) *Attachment {
 
 // DeleteAttachment removes a file from an item the principal may edit.
 func (x *Session) DeleteAttachment(id, attachment ID) error {
-	if _, err := x.editable(id); err != nil {
+	it, err := x.editable(id)
+	if err != nil {
 		return err
+	}
+	// A protected file is not destroyed by one who cannot see it.
+	if !x.s.readsFile(x.who, it, attachment) {
+		return notFound("attachment %s of item %s", attachment, id)
 	}
 	return x.s.DeleteAttachment(x.who, id, attachment)
 }
@@ -351,7 +394,7 @@ func (x *Session) Pictures(space string, keep func(Attachment) bool) []Picture {
 		}
 		editable := x.s.canEdit(x.who, it) && it.Managed == ""
 		for i, a := range it.Attachments {
-			if !a.Deleted && keep(a) {
+			if !a.Deleted && keep(a) && x.s.readsFile(x.who, it, a.ID) {
 				first := firstVersion(it, a)
 				out = append(out, Picture{Item: Item{ID: it.ID, Key: it.Key, Title: it.Title, Space: it.Space, Type: it.Type, Parent: it.Parent}, Attachment: a,
 					Used: inBody(it.Body, a.ID), Editable: editable, First: first, Retention: ruleOf(it, first), order: i})

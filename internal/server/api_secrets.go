@@ -10,7 +10,7 @@ import (
 // (ADR-0088).
 func secretRoutes(h itemHandlers) []Route {
 	return []Route{
-		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets", Summary: "Protect a passage of the body: block (from 0), start and end in characters of its text, and readers (users and @groups) besides oneself; who may edit the item and reads all its passages", Handler: http.HandlerFunc(h.protect)},
+		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets", Summary: "Protect a passage of the body: block (from 0), start and end in characters of its text; or whole blocks, a section: fromBlock and toBlock (from 0, both included), their files with them (ADR-0160); and readers (users and @groups) besides oneself; who may edit the item and reads all its protections", Handler: http.HandlerFunc(h.protect)},
 		{Method: http.MethodPut, Pattern: "/api/items/{ref}/secrets/{id}", Summary: "Set who reads a protected passage besides the one who protected it (that one and the space's administrators)", Handler: http.HandlerFunc(h.setSecretReaders)},
 		{Method: http.MethodDelete, Pattern: "/api/items/{ref}/secrets/{id}", Summary: "Take a passage's protection off (the one who protected it and the space's administrators)", Handler: http.HandlerFunc(h.unprotect)},
 		{Method: http.MethodPost, Pattern: "/api/items/{ref}/secrets/{id}/erase", Summary: "Erase a protected passage for good: its text leaves the body and its key is destroyed, so no earlier version holds it either (the one who protected it and the space's administrators; ADR-0089)", Handler: http.HandlerFunc(h.eraseSecret)},
@@ -35,12 +35,24 @@ func (h itemHandlers) protect(w http.ResponseWriter, r *http.Request) {
 		Start   int      `json:"start"`
 		End     int      `json:"end"`
 		Readers []string `json:"readers"`
+		// FromBlock and ToBlock protect whole blocks instead (ADR-0160).
+		FromBlock *int `json:"fromBlock"`
+		ToBlock   *int `json:"toBlock"`
 	}
 	if !decode(w, r, &req) || h.liveBusy(w, r) {
 		return
 	}
+	if (req.FromBlock == nil) != (req.ToBlock == nil) {
+		writeError(w, http.StatusBadRequest, "fromBlock and toBlock come together")
+		return
+	}
 	h.change(w, r, func(x *item.Session, _ *item.Store, it item.Item) error {
-		_, err := x.Protect(it.ID, req.Block, req.Start, req.End, req.Readers)
+		var err error
+		if req.FromBlock != nil {
+			_, err = x.ProtectBlocks(it.ID, *req.FromBlock, *req.ToBlock, req.Readers)
+		} else {
+			_, err = x.Protect(it.ID, req.Block, req.Start, req.End, req.Readers)
+		}
 		return err
 	})
 }

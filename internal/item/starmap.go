@@ -123,7 +123,7 @@ func (x *Session) Starmap(space string, maxNodes int) (Starmap, error) {
 
 	// 2. Relations of the space's items, hand-made and derived; an end in
 	// another space brings its item in as an outside node.
-	rels := x.s.sortedRelations()
+	rels := x.visibleRelations()
 	// An outside item is on the map only while a node of the space that
 	// brings it in is: its anchors.
 	var outside []*Item
@@ -329,7 +329,9 @@ func (x *Session) copyOrigin(it *Item, first ID) (*Item, *Attachment) {
 		srcFirst = firstVersion(src, *sa)
 	}
 	top := latestVersion(src, srcFirst)
-	if top == nil || !IsPicture(*top) {
+	// An original protected in its item is no edge for one who may not
+	// read it (ADR-0160).
+	if top == nil || !IsPicture(*top) || !x.s.readsFile(x.who, src, top.ID) {
 		return nil, nil
 	}
 	return src, top

@@ -100,7 +100,12 @@ import (
 //   - 37: a tasklist block may carry Query, a query of the query language
 //     in place of its label (ADR-0136, ADR-0151). Versions 1 to 36 are
 //     still read.
-const CodecVersion = 37
+//   - 38: a block may carry Secret, the protection of the whole block; a
+//     sealed body keeps the protected blocks apart, in secretBlocks, sealed
+//     with their protection's own key, and holds in their places blocks
+//     that name only the protection (ADR-0160). Versions 1 to 37 are still
+//     read.
+const CodecVersion = 38
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
@@ -166,7 +171,7 @@ func DecodeBatchSealed(data []byte, sl Sealer) ([]Event, error) {
 				return nil, fmt.Errorf("event %d: %w", w.Seq, err)
 			}
 		}
-		if w.Secrets != nil {
+		if w.Secrets != nil || w.SecretBlocks != nil {
 			if sl == nil {
 				return nil, fmt.Errorf("event %d: passages are sealed and no keys are available", w.Seq)
 			}
@@ -174,8 +179,11 @@ func DecodeBatchSealed(data []byte, sl Sealer) ([]Event, error) {
 				if err := unsealSecrets(&w, sl); err != nil {
 					return nil, fmt.Errorf("event %d: %w", w.Seq, err)
 				}
+				if err := unsealSecretBlocks(&w, sl); err != nil {
+					return nil, fmt.Errorf("event %d: %w", w.Seq, err)
+				}
 			}
-			w.Secrets = nil
+			w.Secrets, w.SecretBlocks = nil, nil
 		}
 		e, err := fromWire(w)
 		if shredded {
@@ -247,6 +255,10 @@ type wireEvent struct {
 	// protected passages of a sealed body, whose places in it hold only
 	// filler (ADR-0088).
 	Secrets map[ID][]byte `json:"secrets,omitempty"`
+	// SecretBlocks hold, sealed with each protection's own key, the
+	// protected blocks of a sealed body, in the order of the body; their
+	// places in it hold blocks that name only the protection (ADR-0160).
+	SecretBlocks map[ID][]byte `json:"secretBlocks,omitempty"`
 }
 
 // wireContent is the part of an event that is sealed: everything
@@ -332,9 +344,15 @@ func sealSecrets(w *wireEvent, sl Sealer) error {
 	if w.Body == nil {
 		return nil
 	}
+	if err := sealSecretBlocks(w, sl); err != nil {
+		return err
+	}
 	parts := map[ID][]string{}
 	body := w.Body.clone()
 	for i, b := range body.Blocks {
+		if b.Secret != "" {
+			continue
+		}
 		runes := []rune(b.Text)
 		for _, m := range b.Marks {
 			if m.Type != MarkSecret || m.End > len(runes) {
@@ -561,4 +579,79 @@ func (e *Event) normalize() {
 	if t, ok := e.Value.(time.Time); ok {
 		e.Value = t.UTC()
 	}
+}
+
+func secretBlocksAAD(w *wireEvent, id ID) []byte {
+	return append(aad(w), " blocks "+string(id)...)
+}
+
+// sealSecretBlocks takes the protected blocks out of a body, before the
+// body is sealed with the item's key, and seals them with their
+// protection's own key (ADR-0160). In their places the body keeps blocks
+// that name only the protection, so destroying the key leaves nothing of
+// them: not their kind, text, file or target.
+func sealSecretBlocks(w *wireEvent, sl Sealer) error {
+	parts := map[ID][]Block{}
+	body := w.Body.clone()
+	for i, b := range body.Blocks {
+		if b.Secret == "" {
+			continue
+		}
+		parts[b.Secret] = append(parts[b.Secret], b)
+		body.Blocks[i] = Block{Kind: Paragraph, Secret: b.Secret}
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	w.SecretBlocks = map[ID][]byte{}
+	for id, p := range parts {
+		pt, err := json.Marshal(p)
+		if err != nil {
+			return err
+		}
+		ct, err := sl.Seal(SecretKey(w.Item, id), pt, secretBlocksAAD(w, id))
+		if err != nil {
+			return err
+		}
+		w.SecretBlocks[id] = ct
+	}
+	w.Body = &body
+	return nil
+}
+
+// unsealSecretBlocks puts the protected blocks back into a body. The
+// blocks of a protection whose key was destroyed stay as they are: blocks
+// that name only the protection, which every reader reads veiled.
+func unsealSecretBlocks(w *wireEvent, sl Sealer) error {
+	if w.Body == nil || len(w.SecretBlocks) == 0 {
+		return nil
+	}
+	parts := map[ID][]Block{}
+	for id, ct := range w.SecretBlocks {
+		pt, err := sl.Open(SecretKey(w.Item, id), ct, secretBlocksAAD(w, id))
+		if errors.Is(err, ErrKeyShredded) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		dec := json.NewDecoder(bytes.NewReader(pt))
+		dec.DisallowUnknownFields()
+		var p []Block
+		if err := dec.Decode(&p); err != nil {
+			return fmt.Errorf("sealed blocks: %w", err)
+		}
+		parts[id] = p
+	}
+	body := w.Body.clone()
+	for i, b := range body.Blocks {
+		p := parts[b.Secret]
+		if b.Secret == "" || len(p) == 0 || p[0].Secret != b.Secret {
+			continue // gone with its key: the stand-in stays
+		}
+		body.Blocks[i] = p[0]
+		parts[b.Secret] = p[1:]
+	}
+	w.Body = &body
+	return nil
 }

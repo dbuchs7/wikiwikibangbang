@@ -85,7 +85,7 @@ func (x *Session) SetPictureLabels(id, attachment ID, labels []string) error {
 		return invalid("%s is %s", it.Key, it.Presence)
 	}
 	a, ok := it.attachment(attachment)
-	if !ok || a.Deleted {
+	if !ok || a.Deleted || !x.s.readsFile(x.who, it, attachment) {
 		return notFound("attachment %s of item %s", attachment, it.Key)
 	}
 	var out []string

@@ -2,7 +2,8 @@
 // data through the HTTP API. Plain ES modules, no build step.
 import { api, get, post, put, del, download, upload, ApiError } from "./api.js";
 import { h, mount, when } from "./dom.js";
-import { createEditor, setSecretClass } from "./editor.js";
+import { createEditor, setSecretClass, setVeiledContent } from "./editor.js";
+import { protectChoices } from "./protect.js";
 import { liveBody, watchLive } from "./live.js";
 import { pageTree, ancestors } from "./tree.js";
 import { renderDiff } from "./diff.js";
@@ -4105,6 +4106,8 @@ async function itemView(ref, params = new URLSearchParams()) {
     // text protects a passage from what they read (ADR-0088).
     const secretOf = new Map((item.secrets || []).map((sc) => [sc.id, sc]));
     setSecretClass((ref) => (secretOf.get(ref)?.readable ? "secret-readable" : "secret-veiled"));
+    // A veiled block says who decides and offers to ask (ADR-0160).
+    setVeiledContent((ref) => veiledBlockContent(path, secretOf.get(ref), status));
     const protect = canEdit && readsAll && live && !editing ? (at) => protectPassageForm(protecting, path, item, at, status) : null;
     const edit = editing ? done : canEdit && readsAll ? link(itemHref + "?edit", t("item.edit"), "button primary", "edit") : null;
     const b = bodySection(item, embeds.embeds, editing, threads, attachments, protect, edit, notes, showEditors);
@@ -4234,7 +4237,8 @@ function bodySection(item, embeds, editing, threads, attachments, protect, edit,
     const section = h("section", { id: "body", class: "reading" }, view.element);
     // A click on a protected passage shows it in the list of passages.
     const open = (ev) => {
-      const el = ev.target.closest?.(".pm-secret");
+      if (ev.target.closest?.("button")) return;
+      const el = ev.target.closest?.(".pm-secret, .pm-veiled");
       if (!el || (ev.type === "keydown" && ev.key !== "Enter")) return;
       const entry = document.querySelector(`#secrets li[data-secret="${CSS.escape(el.dataset.secret)}"]`);
       if (!entry) return;
@@ -4298,21 +4302,69 @@ function principalPicker(id, initial) {
   };
 }
 
-// protectPassageForm protects the selected passage (ADR-0088): it names
-// the text, and who reads it besides the one who protects it.
-function protectPassageForm(box, path, item, at, status) {
-  const text = Array.from(item.body[at.block]?.text || "").slice(at.start, at.end).join("");
+// protectPassageForm protects what is selected (ADR-0088, ADR-0160): the
+// words of one block, the blocks the selection touches or the one
+// clicked, or the section a heading opens. It names what is protected,
+// and who reads it besides the one who protects it.
+function protectPassageForm(box, path, item, sel, status) {
+  const choices = protectChoices(item.body, sel.passage, sel.range);
+  if (!choices.length) {
+    box.replaceChildren(h("p", { class: "notice", id: "protect-none", text: t("secret.protectNone") }));
+    return;
+  }
+  const preview = h("div", { class: "protect-preview" });
+  const help = h("p", { class: "muted" });
+  let chosen = choices[0];
+  const show = () => {
+    if (chosen.kind === "passage") {
+      const at = chosen.request;
+      preview.replaceChildren(h("blockquote", { class: "comment-quote", text: Array.from(item.body[at.block]?.text || "").slice(at.start, at.end).join("") }));
+      help.textContent = t("secret.protectHelp");
+    } else {
+      const shown = item.body.slice(chosen.from, chosen.to + 1);
+      preview.replaceChildren(h("ul", { class: "protect-blocks" }, shown.map((b) => h("li", { text: blockSummary(b) }))));
+      help.textContent = t("secret.protectBlocksHelp");
+    }
+  };
+  const label = (c) => c.kind === "passage" ? t("secret.protectWords")
+    : c.kind === "section" ? t("secret.protectSection", { n: c.to - c.from + 1 })
+      : c.from === c.to ? t("secret.protectBlock") : t("secret.protectBlocks", { n: c.to - c.from + 1 });
+  const options = choices.length > 1 ? h("fieldset", { class: "protect-choices" }, h("legend", { text: t("secret.protectWhat") }),
+    choices.map((c, i) => h("label", { class: "check" }, h("input", { type: "radio", name: "protect-what", value: c.kind, checked: i === 0,
+      onchange: () => { chosen = c; show(); } }), " ", label(c)))) : null;
   const picker = principalPicker("secret-readers", []);
+  show();
   box.replaceChildren(h("section", { class: "card protect-passage" },
-    h("h2", { text: t("secret.protectTitle") }),
-    h("blockquote", { class: "comment-quote", text: text }),
-    h("p", { class: "muted", text: t("secret.protectHelp") }),
+    h("h2", { text: choices.length === 1 && chosen.kind !== "passage" ? label(chosen) : t("secret.protectTitle") }),
+    options, preview, help,
     picker.element,
     h("p", { class: "actions-row" },
       h("button", { type: "button", class: "primary", id: "protect-save", text: t("secret.protect"),
-        onclick: () => action(() => post(path + "/secrets", { ...at, readers: picker.values() }), status) }),
+        onclick: () => action(() => post(path + "/secrets", { ...chosen.request, readers: picker.values() }), status) }),
       h("button", { type: "button", class: "link", text: t("common.cancel"), onclick: () => box.replaceChildren() }))));
   box.scrollIntoView({ block: "nearest" });
+}
+
+// blockSummary names a block in the list of what is about to be protected:
+// its text, or for a picture its caption.
+function blockSummary(b) {
+  const text = (b.text || "").split("\n")[0].slice(0, 80);
+  if (b.kind === "heading") return t("secret.blockHeading", { text });
+  if (["image", "video", "bpmn"].includes(b.kind)) return t("secret.blockPicture", { text: text || "—" });
+  return text || t("secret.blockOther", { kind: b.kind });
+}
+
+// veiledBlockContent is what a veiled block shows beside its bar
+// (ADR-0160): that it is protected, who decides, and a button to ask.
+function veiledBlockContent(path, sc, status) {
+  const box = h("span", { class: "pm-veiled-text" }, h("strong", { text: t("secret.veiledBlock") }));
+  if (!sc) return box;
+  box.append(" ", h("span", { class: "muted", text: t("secret.decidedBy", { who: sc.by.startsWith("@") ? sc.by : person(sc.by) }) }), " ");
+  box.append(sc.requested
+    ? h("span", { class: "notice", text: t("secret.waiting") })
+    : h("button", { type: "button", class: "secondary secret-request-block", text: t("secret.request"),
+      onclick: () => action(() => post(`${path}/secrets/${encodeURIComponent(sc.id)}/request`), status) }));
+  return box;
 }
 
 // secretsSection lists an item's protected passages as the reader sees
@@ -4326,7 +4378,7 @@ function secretsSection(path, item, status) {
   const base = (sc) => `${path}/secrets/${encodeURIComponent(sc.id)}`;
   const entry = (sc, i) => {
     const readers = [sc.by, ...(sc.readers || [])].map(named).join(", ");
-    const parts = [h("strong", { text: t("secret.passage", { n: i + 1 }) }), " ",
+    const parts = [h("strong", { text: sc.blocks ? t("secret.section", { n: i + 1 }) : t("secret.passage", { n: i + 1 }) }), " ",
       h("span", { class: "chip " + (sc.readable ? "secret-chip-readable" : "secret-chip-veiled"), text: sc.readable ? t("secret.readable") : t("secret.veiled") })];
     if (sc.readable || sc.decides) parts.push(h("p", { class: "muted", text: t("secret.readers", { who: readers }) }));
     if (!sc.readable) {
@@ -4347,11 +4399,11 @@ function secretsSection(path, item, status) {
         h("p", { class: "actions-row" },
           h("button", { type: "button", text: t("common.save"), onclick: () => action(() => put(base(sc), { readers: picker.values() }), status) }),
           h("button", { type: "button", class: "danger secret-unprotect", text: t("secret.unprotect"),
-            onclick: () => confirm(t("secret.unprotectConfirm")) && action(() => del(base(sc)), status) }),
+            onclick: () => confirm(sc.blocks ? t("secret.unprotectBlocksConfirm") : t("secret.unprotectConfirm")) && action(() => del(base(sc)), status) }),
           // Erasing destroys the passage's own key: no version holds it
           // any more (ADR-0089).
           h("button", { type: "button", class: "danger secret-erase", text: t("secret.erase"),
-            onclick: () => confirm(t("secret.eraseConfirm")) && action(() => post(base(sc) + "/erase"), status) }))));
+            onclick: () => confirm(sc.blocks ? t("secret.eraseBlocksConfirm") : t("secret.eraseConfirm")) && action(() => post(base(sc) + "/erase"), status) }))));
     }
     return h("li", { class: "secret-entry", "data-secret": sc.id }, ...parts);
   };

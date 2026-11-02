@@ -154,7 +154,7 @@ var tools = []tool{
 			{"type", str, inQuery, false, "Limit to a type name."},
 			{"state", str, inQuery, false, "Limit to a workflow state."},
 		}, paging...)},
-	{Name: "get_item", Description: "Get one item: title, type, state, properties and body. A protected passage your caller may not read shows as ▒▒▒▒▒▒▒▒ under a mark of type secret; secrets says who protected it.", Method: "GET", Path: "/api/items/{ref}",
+	{Name: "get_item", Description: "Get one item: title, type, state, properties and body. A protected passage your caller may not read shows as ▒▒▒▒▒▒▒▒ under a mark of type secret; protected blocks they may not read show as one paragraph ▒▒▒▒▒▒▒▒ whose secret names the protection; secrets says who protected it.", Method: "GET", Path: "/api/items/{ref}",
 		Params: []param{refParam}},
 	{Name: "get_item_markdown", Description: "Get one item as Markdown to read: title, properties and body, the items it embeds as quotes, pictures linked to their attachments. " +
 		"A protected passage your caller may not read shows as ▒▒▒▒▒▒▒▒. To change a body, use commit_body with blocks, not Markdown.",

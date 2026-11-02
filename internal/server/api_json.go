@@ -135,6 +135,8 @@ type blockJSON struct {
 	// Query is what a task list selects its tasks by, in place of a label
 	// (ADR-0151).
 	Query string `json:"query,omitempty"`
+	// Secret names the protection of the whole block (ADR-0160).
+	Secret item.ID `json:"secret,omitempty"`
 }
 
 type prefillJSON struct {
@@ -144,7 +146,7 @@ type prefillJSON struct {
 
 func toBlockJSON(b item.Block) blockJSON {
 	j := blockJSON{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process, View: b.View,
-		Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Layers: b.Layers, Link: b.Link, Query: b.Query}
+		Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Layers: b.Layers, Link: b.Link, Query: b.Query, Secret: b.Secret}
 	for _, m := range b.Marks {
 		j.Marks = append(j.Marks, markJSON{Type: m.Type, Start: m.Start, End: m.End, Href: m.Href, Ref: m.Ref})
 	}
@@ -174,7 +176,7 @@ func toDoc(blocks []blockJSON, kept func(text string) bool) (item.Doc, error) {
 			return d, badInput("block %d: kind must be paragraph, heading, bullet, ordered, quote, code, task, panel, table, toc, figures, tables, children, divider, image, video, bpmn, process, form, decision, architecture, startform, tasklist or embed", i+1)
 		}
 		blk := item.Block{Kind: b.Kind, Text: b.Text, Level: b.Level, Mentions: b.Mentions, Ref: b.Ref, Checked: b.Checked, Tone: b.Tone, Width: b.Width, Align: b.Align, Engine: b.Engine, Process: b.Process, View: b.View,
-			Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Link: b.Link, Query: b.Query}
+			Form: b.Form, Decision: b.Decision, Application: b.Application, Release: b.Release, Link: b.Link, Query: b.Query, Secret: b.Secret}
 		if len(b.Layers) > 0 {
 			// An empty list is the engine's default, as none is.
 			blk.Layers = b.Layers
@@ -254,13 +256,15 @@ type itemJSON struct {
 }
 
 type secretJSON struct {
-	ID        item.ID  `json:"id"`
-	By        string   `json:"by"`
-	Readable  bool     `json:"readable"`
-	Decides   bool     `json:"decides"`
-	Requested bool     `json:"requested,omitempty"`
-	Readers   []string `json:"readers,omitempty"`
-	Requests  []string `json:"requests,omitempty"`
+	ID        item.ID `json:"id"`
+	By        string  `json:"by"`
+	Readable  bool    `json:"readable"`
+	Decides   bool    `json:"decides"`
+	Requested bool    `json:"requested,omitempty"`
+	// Blocks: it protects whole blocks of the body (ADR-0160).
+	Blocks   bool     `json:"blocks,omitempty"`
+	Readers  []string `json:"readers,omitempty"`
+	Requests []string `json:"requests,omitempty"`
 }
 
 // withSecrets adds what the caller sees of an item's protected passages.
@@ -270,7 +274,7 @@ func withSecrets(x *item.Session, j itemJSON) itemJSON {
 		return j
 	}
 	for _, v := range views {
-		j.Secrets = append(j.Secrets, secretJSON{ID: v.ID, By: v.By, Readable: v.Readable, Decides: v.Decides, Requested: v.Requested, Readers: v.Readers, Requests: v.Requests})
+		j.Secrets = append(j.Secrets, secretJSON{ID: v.ID, By: v.By, Readable: v.Readable, Decides: v.Decides, Requested: v.Requested, Blocks: v.Blocks, Readers: v.Readers, Requests: v.Requests})
 	}
 	all := x.ReadsAllSecrets(j.ID)
 	j.ReadsAllSecrets = &all
