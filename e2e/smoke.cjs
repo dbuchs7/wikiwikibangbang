@@ -1651,7 +1651,7 @@ function gitSource() {
     await page.click(`.star-node[data-key='${longPage}']`);
     await page.waitForSelector("#starmap-preview #starmap-more:not([hidden])");
     check((await page.textContent("#starmap-more")) === "Weiterlesen" && await page.locator("#starmap-preview-body.clipped").count() === 1, "a long page is clipped with Weiterlesen");
-    await page.screenshot({ path: process.env.STARMAP_PREVIEW_PNG || "starmap-preview.png" });
+    if (process.env.STARMAP_PREVIEW_PNG) await page.screenshot({ path: process.env.STARMAP_PREVIEW_PNG });
     const clipped = await page.evaluate(() => document.querySelector("#starmap-preview-body").clientHeight);
     await page.click("#starmap-more");
     await page.waitForSelector("#starmap-preview-body:not(.clipped)");
@@ -3860,7 +3860,7 @@ function gitSource() {
     await owner.waitForSelector("#secrets li.secret-entry:has-text('Protected blocks 2')");
     await owner.waitForSelector("#body .ProseMirror .pm-block-secret figure.pm-image img, #body .ProseMirror figure.pm-image.pm-block-secret img");
     check(await owner.locator("#body .ProseMirror .pm-block-secret").count() === 3, "admin reads the three protected blocks marked");
-    await owner.screenshot({ path: process.env.PROTECT_OWNER_PNG || "protect-owner.png", fullPage: true });
+    if (process.env.PROTECT_OWNER_PNG) await owner.screenshot({ path: process.env.PROTECT_OWNER_PNG, fullPage: true });
     // Bert reads the page: two dark bars, the open text, nothing else.
     await page.goto(base + "/#/item/" + budget.key);
     await page.waitForSelector("#body .ProseMirror h2:text-is('Office')");
@@ -3870,7 +3870,7 @@ function gitSource() {
     check(!veiledBody.includes("Paul") && !veiledBody.includes("Salaries") && !veiledBody.includes("salary plan") && veiledBody.includes("The office opens at eight.") && veiledBody.includes("Plan"),
       "bert reads the blocks veiled: " + veiledBody);
     check(await page.$("#body img") === null && await page.$("#edit") === null && await page.$("#protect-selection") === null, "bert sees no picture and cannot change the text");
-    await page.screenshot({ path: process.env.PROTECT_VEILED_PNG || "protect-veiled.png", fullPage: true });
+    if (process.env.PROTECT_VEILED_PNG) await page.screenshot({ path: process.env.PROTECT_VEILED_PNG, fullPage: true });
     // Fetched with bert's session from the test, so the expected 404 is no
     // error in the page's console.
     const fileStatus = (await page.request.get(`${base}/api/items/${budget.id}/attachments/${budget.pic}`)).status();
@@ -3960,7 +3960,7 @@ function gitSource() {
     await page.waitForSelector("#access-dialog #access-ask");
     check((await page.textContent("#access-deciders")).includes("admin") && (await page.textContent("#access-dialog")).includes("Editortest"),
       "the dialog names the page and who decides: " + await page.textContent("#access-dialog"));
-    await page.screenshot({ path: process.env.REQUEST_DIALOG_PNG || "request-dialog.png" });
+    if (process.env.REQUEST_DIALOG_PNG) await page.screenshot({ path: process.env.REQUEST_DIALOG_PNG });
     await page.click("#access-ask");
     await page.waitForSelector("#access-dialog #access-sent");
     await page.click("#access-close");
@@ -3995,14 +3995,14 @@ function gitSource() {
     await decider.waitForSelector(`#secrets li[data-secret="${vault.first}"] .secret-ask-task .secret-task-link`);
     check(await decider.$("#secrets .secret-grant") === null && (await decider.textContent(`#secrets li[data-secret="${vault.first}"] .secret-ask-task`)).includes("bert"),
       "the card names who asked and links the task, without buttons: " + await decider.textContent("#secrets"));
-    await decider.locator("#secrets").screenshot({ path: process.env.PAGE_CARD_PNG || "page-card.png" });
+    if (process.env.PAGE_CARD_PNG) await decider.locator("#secrets").screenshot({ path: process.env.PAGE_CARD_PNG });
     // Admin opens the task of the section and grants it there.
     await decider.click(`#secrets li[data-secret="${vault.first}"] .secret-task-link`);
     await decider.waitForSelector("#access-request #access-grant");
     check((await decider.textContent("#access-request")).includes("bert") && !(await decider.textContent("main")).includes("4711"),
       "the task says who asks, not the content: " + await decider.textContent("#access-request"));
     await decider.setViewportSize({ width: 1280, height: 1000 });
-    await decider.screenshot({ path: process.env.TASK_PAGE_PNG || "task-page.png" });
+    if (process.env.TASK_PAGE_PNG) await decider.screenshot({ path: process.env.TASK_PAGE_PNG });
     const firstTask = decider.url();
     await decider.click("#access-grant");
     await decider.waitForSelector("#access-request #access-request-state");
