@@ -135,6 +135,9 @@ func (h itemHandlers) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, notes.ErrNotFound):
 		writeError(w, http.StatusNotFound, "note not found")
+	case errors.Is(err, storage.ErrNothingNew):
+		// Nothing new is made from the critical level on (ADR-0163).
+		writeError(w, http.StatusInsufficientStorage, NothingNewMessage)
 	case errors.Is(err, storage.ErrNoSpace):
 		// The storage is almost full (ADR-0150): uploads are refused from
 		// the critical level on, every other change below the floor.
@@ -144,6 +147,10 @@ func (h itemHandlers) fail(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusInternalServerError, "the change was not made")
 	}
 }
+
+// NothingNewMessage answers a command that would make something new while
+// the storage is almost full (ADR-0163).
+const NothingNewMessage = "The storage is almost full: no new pages, tasks or rooms can be created until there is room again. Reading, editing existing entries and deleting stay possible."
 
 var errBadInput = errors.New("bad input")
 

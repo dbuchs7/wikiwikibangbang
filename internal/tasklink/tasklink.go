@@ -83,6 +83,10 @@ type Report struct {
 	Updated   int `json:"updated"`
 	Ended     int `json:"ended"`
 	Unmatched int `json:"unmatched"`
+	// Paused counts the open tasks not linked because the storage is
+	// almost full (ADR-0163); a later round links them once there is
+	// room, while the items already linked are kept in step.
+	Paused int `json:"paused,omitempty"`
 	// People are the connected people whose task lists were read,
 	// Unread those whose lists could not be, who keep what they saw;
 	// Readers counts the items whose readers changed. Visible says the
@@ -155,6 +159,9 @@ type Runner struct {
 	// its rounds failed since the start.
 	read   map[string]time.Time
 	failed map[string]int
+	// paused names the engines whose last round left new tasks unlinked
+	// because the storage was almost full (ADR-0163).
+	paused map[string]bool
 }
 
 // New returns a runner for db that lists tasks with tasks.
@@ -164,7 +171,7 @@ func New(db *storage.DB, tasks Lister, log *slog.Logger) *Runner {
 	}
 	r := &Runner{db: db, tasks: tasks, log: log, now: time.Now, nudge: make(chan string, 1), run: map[string]bool{}, report: map[string]Report{},
 		seen: map[string]time.Time{}, due: map[string]bool{}, cursor: map[string]string{}, ahead: map[string]bool{}, saved: map[string]string{},
-		compared: map[string]time.Time{}, recompare: map[string]bool{}, read: map[string]time.Time{}, failed: map[string]int{}}
+		compared: map[string]time.Time{}, recompare: map[string]bool{}, read: map[string]time.Time{}, failed: map[string]int{}, paused: map[string]bool{}}
 	cursors, err := db.TaskCursors()
 	if err != nil {
 		log.Warn("task links: the feeds' cursors cannot be read; each feed is followed from its end", "err", err)
@@ -283,6 +290,30 @@ func (r *Runner) Tick(ctx context.Context) {
 		case len(rep.Problems) > 0:
 			r.log.Warn("task links: round had problems", "engine", e.ID, "problems", len(rep.Problems)+rep.More)
 		}
+		r.tellPaused(e.ID, rep, err)
+	}
+}
+
+// tellPaused logs once that an engine's new tasks are not linked while the
+// storage is almost full, and once that they are again (ADR-0163), rather
+// than on every round.
+func (r *Runner) tellPaused(engineID string, rep Report, err error) {
+	if err != nil {
+		return
+	}
+	r.mu.Lock()
+	was := r.paused[engineID]
+	if rep.Paused > 0 {
+		r.paused[engineID] = true
+	} else {
+		delete(r.paused, engineID)
+	}
+	r.mu.Unlock()
+	switch {
+	case rep.Paused > 0 && !was:
+		r.log.Warn("task links: new tasks are not linked while the storage is almost full", "engine", engineID, "tasks", rep.Paused)
+	case rep.Paused == 0 && was:
+		r.log.Info("task links: new tasks are linked again", "engine", engineID)
 	}
 }
 
@@ -336,6 +367,12 @@ func (r *Runner) Run(ctx context.Context, engineID string, dry bool) (Report, er
 	if !dry {
 		r.mu.Lock()
 		r.report[engineID] = rep
+		// A task left unlinked while the storage was almost full is
+		// linked by the comparison of a later round: the feed has passed
+		// its fact (ADR-0163).
+		if rep.Paused > 0 {
+			r.recompare[engineID] = true
+		}
 		r.mu.Unlock()
 	}
 	return rep, err
@@ -451,6 +488,8 @@ func (r *Runner) follow(ctx context.Context, e site.Engine, cur string, rep *Rep
 					}
 					_, changed, err := s.LinkTask(actor, linked(e, rule, t, rep))
 					switch {
+					case !had && errors.Is(err, storage.ErrNothingNew):
+						rep.Paused++
 					case err != nil:
 						rep.problem("task %s (%s): %v", key, t.Name, err)
 					case changed && had:
@@ -572,6 +611,8 @@ func (r *Runner) compare(ctx context.Context, e site.Engine, rep *Report) error 
 			_, had := s.FindByOrigin(item.LinkedSystem, w.Engine, "task/"+w.Key)
 			_, changed, err := s.LinkTask(actor, w)
 			switch {
+			case !had && errors.Is(err, storage.ErrNothingNew):
+				rep.Paused++
 			case err != nil:
 				rep.problem("task %s (%s): %v", w.Key, w.Title, err)
 			case changed && had:

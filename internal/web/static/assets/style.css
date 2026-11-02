@@ -1813,6 +1813,10 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
 
 /* How full the storage is (ADR-0150): a bar in the level's colour. */
 .storage-level { margin: 0 0 8px; }
+/* Every signed-in person learns that nothing new is made (ADR-0163). */
+.storage-banner { padding: 6px 16px; font-size: 0.9rem; text-align: center; background: var(--warning-soft); color: var(--text); border-bottom: 1px solid var(--warning); }
+.storage-banner.storage-full { background: var(--danger-soft); border-bottom-color: var(--danger); }
+[data-paused] { opacity: 0.55; cursor: not-allowed; }
 .storage-notice { display: block; margin: 0 0 14px; }
 .storage-notice.storage-critical, .storage-notice.storage-full { border-left-color: var(--danger); }
 .storage-level.storage-warning strong { color: #a15c00; }

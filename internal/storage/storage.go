@@ -262,6 +262,8 @@ func OpenWith(dir string, o Options) (_ *DB, _ Recovery, err error) {
 	}
 	// Content is assessed against the installation's data protection
 	// regulations on save (ADR-0058); replay reads the outcome from the log.
+	// Nothing new is made while the storage is almost full (ADR-0163).
+	db.Store.SetNothingNew(db.nothingNew)
 	settings := db.Site
 	db.Store.SetAssessor(func(texts []string) []item.DPFinding {
 		var out []item.DPFinding

@@ -17,7 +17,8 @@ func diskRoutes(d Deps) []Route {
 	h := authHandlers{d: d}
 	return []Route{
 		{Method: http.MethodGet, Pattern: "/api/storage", Summary: "How full the data directory's file system is: free and total bytes, the level (ok, warning, critical, full), the bytes of each data file and of the attachments, the growth per day and the days left at that pace; the last measurement, or a new one with fresh (administrators)", Handler: http.HandlerFunc(h.storage)},
-		{Method: http.MethodPut, Pattern: "/api/settings/storage", Summary: "Set the thresholds of free space: warnPercent, warnMB, criticalPercent, criticalMB; below critical, uploads are refused (administrators)", Handler: http.HandlerFunc(h.setStorage)},
+		{Method: http.MethodGet, Pattern: "/api/status", Summary: "What every signed-in person needs to know of the server's state: storage, the level of the storage (ok, warning, critical, full) — from critical on nothing new is made, at full the wiki only reads; no sizes, which are for administrators (ADR-0163)", Handler: http.HandlerFunc(h.status)},
+		{Method: http.MethodPut, Pattern: "/api/settings/storage", Summary: "Set the thresholds of free space: warnPercent, warnMB, criticalPercent, criticalMB; below critical, uploads and new entries are refused (administrators)", Handler: http.HandlerFunc(h.setStorage)},
 	}
 }
 
@@ -31,6 +32,13 @@ func (h authHandlers) storage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, h.d.Disk.Report())
+}
+
+// status tells every signed-in person the storage's level, so the UI can
+// say that nothing new is made (ADR-0163). Free and total bytes stay
+// administrators' information.
+func (h authHandlers) status(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"storage": h.d.DB.Space().String()})
 }
 
 func (h authHandlers) setStorage(w http.ResponseWriter, r *http.Request) {

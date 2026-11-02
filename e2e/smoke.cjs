@@ -670,6 +670,40 @@ function gitSource() {
     await page.waitForSelector(".comment-text:has-text('Patched on the staging hosts.')");
     check((await page.textContent(".comment .muted")).includes("you") && (await page.textContent(".comment .muted")).includes("edited"), "own, edited comment");
 
+    step("storage: from the critical level on nothing new is made; the banner says so, creating is paused, editing goes on (ADR-0163)");
+    {
+      const thresholds = (th) => page.evaluate(async (th) => (await fetch("/api/settings/storage", { method: "PUT",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(th) })).json(), th);
+      const kept = await page.evaluate(async () => (await (await fetch("/api/storage")).json()).thresholds);
+      // Critical at 50 % or 1 TB free is reached on any test machine.
+      const raised = await thresholds({ warnPercent: 50, warnMB: 1048576, criticalPercent: 50, criticalMB: 1048576 });
+      check(raised.level === "critical", "the raised thresholds make the storage critical: " + raised.level);
+      check((await page.evaluate(async () => (await (await fetch("/api/status")).json()).storage)) === "critical", "the status tells the level");
+      await page.goto(base + "/#/");
+      await page.waitForSelector("#storage-banner.storage-critical:has-text('new entries are paused')");
+      await page.waitForSelector("#nav-new[disabled][data-paused]");
+      check((await page.getAttribute("#nav-new", "title")).includes("almost full"), "the paused button says why");
+      expectedConsole = /status of 507/; // the creation is refused
+      const made = await page.evaluate(async () => {
+        const r = await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ space: "PLAT", type: "task", title: "One more", properties: { priority: "low" } }) });
+        return [r.status, (await r.json()).error];
+      });
+      check(made[0] === 507 && made[1].includes("no new pages, tasks or rooms can be created"), "creating is refused: " + made);
+      expectedConsole = null;
+      await page.goto(base + "/#/item/PLAT-1");
+      await page.waitForSelector("#item-new-child[data-paused][aria-disabled=true]");
+      await page.fill("[name='p:estimate']", "4");
+      await page.press("[name='p:estimate']", "Tab");
+      await page.waitForSelector("tr[data-field=estimate] .saved");
+      await thresholds(kept);
+      await page.goto(base + "/#/");
+      await page.waitForSelector("#nav-new:not([disabled]):not([data-paused])");
+      check(await page.locator("#storage-banner").count() === 0, "with room again, the banner goes");
+      await page.goto(base + "/#/item/PLAT-1");
+      await page.waitForSelector("#item-status");
+    }
+
     step("comment overview: one's own comments, across pages, newest first");
     await page.evaluate(async () => fetch("/api/items/PLAT-1/comments", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: "@bert please verify on production" }) }));

@@ -66,6 +66,9 @@ type state struct {
 	// that can read what changed asks from since (ADR-0140).
 	since, full time.Time
 	settings    string
+	// paused says the last run left new entries out because the storage
+	// was almost full (ADR-0163).
+	paused bool
 }
 
 // sinceOverlap is how much earlier than the last run began a run asks
@@ -244,7 +247,19 @@ func (r *Runner) run(ctx context.Context, c site.Connector, dry bool, actor stri
 			st.seen = rd.seen
 		}
 	}
+	// A run that left new entries out while the storage was almost full
+	// keeps the point the next run asks from, so it reads them again
+	// (ADR-0163); it says so in the log once, not on every run.
+	if !dry && res.Paused > 0 && !st.paused {
+		r.log.Warn("connector: new entries are not written while the storage is almost full", "connector", c.ID, "entries", res.Paused)
+	}
 	if !dry && err == nil {
+		if st.paused && res.Paused == 0 {
+			r.log.Info("connector: new entries are written again", "connector", c.ID)
+		}
+		st.paused = res.Paused > 0
+	}
+	if !dry && err == nil && res.Paused == 0 {
 		st.since, st.settings = start, settings
 		if !rd.partial {
 			st.full = start

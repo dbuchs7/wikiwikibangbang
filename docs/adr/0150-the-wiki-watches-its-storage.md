@@ -69,5 +69,6 @@ Strongest form: a bound per space or per wiki counted from what the wiki stores,
 
 ## Links
 
+- amended by [ADR-0163](0163-at-critical-storage-nothing-new-is-created.md) (from critical on, nothing new is created, not only uploads)
 - amends [ADR-0045](0045-attachments-encrypted-files-beside-the-log.md) (uploads are refused when the storage is almost full)
 - relates to ADR-0008 and ADR-0025 (the log only grows), ADR-0016 (metrics), ADR-0026 (erasure), ADR-0064 (messages), ADR-0073 (backups), ADR-0104 (album retention)
