@@ -105,7 +105,10 @@ import (
 //     with their protection's own key, and holds in their places blocks
 //     that name only the protection (ADR-0160). Versions 1 to 37 are still
 //     read.
-const CodecVersion = 38
+//   - 39: SecretRequested may carry task, the task item made for the
+//     request in the same batch (ADR-0162). Versions 1 to 38 are still
+//     read; their requests have no task.
+const CodecVersion = 39
 
 // Sealer encrypts the content of events with a key per item, so that
 // destroying the key makes the content unrecoverable (crypto-shredding,
@@ -247,6 +250,7 @@ type wireEvent struct {
 	Outcome      string                `json:"outcome,omitempty"`
 	Kanban       *Kanban               `json:"kanban,omitempty"`
 	Secret       *Secret               `json:"secret,omitempty"`
+	Task         ID                    `json:"task,omitempty"`
 	Erased       bool                  `json:"erased,omitempty"`
 	// Sealed holds the encrypted content (wireContent) when a Sealer was
 	// used; the plaintext content fields are then empty.
@@ -453,7 +457,7 @@ func toWire(e Event) (wireEvent, error) {
 		Members: e.Members, Group: e.Group, Principal: e.Principal, SystemRole: e.SystemRole,
 		Restriction: e.Restriction, Reason: e.Reason, Origin: e.Origin, Key: e.Key, Managed: e.Managed, Linked: e.Linked, LinkedFields: e.LinkedFields,
 		Comment: e.Comment, Text: e.Text, Labels: e.Labels, Attachment: e.Attachment, Erased: e.Erased,
-		Anchor: e.Anchor, Reply: e.Reply, Hold: e.Hold, Outcome: e.Outcome, Kanban: e.Kanban, Secret: e.Secret,
+		Anchor: e.Anchor, Reply: e.Reply, Hold: e.Hold, Outcome: e.Outcome, Kanban: e.Kanban, Secret: e.Secret, Task: e.Task,
 	}
 	if e.Role != 0 {
 		name, ok := roleNames[e.Role]
@@ -492,7 +496,7 @@ func fromWire(w wireEvent) (Event, error) {
 		Members: w.Members, Group: w.Group, Principal: w.Principal, SystemRole: w.SystemRole,
 		Restriction: w.Restriction, Reason: w.Reason, Origin: w.Origin, Key: w.Key, Managed: w.Managed, Linked: w.Linked, LinkedFields: w.LinkedFields,
 		Comment: w.Comment, Text: w.Text, Labels: w.Labels, Attachment: w.Attachment, Erased: w.Erased,
-		Anchor: w.Anchor, Reply: w.Reply, Hold: w.Hold, Outcome: w.Outcome, Kanban: w.Kanban, Secret: w.Secret,
+		Anchor: w.Anchor, Reply: w.Reply, Hold: w.Hold, Outcome: w.Outcome, Kanban: w.Kanban, Secret: w.Secret, Task: w.Task,
 	}
 	if w.Role != "" {
 		for r, name := range roleNames {

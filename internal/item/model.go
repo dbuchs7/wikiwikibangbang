@@ -518,6 +518,7 @@ type Event struct {
 	Outcome      string       // HoldReleased: HoldRestricted or HoldFalseAlarm; Text holds the reason
 	Kanban       *Kanban      // KanbanSet; KanbanRemoved and KanbanCardPlaced: only its ID
 	Secret       *Secret      // SecretSet; the other secret kinds: only its ID
+	Task         ID           // SecretRequested: the task item made for the request, if any (ADR-0162)
 
 	// Erased is set on an event whose content (title, properties, body, raw
 	// source) was removed because its item was purged or redacted. The

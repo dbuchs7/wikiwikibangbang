@@ -101,9 +101,11 @@ var (
 // text as a person reads it, protected passages veiled, with exactly the
 // caller's rights; the ZIP archive with pictures is for people.
 //
-// Of the requests to read a protection (ADR-0161), the list of those that
-// wait on the caller is offered as a read, list_access_requests; granting
-// and declining are not, as they change who reads (ADR-0088).
+// A request to read a protection is a task (ADR-0162): an agent finds the
+// tasks of requests as any task, with query_items or find_items by the
+// label access-request, and the list of ADR-0161 is gone with its route.
+// Granting and declining are not offered, as they change who reads
+// (ADR-0088).
 //
 // Of the change feed and the own-roles query (ADR-0121), the reads are
 // offered: list_changes without its wait, as a tool call answers at once,
@@ -124,12 +126,6 @@ var tools = []tool{
 	{Name: "list_spaces", Description: "List the spaces the caller holds a role in.", Method: "GET", Path: "/api/spaces"},
 	{Name: "get_own_roles", Description: "The caller's own roles: the system roles held, and every space role granted to the caller, directly or through a group (via), one entry per grant.",
 		Method: "GET", Path: "/api/me/roles"},
-	{Name: "list_access_requests", Description: "The waiting requests to read a protected passage or protected blocks that the caller decides (they protected it, or administer its space), " +
-		"across spaces, oldest first: who asked (principal), on which item, which protection (number, as the item's list of protections counts them), and when. Continue with after set to next.",
-		Method: "GET", Path: "/api/me/access-requests", Params: []param{
-			{"after", str, inQuery, false, "The next of the previous answer; absent to start."},
-			{"limit", integer, inQuery, false, "Entries per page, 1 to the server's budget."},
-		}},
 	{Name: "list_changes", Description: "The change feed: what happened, oldest first, to the items the caller watches (and their ancestors and watched spaces) after the event after, " +
 		"and to the caller's own roles. An entry's item is empty when the caller may not read the item now. Continue from last; without after, the answer is the newest event to start from.",
 		Method: "GET", Path: "/api/changes", Params: []param{

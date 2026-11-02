@@ -329,8 +329,10 @@ func (x *Session) secretAlert(e Event) bool {
 	}
 	switch e.Kind {
 	case SecretRequested:
+		// Those who answer it: those who decide, and the item's owner
+		// (ADR-0162).
 		i, ok := it.secret(e.Secret.ID)
-		return ok && x.s.decidesSecret(x.who, it, it.Secrets[i])
+		return ok && x.s.answersRequest(x.who, it, it.Secrets[i], e.Principal)
 	case SecretGranted, SecretDeclined:
 		return e.Principal == x.who
 	}

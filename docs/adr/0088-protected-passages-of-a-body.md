@@ -132,5 +132,6 @@ Strongest form: no new model; the existing restriction does it.
 
 - amended by [ADR-0089](0089-a-protected-passage-is-erased-by-its-key.md) (erasing a passage by destroying its key)
 - amended by [ADR-0160](0160-protected-blocks-and-pictures-of-a-page.md) (whole blocks and the pictures they show are protected too)
+- amended by [ADR-0162](0162-an-access-request-becomes-a-task-for-the-pages-owner.md) (a request becomes a task for the item's owner, who answers requests too)
 - amended by [ADR-0161](0161-access-requests-are-answered-from-the-task-list.md) (requests are asked from every veiled element and answered from the task list)
 - relates to ADR-0022 and ADR-0078 (permissions, protecting items), ADR-0026 (keys per item, erasure), ADR-0010 (live sessions), ADR-0043 (versions), ADR-0047 (inline comments), ADR-0040 (governance), ADR-0067 (copying), ADR-0046 (notifications)

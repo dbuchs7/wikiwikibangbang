@@ -9,7 +9,9 @@
 // (ADR-0159) shows what depends on it, or what it depends on, across
 // rooms to a chosen depth, as the server walks it. Shapes and outlines tell the kinds
 // apart, not colour alone; the colours are the look's tokens (style.css),
-// so it reads in the light, dark and cockpit looks alike.
+// so it reads in the light, dark and cockpit looks alike. A focused node's
+// panel shows the page itself, read-only and as the reader may read it,
+// clipped with "Read more", so one stays on the map (ADR-0157).
 import { h, mount } from "./dom.js";
 import { t } from "./i18n.js";
 import { get } from "./api.js";
@@ -76,7 +78,10 @@ let impactReturn = null;
 // depth the reach of a separated neighbourhood. params are the address's
 // parameters: depth, and impact with depth for an impact view of the
 // last station of the path (ADR-0159).
-export async function starmapView(container, space, path = [], params = new URLSearchParams()) {
+// preview, given by the page that shows the map, draws an item's page
+// read-only for the panel (the renderer embeds use, so protected content
+// stays veiled); without it the panel shows the facts only.
+export async function starmapView(container, space, path = [], params = new URLSearchParams(), { preview = null } = {}) {
   const depth = Number(params.get("depth")) || 1;
   const impact = path.length ? impactParams(params) : null;
   const { spaces } = await get("/api/spaces");
@@ -91,19 +96,19 @@ export async function starmapView(container, space, path = [], params = new URLS
     const start = path[path.length - 1];
     const result = await get(impactPath(start, impact));
     const map = drawMap({ ...impactGraph(result), truncated: false }, key, select,
-      { path: [], depth: 1, impact: { ...impact, result, stations: path.slice(0, -1), start: result.start } });
+      { path: [], depth: 1, preview, impact: { ...impact, result, stations: path.slice(0, -1), start: result.start } });
     mount(container, map.root);
     map.start();
     return;
   }
   impactReturn = null;
   const data = await get(`/api/spaces/${encodeURIComponent(key)}/starmap`);
-  const map = drawMap(data, key, select, { path: key === space ? path : [], depth });
+  const map = drawMap(data, key, select, { path: key === space ? path : [], depth, preview });
   mount(container, map.root);
   map.start();
 }
 
-function drawMap(data, space, select, { path, depth: askedDepth, impact = null }) {
+function drawMap(data, space, select, { path, depth: askedDepth, impact = null, preview = null }) {
   const graph = { nodes: data.nodes, edges: data.edges };
   const n = graph.nodes.length;
   const tone = toneOf(graph.nodes);
@@ -364,7 +369,48 @@ function drawMap(data, space, select, { path, depth: askedDepth, impact = null }
   }
 
   // --- the side panel of the focused node ---
-  const panel = h("aside", { class: "starmap-panel card", id: "starmap-panel", hidden: true, "aria-live": "polite" });
+  const panel = h("aside", { class: "starmap-panel card", id: "starmap-panel", hidden: true, tabindex: "-1", "aria-labelledby": "starmap-panel-title" });
+  // What the panel shows of a node is read once while the map is open,
+  // when the node is chosen; pointing reads nothing.
+  const previews = new Map();
+  function contentOf(node) {
+    if (!previews.has(node.id)) previews.set(node.id, previewOf(node));
+    return previews.get(node.id);
+  }
+  async function previewOf(node) {
+    if (node.kind === "picture") {
+      const [, file] = node.id.slice("picture:".length).split("/");
+      const owner = byID.get(node.item);
+      return h("div", { class: "starmap-picture" },
+        h("figure", {}, h("img", { src: `/api/items/${encodeURIComponent(node.item)}/attachments/${encodeURIComponent(file)}`, alt: node.name, id: "starmap-picture", loading: "lazy" }),
+          h("figcaption", { class: "muted", text: node.name })),
+        owner ? h("p", {}, h("button", { type: "button", class: "link", id: "starmap-picture-item", text: owner.title || owner.key, onclick: () => focus(owner.id) })) : null);
+    }
+    if (node.kind === "label") {
+      const carriers = graph.edges.filter((e) => e.kind === "label" && (e.from === node.id || e.to === node.id))
+        .map((e) => byID.get(e.from === node.id ? e.to : e.from)).filter((m) => m && m.kind === "item");
+      return h("div", { class: "starmap-label-items" },
+        h("h3", { text: t("starmap.labelItems", { n: carriers.length }) }),
+        h("ul", { class: "list", id: "starmap-label-list" }, carriers.map((m) => h("li", {},
+          h("button", { type: "button", class: "link", "data-id": m.id, text: `${m.key} ${m.title}`, onclick: () => focus(m.id) })))));
+    }
+    if (!preview) return null;
+    const content = await preview(node.key || node.id);
+    // Long pages are clipped; "Read more" opens them in the panel.
+    const body = h("div", { class: "starmap-preview-body clipped", id: "starmap-preview-body" }, content);
+    const more = h("button", { type: "button", class: "link starmap-more", id: "starmap-more", hidden: true, "aria-expanded": "false", text: t("starmap.readMore"),
+      onclick: () => {
+        const open = body.classList.toggle("clipped");
+        more.textContent = open ? t("starmap.readMore") : t("starmap.readLess");
+        more.setAttribute("aria-expanded", String(!open));
+      } });
+    const measure = () => {
+      if (body.classList.contains("clipped")) more.hidden = body.scrollHeight <= body.clientHeight + 4;
+    };
+    if (typeof ResizeObserver === "function") new ResizeObserver(measure).observe(content);
+    requestAnimationFrame(measure);
+    return h("div", { class: "starmap-preview" }, body, more);
+  }
   function showPanel(node) {
     const row = (label, value) => (value ? [h("dt", { text: label }), h("dd", { text: value })] : null);
     let link = null;
@@ -384,18 +430,29 @@ function drawMap(data, space, select, { path, depth: askedDepth, impact = null }
         id: "starmap-impact-open", title: t("starmap.impactHelp"), text: t("starmap.impact"),
         onclick: () => { if (!impact) impactReturn = location.hash; } });
     }
+    const box = h("div", { class: "starmap-preview-box", id: "starmap-preview", "aria-live": "polite" },
+      h("p", { class: "muted", id: "starmap-preview-loading", text: t("starmap.loading") }));
+    contentOf(node).then((el) => { if (el) mount(box, el); else box.replaceChildren(); },
+      () => { previews.delete(node.id); mount(box, h("p", { class: "muted", id: "starmap-preview-none", text: t("starmap.unavailable") })); });
     mount(panel,
-      h("div", { class: "starmap-panel-head" }, h("h2", { text: node.kind === "item" ? node.title || node.key : node.name }),
+      h("div", { class: "starmap-panel-head" }, h("h2", { id: "starmap-panel-title", text: node.kind === "item" ? node.title || node.key : node.name }),
         h("button", { type: "button", class: "link", "aria-label": t("common.close"), title: t("common.close"), onclick: () => focus(null) }, "×")),
-      h("dl", { class: "starmap-facts" },
+      // An item says its kind, key, room and state in one line.
+      node.kind === "item" ? h("p", { class: "muted starmap-facts-line", id: "starmap-facts" },
+        [node.type, node.key, node.space, node.state, impact ? distanceName(node.distance) : null].filter(Boolean).join(" · ")) : null,
+      node.kind === "item" ? null : h("dl", { class: "starmap-facts" },
         row(t("starmap.panelKind"), node.kind === "item" ? node.type : node.kind === "picture" ? t("starmap.kindPicture") : t("starmap.kindLabel")),
         row(t("starmap.panelKey"), node.key || owner?.key),
         row(t("starmap.panelTitle"), owner ? owner.title : null),
         row(t("starmap.panelState"), node.state),
         row(t("starmap.panelSpace"), node.space),
         impact ? row(t("starmap.impactDistanceLabel"), distanceName(node.distance)) : null),
-      h("div", { class: "starmap-panel-actions" }, link, drill, impactLink));
+      h("div", { class: "starmap-panel-actions" }, link, drill, impactLink),
+      box);
     panel.hidden = false;
+    panel.scrollTop = 0;
+    // The keyboard follows into the panel; Escape closes it as before.
+    panel.focus({ preventScroll: true });
   }
 
   // --- filters and the depth of a separated neighbourhood ---
@@ -516,8 +573,12 @@ function drawMap(data, space, select, { path, depth: askedDepth, impact = null }
   }
 
   function focus(id) {
+    const was = focused;
+    const inPanel = panel.contains(document.activeElement);
     focused = id;
     if (id) showPanel(byID.get(id)); else panel.hidden = true;
+    // Closed from within, the keyboard goes back to the node it came from.
+    if (!id && was && inPanel && index.has(was)) nodeEls[index.get(was)].focus?.({ preventScroll: true });
     render();
   }
 
