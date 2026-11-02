@@ -48,6 +48,10 @@ const Stale = 5 * time.Minute
 // next round reads on.
 const maxFactPages = 20
 
+// maxEndReads is how many tasks that left the list of open tasks one round
+// asks the engine about one by one (ADR-0152); the next round asks on.
+const maxEndReads = 100
+
 // VisibilityEvery is how often the connected people's own task lists are
 // read again, to tell who sees each linked task. A round that linked a
 // task, or follows a person connecting, reads them at once.
@@ -83,6 +87,9 @@ type Report struct {
 	Updated   int `json:"updated"`
 	Ended     int `json:"ended"`
 	Unmatched int `json:"unmatched"`
+	// Detached are the items whose task the engine's system grant no
+	// longer reaches, handed back to the wiki (ADR-0152).
+	Detached int `json:"detached"`
 	// People are the connected people whose task lists were read,
 	// Unread those whose lists could not be, who keep what they saw;
 	// Readers counts the items whose readers changed. Visible says the
@@ -116,6 +123,12 @@ type Lister interface {
 	OpenTask(ctx context.Context, e site.Engine, key uint64) (engine.Task, error)
 	HasEventsCredential(id string) bool
 	TaskFacts(ctx context.Context, e site.Engine, after string) ([]engine.TaskFact, string, bool, error)
+	// ByGrant says the open tasks are read with the engine's system grant,
+	// and TaskEnd asks what became of a task that left the list: nil
+	// while open, an engine.TaskEnded, or engine.ErrNotFound for one out
+	// of the grant's reach (ADR-0152).
+	ByGrant(id string) bool
+	TaskEnd(ctx context.Context, e site.Engine, key uint64) error
 }
 
 // Grants gives the access token of a connected person's grant at an
@@ -195,6 +208,36 @@ func (r *Runner) Forget(engineID string) {
 	delete(r.read, engineID)
 	r.mu.Unlock()
 	r.saveCursors()
+}
+
+// Detach hands the items of an engine's tasks back to the wiki when its
+// links can no longer be followed: the engine was removed or given another
+// address (ADR-0152). It waits for a round of the engine that runs to end,
+// so that round cannot link again what it detached, and returns how many
+// items it detached.
+func (r *Runner) Detach(engineID string) (int, error) {
+	for {
+		r.mu.Lock()
+		if !r.run[engineID] {
+			r.run[engineID] = true
+			r.mu.Unlock()
+			break
+		}
+		r.mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+	}
+	defer func() {
+		r.mu.Lock()
+		delete(r.run, engineID)
+		r.mu.Unlock()
+	}()
+	var n int
+	err := r.db.Write(func(s *item.Store) error {
+		var err error
+		n, err = s.DetachTasks(Actor(engineID), engineID)
+		return err
+	})
+	return n, err
 }
 
 // Freshness is when the engine's tasks were last read in full, and whether
@@ -559,7 +602,8 @@ func (r *Runner) compare(ctx context.Context, e site.Engine, rep *Report) error 
 		}
 		return r.db.Write(fn)
 	}
-	return write(func(s *item.Store) error {
+	byGrant := r.tasks.ByGrant(engineID)
+	if err := write(func(s *item.Store) error {
 		for _, w := range wanted {
 			if rep.Dry {
 				if _, had := s.FindByOrigin(item.LinkedSystem, w.Engine, "task/"+w.Key); had {
@@ -580,7 +624,7 @@ func (r *Runner) compare(ctx context.Context, e site.Engine, rep *Report) error 
 				rep.Linked++
 			}
 		}
-		if !complete {
+		if !complete || byGrant {
 			return nil
 		}
 		for _, it := range s.LinkedTasks(engineID) {
@@ -601,6 +645,96 @@ func (r *Runner) compare(ctx context.Context, e site.Engine, rep *Report) error 
 			}
 			if err := s.EndTask(actor, it.ID, rule.Completed); err != nil {
 				rep.problem("%s: %v", it.Key, err)
+				continue
+			}
+			rep.Ended++
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if !complete || !byGrant {
+		return nil
+	}
+	return r.left(ctx, e, open, rep)
+}
+
+// left settles the open items whose task the list read with the engine's
+// system grant no longer holds (ADR-0152): the list does not tell a task
+// that ended from one that left the grant's reach, so the engine is asked
+// about each — one that ended goes to the rule's completed or cancelled
+// state, one the engine does not find is detached, handed back to the
+// wiki, rather than closed as if its work were done.
+func (r *Runner) left(ctx context.Context, e site.Engine, open map[string]bool, rep *Report) error {
+	links := r.db.Site.TaskLinks(e.ID)
+	var gone []item.Item
+	r.db.Read(func(s *item.Store) {
+		for _, it := range s.LinkedTasks(e.ID) {
+			if it.Origin != nil && !open[it.Origin.ExternalKey] && !s.Type(it.Type).Workflow.Finished(it.State) {
+				gone = append(gone, it)
+			}
+		}
+	})
+	if len(gone) > maxEndReads {
+		rep.problem("%d tasks left the list; %d are settled now, the others in the next rounds", len(gone), maxEndReads)
+		gone = gone[:maxEndReads]
+	}
+	type outcome struct {
+		it      item.Item
+		ended   string // "completed" or "cancelled"; empty to detach
+		problem string
+	}
+	var outcomes []outcome
+	for _, it := range gone {
+		key, err := strconv.ParseUint(it.Origin.ExternalKey, 10, 64)
+		if err != nil {
+			continue
+		}
+		err = r.tasks.TaskEnd(ctx, e, key)
+		var ended engine.TaskEnded
+		switch {
+		case err == nil:
+			// Open after all: the list will hold it again.
+		case errors.As(err, &ended):
+			outcomes = append(outcomes, outcome{it: it, ended: ended.Ended})
+		case errors.Is(err, engine.ErrNotFound):
+			outcomes = append(outcomes, outcome{it: it})
+		default:
+			rep.problem("%s: what became of its task is not known: %v", it.Key, err)
+		}
+	}
+	if rep.Dry {
+		for _, o := range outcomes {
+			if o.ended != "" {
+				rep.Ended++
+			} else {
+				rep.Detached++
+			}
+		}
+		return nil
+	}
+	actor := Actor(e.ID)
+	return r.db.Write(func(s *item.Store) error {
+		for _, o := range outcomes {
+			if o.ended == "" {
+				if detached, err := s.DetachTask(actor, o.it.ID); err != nil {
+					rep.problem("%s: %v", o.it.Key, err)
+				} else if detached {
+					rep.Detached++
+				}
+				continue
+			}
+			rule, ok := RuleOf(links.Rules, o.it)
+			if !ok {
+				rep.problem("%s: its task ended, and no rule names its space %s and type %s, so it stays open", o.it.Key, o.it.Space, o.it.Type)
+				continue
+			}
+			state := rule.Completed
+			if o.ended == "cancelled" {
+				state = rule.Cancelled
+			}
+			if err := s.EndTask(actor, o.it.ID, state); err != nil {
+				rep.problem("%s: %v", o.it.Key, err)
 				continue
 			}
 			rep.Ended++

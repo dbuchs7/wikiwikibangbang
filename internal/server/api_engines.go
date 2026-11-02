@@ -13,6 +13,7 @@ import (
 
 	"github.com/dbuchs7/orbithek/internal/audit"
 	"github.com/dbuchs7/orbithek/internal/engine"
+	"github.com/dbuchs7/orbithek/internal/engineconn"
 	"github.com/dbuchs7/orbithek/internal/item"
 	"github.com/dbuchs7/orbithek/internal/site"
 )
@@ -69,6 +70,25 @@ type engineJSON struct {
 	// whether it is set.
 	CredentialVar string `json:"credentialVar,omitempty"`
 	Credential    *bool  `json:"credential,omitempty"`
+	// System is this server's connection to the engine (ADR-0152), for
+	// administrators.
+	System *systemJSON `json:"system,omitempty"`
+}
+
+// systemJSON is this server's connection to an engine as administrators
+// see it: whether it can be made — it needs a public address —, its
+// client ID, and once made, who approved what, whether people are
+// connected without a page of their own, and which credentials come from
+// it rather than the environment.
+type systemJSON struct {
+	Available    bool                    `json:"available"`
+	ClientID     string                  `json:"clientId,omitempty"`
+	Connected    bool                    `json:"connected"`
+	Since        *time.Time              `json:"since,omitempty"`
+	ApprovedBy   string                  `json:"approvedBy,omitempty"`
+	Capabilities []engineconn.Capability `json:"capabilities,omitempty"`
+	Preconsent   bool                    `json:"preconsent"`
+	FromGrant    map[string]bool         `json:"fromGrant"`
 }
 
 func (h engineHandlers) engineJSON(e site.Engine, admin bool) engineJSON {
@@ -76,6 +96,15 @@ func (h engineHandlers) engineJSON(e site.Engine, admin bool) engineJSON {
 	if admin {
 		set := h.d.Engines.HasCredential(e.ID)
 		out.Kind, out.BaseURL, out.CredentialVar, out.Credential = e.Kind, e.BaseURL, engine.TokenVar(e.ID), &set
+		if e.Kind == site.EngineAtlas {
+			sys := &systemJSON{Available: h.d.Connect.MetadataClientID() != "", ClientID: h.d.Connect.MetadataClientID(), FromGrant: h.d.Engines.FromGrant(e.ID)}
+			if c, ok := h.d.Connect.System(e.ID); ok {
+				since := c.Connected.UTC()
+				sys.Connected, sys.Since, sys.ApprovedBy = true, &since, c.System.ApprovedBy
+				sys.Capabilities, sys.Preconsent = c.System.Capabilities, c.System.Preconsent
+			}
+			out.System = sys
+		}
 	}
 	return out
 }
@@ -121,6 +150,7 @@ func (h engineHandlers) setEngine(w http.ResponseWriter, r *http.Request) {
 	if existed && before.BaseURL != kept.BaseURL {
 		endConnections(h.d, actor, clientAddr(r), kept.ID, "the engine's address changed")
 		h.d.TaskLinks.Forget(kept.ID)
+		h.detachTasks(kept.ID)
 	}
 	status := http.StatusOK
 	if !existed {
@@ -146,7 +176,18 @@ func (h engineHandlers) removeEngine(w http.ResponseWriter, r *http.Request) {
 	h.record(audit.Entry{Event: audit.EngineChanged, Actor: actor, Addr: clientAddr(r), Subject: id, Detail: map[string]string{"removed": "true"}})
 	endConnections(h.d, actor, clientAddr(r), id, "the engine was removed")
 	h.d.TaskLinks.Forget(id)
+	h.detachTasks(id)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// detachTasks hands the items of an engine's tasks back to the wiki once
+// the engine is removed or given another address: their tasks can no
+// longer be followed, and nobody but the synchronisation could finish an
+// item still linked (ADR-0152).
+func (h engineHandlers) detachTasks(engineID string) {
+	if _, err := h.d.TaskLinks.Detach(engineID); err != nil {
+		h.d.Log.Error("engine: linked tasks not detached", "engine", engineID, "err", err)
+	}
 }
 
 // engineOf returns the engine a request names, or answers that it is not

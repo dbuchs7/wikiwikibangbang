@@ -34,9 +34,30 @@ type fakeLister struct {
 	feed   []engine.TaskFact
 	pruned int
 	reads  int
+	// grant reads the list with a system grant (ADR-0152); ended says how
+	// each task that left it ended, a task without an entry being out of
+	// the grant's reach, and endReads counts the questions.
+	grant    bool
+	ended    map[uint64]string
+	endReads int
 }
 
 func (f *fakeLister) HasEventsCredential(string) bool { return f.events }
+
+func (f *fakeLister) ByGrant(string) bool { return f.grant }
+
+func (f *fakeLister) TaskEnd(_ context.Context, _ site.Engine, key uint64) error {
+	f.endReads++
+	for _, t := range f.tasks {
+		if t.Key == key {
+			return nil
+		}
+	}
+	if how, ok := f.ended[key]; ok {
+		return engine.TaskEnded{Ended: how}
+	}
+	return engine.ErrNotFound
+}
 
 func (f *fakeLister) TaskFacts(_ context.Context, _ site.Engine, after string) ([]engine.TaskFact, string, bool, error) {
 	f.reads++
@@ -226,6 +247,52 @@ func TestARoundLinksTheTasksARuleMatchesAndEndsTheGoneOnes(t *testing.T) {
 			t.Errorf("a round over unchanged tasks wrote %d events", s.Seq()-seq)
 		}
 	})
+}
+
+// TestWithASystemGrantATaskIsEndedOnlyOnTheEnginesWord (ADR-0152): when
+// the open tasks are read with the engine's system grant, a task that left
+// the list is not taken for done — the engine is asked about it: one that
+// ended goes to the rule's completed or cancelled state, one the engine no
+// longer finds, out of the reach its administrator chose, is detached; a
+// dry round only counts.
+func TestWithASystemGrantATaskIsEndedOnlyOnTheEnginesWord(t *testing.T) {
+	f := setup(t)
+	f.l.grant = true
+	f.l.tasks = []engine.Task{holidayTask(1), holidayTask(2), holidayTask(3), holidayTask(4)}
+	if _, err := f.r.Run(context.Background(), "atlas-prod", false); err != nil {
+		t.Fatal(err)
+	}
+	f.l.tasks = []engine.Task{holidayTask(4)}
+	f.l.ended = map[uint64]string{1: "completed", 2: "cancelled"}
+
+	dry, err := f.r.Run(context.Background(), "atlas-prod", true)
+	if err != nil || dry.Ended != 2 || dry.Detached != 1 {
+		t.Fatalf("dry round = %+v %v", dry, err)
+	}
+	rep, err := f.r.Run(context.Background(), "atlas-prod", false)
+	if err != nil || rep.Ended != 2 || rep.Detached != 1 || f.l.endReads != 6 {
+		t.Fatalf("round = %+v %v, %d questions", rep, err, f.l.endReads)
+	}
+	states := map[string]string{}
+	var detached []string
+	f.db.Read(func(s *item.Store) {
+		for _, it := range s.LinkedTasks("atlas-prod") {
+			states[it.Origin.ExternalKey] = it.State
+		}
+		it, _ := s.FindByOrigin(item.LinkedSystem, "atlas-prod", "task/3")
+		detached = append(detached, it.DetachedFrom(), it.State)
+	})
+	if states["1"] != "done" || states["2"] != "cancelled" || states["4"] != "open" || states["3"] != "" {
+		t.Errorf("linked items = %v", states)
+	}
+	if !slices.Equal(detached, []string{"atlas-prod", "open"}) {
+		t.Errorf("task 3, out of reach, is %v, want detached and still open", detached)
+	}
+	// Ended and detached items are not asked about again.
+	before := f.l.endReads
+	if _, err := f.r.Run(context.Background(), "atlas-prod", false); err != nil || f.l.endReads != before {
+		t.Errorf("a later round asked %d more questions", f.l.endReads-before)
+	}
 }
 
 // TestADryRoundChangesNothing: a dry round reports what a round would do.

@@ -2,12 +2,17 @@
 // holds the access tokens of their grants, in memory (ADR-0151): the
 // authorization code flow with PKCE for the engine's tasks resource, the
 // renewal of a grant with its refresh token — which the engine replaces
-// on every use — and its end. The connections themselves are kept by
+// on every use — and its end. It also connects this server itself: an
+// administrator of the engine approves a system grant for it, which takes
+// the place of the credentials of the environment, and this server names
+// itself by a client metadata document and signed assertions instead of a
+// registered client (ADR-0152). The connections themselves are kept by
 // internal/engineconn.
 package engineauth
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -45,6 +50,9 @@ var (
 	// ErrUnavailable: the engine's authorization did not answer, or not as
 	// expected; the connection stays.
 	ErrUnavailable = errors.New("engineauth: the engine's authorization is not available")
+	// ErrNoSystem: the engine offers no grant for a connected system
+	// (ADR-0152); its credentials come from the environment.
+	ErrNoSystem = errors.New("engineauth: the engine offers no connection for systems")
 )
 
 // FlowLifetime bounds how long a begun connection may take.
@@ -57,6 +65,12 @@ const metadataLifetime = time.Hour
 // tasksResource is the engine's resource a person's grant is confined to:
 // the person's tasks, their forms and values, and who they are.
 const tasksResource = "/tasks"
+
+// systemResource is the engine's resource a system grant is for, and
+// systemScopes the capabilities this server asks for with it (ADR-0152).
+const systemResource = "/system"
+
+var systemScopes = []string{engine.ScopeDiagrams, engine.ScopeTaskList, engine.ScopeEvents}
 
 // Broker connects people to engines and holds the access tokens of their
 // grants, in memory. It is safe for concurrent use.
@@ -77,18 +91,37 @@ type Broker struct {
 	meta    map[string]metadata
 	access  map[string]access
 	locks   map[string]*sync.Mutex
+
+	keyMu sync.Mutex
+	key   ed25519.PrivateKey
 }
 
 type flow struct {
-	user, engine, base, verifier string
-	expires                      time.Time
+	Flow
+	base, verifier string
+	client         client
+	expires        time.Time
 }
 
-// metadata is what the engine says of its tasks resource and of the
-// authorization server that grants it (RFC 9728, RFC 8414).
+// Flow is a begun connection: whose, to which engine, and how.
+type Flow struct {
+	User, Engine string
+	// System is an administrator connecting this server itself (ADR-0152).
+	System bool
+	// Silent asks the engine to show no page (prompt=none): a person whose
+	// grant the engine's administrator approved beforehand comes back at
+	// once, connected, or with an error when they have no session there.
+	Silent bool
+	// Back is the page of the web UI to go on to, a hash route.
+	Back string
+}
+
+// metadata is what the engine says of its resources and of the
+// authorization server that grants them (RFC 9728, RFC 8414); system is
+// empty when the engine offers no system grant.
 type metadata struct {
-	base, resource, authURL, tokenURL, revokeURL string
-	read                                         time.Time
+	base, resource, system, authURL, tokenURL, revokeURL string
+	read                                                 time.Time
 }
 
 type access struct {
@@ -121,9 +154,47 @@ func (b *Broker) Callback(engineID string) string {
 }
 
 // Configured reports whether people may connect to the engine: this
-// server is registered there and has a public address.
+// server has a public address and is registered there, or an
+// administrator connected the engine (ADR-0152).
 func (b *Broker) Configured(engineID string) bool {
-	return b.public != "" && b.getenv(engine.ClientIDVar(engineID)) != "" && b.getenv(engine.ClientSecretVar(engineID)) != ""
+	_, ok := b.personClient(engineID)
+	return ok
+}
+
+// System is the engine's system grant, if an administrator connected the
+// engine (ADR-0152).
+func (b *Broker) System(engineID string) (engineconn.Connection, bool) {
+	c, ok := b.conns.Get(engineconn.SystemUser, engineID)
+	return c, ok && c.System != nil
+}
+
+// SystemHolds reports whether the engine's system grant reaches scope.
+func (b *Broker) SystemHolds(engineID, scope string) bool {
+	c, ok := b.System(engineID)
+	return ok && c.System.Holds(scope)
+}
+
+// SystemToken is an access token of the engine's system grant.
+func (b *Broker) SystemToken(ctx context.Context, e site.Engine) (string, error) {
+	return b.Token(ctx, e, engineconn.SystemUser)
+}
+
+// SystemRefused tells that the engine refused an access token of its
+// system grant.
+func (b *Broker) SystemRefused(engineID string) { b.Refused(engineconn.SystemUser, engineID) }
+
+// Silent reports whether a person may be connected to the engine without a
+// page of their own: its administrator approved people's grants
+// beforehand, the person has none, and has not ended one themselves.
+func (b *Broker) Silent(engineID, user string) bool {
+	c, ok := b.System(engineID)
+	if !ok || !c.System.Preconsent || b.public == "" {
+		return false
+	}
+	if _, connected := b.conns.Get(user, engineID); connected {
+		return false
+	}
+	return !b.conns.Declined(user, engineID)
 }
 
 func key(user, engineID string) string { return user + "\x00" + engineID }
@@ -136,29 +207,33 @@ func random() string {
 	return hex.EncodeToString(buf)
 }
 
-func (b *Broker) config(e site.Engine, m metadata) *oauth2.Config {
-	return &oauth2.Config{
-		ClientID: b.getenv(engine.ClientIDVar(e.ID)), ClientSecret: b.getenv(engine.ClientSecretVar(e.ID)),
-		// The engine takes the client's credentials in the form only.
-		Endpoint:    oauth2.Endpoint{AuthURL: m.authURL, TokenURL: m.tokenURL, AuthStyle: oauth2.AuthStyleInParams},
-		RedirectURL: b.Callback(e.ID),
-	}
-}
-
-func (b *Broker) ctx(ctx context.Context) context.Context {
-	return context.WithValue(ctx, oauth2.HTTPClient, b.client)
-}
-
-// Begin starts a person's connection to an engine and answers the address
-// of the engine's consent to send the browser to and the state, which the
-// caller binds to the browser.
-func (b *Broker) Begin(ctx context.Context, e site.Engine, user string) (authURL, state string, err error) {
-	if !b.Configured(e.ID) {
-		return "", "", ErrNotConfigured
+// Begin starts a connection to an engine — a person's, or with o.System
+// this server's own — and answers the address of the engine's consent to
+// send the browser to and the state, which the caller binds to the
+// browser.
+func (b *Broker) Begin(ctx context.Context, e site.Engine, user string, o Flow) (authURL, state string, err error) {
+	var c client
+	if o.System {
+		if b.public == "" {
+			return "", "", ErrNotConfigured
+		}
+		c = client{id: b.MetadataClientID(), metadata: true}
+	} else {
+		var ok bool
+		if c, ok = b.personClient(e.ID); !ok {
+			return "", "", ErrNotConfigured
+		}
 	}
 	m, err := b.metadata(ctx, e)
 	if err != nil {
 		return "", "", err
+	}
+	resource := m.resource
+	if o.System {
+		if m.system == "" {
+			return "", "", ErrNoSystem
+		}
+		resource = m.system
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -172,20 +247,28 @@ func (b *Broker) Begin(ctx context.Context, e site.Engine, user string) (authURL
 		return "", "", fmt.Errorf("%w: too many connections in progress", ErrUnavailable)
 	}
 	state, verifier := random(), oauth2.GenerateVerifier()
-	b.pending[state] = flow{user: user, engine: e.ID, base: e.BaseURL, verifier: verifier, expires: now.Add(FlowLifetime)}
-	return b.config(e, m).AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("resource", m.resource)), state, nil
+	o.User, o.Engine = user, e.ID
+	b.pending[state] = flow{Flow: o, base: e.BaseURL, verifier: verifier, client: c, expires: now.Add(FlowLifetime)}
+	cfg := &oauth2.Config{ClientID: c.id, Endpoint: oauth2.Endpoint{AuthURL: m.authURL, TokenURL: m.tokenURL}, RedirectURL: b.Callback(e.ID)}
+	opts := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("resource", resource)}
+	if o.System {
+		cfg.Scopes = systemScopes
+	}
+	if o.Silent {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", "none"))
+	}
+	return cfg.AuthCodeURL(state, opts...), state, nil
 }
 
-// Pending answers whose connection to which engine a state begun, without
-// using it up.
-func (b *Broker) Pending(state string) (user, engineID string, ok bool) {
+// Pending answers the connection a state begun, without using it up.
+func (b *Broker) Pending(state string) (Flow, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	f, ok := b.pending[state]
 	if !ok || !b.now().Before(f.expires) {
-		return "", "", false
+		return Flow{}, false
 	}
-	return f.user, f.engine, true
+	return f.Flow, true
 }
 
 // Cancel forgets a begun connection the person refused at the engine.
@@ -204,14 +287,19 @@ func (b *Broker) Finish(ctx context.Context, e site.Engine, state, code string) 
 	f, ok := b.pending[state]
 	delete(b.pending, state) // one use only
 	b.mu.Unlock()
-	if !ok || !b.now().Before(f.expires) || f.engine != e.ID || f.base != e.BaseURL {
+	if !ok || !b.now().Before(f.expires) || f.Engine != e.ID || f.base != e.BaseURL {
 		return engineconn.Connection{}, ErrUnknownState
 	}
 	m, err := b.metadata(ctx, e)
 	if err != nil {
 		return engineconn.Connection{}, err
 	}
-	tok, err := b.config(e, m).Exchange(b.ctx(ctx), code, oauth2.VerifierOption(f.verifier), oauth2.SetAuthURLParam("resource", m.resource))
+	resource, user := m.resource, f.User
+	if f.System {
+		resource, user = m.system, engineconn.SystemUser
+	}
+	tok, err := b.retrieve(ctx, m, f.client, url.Values{"grant_type": {"authorization_code"}, "code": {code},
+		"redirect_uri": {b.Callback(e.ID)}, "code_verifier": {f.verifier}, "resource": {resource}})
 	if err != nil {
 		return engineconn.Connection{}, fmt.Errorf("%w: exchanging the code: %s", ErrUnavailable, tokenError(err))
 	}
@@ -222,25 +310,46 @@ func (b *Broker) Finish(ctx context.Context, e site.Engine, state, code string) 
 	if err != nil {
 		return engineconn.Connection{}, err
 	}
+	profile := profileOf(p)
+	if f.client.metadata {
+		profile.Client = f.client.id
+	}
+	if f.System {
+		if p.System == nil {
+			return engineconn.Connection{}, fmt.Errorf("%w: the engine did not say what it approved", ErrUnavailable)
+		}
+		profile.System = systemOf(*p.System)
+	}
 	// Not while a renewal of the connection it replaces runs, which would
 	// keep that grant's token for this one.
-	l := b.lock(f.user, e.ID)
+	l := b.lock(user, e.ID)
 	l.Lock()
 	defer l.Unlock()
-	replaced, rerr := b.conns.Refresh(f.user, e.ID)
-	c, err := b.conns.Connect(f.user, e.ID, profileOf(p), tok.RefreshToken)
+	old, had := b.conns.Get(user, e.ID)
+	replaced, rerr := b.conns.Refresh(user, e.ID)
+	c, err := b.conns.Connect(user, e.ID, profile, tok.RefreshToken)
 	if err != nil {
 		return engineconn.Connection{}, err
 	}
-	b.keep(f.user, e.ID, tok)
-	if rerr == nil && m.revokeURL != "" {
-		b.revoke(ctx, e, m, replaced) // the grant it replaces is of no use now
+	b.keep(user, e.ID, tok)
+	if had && rerr == nil && m.revokeURL != "" {
+		if oc, ok := b.clientOf(e.ID, old.Profile); ok {
+			b.revoke(ctx, m, oc, replaced) // the grant it replaces is of no use now
+		}
 	}
 	return c, nil
 }
 
 func profileOf(p engine.Person) engineconn.Profile {
 	return engineconn.Profile{Subject: p.ID, Username: p.Username, Name: p.Name, Email: p.Email, Groups: slices.Clone(p.Groups)}
+}
+
+func systemOf(g engine.SystemGrant) *engineconn.System {
+	s := &engineconn.System{ApprovedBy: g.ApprovedBy, ApprovedAt: g.ApprovedAt.UTC(), Preconsent: g.Preconsent}
+	for _, c := range g.Capabilities {
+		s.Capabilities = append(s.Capabilities, engineconn.Capability{Scope: c.Scope, Projects: slices.Clone(c.Projects)})
+	}
+	return s
 }
 
 func (b *Broker) keep(user, engineID string, tok *oauth2.Token) {
@@ -280,18 +389,20 @@ func (b *Broker) Token(ctx context.Context, e site.Engine, user string) (string,
 	if ok && b.now().Before(a.expires) {
 		return a.token, nil
 	}
+	conn, connected := b.conns.Get(user, e.ID)
 	refresh, err := b.conns.Refresh(user, e.ID)
 	if err != nil {
 		return "", err
 	}
-	if !b.Configured(e.ID) {
+	c, ok := b.clientOf(e.ID, conn.Profile)
+	if !connected || !ok || b.public == "" {
 		return "", ErrNotConfigured
 	}
 	m, err := b.metadata(ctx, e)
 	if err != nil {
 		return "", err
 	}
-	tok, err := b.config(e, m).TokenSource(b.ctx(ctx), &oauth2.Token{RefreshToken: refresh}).Token()
+	tok, err := b.retrieve(ctx, m, c, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refresh}})
 	if err != nil {
 		var re *oauth2.RetrieveError
 		if errors.As(err, &re) && re.ErrorCode == "invalid_grant" {
@@ -334,13 +445,14 @@ func (b *Broker) Disconnect(ctx context.Context, e site.Engine, user string) err
 	l := b.lock(user, e.ID)
 	l.Lock()
 	defer l.Unlock()
+	conn, _ := b.conns.Get(user, e.ID)
 	refresh, err := b.conns.Refresh(user, e.ID)
 	if errors.Is(err, engineconn.ErrNotConnected) {
 		return err
 	}
-	if err == nil && b.Configured(e.ID) {
+	if c, ok := b.clientOf(e.ID, conn.Profile); err == nil && ok && b.public != "" {
 		if m, merr := b.metadata(ctx, e); merr == nil && m.revokeURL != "" {
-			b.revoke(ctx, e, m, refresh)
+			b.revoke(ctx, m, c, refresh)
 		}
 	}
 	b.forget(user, e.ID)
@@ -349,9 +461,11 @@ func (b *Broker) Disconnect(ctx context.Context, e site.Engine, user string) err
 
 // revoke asks the engine to revoke a refresh token, and with it the
 // grant; what it answers does not change that the connection ends.
-func (b *Broker) revoke(ctx context.Context, e site.Engine, m metadata, refresh string) {
-	form := url.Values{"token": {refresh}, "token_type_hint": {"refresh_token"},
-		"client_id": {b.getenv(engine.ClientIDVar(e.ID))}, "client_secret": {b.getenv(engine.ClientSecretVar(e.ID))}}
+func (b *Broker) revoke(ctx context.Context, m metadata, c client, refresh string) {
+	form := url.Values{"token": {refresh}, "token_type_hint": {"refresh_token"}}
+	if err := b.authenticate(form, c, m.tokenURL); err != nil {
+		return
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.revokeURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return
@@ -419,6 +533,16 @@ func (b *Broker) metadata(ctx context.Context, e site.Engine) (metadata, error) 
 		}
 	}
 	m = metadata{base: e.BaseURL, resource: pr.Resource, authURL: as.Authorize, tokenURL: as.Token, revokeURL: as.Revoke, read: b.now()}
+	// A system grant is offered by an engine that publishes its resource
+	// (ADR-0152); without one, credentials come from the environment.
+	var sys struct {
+		Resource             string   `json:"resource"`
+		AuthorizationServers []string `json:"authorization_servers"`
+	}
+	if err := b.getJSON(ctx, e.BaseURL+"/.well-known/oauth-protected-resource"+systemResource, &sys); err == nil &&
+		sys.Resource != "" && slices.Contains(sys.AuthorizationServers, pr.AuthorizationServers[0]) {
+		m.system = sys.Resource
+	}
 	b.mu.Lock()
 	b.meta[e.ID] = m
 	b.mu.Unlock()

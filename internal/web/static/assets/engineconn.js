@@ -77,3 +77,28 @@ export function connectionsCard() {
   load();
   return card;
 }
+
+// silentConnect connects one, once a browser session, to an engine whose
+// administrator approved people's grants beforehand (ADR-0152): through the
+// engine and back to this page, without a page of the engine's when one
+// has a session there; without one, the engine sends one straight back.
+// It answers whether the browser is on its way.
+export async function silentConnect() {
+  try {
+    if (sessionStorage.getItem("ot.silent-connect")) return false;
+    sessionStorage.setItem("ot.silent-connect", "1");
+  } catch {
+    return false; // without the mark it could not stop asking
+  }
+  let engines;
+  try {
+    ({ engines } = await get("/api/me/engines"));
+  } catch {
+    return false;
+  }
+  const e = (engines || []).find((x) => x.silent);
+  if (!e) return false;
+  location.assign("/api/engines/" + encodeURIComponent(e.id) + "/connect?" +
+    new URLSearchParams({ silent: "1", back: location.hash || "#/" }).toString());
+  return true;
+}

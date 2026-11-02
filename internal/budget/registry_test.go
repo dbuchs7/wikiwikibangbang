@@ -56,6 +56,8 @@ var classified = map[string]string{
 	"internal/site.maxEngines":      "the shape of the site's settings (ADR-0129): how many process engines an administrator keeps, like the number of connectors",
 	"internal/tasklink.maxProblems": "the shape of a round's report (ADR-0151): how many problems it names before it counts the rest, held for one engine at a time",
 	"internal/site.maxTaskRules":    "the shape of the site's settings (ADR-0151): how many task link rules an administrator keeps per engine, like the number of engines",
+	"internal/tasklink.maxEndReads": "how many tasks that left the list one round asks the engine about (ADR-0152), so many at once are settled over several rounds; " +
+		"each question is one bounded read of the engine, not memory a caller of this server can claim",
 	"internal/tasklink.maxFactPages": "how many pages of an engine's feed one round reads (ADR-0151), so a long feed is read over several rounds; " +
 		"each page is bounded by EngineResponseBytes and applied before the next is read, not memory a caller of this server can claim",
 	"internal/connector.maxDatasets": "the size of one connector's run (ADR-0075), so a misbehaving source cannot make it endless; " +
@@ -67,6 +69,8 @@ var classified = map[string]string{
 	"internal/item.maxSecretReaders": "the shape of a protected passage (ADR-0088): how many people and groups it names, like the lists of a restriction",
 	"internal/item.maxPictureLabels": "the shape of a picture (ADR-0090): how many labels it carries, a list a person types, not a memory setting",
 	"internal/item.MaxPrefill":       "the shape of a start form (ADR-0148): how many of its fields it fills in beforehand, a list a person chooses, like the labels of a picture",
+	"internal/engine/grant.go:4096": "an engine's answer that a task ended (ADR-0152), a small fixed object read only for the word it says; " +
+		"not memory a caller of this server can claim",
 	"internal/engine/engine.go:4096": "the start of an engine's refusal of a start link's submission, quoted in the error message (ADR-0148); " +
 		"not a caller's input to this server, the whole answer is bounded by EngineResponseBytes elsewhere",
 	"internal/item.maxRetentionKeep": "a retention policy (ADR-0104): how many versions of a picture a rule may keep, not something the server holds in memory",

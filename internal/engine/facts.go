@@ -24,7 +24,9 @@ func EventsVar(id string) string {
 }
 
 // HasEventsCredential reports whether the engine's events variable is set.
-func (r *Reader) HasEventsCredential(id string) bool { return r.getenv(EventsVar(id)) != "" }
+func (r *Reader) HasEventsCredential(id string) bool {
+	return r.getenv(EventsVar(id)) != "" || r.granted(id, EventsVar(id))
+}
 
 // ErrCursorGone is a cursor older than what the engine's feed keeps: what
 // happened after it is no longer told, so the open tasks are compared

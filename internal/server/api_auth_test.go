@@ -92,6 +92,9 @@ var publicAPI = map[string]bool{
 	// The engine's redirect back to a begun connection (ADR-0151): the
 	// session cookie is not sent with it, the state cookie binds it.
 	"/api/engines/{id}/connect/callback": true,
+	// The client metadata document engines read this server's name,
+	// callbacks and public key from (ADR-0152); it holds no secret.
+	"/api/engines/client-metadata": true,
 }
 
 func TestEveryAPIRouteButLoginNeedsAPrincipal(t *testing.T) {
