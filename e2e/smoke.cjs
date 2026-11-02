@@ -3185,6 +3185,8 @@ function gitSource() {
       await page.waitForSelector("#engine-system-connect");
       check(engine.system.grant === null, "ending the connection gives the grant back at the engine");
       check((await page.request.delete(base + "/api/engines/grant")).status() === 204, "the engine is removed again");
+      await page.goto(base + "/#/item/" + flow.item.key); // where the drawing begins
+      await page.waitForSelector("#edit");
 
       step("drawing: a model of its own and a process of an engine go into a drawing; the latter shows live over its picture, with its operations (ADR-0142)");
       await page.click("#edit");
