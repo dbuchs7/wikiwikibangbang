@@ -86,6 +86,8 @@ func TokenVar(id string) string {
 type Reader struct {
 	getenv func(string) string
 	http   *http.Client
+	// system are the engines' system grants (ADR-0152), or nil.
+	system SystemGrants
 }
 
 // NewReader returns a reader that takes credentials from getenv
@@ -125,8 +127,11 @@ func NewClient(getenv func(string) string) *http.Client {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
-// HasCredential reports whether the engine's variable is set.
-func (r *Reader) HasCredential(id string) bool { return r.getenv(TokenVar(id)) != "" }
+// HasCredential reports whether the engine's variable is set, or its
+// system grant reaches its processes (ADR-0152).
+func (r *Reader) HasCredential(id string) bool {
+	return r.getenv(TokenVar(id)) != "" || r.granted(id, TokenVar(id))
+}
 
 // Process is one version of a process.
 type Process struct {
@@ -886,6 +891,8 @@ type request struct {
 	// feed is a read of the event feed, whose 410 says the cursor is
 	// older than what it keeps (ErrCursorGone).
 	feed bool
+	// gone is a read of one task, whose 410 says how it ended (ADR-0152).
+	gone bool
 }
 
 // call makes a request of the engine and hands the answer's type and body
@@ -898,6 +905,16 @@ func (r *Reader) call(ctx context.Context, e site.Engine, rq request, read func(
 	token := rq.bearer
 	if token == "" {
 		token = r.getenv(tokenVar)
+	}
+	// A credential the environment does not set comes from the engine's
+	// system grant, where it reaches it (ADR-0152).
+	viaGrant := false
+	if token == "" && !rq.public && r.granted(e.ID, tokenVar) {
+		tok, err := r.system.SystemToken(ctx, e)
+		if err != nil {
+			return fmt.Errorf("%w: the connection to the engine: %v", ErrUnavailable, err)
+		}
+		token, viaGrant = tok, true
 	}
 	if token == "" && !rq.public {
 		return fmt.Errorf("%w: set %s", ErrNoCredential, tokenVar)
@@ -942,6 +959,8 @@ func (r *Reader) call(ctx context.Context, e site.Engine, rq request, read func(
 		return ErrBusy
 	case rq.feed && res.StatusCode == http.StatusGone:
 		return ErrCursorGone
+	case rq.gone && res.StatusCode == http.StatusGone:
+		return goneOf(res.Body)
 	case rq.work && res.StatusCode == http.StatusForbidden:
 		return fmt.Errorf("%w: %s", ErrNotAllowed, engineMessage(res.Body))
 	case rq.work && (res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusUnprocessableEntity):
@@ -949,6 +968,9 @@ func (r *Reader) call(ctx context.Context, e site.Engine, rq request, read func(
 	case rq.work && (res.StatusCode == http.StatusTooManyRequests || res.StatusCode == http.StatusServiceUnavailable):
 		return ErrBusy
 	case res.StatusCode == http.StatusUnauthorized || res.StatusCode == http.StatusForbidden:
+		if viaGrant && res.StatusCode == http.StatusUnauthorized {
+			r.system.SystemRefused(e.ID) // the next call renews, and learns whether it stands
+		}
 		return fmt.Errorf("%w (%d)", ErrRefused, res.StatusCode)
 	case res.StatusCode == http.StatusNotFound:
 		return fmt.Errorf("%w (%s)", ErrNotFound, rq.path)

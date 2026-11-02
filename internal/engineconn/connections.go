@@ -9,6 +9,7 @@
 package engineconn
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,7 +31,50 @@ type Profile struct {
 	Name     string   `json:"name,omitempty"`
 	Email    string   `json:"email,omitempty"`
 	Groups   []string `json:"groups,omitempty"`
+	// Client is the client the grant was issued to, when it is this
+	// server's client metadata document rather than a client registered
+	// by an administrator (ADR-0152): renewing and revoking it must name
+	// the same client.
+	Client string `json:"client,omitempty"`
+	// System is what the engine approved for this server, on its system
+	// grant only (ADR-0152).
+	System *System `json:"system,omitempty"`
 }
+
+// System is what an engine's administrator approved for this server's
+// system grant (ADR-0152).
+type System struct {
+	ApprovedBy   string       `json:"approvedBy"`
+	ApprovedAt   time.Time    `json:"approvedAt"`
+	Capabilities []Capability `json:"capabilities"`
+	// Preconsent says people's grants are approved without a consent
+	// screen of their own.
+	Preconsent bool `json:"preconsent"`
+}
+
+// Capability is one thing a system grant reaches — diagrams, tasklist or
+// events — and the projects it is confined to, none for all.
+type Capability struct {
+	Scope    string   `json:"scope"`
+	Projects []string `json:"projects,omitempty"`
+}
+
+// Holds reports whether the grant reaches scope.
+func (s *System) Holds(scope string) bool {
+	return s != nil && slices.ContainsFunc(s.Capabilities, func(c Capability) bool { return c.Scope == scope })
+}
+
+// SystemUser is the subject an engine's system grant is kept under
+// (ADR-0152); keyUser and keyEngine hold this server's signing key for
+// client authentication. No account has an ID that starts with ":", so
+// none can be them, and listings leave them out.
+const (
+	SystemUser = ":system"
+	keyUser    = ":client"
+	keyEngine  = ":key"
+)
+
+func reserved(user string) bool { return strings.HasPrefix(user, ":") }
 
 // Connection is one person's connection to one engine.
 type Connection struct {
@@ -54,6 +98,9 @@ const (
 	connected = "connected"
 	renewed   = "renewed"
 	ended     = "ended"
+	// declined: a person ended their connection themselves, so they are
+	// not connected again without asking (ADR-0152); connecting clears it.
+	declined = "declined"
 )
 
 // record is one entry of the journal. Sealed holds the refresh token,
@@ -87,7 +134,10 @@ type Connections struct {
 	newKey  func() string
 	now     func() time.Time
 	conns   map[string]*conn // by user and engine
-	records int
+	// declined are the people, by user and engine, who ended their
+	// connection themselves.
+	declined map[string]bool
+	records  int
 }
 
 func id(user, engine string) string { return user + "\x00" + engine }
@@ -102,7 +152,7 @@ func aad(user, engine, key string) []byte {
 // New rebuilds the connections from records and journals later changes.
 // newKey makes the ID of a new connection's key.
 func New(records [][]byte, journal func([]byte) error, sealer Sealer, newKey func() string) (*Connections, error) {
-	c := &Connections{journal: journal, sealer: sealer, newKey: newKey, now: time.Now, conns: map[string]*conn{}}
+	c := &Connections{journal: journal, sealer: sealer, newKey: newKey, now: time.Now, conns: map[string]*conn{}, declined: map[string]bool{}}
 	for i, data := range records {
 		var r record
 		if err := json.Unmarshal(data, &r); err != nil {
@@ -127,6 +177,7 @@ func (c *Connections) apply(r record) error {
 			return errors.New("a connection without its profile, key or token")
 		}
 		c.conns[k] = &conn{Connection: Connection{User: r.User, Engine: r.Engine, Profile: *r.Profile, Connected: r.At}, key: r.Key, sealed: r.Sealed, renewed: r.At}
+		delete(c.declined, k)
 	case renewed:
 		cn, ok := c.conns[k]
 		if !ok || cn.key != r.Key {
@@ -140,6 +191,8 @@ func (c *Connections) apply(r record) error {
 		if cn, ok := c.conns[k]; ok && (r.Key == "" || cn.key == r.Key) {
 			delete(c.conns, k)
 		}
+	case declined:
+		c.declined[k] = true
 	default:
 		return fmt.Errorf("unknown kind %q", r.Kind)
 	}
@@ -283,6 +336,9 @@ func (c *Connections) Of(user, engine string) []Connection {
 	defer c.mu.Unlock()
 	var out []Connection
 	for _, cn := range c.conns {
+		if reserved(cn.User) {
+			continue
+		}
 		if (user == "" || cn.User == user) && (engine == "" || cn.Engine == engine) {
 			x := cn.Connection
 			x.Groups = slices.Clone(x.Groups)
@@ -307,11 +363,58 @@ func (c *Connections) Keys() []string {
 	return out
 }
 
-// Count is the number of connections.
+// Count is the number of people's connections.
 func (c *Connections) Count() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return len(c.conns)
+	n := 0
+	for _, cn := range c.conns {
+		if !reserved(cn.User) {
+			n++
+		}
+	}
+	return n
+}
+
+// Decline records that a person ended their connection to engine
+// themselves, so it is not made again without asking (ADR-0152).
+func (c *Connections) Decline(user, engine string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.declined[id(user, engine)] {
+		return nil
+	}
+	return c.record(record{Kind: declined, At: c.now().UTC(), User: user, Engine: engine})
+}
+
+// Declined reports whether the person ended their connection to engine
+// themselves and has not connected since.
+func (c *Connections) Declined(user, engine string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.declined[id(user, engine)]
+}
+
+// ClientKey is this server's signing key for client authentication at
+// engines, as SetClientKey kept it, sealed like a refresh token
+// (ADR-0152); ok is false before the first.
+func (c *Connections) ClientKey() (seed []byte, ok bool, err error) {
+	pt, err := c.Refresh(keyUser, keyEngine)
+	if errors.Is(err, ErrNotConnected) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	seed, err = base64.RawStdEncoding.DecodeString(pt)
+	return seed, err == nil, err
+}
+
+// SetClientKey keeps a new signing key, replacing the one before, whose
+// key is destroyed.
+func (c *Connections) SetClientKey(seed []byte) error {
+	_, err := c.Connect(keyUser, keyEngine, Profile{Subject: "client-key", Username: "client-key"}, base64.RawStdEncoding.EncodeToString(seed))
+	return err
 }
 
 // Compacted answers the records that hold the connections as they are,
@@ -321,13 +424,21 @@ func (c *Connections) Count() int {
 func (c *Connections) Compacted() [][]byte {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.records < 2*len(c.conns)+100 {
+	if c.records < 2*(len(c.conns)+len(c.declined))+100 {
 		return nil
 	}
 	out := [][]byte{}
 	for _, cn := range c.conns {
 		p := cn.Profile
 		data, err := json.Marshal(record{V: 1, Kind: connected, At: cn.Connected, User: cn.User, Engine: cn.Engine, Key: cn.key, Profile: &p, Sealed: cn.sealed})
+		if err != nil {
+			return nil
+		}
+		out = append(out, data)
+	}
+	for k := range c.declined {
+		user, engine, _ := strings.Cut(k, "\x00")
+		data, err := json.Marshal(record{V: 1, Kind: declined, User: user, Engine: engine})
 		if err != nil {
 			return nil
 		}

@@ -158,6 +158,36 @@ function engineSource() {
   let reached = true;
   const starts = [];
   const grants = { codes: new Map(), access: new Set(), refresh: new Set(), revoked: 0, completed: [] };
+  // This server connected by one approval (ADR-0152): its system grant, its
+  // tokens, and the client assertions the engine accepted.
+  const system = { grant: null, access: new Set(), refresh: new Set(), assertions: 0, jtis: new Set(), silent: 0 };
+  // The client metadata document of a client named by its address.
+  const documentOf = async (id) => {
+    try {
+      const doc = await (await fetch(id)).json();
+      return doc.client_id === id ? doc : null;
+    } catch {
+      return null;
+    }
+  };
+  // A client assertion (RFC 7523) signed with a key of the document, for
+  // this engine's token endpoint, used once.
+  const asserted = async (f, self) => {
+    const doc = await documentOf(f.get("client_id") || "");
+    const parts = (f.get("client_assertion") || "").split(".");
+    if (!doc || parts.length !== 3 || f.get("client_assertion_type") !== "urn:ietf:params:oauth:client-assertion-type:jwt-bearer") return false;
+    const header = JSON.parse(Buffer.from(parts[0], "base64url"));
+    const claims = JSON.parse(Buffer.from(parts[1], "base64url"));
+    const jwk = (doc.jwks?.keys || []).find((k) => k.kid === header.kid);
+    if (!jwk || header.alg !== "EdDSA") return false;
+    const crypto = require("crypto");
+    const key = crypto.createPublicKey({ key: { kty: jwk.kty, crv: jwk.crv, x: jwk.x }, format: "jwk" });
+    if (!crypto.verify(null, Buffer.from(parts[0] + "." + parts[1]), key, Buffer.from(parts[2], "base64url"))) return false;
+    if (claims.iss !== doc.client_id || claims.sub !== doc.client_id || claims.aud !== self + "/oauth/token" || claims.exp * 1000 < Date.now() || system.jtis.has(claims.jti)) return false;
+    system.jtis.add(claims.jti);
+    system.assertions++;
+    return true;
+  };
   // The feed of task facts (ADR-0151): a cursor is the position after the
   // last fact read.
   const facts = [];
@@ -201,6 +231,7 @@ function engineSource() {
     const json = (v, status = 200) => { res.statusCode = status; res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify(v)); };
     const path = req.url.split("?")[0];
     if (path === "/.well-known/oauth-protected-resource/tasks") return json({ resource: self + "/tasks", authorization_servers: [self] });
+    if (path === "/.well-known/oauth-protected-resource/system") return json({ resource: self + "/system", authorization_servers: [self] });
     if (path === "/.well-known/oauth-authorization-server") {
       return json({ issuer: self, authorization_endpoint: self + "/oauth/authorize", token_endpoint: self + "/oauth/token", revocation_endpoint: self + "/oauth/revoke",
         code_challenge_methods_supported: ["S256"], token_endpoint_auth_methods_supported: ["client_secret_post"] });
@@ -209,33 +240,64 @@ function engineSource() {
       const q = new URL(req.url, self).searchParams;
       const back = new URL(q.get("redirect_uri"));
       back.searchParams.set("state", q.get("state"));
-      if (q.get("client_id") === "e2e-client" && q.get("resource") === self + "/tasks" && q.get("code_challenge_method") === "S256") {
+      const redirect = () => {
+        res.statusCode = 302;
+        res.setHeader("Location", back.toString());
+        res.end();
+      };
+      const approve = (kind) => {
         const code = "atlasoc_" + Math.random().toString(16).slice(2);
-        grants.codes.set(code, { challenge: q.get("code_challenge"), redirect: q.get("redirect_uri") });
+        grants.codes.set(code, { challenge: q.get("code_challenge"), redirect: q.get("redirect_uri"), kind, client: q.get("client_id"), scopes: (q.get("scope") || "").split(" ") });
         back.searchParams.set("code", code);
-      } else back.searchParams.set("error", "invalid_request");
-      res.statusCode = 302;
-      res.setHeader("Location", back.toString());
-      return res.end();
+      };
+      if (q.get("client_id") === "e2e-client" && q.get("resource") === self + "/tasks" && q.get("code_challenge_method") === "S256") {
+        approve("person");
+        return redirect();
+      }
+      // A client named by its document (ADR-0152): the administrator
+      // approves the system grant, with people approved beforehand; a
+      // person of a pre-consented client comes back at once, even with
+      // prompt=none.
+      documentOf(q.get("client_id") || "").then((doc) => {
+        if (!doc || !doc.redirect_uris.includes(q.get("redirect_uri")) || q.get("code_challenge_method") !== "S256") back.searchParams.set("error", "invalid_request");
+        else if (q.get("resource") === self + "/system") approve("system");
+        else if (q.get("resource") !== self + "/tasks") back.searchParams.set("error", "invalid_target");
+        else if (q.get("prompt") === "none" && !(system.grant?.preconsent && system.grant.client === q.get("client_id"))) back.searchParams.set("error", "consent_required");
+        else {
+          if (q.get("prompt") === "none") system.silent++;
+          approve("person");
+        }
+        redirect();
+      });
+      return;
     }
     if (path === "/oauth/token" || path === "/oauth/revoke") {
       let body = "";
       req.on("data", (c) => { body += c; });
-      req.on("end", () => {
+      req.on("end", async () => {
         const f = new URLSearchParams(body);
-        if (f.get("client_id") !== "e2e-client" || f.get("client_secret") !== "e2e-client-secret") return json({ error: "invalid_client" }, 401);
+        const registered = f.get("client_id") === "e2e-client" && f.get("client_secret") === "e2e-client-secret";
+        if (!registered && !(await asserted(f, self))) return json({ error: "invalid_client" }, 401);
         if (path === "/oauth/revoke") {
           grants.revoked += grants.refresh.delete(f.get("token")) ? 1 : 0;
+          if (system.refresh.delete(f.get("token"))) system.grant = null;
           return json({});
         }
         const c = grants.codes.get(f.get("code"));
         grants.codes.delete(f.get("code"));
         const verified = c && require("crypto").createHash("sha256").update(f.get("code_verifier") || "").digest("base64url") === c.challenge;
-        const refreshed = f.get("grant_type") === "refresh_token" && grants.refresh.delete(f.get("refresh_token"));
-        if (!(f.get("grant_type") === "authorization_code" && verified && c.redirect === f.get("redirect_uri")) && !refreshed) return json({ error: "invalid_grant" }, 400);
+        const kind = f.get("grant_type") === "refresh_token" ? (system.refresh.delete(f.get("refresh_token")) ? "system" : grants.refresh.delete(f.get("refresh_token")) ? "person" : "")
+          : f.get("grant_type") === "authorization_code" && verified && c.redirect === f.get("redirect_uri") ? c.kind : "";
+        if (!kind) return json({ error: "invalid_grant" }, 400);
         const access = "atlasoa_" + Math.random().toString(16).slice(2), refresh = "atlasor_" + Math.random().toString(16).slice(2);
-        grants.access.add(access);
-        grants.refresh.add(refresh);
+        if (kind === "system") {
+          if (c) system.grant = { client: c.client, scopes: c.scopes.filter((x) => ["diagrams", "tasklist", "events"].includes(x)), preconsent: true };
+          system.access.add(access);
+          system.refresh.add(refresh);
+        } else {
+          grants.access.add(access);
+          grants.refresh.add(refresh);
+        }
         json({ access_token: access, token_type: "Bearer", expires_in: 7200, refresh_token: refresh });
       });
       return;
@@ -269,11 +331,18 @@ function engineSource() {
         { type: "textfield", key: "comment", label: "Comment" }] } });
     }
     if (/^\/api\/v1\/instances\/\d+\/variables$/.test(path) && person) return json({ comment: "Ben's two weeks" });
+    const bearer = (req.headers.authorization || "").replace(/^Bearer /, "");
+    if (path === "/api/v1/auth/me" && system.access.has(bearer) && system.grant) {
+      return json({ authEnabled: true, user: { id: "u-1", username: "patrick", displayName: "Patrick Admin", roles: ["admin"], groups: [] },
+        system: { clientId: system.grant.client, clientName: "Orbithek", approvedBy: "patrick", approvedAt: "2026-11-02T09:00:00Z",
+          capabilities: system.grant.scopes.map((scope) => ({ scope, projects: [] })), preconsent: system.grant.preconsent } });
+    }
     if (path === "/api/v1/auth/me" && grants.access.has((req.headers.authorization || "").replace(/^Bearer /, ""))) {
       return json({ authEnabled: true, user: { id: "u-17", username: "anna", displayName: "Anna Muster", email: "anna@example.org", roles: ["user"],
         groups: [{ id: "g1", name: "hr" }] } });
     }
-    if (req.headers.authorization !== "Bearer " + process.env.ENGINE_TOKEN) {
+    // The system grant reads what the environment's token reads (ADR-0152).
+    if (req.headers.authorization !== "Bearer " + process.env.ENGINE_TOKEN && !(system.grant && system.access.has(bearer))) {
       res.statusCode = 401;
       return res.end();
     }
@@ -346,6 +415,7 @@ function engineSource() {
   server.reach = (on) => { reached = on; };
   server.starts = starts;
   server.grants = grants;
+  server.system = system;
   // A task opens at the engine, or is cancelled there, and the feed says so.
   server.openTask = (task) => { openTasks.push(task); fact("created", task); };
   server.cancelTask = (key) => {
@@ -3107,6 +3177,54 @@ function gitSource() {
       await page.goto(base + "/#/admin");
       await page.click("#engine-list tr[data-engine=atlas] button:has-text('Edit')");
       await page.waitForSelector("#task-links-events >> text=OT_ENGINE_ATLAS_EVENTS_TOKEN; it is set");
+      await page.goto(base + "/#/item/" + flow.item.key); // where the drawing begins
+      await page.waitForSelector("#edit");
+
+      step("one approval: an administrator connects an engine from its page, the engine's administrator approves, its processes are read with that connection, and a person is connected silently (ADR-0152)");
+      const clientDoc = await (await page.request.get(base + "/api/engines/client-metadata")).json();
+      check(clientDoc.client_id === base + "/api/engines/client-metadata" && clientDoc.token_endpoint_auth_method === "private_key_jwt" &&
+        clientDoc.jwks.keys[0].crv === "Ed25519" && !JSON.stringify(clientDoc).includes("secret"), "the server names itself by its client metadata document");
+      await page.goto(base + "/#/admin");
+      await page.click("#engine-new");
+      await page.fill("#engine-settings [name=id]", "grant");
+      await page.fill("#engine-settings [name=name]", "Atlas connected");
+      await page.fill("#engine-settings [name=baseURL]", `http://127.0.0.1:${engine.address().port}`);
+      await page.click("#engine-settings button[type=submit]");
+      await page.waitForSelector("#engine-credential >> text=OT_ENGINE_GRANT_TOKEN");
+      await page.click("#engine-system-connect"); // to the engine, approved there, and back
+      await page.waitForSelector("#engine-system-done >> text=This server is connected to the engine.");
+      await page.waitForSelector("#engine-system-status >> text=approved by patrick");
+      await page.waitForSelector("#engine-system-preconsent");
+      await page.waitForSelector("#engine-credential >> text=read with this server's connection to the engine");
+      check(!new URL(page.url()).search, "the engine's answer leaves the address");
+      check(engine.system.assertions >= 1 && engine.system.grant?.scopes.join(",") === "diagrams,tasklist,events", "the grant was asked for with a signed assertion: " + JSON.stringify(engine.system.grant));
+      await page.click("#engine-check-now");
+      await page.waitForSelector("#engine-check >> text=The engine answered with 2 processes.");
+      // A new browser session of the same person is connected on its first page.
+      const silentCtx = await browser.newContext();
+      await silentCtx.addCookies(await page.context().cookies());
+      const silentPage = await silentCtx.newPage();
+      await silentPage.goto(base + "/#/account");
+      // Away to the engine and back to the page; the connection is kept on the way.
+      const grantOf = async () => (await (await silentPage.request.get(base + "/api/me/engines")).json()).engines.find((e) => e.id === "grant");
+      let mine = await grantOf();
+      for (let i = 0; i < 50 && !mine?.connection; i++) {
+        await silentPage.waitForTimeout(200);
+        mine = await grantOf();
+      }
+      for (let i = 0; i < 50 && !silentPage.url().endsWith("/#/account"); i++) await silentPage.waitForTimeout(200);
+      check(silentPage.url() === base + "/#/account", "the person is back on the page they began from: " + silentPage.url());
+      check(engine.system.silent === 1, "the person was connected without a page of the engine");
+      check(mine?.connection?.username === "anna" && mine.silent === false, "the silent connection is the person's own: " + JSON.stringify(mine));
+      await silentPage.reload(); // once a session: no second round trip
+      await silentPage.waitForTimeout(1000);
+      check(engine.system.silent === 1, "a reload is not connected again");
+      await silentCtx.close();
+      answer = true; // the confirmation to end the connection
+      await page.click("#engine-system-disconnect");
+      await page.waitForSelector("#engine-system-connect");
+      check(engine.system.grant === null, "ending the connection gives the grant back at the engine");
+      check((await page.request.delete(base + "/api/engines/grant")).status() === 204, "the engine is removed again");
       await page.goto(base + "/#/item/" + flow.item.key); // where the drawing begins
       await page.waitForSelector("#edit");
 

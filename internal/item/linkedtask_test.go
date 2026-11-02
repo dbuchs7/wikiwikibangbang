@@ -168,6 +168,79 @@ func TestPeopleMayNotDoWhatOnlyTheEngineDecides(t *testing.T) {
 	noErr(t, anna.Trash(it.ID))
 }
 
+// TestADetachedTaskIsTheWikisAgain (ADR-0152): a task the synchronisation
+// can no longer follow is detached, not ended — the item keeps its origin,
+// state, fields, labels and readers, and people may finish, move and
+// remove it as any item; detaching an engine's tasks is one batch; a task
+// that comes back is linked again to the same item.
+func TestADetachedTaskIsTheWikisAgain(t *testing.T) {
+	s := linkSetup(t)
+	link := func(key string) Item {
+		return mustItem(t)(func() (Item, error) { it, _, err := s.LinkTask("engine:atlas-prod", approval(key)); return it, err }())
+	}
+	one, two, three := link("1"), link("2"), link("3")
+	noErr(t, s.Restrict("admin", one.ID, Restriction{}))
+	noErr(t, s.SetLabels("admin", one.ID, []string{"atlas", "q4"}))
+	noErr(t, s.EndTask("engine:atlas-prod", three.ID, "done"))
+
+	detached, err := s.DetachTask("engine:atlas-prod", one.ID)
+	if err != nil || !detached {
+		t.Fatalf("DetachTask = %v %v", detached, err)
+	}
+	got, _ := s.Get(one.ID)
+	if got.Linked != "" || got.LinkedFields != nil || got.DetachedFrom() != "atlas-prod" {
+		t.Fatalf("detached item = linked %q %v, detached from %q", got.Linked, got.LinkedFields, got.DetachedFrom())
+	}
+	if got.State != "open" || got.Title != one.Title || got.Properties["due"] != day(2026, 11, 2) ||
+		!slices.Equal(got.Labels, []string{"atlas", "q4"}) || got.Origin == nil || got.Origin.ExternalKey != "1" {
+		t.Errorf("detaching changed the item: %+v", got)
+	}
+	if again, err := s.DetachTask("engine:atlas-prod", one.ID); err != nil || again {
+		t.Errorf("detaching a detached item = %v %v, want nothing to do", again, err)
+	}
+	if plain := mustItem(t)(s.Create("anna", NewItem{Space: "PLAT", Type: "engine-task", Title: "Own"})); plain.DetachedFrom() != "" {
+		t.Error("an item that never was a linked task counts as detached")
+	}
+
+	// Nothing the engine decided binds it any longer.
+	noErr(t, s.GrantRole("admin", "OPS", "anna", Editor))
+	anna := s.As("anna")
+	noErr(t, anna.SetTitle(one.ID, "Approve holidays, by hand"))
+	noErr(t, anna.SetProperty(one.ID, "due", day(2027, 1, 1)))
+	noErr(t, anna.Transition(one.ID, "finish"))
+	noErr(t, anna.Move(one.ID, "OPS", ""))
+	noErr(t, anna.Trash(one.ID))
+
+	// An engine's tasks are detached in one batch; ended ones too, so they
+	// may leave their space; others' tasks are left.
+	other := mustItem(t)(func() (Item, error) {
+		t := approval("9")
+		t.Engine = "atlas-test"
+		it, _, err := s.LinkTask("engine:atlas-test", t)
+		return it, err
+	}())
+	n, err := s.DetachTasks("engine:atlas-prod", "atlas-prod")
+	if err != nil || n != 2 {
+		t.Fatalf("DetachTasks = %d %v, want the open and the ended one", n, err)
+	}
+	log := s.Log()
+	if last := log[len(log)-1]; last.Batch == 0 || log[len(log)-2].Batch != last.Batch {
+		t.Errorf("an engine's tasks were not detached in one batch: %+v", log[len(log)-2:])
+	}
+	if got, _ := s.Get(other.ID); got.Linked != "atlas-test" {
+		t.Errorf("another engine's task was detached: %+v", got)
+	}
+	if n, err := s.DetachTasks("engine:atlas-prod", "atlas-prod"); err != nil || n != 0 {
+		t.Errorf("detaching again = %d %v", n, err)
+	}
+
+	// A task that comes back is the same item, linked again.
+	back, changed, err := s.LinkTask("engine:atlas-prod", approval("2"))
+	if err != nil || !changed || back.ID != two.ID || back.Linked != "atlas-prod" || back.DetachedFrom() != "" {
+		t.Errorf("a returning task = %+v %v %v, want item %s linked again", back, changed, err, two.ID)
+	}
+}
+
 // TestTheEngineEndsATaskByItsTransition: EndTask makes the one transition
 // that leads to the state (D3); it leaves an item already there and one no
 // longer live, and refuses an item that is no linked task or a state no

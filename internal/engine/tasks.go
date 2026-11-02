@@ -26,7 +26,9 @@ func TaskListVar(id string) string {
 
 // HasTaskListCredential reports whether the engine's task list variable is
 // set.
-func (r *Reader) HasTaskListCredential(id string) bool { return r.getenv(TaskListVar(id)) != "" }
+func (r *Reader) HasTaskListCredential(id string) bool {
+	return r.getenv(TaskListVar(id)) != "" || r.granted(id, TaskListVar(id))
+}
 
 // Task is an open user task of an engine, as a task link reads it.
 type Task struct {
@@ -166,6 +168,9 @@ func ClientSecretVar(id string) string {
 type Person struct {
 	ID, Username, Name, Email string
 	Groups                    []string
+	// System is what the engine approved for this server, when the token
+	// is of its system grant (ADR-0152).
+	System *SystemGrant
 }
 
 // Me reads who the access token of a person's grant belongs to, from
@@ -181,6 +186,7 @@ func (r *Reader) Me(ctx context.Context, e site.Engine, bearer string) (Person, 
 				Name string `json:"name"`
 			} `json:"groups"`
 		} `json:"user"`
+		System *SystemGrant `json:"system"`
 	}
 	err := r.call(ctx, e, request{method: http.MethodGet, path: "/api/v1/auth/me", accept: "application/json", bearer: bearer},
 		func(_ string, body io.Reader) error { return json.NewDecoder(body).Decode(&got) })
@@ -191,7 +197,7 @@ func (r *Reader) Me(ctx context.Context, e site.Engine, bearer string) (Person, 
 	if u.ID == "" {
 		return Person{}, fmt.Errorf("%w: it did not say who the grant belongs to", ErrUnavailable)
 	}
-	p := Person{ID: u.ID, Username: u.Username, Name: strings.TrimSpace(u.DisplayName), Email: u.Email}
+	p := Person{ID: u.ID, Username: u.Username, Name: strings.TrimSpace(u.DisplayName), Email: u.Email, System: got.System}
 	for _, g := range u.Groups {
 		if g.Name != "" {
 			p.Groups = append(p.Groups, g.Name)

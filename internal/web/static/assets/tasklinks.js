@@ -81,7 +81,10 @@ function connectInfo(c) {
     h("p", { class: c.configured ? "muted" : "error", text: c.configured
       ? t("tasklinks.connectOn", { n: String(c.connected || 0) })
       : t("tasklinks.connectOff", { id: c.clientIdVar, secret: c.clientSecretVar }) }),
-    c.callback
+    // Since the engine is connected, people connect without a registered
+    // client, and with pre-consent without a page (ADR-0152).
+    c.byMetadata ? h("p", { class: "muted", id: "task-links-by-metadata", text: t(c.preconsent ? "tasklinks.connectSilent" : "tasklinks.connectGrant") }) : "",
+    c.byMetadata ? "" : c.callback
       ? h("p", { class: "muted" }, t("tasklinks.callback"), " ", h("code", { text: c.callback }))
       : h("p", { class: "error", text: t("tasklinks.noPublicURL") }));
 }
@@ -127,8 +130,10 @@ export function taskLinksCard(engine) {
       h("h3", { text: t("tasklinks.title") }),
       h("p", { class: "muted", text: t("tasklinks.note") }),
       h("p", { class: links.credential ? "muted" : "error", id: "task-links-credential",
-        text: links.credential ? t("tasklinks.credentialIs", { name: links.credentialVar }) : t("tasklinks.credentialMissing", { name: links.credentialVar }) }),
-      h("p", { class: "muted", id: "task-links-events", text: links.events ? t("tasklinks.eventsIs", { name: links.eventsVar }) : t("tasklinks.eventsMissing", { name: links.eventsVar }) }),
+        text: links.listFromGrant ? t("tasklinks.credentialGrant")
+          : links.credential ? t("tasklinks.credentialIs", { name: links.credentialVar }) : t("tasklinks.credentialMissing", { name: links.credentialVar }) }),
+      h("p", { class: "muted", id: "task-links-events", text: links.eventsFromGrant ? t("tasklinks.eventsGrant")
+        : links.events ? t("tasklinks.eventsIs", { name: links.eventsVar }) : t("tasklinks.eventsMissing", { name: links.eventsVar }) }),
       links.readAt ? h("p", { class: links.stale ? "notice warning" : "muted", id: "task-links-fresh", text: t(links.stale ? "enginetask.stale" : "enginetask.fresh", { engine: engine.name, when: when(links.readAt) }) }) : "",
       connectInfo(links.connect || {}),
       types.length ? "" : h("p", { class: "error", text: t("tasklinks.noTypes") }),

@@ -203,3 +203,84 @@ func TestEndingAnEngineEndsItsConnectionsAndTheJournalIsCompacted(t *testing.T) 
 		t.Errorf("left %+v", cs)
 	}
 }
+
+// TestTheSystemGrantTheKeyAndADeclineAreKeptApart covers ADR-0152's use of
+// the journal: an engine's system grant and this server's signing key are
+// kept sealed like a person's refresh token but are no person's — no
+// listing or count shows them —, the key survives a restart and is
+// replaced with its old key destroyed, and a person who ended their own
+// connection is remembered as having declined until they connect again,
+// through a compaction too.
+func TestTheSystemGrantTheKeyAndADeclineAreKeptApart(t *testing.T) {
+	j, sl := &journal{}, &memSealer{keys: map[string]byte{}}
+	c := newConns(t, j, sl)
+	if _, ok, err := c.ClientKey(); ok || err != nil {
+		t.Fatalf("a key before any was kept: %v %v", ok, err)
+	}
+	if err := c.SetClientKey([]byte("seed-one")); err != nil {
+		t.Fatal(err)
+	}
+	sys := Profile{Subject: "u-1", Username: "patrick", System: &System{ApprovedBy: "patrick", Capabilities: []Capability{{Scope: "tasklist"}, {Scope: "events", Projects: []string{"p-1"}}}, Preconsent: true}}
+	if _, err := c.Connect(SystemUser, "atlas", sys, "atlasor_system"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Connect("bert", "atlas", anna, "atlasor_bert"); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Of("", ""); len(got) != 1 || got[0].User != "bert" || c.Count() != 1 {
+		t.Errorf("listings show %+v, count %d; want bert alone", got, c.Count())
+	}
+	for _, rec := range j.records {
+		if bytes.Contains(rec, []byte("seed-one")) || bytes.Contains(rec, []byte("atlasor_system")) {
+			t.Fatalf("a secret is in the journal in plaintext: %s", rec)
+		}
+	}
+	got, ok := c.Get(SystemUser, "atlas")
+	if !ok || !got.System.Holds("tasklist") || got.System.Holds("diagrams") || !got.System.Preconsent {
+		t.Errorf("the system grant reads back as %+v", got.System)
+	}
+
+	again := newConns(t, j, sl)
+	if seed, ok, err := again.ClientKey(); !ok || err != nil || string(seed) != "seed-one" {
+		t.Fatalf("after a restart the key is %q %v %v", seed, ok, err)
+	}
+	if err := again.SetClientKey([]byte("seed-two")); err != nil {
+		t.Fatal(err)
+	}
+	if len(sl.shredded) != 1 {
+		t.Errorf("replacing the key destroyed %v, want the old one", sl.shredded)
+	}
+
+	if err := again.End("bert", "atlas", "disconnected"); err != nil {
+		t.Fatal(err)
+	}
+	if err := again.Decline("bert", "atlas"); err != nil {
+		t.Fatal(err)
+	}
+	if !again.Declined("bert", "atlas") || again.Declined("vera", "atlas") {
+		t.Error("the decline is not remembered for bert alone")
+	}
+	for i := range 120 {
+		if err := again.Renewed(SystemUser, "atlas", fmt.Sprintf("atlasor_s%d", i), nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	records := again.Compacted()
+	if records == nil {
+		t.Fatal("a long journal is not compacted")
+	}
+	j.records = records
+	third := newConns(t, j, sl)
+	if !third.Declined("bert", "atlas") {
+		t.Error("compaction forgot the decline")
+	}
+	if _, err := third.Connect("bert", "atlas", anna, "atlasor_bert2"); err != nil {
+		t.Fatal(err)
+	}
+	if third.Declined("bert", "atlas") {
+		t.Error("connecting again did not clear the decline")
+	}
+	if seed, _, _ := third.ClientKey(); string(seed) != "seed-two" {
+		t.Errorf("after compaction the key is %q", seed)
+	}
+}
