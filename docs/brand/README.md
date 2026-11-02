@@ -16,7 +16,8 @@ The icon is the mark on a rounded white square (inverted: on dark). It is the ap
 | `pdf/` | vector for print |
 | `png/` | raster with a transparent background, in several widths |
 | `favicon/` | the icon: `favicon.ico` (16, 32, 48 px), `favicon.svg` (white square, dark in a dark browser theme), `apple-touch-icon.png` (180 px), `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`, `site.webmanifest` |
-| `source/` | the generators: `build.py` draws the mark and the wordmark, `welcome.py` the start page's illustration |
+| `icons/` | the web UI's symbols as files: `navigation/` the module switcher's line icons (24 px, drawn in `currentColor`), `module-symbols/` the start page's coloured module symbols |
+| `source/` | the generators: `build.py` draws the mark and the wordmark, `welcome.py` the start page's illustration, `icons.mjs` writes `icons/` from the UI's code |
 
 Each artwork is named `orbithek-<artwork>` and comes as `-black` (on light ground) and `-white` (on dark ground):
 
@@ -43,7 +44,10 @@ The web UI embeds copies (ADR-0009): `internal/web/static/favicon.ico`, and in `
 ```bash
 python3 docs/brand/source/build.py /tmp/brand   # then copy svg, pdf, png and favicon over docs/brand
 python3 docs/brand/source/welcome.py internal/web/static/assets/brand/welcome.svg   # the start page's illustration, Python 3 only
+node docs/brand/source/icons.mjs docs/brand/icons   # the UI's symbols, after a change to them in app.js or style.css
 ```
+
+The UI draws its symbols inline (`modules` and `moduleGlyphs` in `internal/web/static/assets/app.js`, their colours in `style.css`); `icons/` holds copies for documents and slides. `internal/web/jstest/brandicons.test.mjs` fails when they no longer match the code.
 
 ## License
 
