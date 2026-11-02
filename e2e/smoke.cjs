@@ -1569,6 +1569,13 @@ function gitSource() {
       await fetch("/api/relations", { method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type: "depends-on", from: ids[1], to: ids[0] }) });
     });
+    // A long page, whose preview on the map is clipped (ADR-0157).
+    const longPage = await page.evaluate(async () => {
+      const body = Array.from({ length: 30 }, (_, i) => ({ kind: "paragraph", text: `Line ${i + 1} of the long star chart: the constellations rise and set.` }));
+      const r = await fetch("/api/items", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ space: "PLAT", type: "task", title: "Star chart", properties: { priority: "low" }, body }) });
+      return (await r.json()).item.key;
+    });
     await page.goto(base + "/#/starmap/PLAT");
     await page.waitForSelector("#starmap-canvas .star-node");
     check(await page.inputValue("#starmap-space") === "PLAT", "the room of the address is chosen");
@@ -1593,10 +1600,42 @@ function gitSource() {
     await page.click(".star-node[data-key='PLAT-2']");
     await page.waitForSelector("#starmap-panel:not([hidden])");
     check((await page.getAttribute("#starmap-open", "href")) === "#/item/PLAT-2", "the panel links the item");
+    // The panel shows the page itself, read-only, without leaving the map.
+    const plat2Text = await page.evaluate(async () => (await (await fetch("/api/items/PLAT-2")).json()).item.body.map((b) => b.text).filter(Boolean)[0] || "");
+    await page.waitForSelector("#starmap-preview .pm-embed-content");
+    check(plat2Text === "" || (await page.textContent("#starmap-preview")).includes(plat2Text), "the panel shows the page's text: " + plat2Text);
+    check(await page.evaluate(() => document.activeElement?.id === "starmap-panel"), "the keyboard follows into the panel");
     check(await page.locator(".star-node.dim").count() > 0 && await page.locator(".star-node.focused[data-key='PLAT-2']").count() === 1, "the node's neighbourhood stands out, the rest is dimmed");
     await page.keyboard.press("Escape");
     await page.waitForSelector("#starmap-panel", { state: "hidden" });
     check(await page.locator(".star-node.dim").count() === 0, "Escape clears the focus");
+    // A long page is clipped, and Read more opens it in the panel; in
+    // German, it says Weiterlesen.
+    await page.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "de" }) }));
+    await page.reload();
+    await page.waitForSelector(`.star-node[data-key='${longPage}']`);
+    await page.click(`.star-node[data-key='${longPage}']`);
+    await page.waitForSelector("#starmap-preview #starmap-more:not([hidden])");
+    check((await page.textContent("#starmap-more")) === "Weiterlesen" && await page.locator("#starmap-preview-body.clipped").count() === 1, "a long page is clipped with Weiterlesen");
+    await page.screenshot({ path: process.env.STARMAP_PREVIEW_PNG || "starmap-preview.png" });
+    const clipped = await page.evaluate(() => document.querySelector("#starmap-preview-body").clientHeight);
+    await page.click("#starmap-more");
+    await page.waitForSelector("#starmap-preview-body:not(.clipped)");
+    check(await page.evaluate(() => document.querySelector("#starmap-preview-body").clientHeight) > clipped && (await page.textContent("#starmap-more")) === "Weniger",
+      "Read more opens the whole page in the panel");
+    await page.click("#starmap-more");
+    await page.waitForSelector("#starmap-preview-body.clipped");
+    await page.evaluate(async () => fetch("/api/me/language", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "" }) }));
+    await page.reload();
+    // A picture shows itself in the panel, with its item.
+    await page.waitForSelector("#starmap-canvas .star-node.kind-picture");
+    // By keyboard: the picture's small mark may lie under another one.
+    await page.focus("#starmap-canvas .star-node.kind-picture >> nth=0");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#starmap-preview #starmap-picture");
+    await page.waitForFunction(() => { const img = document.querySelector("#starmap-picture"); return img && img.complete && img.naturalWidth > 0; });
+    await page.keyboard.press("Escape");
+    await page.waitForSelector("#starmap-panel", { state: "hidden" });
 
     step("starmap moves: the map settles, pointing lights a neighbourhood, a dragged node moves, a double-click separates a node, Escape and the trail step back, the address keeps the drill path (ADR-0158)");
     // The map is a live simulation; the canvas says when it rests, so the

@@ -3614,7 +3614,25 @@ function kanbanSettings(k, type, columns, kpath) {
 async function starmapScreen(space, path, params) {
   const section = h("section", { id: "starmap" });
   screen()(h("h1", { text: t("starmap.title") }), h("p", { class: "muted", text: t("starmap.intro") }), section);
-  await starmapView(section, space, path, params);
+  // A node's panel shows the page as an embed shows it (ADR-0106): read-
+  // only, protected content veiled, a veiled block asking for access
+  // (ADR-0161).
+  shownSecrets.clear();
+  setSecretClass((ref) => (shownSecrets.get(ref)?.sc.readable ? "secret-readable" : "secret-veiled"));
+  setVeiledContent((ref) => veiledBlockContent(ref));
+  const askOnVeiled = (ev) => {
+    const el = ev.target.closest?.(".pm-secret.secret-veiled");
+    if (!el || (ev.type === "keydown" && ev.key !== "Enter" && ev.key !== " ")) return;
+    ev.preventDefault();
+    accessDialog(el.dataset.secret);
+  };
+  const preview = async (ref) => {
+    const el = await embedLoader([])(ref);
+    el.addEventListener("click", askOnVeiled);
+    el.addEventListener("keydown", askOnVeiled);
+    return el;
+  };
+  await starmapView(section, space, path, params, { preview });
 }
 
 // albumView shows the images and drawings of every item one may read
