@@ -12,6 +12,7 @@ import { personalNotes } from "./notes.js";
 import { isDrawing } from "./drawing.js";
 import { albumBrowser, retentionCard } from "./album.js";
 import { starmapView } from "./starmap.js";
+import { roadmapView } from "./roadmap.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 import { applyTheme, setTheme, isDark, chosenTheme } from "./theme.js";
 import { filtered, serverFilter, filterParams, norm } from "./filter.js";
@@ -455,7 +456,8 @@ async function labelView(label) {
   show(
     h("p", {}, link("#/", t("nav.spaces")), " / " + t("label.title")),
     h("div", { class: "page-head" }, h("h1", {}, t("label.heading") + " ", labelChip(label)),
-      h("p", { class: "actions" }, link(`#/labelboard/${encodeURIComponent(label)}`, t("labelboard.open"), "button secondary", "label-board"), csv)),
+      h("p", { class: "actions" }, link(`#/labelboard/${encodeURIComponent(label)}`, t("labelboard.open"), "button secondary", "label-board"),
+        link(`#/roadmap?labels=${encodeURIComponent(label)}`, t("roadmap.open"), "button secondary", "label-roadmap"), csv)),
     filter.el,
     table, none, more,
   );
@@ -892,7 +894,7 @@ function renderFooter() {
 const modules = [
   { id: "spaces", name: "nav.spaces", href: "#/", match: ["", "space", "item", "board", "links", "search", "query", "label"], icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
   { id: "new", name: "nav.new", href: "#/new", match: ["new"], icon: "M12 8v8M8 12h8M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" },
-  { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban"], icon: "M9 11l3 3 8-8M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11" },
+  { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban", "roadmap"], icon: "M9 11l3 3 8-8M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11" },
   { id: "comments", name: "nav.comments", href: "#/comments", match: ["comments"], icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
   { id: "album", name: "nav.album", href: "#/album", match: ["album"], icon: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 8h.01" },
   { id: "starmap", name: "nav.starmap", href: "#/starmap", match: ["starmap"], icon: "M5 7l7 4 7-5M12 11l-4 8M12 11l6 6M5 7h.01M19 6h.01M12 11h.01M8 19h.01M18 17h.01" },
@@ -1553,6 +1555,7 @@ async function route() {
       case "kanbans": return await kanbansView();
       case "kanban": return await kanbanView(arg, arg2);
       case "labelboard": return await labelBoardView(arg, params.get("space") || "");
+      case "roadmap": return await roadmapScreen(params);
       case "space": return await spaceView(arg);
       case "board": return await boardView(arg, arg2);
       case "links": return await linksView(arg);
@@ -2411,7 +2414,7 @@ async function spaceView(key) {
         create && types.length ? h("button", { class: "primary", id: "space-new-page", text: t("space.newPage"), onclick: toForm }) : null,
         csv,
         watchButton("/api/spaces/" + encodeURIComponent(key), watches.some((w) => !w.item && w.space === key), status))),
-    h("nav", { class: "subnav", "aria-label": t("space.views") }, [...boards, link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance")),
+    h("nav", { class: "subnav", "aria-label": t("space.views") }, [...boards, link(`#/roadmap?space=${encodeURIComponent(key)}`, t("roadmap.tab")), link(`#/links/${encodeURIComponent(key)}`, t("space.linkCheck")), link(`#/governance/${encodeURIComponent(key)}`, t("nav.governance")),
       sp.role === "space-admin" ? link(`#/members/${encodeURIComponent(key)}`, t("members.title")) : null].filter(Boolean)),
     status,
     home,
@@ -2797,7 +2800,7 @@ async function tasksView(tab, params) {
   const tabLink = (id, label) => link(`#/tasks/${id}${query()}`, `${label} (${lists[id].length})`, id === current ? "tab active" : "tab");
   const tabs = h("nav", { class: "tabs", "aria-label": t("tasks.title") },
     tabLink("mine", t("tasks.mine")), tabLink("unassigned", t("tasks.unassigned")), tabLink("all", t("tasks.all")),
-    link("#/kanbans", t("kanban.tab"), "tab", "tab-kanbans"));
+    link("#/kanbans", t("kanban.tab"), "tab", "tab-kanbans"), link(`#/roadmap${space ? "?space=" + encodeURIComponent(space) : ""}`, t("roadmap.tab"), "tab", "tab-roadmap"));
   // The tab links carry the filters as they change.
   const relink = () => tabs.querySelectorAll("a").forEach((a) => { a.href = a.getAttribute("href").split("?")[0] + query(); });
   show(
@@ -2939,7 +2942,7 @@ async function kanbansView() {
     h("div", { class: "page-head" }, h("h1", { text: t("kanban.title") })),
     h("nav", { class: "tabs", "aria-label": t("tasks.title") },
       link("#/tasks/mine", t("tasks.mine"), "tab"), link("#/tasks/unassigned", t("tasks.unassigned"), "tab"), link("#/tasks/all", t("tasks.all"), "tab"),
-      link("#/kanbans", t("kanban.tab"), "tab active", "tab-kanbans")),
+      link("#/kanbans", t("kanban.tab"), "tab active", "tab-kanbans"), link("#/roadmap", t("roadmap.tab"), "tab", "tab-roadmap")),
     // The boards by label lead on the left, the kanbans stand in the
     // middle, a new kanban is made on the right (ADR-0110).
     h("div", { class: "kanbans-layout" },
@@ -3676,6 +3679,18 @@ function kanbanSettings(k, type, columns, kpath) {
       h("button", { type: "button", class: "danger", id: "kanban-remove", text: t("kanban.remove"), onclick: () => confirm(t("kanban.removeConfirm", { name: k.name }))
         && action(async () => { await del(kpath); location.hash = "#/kanbans"; }, status) })));
   return dialog;
+}
+
+// roadmapScreen shows readable items with dates on a time axis, in lanes
+// by label or as a Gantt chart (ADR-0164); its state is the address.
+async function roadmapScreen(params) {
+  const section = h("section", { id: "roadmap" });
+  screen()(
+    h("p", {}, link("#/tasks", t("nav.tasks")), " / " + t("roadmap.tab")),
+    h("div", { class: "page-head" }, h("h1", { text: t("roadmap.title") })),
+    h("p", { class: "muted", text: t("roadmap.intro") }),
+    section);
+  await roadmapView(section, params, { readAll, favouritesFirst });
 }
 
 // starmapScreen shows the starmap of a room (ADR-0157): its items,

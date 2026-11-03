@@ -2370,6 +2370,46 @@ function gitSource() {
     await page.press("#nav .search input", "Enter");
     await page.waitForSelector("#search-labels a:has-text('website-relaunch')");
     await page.waitForSelector("ol.hits li:has-text('Hero image')");
+
+    step("roadmap and Gantt chart: items with dates on a time axis, in lanes by label or a row each; the view is its address (ADR-0164)");
+    const planned = await page.evaluate(async () => {
+      const send = (method, path, body) => fetch(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+      await send("POST", "/api/types", { name: "epic", body: true, fields: [{ name: "start", kind: "date" }, { name: "due", kind: "date" }],
+        workflow: { initial: "open", states: ["open", "done"], transitions: [{ name: "finish", from: ["open"], to: "done" }] } });
+      const make = async (title, properties, labels) => {
+        const { item } = await send("POST", "/api/items", { space: "PLAT", type: "epic", title, properties });
+        await send("PUT", `/api/items/${item.id}/labels`, { labels });
+        return item.key;
+      };
+      return {
+        design: await make("Design the plan", { start: "2026-03-02", due: "2026-03-20" }, ["plan-q1"]),
+        launch: await make("Launch day", { due: "2026-03-31" }, ["plan-q1", "plan-ops"]),
+        idea: await make("Someday idea", {}, ["plan-q1"]),
+      };
+    });
+    await page.goto(base + "/#/label/plan-q1");
+    await page.click("#label-roadmap");
+    await page.waitForSelector(`#roadmap-chart .tl-lane[data-label=plan-q1] .tl-bar[data-key='${planned.design}']:not(.tl-milestone)`);
+    // One date only is a milestone; an item without one is listed apart.
+    await page.waitForSelector(`#roadmap-chart .tl-lane[data-label=plan-q1] .tl-milestone[data-key='${planned.launch}']`);
+    await page.waitForSelector(`#roadmap-unscheduled li:has-text('Someday idea')`, { state: "attached" });
+    check(await page.inputValue("#roadmap-start") === "start" && await page.inputValue("#roadmap-end") === "due", "start and end are guessed by their names");
+    check((await page.getAttribute(`.tl-bar[data-key='${planned.design}']`, "aria-label")).includes("Design the plan"), "a bar says what it is in words");
+    // A second label is a lane of its own, the item in both.
+    await page.check(".tl-labels input[value=plan-ops]");
+    await page.waitForFunction(() => location.hash.includes("labels=plan-q1%2Cplan-ops"));
+    await page.waitForSelector(`#roadmap-chart .tl-lane[data-label=plan-ops] .tl-milestone[data-key='${planned.launch}']`);
+    await page.click("#roadmap-mode-gantt");
+    await page.waitForSelector(`#roadmap-chart.tl-scroll .tl-gantt .tl-row:has(a.key:has-text('${planned.design}')) .tl-bar`);
+    check(await page.locator(".tl-gantt .tl-body > .tl-row").count() === 2, "a Gantt chart has a row per scheduled item, each once");
+    await page.selectOption("#roadmap-scale", "week");
+    await page.waitForFunction(() => location.hash.includes("mode=gantt") && location.hash.includes("scale=week"));
+    await page.reload();
+    await page.waitForSelector(".tl-gantt .tl-tick:has-text('W10')");
+    // The tasks page and a room lead there too.
+    await page.goto(base + "/#/tasks");
+    await page.click("#tab-roadmap");
+    await page.waitForSelector("#roadmap-controls");
     // While typing, the search at the top suggests labels; the arrow keys
     // and Enter open the chosen one.
     await page.locator("#nav .search input").fill("");
