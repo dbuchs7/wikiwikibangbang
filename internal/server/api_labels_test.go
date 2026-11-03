@@ -68,3 +68,36 @@ func TestLabelsCountTasksAndAreSearched(t *testing.T) {
 		t.Fatalf("search by label %v", hits)
 	}
 }
+
+// pairs tells how many readable items carry two labels at once, the lines
+// of the labels' starmap (ADR-0165).
+func TestLabelPairsThroughTheAPI(t *testing.T) {
+	w := newWorld(t)
+	mk := func(title, labels string) {
+		it := w.bert.expect("POST", "/api/items", `{"space":"PLAT","type":"task","title":"`+title+`","properties":{"priority":"low"}}`, http.StatusCreated)
+		w.bert.expect("PUT", "/api/items/"+field(it, "item", "key").(string)+"/labels", `{"labels":`+labels+`}`, http.StatusOK)
+	}
+	mk("Patch", `["ops","security"]`)
+	mk("Rotate", `["ops","security","keys"]`)
+	mk("Deploy", `["ops"]`)
+	got := w.vera.expect("GET", "/api/labels?space=PLAT&pairs=on", "", http.StatusOK)
+	if fmt.Sprint(got["pairs"]) != "[map[count:2 labels:[ops security]] map[count:1 labels:[keys ops]] map[count:1 labels:[keys security]]]" {
+		t.Fatalf("pairs %v", got["pairs"])
+	}
+	if fmt.Sprint(got["pairsTotal"]) != "map[exact:true value:3]" {
+		t.Fatalf("pairs total %v", got["pairsTotal"])
+	}
+	// Only pairs of the labels listed: q narrows them.
+	if got := w.vera.expect("GET", "/api/labels?q=s&pairs=1", "", http.StatusOK); fmt.Sprint(got["pairs"]) != "[map[count:2 labels:[ops security]] map[count:1 labels:[keys ops]] map[count:1 labels:[keys security]]]" {
+		t.Fatalf("pairs of labels holding s %v", got["pairs"])
+	}
+	if got := w.vera.expect("GET", "/api/labels?q=sec&pairs=1", "", http.StatusOK); fmt.Sprint(got["pairs"]) != "[]" {
+		t.Fatalf("pairs of one label %v", got["pairs"])
+	}
+	if got := w.vera.expect("GET", "/api/labels", "", http.StatusOK); got["pairs"] != nil {
+		t.Fatalf("pairs without asking %v", got["pairs"])
+	}
+	if got := w.carla.expect("GET", "/api/labels?pairs=on", "", http.StatusOK); fmt.Sprint(got["pairs"]) != "[]" {
+		t.Fatalf("an outsider pairs %v", got["pairs"])
+	}
+}

@@ -66,3 +66,37 @@ func TestLabels(t *testing.T) {
 		}
 	}
 }
+
+// Pairs count the readable items that carry two labels at once, only of
+// the labels asked for (ADR-0165).
+func TestLabelPairs(t *testing.T) {
+	s := permFixture(t)
+	anna, ben := s.As("anna"), s.As("ben")
+	mk := func(title string, labels ...string) Item {
+		it := mustItem(t)(anna.Create(NewItem{Space: "PLAT", Type: "page", Title: title}))
+		noErr(t, anna.SetLabels(it.ID, labels))
+		return it
+	}
+	mk("A", "ops", "backup", "dr")
+	mk("B", "ops", "backup")
+	mk("C", "ops")
+	secret := mk("D", "ops", "backup", "hidden")
+	noErr(t, anna.Restrict(secret.ID, Restriction{Read: []string{"anna"}}))
+
+	all := []string{"ops", "backup", "dr", "hidden"}
+	if got := ben.LabelPairs("PLAT", false, all); !slices.Equal(got, []LabelPair{{"backup", "ops", 2}, {"backup", "dr", 1}, {"dr", "ops", 1}}) {
+		t.Errorf("ben pairs %v", got)
+	}
+	if got := anna.LabelPairs("", false, all); got[0] != (LabelPair{"backup", "ops", 3}) || !slices.Contains(got, LabelPair{"hidden", "ops", 1}) {
+		t.Errorf("anna pairs %v", got)
+	}
+	if got := ben.LabelPairs("PLAT", false, []string{"ops", "dr"}); !slices.Equal(got, []LabelPair{{"dr", "ops", 1}}) {
+		t.Errorf("pairs among two labels %v", got)
+	}
+	if got := ben.LabelPairs("PLAT", true, all); len(got) != 0 {
+		t.Errorf("pages are no tasks, yet paired %v", got)
+	}
+	if got := s.As("carl").LabelPairs("", false, all); len(got) != 0 {
+		t.Errorf("an outsider pairs %v", got)
+	}
+}
