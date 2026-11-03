@@ -2081,3 +2081,55 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
 .access-request-card .actions-row { margin-bottom: 0; }
 .secret-ask-task, .secret-own-task { overflow-wrap: anywhere; }
 .pm-veiled .secret-request-block.secret-waiting { font-style: italic; }
+
+/* --- roadmap and Gantt chart (ADR-0164) ------------------------------------ */
+/* Bars stand in percent of their track; a long frame scrolls sideways
+   rather than squeezing them. Shape and outline, not colour alone, tell a
+   milestone, a finished item and one that waits on others. */
+.tl-controls .form-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.tl-controls .form-row .field { flex: 1 1 10rem; }
+.tl-labels { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.tl-scroll { overflow-x: auto; margin: var(--space-4) 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.tl { --tl-head: 14rem; --tl-row: 30px; position: relative; }
+.tl-row { display: flex; min-height: var(--tl-row); }
+.tl-head {
+  flex: 0 0 var(--tl-head); width: var(--tl-head); box-sizing: border-box; padding: 4px var(--space-3);
+  border-right: 1px solid var(--border); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  position: sticky; left: 0; z-index: 2; background: var(--surface);
+}
+.tl-head-title { color: var(--muted); }
+.tl-track { position: relative; flex: 1 1 auto; }
+.tl-axis-row { border-bottom: 1px solid var(--border-strong); background: var(--surface-2); }
+.tl-axis-row .tl-head { background: var(--surface-2); }
+.tl-tick {
+  position: absolute; top: 0; bottom: 0; box-sizing: border-box; padding: 5px 6px; font-size: 12px; color: var(--muted);
+  border-left: 1px solid var(--border); white-space: nowrap; overflow: hidden;
+}
+.tl-body { position: relative; }
+.tl-lane + .tl-lane, .tl-gantt .tl-row + .tl-row { border-top: 1px solid var(--border); }
+.tl-grid { position: absolute; top: 0; bottom: 0; left: var(--tl-head); right: 0; pointer-events: none; z-index: 0; }
+.tl-gridline { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); }
+.tl-today { position: absolute; top: 0; bottom: 0; border-left: 2px solid var(--danger); }
+.tl-bar {
+  position: absolute; top: 4px; height: calc(var(--tl-row) - 8px); box-sizing: border-box; min-width: 6px; z-index: 1;
+  padding: 0 6px; border-radius: var(--radius-sm); border: 1px solid var(--accent);
+  background: var(--accent-soft); color: var(--text); font-size: 12px; line-height: calc(var(--tl-row) - 10px);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-decoration: none;
+}
+.tl-bar:hover, .tl-bar:focus-visible { background: var(--accent); color: var(--accent-ink); outline: none; box-shadow: var(--focus); }
+.tl-bar-text { pointer-events: none; }
+.tl-done { border-color: var(--success); background: repeating-linear-gradient(135deg, var(--success-soft) 0 6px, var(--surface) 6px 10px); color: var(--muted); }
+.tl-waiting { border-style: dashed; border-color: var(--warning); }
+.tl-milestone {
+  width: auto; min-width: 0; padding: 0 0 0 20px; border: 0; background: none; transform: translateX(-9px); overflow: visible;
+}
+.tl-milestone::before {
+  content: ""; position: absolute; left: 3px; top: 50%; width: 12px; height: 12px; margin-top: -6px;
+  transform: rotate(45deg); background: var(--accent); border: 1px solid var(--accent); border-radius: 2px;
+}
+.tl-milestone:hover, .tl-milestone:focus-visible { background: none; color: var(--accent); }
+.tl-milestone.tl-done::before { background: var(--success-soft); border-color: var(--success); }
+.tl-milestone.tl-waiting::before, .tl-inverted::before { background: var(--surface); border-style: dashed; border-color: var(--warning); }
+.tl-legend { font-size: 12px; }
+.tl-unscheduled ul { margin: var(--space-2) 0; padding-left: var(--space-5); }
+@media (max-width: 640px) { .tl { --tl-head: 8rem; } }
