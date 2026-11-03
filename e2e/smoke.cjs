@@ -1152,6 +1152,12 @@ function gitSource() {
     await page.click("#new-item button[type=submit]");
     await page.waitForSelector(".tree a.current:has-text('Created from New')");
     check(await page.locator(".tree li.open > .tree-row a:has-text('Upgrade')").count() === 1, "the new page lies below the page it was created from");
+    // Each item shows its symbol, a task's or a page's; one with items
+    // below it shows it on a stack.
+    check(await page.locator(".tree .tree-row:has(a:text-is('Created from New')) .tree-icon[data-kind=task]:not([data-stacked])").count() === 1,
+      "a task without items below it shows the task's symbol, alone");
+    check(await page.locator(".tree .tree-row:has(a:text-is('Upgrade')) .tree-icon[data-stacked]").count() === 1,
+      "an item with items below it shows its symbol on a stack");
     await page.fill("#title [name=title]", "Created from New, renamed"); // Done saves the title too
     await page.click("#edit-done"); // a new page opened for writing; Done shows it for reading
     await page.waitForSelector("#body.reading");

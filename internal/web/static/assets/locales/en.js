@@ -415,6 +415,8 @@ export default {
   "tree.empty": "No pages yet.",
   "tree.expand": "Expand {title}",
   "tree.collapse": "Collapse {title}",
+  "tree.page": "Page",
+  "tree.task": "Task",
   "space.allItems": "All items",
   "space.noPages": "This room has no pages yet.",
   "space.homeEmpty": "This page is empty.",

@@ -413,6 +413,8 @@ export default {
   "tree.empty": "Noch keine Seiten.",
   "tree.expand": "{title} aufklappen",
   "tree.collapse": "{title} zuklappen",
+  "tree.page": "Seite",
+  "tree.task": "Aufgabe",
   "space.allItems": "Alle Einträge",
   "space.noPages": "Dieser Raum hat noch keine Seiten.",
   "space.homeEmpty": "Diese Seite ist leer.",
