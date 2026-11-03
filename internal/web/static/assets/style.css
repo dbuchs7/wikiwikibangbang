@@ -1953,6 +1953,46 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
    cyan-HUD key (it outranks dark.css's :root by specificity, not by order).
    The backdrop is decorative only: fixed, inert, behind the content. All
    motion stops under prefers-reduced-motion; the static palette stays. */
+/* The starmap of the labels (ADR-0165): a star per label, its size by
+   the items that carry it, lines between labels carried together. The
+   canvas's height is set by the view from the number of stars; colours
+   are the look's tokens, so light, dark and cockpit all read. */
+.labelmap-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0 0 8px; }
+.labelmap-field { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.labelmap-field input { min-width: 0; }
+.labelmap-min { width: 5em; }
+.labelmap-chosen { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.labelmap-chosen:empty { display: none; }
+.labelmap-chip { display: inline-flex; align-items: center; gap: 4px; }
+.labelmap-chip button { line-height: 1; font-size: 15px; padding: 0 2px; }
+.labelmap-canvas { display: block; width: 100%; background: radial-gradient(ellipse at center, var(--accent-soft), var(--surface) 70%); border: 1px solid var(--border); border-radius: var(--radius); cursor: grab; touch-action: none; user-select: none; }
+.labelmap-canvas:active { cursor: grabbing; }
+.lm-line { stroke: var(--border-strong); stroke-linecap: round; opacity: 0.7; }
+.lm-star { cursor: pointer; outline: none; }
+.lm-halo { fill: var(--accent); opacity: 0.12; }
+.lm-core { fill: color-mix(in srgb, var(--accent) 55%, var(--surface)); stroke: var(--accent); stroke-width: 1.5; }
+.lm-caption { fill: var(--text); font-size: 11px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+.lm-star.minor .lm-caption { opacity: 0; }
+.lm-star:is(.lit, .match, .focused, :focus-visible) .lm-caption { opacity: 1; }
+.lm-star.match .lm-core { stroke-width: 3.5; }
+.lm-star.match .lm-caption { font-weight: 600; }
+.lm-star:hover .lm-core, .lm-star:focus-visible .lm-core { stroke-width: 3; }
+.lm-star.focused .lm-core { stroke-width: 4.5; fill: var(--accent); }
+.lm-star.focused .lm-halo { opacity: 0.3; }
+.labelmap-canvas.hovering .lm-star:not(.lit), .labelmap-canvas.hovering .lm-line:not(.lit) { opacity: 0.2; }
+.lm-line.lit { stroke: var(--accent); opacity: 1; }
+.lm-star, .lm-line, .lm-caption { transition: opacity 0.18s ease; }
+@media (prefers-reduced-motion: reduce) { .lm-star, .lm-line, .lm-caption { transition: none; } }
+/* Beside the canvas on a wide page, so a small map does not clip it. */
+@media (min-width: 641px) {
+  .labelmap-stage { display: flex; align-items: flex-start; gap: 12px; }
+  .labelmap-stage .labelmap-canvas { flex: 1 1 auto; min-width: 0; }
+  .labelmap-stage .labelmap-panel { position: static; flex: 0 0 min(340px, 40%); max-height: none; box-shadow: none; }
+}
+.labelmap-near-head { font-size: 14px; margin: 14px 0 6px; }
+.labelmap-list { margin-top: 12px; }
+.labelmap-list table { margin-top: 6px; }
+
 :root[data-look="cockpit"] {
   --bg: #060a12;
   --surface: #0c1622;

@@ -620,8 +620,10 @@ func (x *Session) TaskLabels(space string) []LabelCount {
 	return x.labels(space, true)
 }
 
-func (x *Session) labels(space string, tasks bool) []LabelCount {
-	counts := map[string]int{}
+// labelled calls fn with the labels of every readable live item of a space
+// (all spaces when space is empty) that carries any, only of tasks when
+// tasks is set.
+func (x *Session) labelled(space string, tasks bool, fn func(labels []string)) {
 	for _, it := range x.s.items {
 		if it.Presence != Live || (space != "" && it.Space != space) || len(it.Labels) == 0 || !x.s.canRead(x.who, it) {
 			continue
@@ -631,10 +633,17 @@ func (x *Session) labels(space string, tasks bool) []LabelCount {
 				continue
 			}
 		}
-		for _, l := range it.Labels {
+		fn(it.Labels)
+	}
+}
+
+func (x *Session) labels(space string, tasks bool) []LabelCount {
+	counts := map[string]int{}
+	x.labelled(space, tasks, func(labels []string) {
+		for _, l := range labels {
 			counts[l]++
 		}
-	}
+	})
 	out := make([]LabelCount, 0, len(counts))
 	for l, n := range counts {
 		out = append(out, LabelCount{l, n})
@@ -644,6 +653,59 @@ func (x *Session) labels(space string, tasks bool) []LabelCount {
 			return b.Count - a.Count
 		}
 		return strings.Compare(a.Label, b.Label)
+	})
+	return out
+}
+
+// LabelPair is two labels, A before B in the order of the alphabet, and
+// how many readable items carry both.
+type LabelPair struct {
+	A, B  string
+	Count int
+}
+
+// LabelPairs counts, for every two of the labels among, the readable live
+// items of a space (all spaces when space is empty; only tasks when tasks
+// is set) that carry both, most shared first: the lines between the stars
+// of the labels' starmap (ADR-0165). Pairs no readable item shares are
+// left out. Only labels among are paired, so the caller bounds what is
+// held by the labels it asks for.
+func (x *Session) LabelPairs(space string, tasks bool, among []string) []LabelPair {
+	wanted := make(map[string]bool, len(among))
+	for _, l := range among {
+		wanted[l] = true
+	}
+	counts := map[[2]string]int{}
+	var mine []string
+	x.labelled(space, tasks, func(labels []string) {
+		// The item's wanted labels, sorted and unique whatever wrote
+		// them, so every pair is counted once and named a < b.
+		mine = mine[:0]
+		for _, l := range labels {
+			if wanted[l] {
+				mine = append(mine, l)
+			}
+		}
+		slices.Sort(mine)
+		mine = slices.Compact(mine)
+		for i, a := range mine {
+			for _, b := range mine[i+1:] {
+				counts[[2]string{a, b}]++
+			}
+		}
+	})
+	out := make([]LabelPair, 0, len(counts))
+	for p, n := range counts {
+		out = append(out, LabelPair{p[0], p[1], n})
+	}
+	slices.SortFunc(out, func(a, b LabelPair) int {
+		if a.Count != b.Count {
+			return b.Count - a.Count
+		}
+		if c := strings.Compare(a.A, b.A); c != 0 {
+			return c
+		}
+		return strings.Compare(a.B, b.B)
 	})
 	return out
 }

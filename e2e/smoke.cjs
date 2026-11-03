@@ -2416,6 +2416,43 @@ function gitSource() {
     await page.goto(base + "/#/tasks");
     await page.click("#tab-roadmap");
     await page.waitForSelector("#roadmap-controls");
+
+    step("starmap of the labels: a star per label, sized by its items, lines between labels carried together, filtered by labels (ADR-0165)");
+    await page.goto(base + "/#/label/plan-q1");
+    await page.click("#label-labelmap");
+    await page.waitForSelector("#labelmap-canvas .lm-star[data-label=plan-q1]");
+    await page.waitForFunction(() => location.hash === "#/labelmap?labels=plan-q1");
+    check(await page.getAttribute("#labelmap-canvas .lm-star[data-label=plan-q1]", "data-count") === "3", "a star tells how many items carry its label");
+    // Launch day carries both labels: plan-ops is connected and shown.
+    await page.waitForSelector("#labelmap-canvas .lm-star[data-label=plan-ops]");
+    check(await page.locator("#labelmap-canvas .lm-line").count() >= 1, "labels carried together are joined by a line");
+    check((await page.getAttribute("#labelmap-canvas .lm-star[data-label=plan-q1]", "aria-label")).includes("plan-q1"), "a star says its label and count in words");
+    const fewHeight = Number(await page.getAttribute("#labelmap-canvas", "height"));
+    await page.uncheck("#labelmap-near");
+    await page.waitForFunction(() => location.hash.includes("near=off"));
+    await page.waitForSelector("#labelmap-canvas .lm-star[data-label=plan-ops]", { state: "detached" });
+    await page.click("#labelmap-canvas .lm-star[data-label=plan-q1]");
+    await page.waitForSelector("#labelmap-panel:not([hidden]) #labelmap-near-list [data-label=plan-ops]");
+    // Choosing a connected label from the panel adds it to the filter.
+    await page.click("#labelmap-near-list [data-label=plan-ops]");
+    await page.waitForSelector("#labelmap-canvas .lm-star[data-label=plan-ops]");
+    await page.waitForSelector("#labelmap-chosen [data-label=plan-ops]");
+    await page.click("#labelmap-reset");
+    await page.waitForFunction(() => location.hash === "#/labelmap");
+    await page.waitForSelector("#labelmap-canvas .lm-star[data-label=website-relaunch]");
+    const allStars = Number(await page.getAttribute("#labelmap-canvas", "data-stars"));
+    check(allStars > 2 && Number(await page.getAttribute("#labelmap-canvas", "height")) >= fewHeight, "the map grows with the number of labels");
+    // Typing a label in the picker filters by it.
+    await page.fill("#labelmap-pick", "website-relaunch");
+    await page.press("#labelmap-pick", "Enter");
+    await page.waitForFunction(() => location.hash.includes("labels=website-relaunch"));
+    await page.reload();
+    await page.waitForSelector("#labelmap-chosen [data-label=website-relaunch]");
+    await page.waitForSelector("#labelmap-canvas .lm-star.match[data-label=website-relaunch]");
+    // The starmap's tabs lead between the room and the labels.
+    await page.goto(base + "/#/starmap");
+    await page.click("#tab-starmap-labels");
+    await page.waitForSelector("#labelmap-canvas");
     // While typing, the search at the top suggests labels; the arrow keys
     // and Enter open the chosen one.
     await page.locator("#nav .search input").fill("");

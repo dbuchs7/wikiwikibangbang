@@ -13,6 +13,7 @@ import { isDrawing } from "./drawing.js";
 import { albumBrowser, retentionCard } from "./album.js";
 import { starmapView } from "./starmap.js";
 import { roadmapView } from "./roadmap.js";
+import { labelmapView } from "./labelmap.js";
 import { t, setLanguage, suggestedLanguage, languages, language } from "./i18n.js";
 import { applyTheme, setTheme, isDark, chosenTheme } from "./theme.js";
 import { filtered, serverFilter, filterParams, norm } from "./filter.js";
@@ -457,7 +458,8 @@ async function labelView(label) {
     h("p", {}, link("#/", t("nav.spaces")), " / " + t("label.title")),
     h("div", { class: "page-head" }, h("h1", {}, t("label.heading") + " ", labelChip(label)),
       h("p", { class: "actions" }, link(`#/labelboard/${encodeURIComponent(label)}`, t("labelboard.open"), "button secondary", "label-board"),
-        link(`#/roadmap?labels=${encodeURIComponent(label)}`, t("roadmap.open"), "button secondary", "label-roadmap"), csv)),
+        link(`#/roadmap?labels=${encodeURIComponent(label)}`, t("roadmap.open"), "button secondary", "label-roadmap"),
+        link(`#/labelmap?labels=${encodeURIComponent(label)}`, t("labelmap.openFromLabel"), "button secondary", "label-labelmap"), csv)),
     filter.el,
     table, none, more,
   );
@@ -897,7 +899,7 @@ const modules = [
   { id: "tasks", name: "nav.tasks", href: "#/tasks", match: ["tasks", "kanbans", "kanban", "roadmap"], icon: "M9 11l3 3 8-8M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11" },
   { id: "comments", name: "nav.comments", href: "#/comments", match: ["comments"], icon: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
   { id: "album", name: "nav.album", href: "#/album", match: ["album"], icon: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 8h.01" },
-  { id: "starmap", name: "nav.starmap", href: "#/starmap", match: ["starmap"], icon: "M5 7l7 4 7-5M12 11l-4 8M12 11l6 6M5 7h.01M19 6h.01M12 11h.01M8 19h.01M18 17h.01" },
+  { id: "starmap", name: "nav.starmap", href: "#/starmap", match: ["starmap", "labelmap"], icon: "M5 7l7 4 7-5M12 11l-4 8M12 11l6 6M5 7h.01M19 6h.01M12 11h.01M8 19h.01M18 17h.01" },
   { id: "mcp", name: "nav.mcp", href: "#/mcp", match: ["mcp"], icon: "M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8zM19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z" },
   { id: "governance", name: "nav.governance", href: "#/governance", match: ["governance"], icon: "M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4" },
   { id: "account", name: "nav.account", href: "#/account", match: ["account"], icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0" },
@@ -1566,6 +1568,7 @@ async function route() {
       case "my-notes": return await myNotesView();
       case "comments": return await commentsView(arg);
       case "album": return albumView();
+      case "labelmap": return await labelmapScreen(params);
       case "starmap": return await starmapScreen(arg || "", hash.split("?")[0].split("/").slice(3).map(decodeURIComponent), params);
       case "search": return await searchView(arg || "");
       case "query": return await queryView(params);
@@ -3699,7 +3702,7 @@ async function roadmapScreen(params) {
 // parameters may ask for the impact of its last station (ADR-0159).
 async function starmapScreen(space, path, params) {
   const section = h("section", { id: "starmap" });
-  screen()(h("h1", { text: t("starmap.title") }), h("p", { class: "muted", text: t("starmap.intro") }), section);
+  screen()(h("h1", { text: t("starmap.title") }), starmapTabs("room"), h("p", { class: "muted", text: t("starmap.intro") }), section);
   // A node's panel shows the page as an embed shows it (ADR-0106): read-
   // only, protected content veiled, a veiled block asking for access
   // (ADR-0161).
@@ -3719,6 +3722,23 @@ async function starmapScreen(space, path, params) {
     return el;
   };
   await starmapView(section, space, path, params, { preview });
+}
+
+// starmapTabs switches between the starmap of a room and the starmap of
+// the labels (ADR-0165); current is the one shown.
+function starmapTabs(current) {
+  return h("nav", { class: "tabs", "aria-label": t("starmap.title") },
+    link("#/starmap", t("starmap.tabRoom"), current === "room" ? "tab active" : "tab", "tab-starmap-room"),
+    link("#/labelmap", t("labelmap.tab"), current === "labels" ? "tab active" : "tab", "tab-starmap-labels"));
+}
+
+// labelmapScreen shows the labels of the items one may read as stars, as
+// big as the number of items that carry them, joined by the items they
+// share (ADR-0165); its state is the address.
+async function labelmapScreen(params) {
+  const section = h("section", { id: "labelmap" });
+  screen()(h("h1", { text: t("starmap.title") }), starmapTabs("labels"), h("p", { class: "muted", text: t("labelmap.intro") }), section);
+  await labelmapView(section, params, { favouritesFirst });
 }
 
 // albumView shows the images and drawings of every item one may read
