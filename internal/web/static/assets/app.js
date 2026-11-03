@@ -2404,7 +2404,7 @@ async function spaceView(key) {
   addRows(first);
   const boards = types.filter((ty) => ty.workflow)
     .map((ty) => link(`#/board/${encodeURIComponent(key)}/${encodeURIComponent(ty.name)}`, t("space.board", { type: ty.name })));
-  const tree = pageTree({ space: key, onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
+  const tree = pageTree({ space: key, taskTypes: new Set(types.filter(isTaskType).map((ty) => ty.name)), onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
   show(withTree(tree,
     h("p", {}, link("#/", t("nav.spaces")), " / " + key),
     h("div", { class: "page-head" },
@@ -4187,7 +4187,7 @@ async function itemView(ref, params = new URLSearchParams()) {
   const lastRestriction = history.events.filter((e) => e.kind === "RestrictionSet").pop();
   const guarded = item.restriction?.read?.length && lastRestriction?.actor === "governance";
   // The tree opens down to the page and shows the page's own children.
-  const tree = pageTree({ space: item.space, current: item.id, open: [...open, item.id], onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
+  const tree = pageTree({ space: item.space, current: item.id, open: [...open, item.id], taskTypes: new Set(types.filter(isTaskType).map((ty) => ty.name)), onMoved: () => route(), onError: (err) => status.replaceChildren(errorBox(err)) });
   // Leaving the editor stores what is not yet saved, then shows the page.
   let session = null;
   const done = h("button", { type: "button", id: "edit-done", class: "primary", text: t("item.done"), onclick: async () => {

@@ -5,13 +5,16 @@
 import { get, post } from "./api.js";
 import { h } from "./dom.js";
 import { t } from "./i18n.js";
+import { treeIconKind, treeIconParts } from "./treeicons.js";
 
 // pageTree returns the tree as a <details>: a sidebar on wide screens, a
 // block that folds away on narrow ones. current is the ID of the page
 // shown, open the IDs of its ancestors; onMoved runs after a page moved,
-// onError with a failed request. A new page is made with the buttons of
-// the page head, the bell last among them (ADR-0112).
-export function pageTree({ space, current = "", open = [], onMoved, onError }) {
+// onError with a failed request. taskTypes names the types whose items
+// show the task's symbol; every other item shows the page's. A new page is
+// made with the buttons of the page head, the bell last among them
+// (ADR-0112).
+export function pageTree({ space, current = "", open = [], taskTypes = new Set(), onMoved, onError }) {
   const opened = new Set(open);
   // A list of links with disclosure buttons, not an ARIA tree: that role
   // promises arrow-key navigation this tree does not have.
@@ -67,7 +70,7 @@ export function pageTree({ space, current = "", open = [], onMoved, onError }) {
     }
     const label = h("a", { href: "#/item/" + encodeURIComponent(n.key), text: n.title || n.key, title: n.key,
       class: n.id === current ? "current" : "", "aria-current": n.id === current ? "page" : "false" });
-    const row = h("div", { class: "tree-row", draggable: "true" }, toggle, label);
+    const row = h("div", { class: "tree-row", draggable: "true" }, toggle, treeIcon(treeIconKind(n.type, taskTypes), n.hasChildren), label);
     wireDrag(row, n, parent);
     li.append(row, kids);
     if (opened.has(n.id) && n.hasChildren) setOpen(true).catch(onError);
@@ -110,6 +113,25 @@ export function pageTree({ space, current = "", open = [], onMoved, onError }) {
 
   level("", root).catch(onError);
   return box;
+}
+
+// treeIcon draws an item's symbol, as SVG: h() makes HTML elements only.
+// It names the item's kind for screen readers; a stack, for an item with
+// items below it, is told by the button that expands it.
+function treeIcon(kind, stacked) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ viewBox: "0 0 24 24", width: "16", height: "16", class: "tree-icon", role: "img",
+    "aria-label": kind === "task" ? t("tree.task") : t("tree.page"), "data-kind": kind })) svg.setAttribute(k, v);
+  if (stacked) svg.setAttribute("data-stacked", "");
+  for (const part of treeIconParts(kind, stacked)) {
+    const p = document.createElementNS(ns, "path");
+    for (const [k, v] of Object.entries({ d: part.d, fill: "none", stroke: "currentColor", "stroke-width": "1.8",
+      "stroke-linecap": "round", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" })) p.setAttribute(k, v);
+    if (part.transform) p.setAttribute("transform", part.transform);
+    svg.append(p);
+  }
+  return svg;
 }
 
 // ancestors returns the IDs above an item, nearest first, up to the first
