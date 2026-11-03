@@ -65,7 +65,7 @@ func itemRoutes(d Deps) []Route {
 		{Method: get, Pattern: "/api/items/{ref}", Summary: "Get an item by ID or key", Handler: http.HandlerFunc(h.getItem)},
 		{Method: put, Pattern: "/api/items/{ref}/title", Summary: "Set the title", Handler: http.HandlerFunc(h.setTitle)},
 		{Method: put, Pattern: "/api/items/{ref}/labels", Summary: "Replace the labels", Handler: http.HandlerFunc(h.setLabels)},
-		{Method: get, Pattern: "/api/labels", Summary: "The labels of readable items with how many carry each (space; q: holding it; tasks: count only items whose type has a workflow), most used first", Handler: http.HandlerFunc(h.listLabels)},
+		{Method: get, Pattern: "/api/labels", Summary: "The labels of readable items with how many carry each (space; q: holding it; tasks: count only items whose type has a workflow), most used first; pairs adds how many carry two of them at once", Handler: http.HandlerFunc(h.listLabels)},
 		{Method: put, Pattern: "/api/items/{ref}/properties/{field}", Summary: "Set a property; null unsets it", Handler: http.HandlerFunc(h.setProperty)},
 		{Method: post, Pattern: "/api/items/{ref}/transitions", Summary: "Perform a workflow transition", Handler: http.HandlerFunc(h.transition)},
 		{Method: put, Pattern: "/api/items/{ref}/body", Summary: "Commit a new version of the body", Handler: http.HandlerFunc(h.commitBody)},
@@ -952,10 +952,27 @@ func (h itemHandlers) listLabels(w http.ResponseWriter, r *http.Request) {
 		out := []map[string]any{}
 		// The most used labels, as many as a page holds; the total says
 		// how many there are (ADR-0015).
-		for _, l := range all[:min(len(all), budget.Get().PageItems)] {
+		page := all[:min(len(all), budget.Get().PageItems)]
+		names := make([]string, 0, len(page))
+		for _, l := range page {
 			out = append(out, map[string]any{"label": l.Label, "count": l.Count})
+			names = append(names, l.Label)
 		}
-		return map[string]any{"labels": out, "total": map[string]any{"value": len(all), "exact": true}}, nil
+		res := map[string]any{"labels": out, "total": map[string]any{"value": len(all), "exact": true}}
+		// pairs adds how many items carry two of these labels at once,
+		// the lines of the labels' starmap (ADR-0165): only pairs of the
+		// labels on the page, the most shared as many as a page holds.
+		if q := r.URL.Query().Get("pairs"); q != "" && q != "0" && q != "false" && q != "off" {
+			tasks := r.URL.Query().Get("tasks") != ""
+			pairs := x.LabelPairs(r.URL.Query().Get("space"), tasks, names)
+			list := []map[string]any{}
+			for _, p := range pairs[:min(len(pairs), budget.Get().PageItems)] {
+				list = append(list, map[string]any{"labels": []string{p.A, p.B}, "count": p.Count})
+			}
+			res["pairs"] = list
+			res["pairsTotal"] = map[string]any{"value": len(pairs), "exact": true}
+		}
+		return res, nil
 	})
 }
 
