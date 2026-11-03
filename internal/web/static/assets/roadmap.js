@@ -11,8 +11,8 @@ import { h } from "./dom.js";
 import { t, language } from "./i18n.js";
 import { get } from "./api.js";
 import { finished } from "./taskparts.js";
-import { MODES, NO_LABEL, SCALES, address, autoScale, dateFields, frame, ganttRows, guessFields, lanes, place, readState,
-  schedule, span, todayDay } from "./timeline.js";
+import { MODES, NO_LABEL, SCALES, address, autoScale, dateFields, frame, ganttRows, guessFields, lanes, normalLabel, place, readState,
+  schedule, span, suggest, todayDay } from "./timeline.js";
 
 // unitWidth is how many pixels a unit of each scale takes at least, so a
 // long frame scrolls rather than squeezing its bars.
@@ -152,11 +152,52 @@ export async function roadmapView(container, params, { readAll, favouritesFirst 
 
   const select = (id, label, options, value, key) => field(label, h("select", { id, onchange: (ev) => go({ [key]: ev.target.value }) },
     options.map(([v, text]) => h("option", { value: v, text, selected: v === value }))));
-  const labelBoxes = h("div", { class: "tl-labels" }, [...new Set([...state.labels, ...labels.map((l) => l.label)])].map((l) => {
-    const box = h("input", { type: "checkbox", value: l, checked: state.labels.includes(l) });
-    box.addEventListener("change", () => go({ labels: box.checked ? [...state.labels, l] : state.labels.filter((x) => x !== l) }));
-    return h("label", { class: "check" }, box, " " + l);
-  }));
+  // Labels are chosen by typing: the labels in use are suggested as one
+  // types, the most used first, from the server so every label is found,
+  // not only the most used page; the chosen ones stand as chips in their
+  // order, and the most used are offered to pick at a click.
+  const addLabel = (value) => {
+    const l = normalLabel(value);
+    if (l && !state.labels.includes(l)) go({ labels: [...state.labels, l] });
+  };
+  const options = h("datalist", { id: "roadmap-label-options" });
+  const input = h("input", { id: "roadmap-label", type: "search", autocomplete: "off", list: "roadmap-label-options", placeholder: t("roadmap.labelSearch"), "aria-label": t("roadmap.labelSearch") });
+  const known = new Map(labels.map((l) => [l.label, l.count]));
+  const offer = (list) => options.replaceChildren(...list.map((l) => h("option", { value: l, label: known.has(l) ? t("label.suggestion", { n: known.get(l) }) : null })));
+  let timer = 0;
+  input.addEventListener("input", (ev) => {
+    clearTimeout(timer);
+    // Picking a suggestion replaces the text at once: that is a choice.
+    if (!ev.inputType || ev.inputType === "insertReplacementText") {
+      if (known.has(input.value) || [...options.options].some((o) => o.value === input.value)) return addLabel(input.value);
+    }
+    const typed = input.value;
+    offer(suggest(labels, typed, state.labels));
+    if (!normalLabel(typed)) return;
+    timer = setTimeout(async () => {
+      const found = await get("/api/labels?q=" + encodeURIComponent(normalLabel(typed)) + (state.space ? "&space=" + encodeURIComponent(state.space) : "")).catch(() => ({ labels: [] }));
+      for (const l of found.labels) known.set(l.label, l.count);
+      if (input.value === typed) offer(suggest([...found.labels, ...labels], typed, state.labels));
+    }, 150);
+  });
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Enter") return;
+    ev.preventDefault();
+    addLabel(input.value);
+  });
+  offer(suggest(labels, "", state.labels));
+  const chipsOf = state.labels.map((l) => h("span", { class: "label tl-chosen", "data-label": l }, l,
+    h("button", { type: "button", class: "label-remove", title: t("label.remove", { label: l }), "aria-label": t("label.remove", { label: l }), text: "\u00d7",
+      onclick: () => go({ labels: state.labels.filter((x) => x !== l) }) })));
+  const popular = suggest(labels, "", state.labels, 8);
+  const labelChoice = h("div", { class: "tl-label-choice", id: "roadmap-labels" },
+    field(t("roadmap.labels"), h("span", { class: "tl-label-input" }, input, options,
+      h("button", { type: "button", class: "secondary", id: "roadmap-label-add", text: t("roadmap.labelAdd"), onclick: () => addLabel(input.value) }))),
+    state.labels.length ? h("p", { class: "tl-chosen-list" }, chipsOf,
+      h("button", { type: "button", class: "link", id: "roadmap-labels-clear", text: t("roadmap.labelsClear"), onclick: () => go({ labels: [] }) })) : null,
+    popular.length ? h("p", { class: "muted tl-popular" }, t("roadmap.labelsPopular") + " ",
+      popular.map((l) => h("button", { type: "button", class: "chip tl-pick", "data-label": l, text: l, onclick: () => addLabel(l) }))) : null,
+    h("p", { class: "muted", text: t("roadmap.labelsHint") }));
   const controls = h("div", { class: "card tl-controls", id: "roadmap-controls" },
     h("nav", { class: "tabs", "aria-label": t("roadmap.mode") }, MODES.map((m) =>
       h("a", { href: address({ ...state, mode: m }), class: m === state.mode ? "tab active" : "tab", id: "roadmap-mode-" + m, text: modeName(m) }))),
@@ -166,9 +207,7 @@ export async function roadmapView(container, params, { readAll, favouritesFirst 
       select("roadmap-start", t("roadmap.startField"), [["", t("roadmap.noField")], ...fields.map((f) => [f, f])], chosen.start, "start"),
       select("roadmap-end", t("roadmap.endField"), [["", t("roadmap.noField")], ...fields.map((f) => [f, f])], chosen.end, "end"),
       select("roadmap-scale", t("roadmap.scale"), SCALES.reduce((o, s) => [...o, [s, scaleName(s)]], [["", scaleName("")]]), state.scale, "scale")),
-    labels.length || state.labels.length ? h("details", { class: "tl-label-choice", open: state.labels.length > 0 },
-      h("summary", { text: state.labels.length ? t("roadmap.labelsChosen", { n: state.labels.length }) : t("roadmap.labels") }),
-      h("p", { class: "muted", text: t("roadmap.labelsHint") }), labelBoxes) : null);
+    labelChoice);
 
   const unscheduledList = unscheduled.length ? h("details", { class: "tl-unscheduled", id: "roadmap-unscheduled" },
     h("summary", { text: t("roadmap.unscheduled", { n: unscheduled.length }) }),

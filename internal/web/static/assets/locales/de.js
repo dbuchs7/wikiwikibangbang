@@ -1843,10 +1843,13 @@ export default {
   "roadmap.endField": "Ende",
   "roadmap.noField": "Keines",
   "roadmap.labels": "Labels",
-  "roadmap.labelsChosen": {"one": "{n} Label gewählt", "other": "{n} Labels gewählt"},
-  "roadmap.labelsHint": "Gewählte Labels beschränken die Ansicht auf ihre Einträge und geben der Roadmap je eine Bahn, in der gewählten Reihenfolge. Ohne Auswahl erhält jedes Label der gezeigten Einträge eine Bahn.",
   "roadmap.unscheduled": {"one": "{n} Eintrag ohne Datum", "other": "{n} Einträge ohne Datum"},
   "roadmap.noDateFields": "Kein Typ der gezeigten Einträge hat ein Datumsfeld. Ein Typ braucht ein Datumsfeld, etwa ein Fälligkeitsdatum, damit seine Einträge auf der Zeitachse stehen.",
   "roadmap.none": "Kein gezeigter Eintrag hat ein Datum in den gewählten Feldern.",
-  "roadmap.legend": "Ein Balken reicht vom Beginn bis zum Ende, beide Tage eingeschlossen. Eine Raute ist ein Meilenstein: ein Eintrag mit nur einem Datum. Erledigte Einträge sind schraffiert, Einträge, die auf unerledigte warten, gestrichelt umrandet, und die senkrechte Linie ist heute."
+  "roadmap.legend": "Ein Balken reicht vom Beginn bis zum Ende, beide Tage eingeschlossen. Eine Raute ist ein Meilenstein: ein Eintrag mit nur einem Datum. Erledigte Einträge sind schraffiert, Einträge, die auf unerledigte warten, gestrichelt umrandet, und die senkrechte Linie ist heute.",
+  "roadmap.labelSearch": "Label suchen",
+  "roadmap.labelAdd": "Hinzufügen",
+  "roadmap.labelsClear": "Alle entfernen",
+  "roadmap.labelsPopular": "Häufig verwendet:",
+  "roadmap.labelsHint": "Tippen, um die verwendeten Labels zu durchsuchen, und eines wählen oder die Eingabetaste drücken. Gewählte Labels beschränken die Ansicht auf ihre Einträge und geben der Roadmap je eine Bahn, in der gewählten Reihenfolge. Ohne Auswahl erhält jedes Label der gezeigten Einträge eine Bahn."
 };

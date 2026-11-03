@@ -200,6 +200,23 @@ export function ganttRows(bars) {
   return [...bars].sort(byStart);
 }
 
+// normalLabel is a label as typed, as the server keeps it: trimmed, in
+// lower case, inner spaces as dashes; empty when nothing is left.
+export function normalLabel(typed) {
+  return String(typed || "").trim().toLowerCase().replace(/\s+/g, "-");
+}
+
+// suggest picks the labels to offer while one types: those that start with
+// what was typed first, then those that hold it, each group in the order
+// given (the most used first), none already chosen, at most n. Without
+// anything typed it offers the most used.
+export function suggest(labels, typed, chosen = [], n = 12) {
+  const q = normalLabel(typed);
+  const free = labels.map((l) => (typeof l === "string" ? l : l.label)).filter((l, i, all) => !chosen.includes(l) && all.indexOf(l) === i);
+  if (!q) return free.slice(0, n);
+  return [...free.filter((l) => l.startsWith(q)), ...free.filter((l) => !l.startsWith(q) && l.includes(q))].slice(0, n);
+}
+
 // readState reads the view's state from the address's parameters; what
 // is missing or unknown takes its default.
 export function readState(params) {
