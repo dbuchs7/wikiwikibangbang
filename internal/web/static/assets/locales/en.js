@@ -1882,10 +1882,13 @@ export default {
   "roadmap.endField": "End",
   "roadmap.noField": "None",
   "roadmap.labels": "Labels",
-  "roadmap.labelsChosen": {"one": "{n} label chosen", "other": "{n} labels chosen"},
-  "roadmap.labelsHint": "Chosen labels narrow the view to their items and give the roadmap one lane each, in the order chosen. Without a choice, every label of the items shown has a lane.",
   "roadmap.unscheduled": {"one": "{n} item without a date", "other": "{n} items without a date"},
   "roadmap.noDateFields": "No type of the items shown has a date field. A type needs a date field, such as a due date, for its items to stand on the time axis.",
   "roadmap.none": "No item shown has a date in the chosen fields.",
-  "roadmap.legend": "A bar runs from the start to the end, both days included. A diamond is a milestone: an item with one date only. Finished items are drawn hatched, items that wait on unfinished ones have a dashed outline, and the vertical line is today."
+  "roadmap.legend": "A bar runs from the start to the end, both days included. A diamond is a milestone: an item with one date only. Finished items are drawn hatched, items that wait on unfinished ones have a dashed outline, and the vertical line is today.",
+  "roadmap.labelSearch": "Search a label",
+  "roadmap.labelAdd": "Add",
+  "roadmap.labelsClear": "Remove all",
+  "roadmap.labelsPopular": "Most used:",
+  "roadmap.labelsHint": "Type to search the labels in use and pick one, or press Enter. Chosen labels narrow the view to their items and give the roadmap one lane each, in the order chosen. Without a choice, every label of the items shown has a lane."
 };

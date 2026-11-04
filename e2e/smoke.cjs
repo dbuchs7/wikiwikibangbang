@@ -2402,9 +2402,15 @@ function gitSource() {
     check(await page.inputValue("#roadmap-start") === "start" && await page.inputValue("#roadmap-end") === "due", "start and end are guessed by their names");
     check((await page.getAttribute(`.tl-bar[data-key='${planned.design}']`, "aria-label")).includes("Design the plan"), "a bar says what it is in words");
     // A second label is a lane of its own, the item in both.
-    await page.check(".tl-labels input[value=plan-ops]");
+    // Labels are found by typing, the labels in use suggested; Enter adds one.
+    await page.fill("#roadmap-label", "plan");
+    await page.waitForSelector("#roadmap-label-options option[value=plan-ops]", { state: "attached" });
+    check(await page.locator("#roadmap-label-options option[value=plan-q1]").count() === 0, "a chosen label is not suggested again");
+    await page.fill("#roadmap-label", "plan-ops");
+    await page.press("#roadmap-label", "Enter");
     await page.waitForFunction(() => location.hash.includes("labels=plan-q1%2Cplan-ops"));
     await page.waitForSelector(`#roadmap-chart .tl-lane[data-label=plan-ops] .tl-milestone[data-key='${planned.launch}']`);
+    check(await page.locator("#roadmap-labels .tl-chosen").evaluateAll((els) => els.map((e) => e.dataset.label).join()) === "plan-q1,plan-ops", "the chosen labels stand as chips in their order");
     await page.click("#roadmap-mode-gantt");
     await page.waitForSelector(`#roadmap-chart.tl-scroll .tl-gantt .tl-row:has(a.key:has-text('${planned.design}')) .tl-bar`);
     check(await page.locator(".tl-gantt .tl-body > .tl-row").count() === 2, "a Gantt chart has a row per scheduled item, each once");

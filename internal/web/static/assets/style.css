@@ -2128,7 +2128,12 @@ dialog.note-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
    milestone, a finished item and one that waits on others. */
 .tl-controls .form-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .tl-controls .form-row .field { flex: 1 1 10rem; }
-.tl-labels { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.tl-label-choice .field { max-width: 28rem; }
+.tl-label-input { display: flex; gap: var(--space-2); }
+.tl-label-input input { flex: 1 1 auto; min-width: 0; }
+.tl-chosen-list, .tl-popular { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: var(--space-2) 0; }
+.tl-pick { font-size: 12px; padding: 1px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.tl-pick:hover, .tl-pick:focus-visible { border-color: var(--accent); color: var(--accent); }
 .tl-scroll { overflow-x: auto; margin: var(--space-4) 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .tl { --tl-head: 14rem; --tl-row: 30px; position: relative; }
 .tl-row { display: flex; min-height: var(--tl-row); }

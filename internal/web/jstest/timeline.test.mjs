@@ -9,8 +9,8 @@
 // The view itself is in e2e/smoke.cjs.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NO_LABEL, address, autoScale, dateFields, dayString, frame, ganttRows, guessFields, isoWeek, lanes, pack, parseDay, place, readState,
-  schedule, span, todayDay } from "../static/assets/timeline.js";
+import { NO_LABEL, address, autoScale, dateFields, dayString, frame, ganttRows, guessFields, isoWeek, lanes, normalLabel, pack, parseDay, place, readState,
+  schedule, span, suggest, todayDay } from "../static/assets/timeline.js";
 
 const d = (s) => parseDay(s);
 const it = (key, props, labels = []) => ({ id: "id-" + key, key, title: key, properties: props, labels });
@@ -121,4 +121,15 @@ test("the state lives in the address, defaults left out", () => {
   const plain = readState(new URLSearchParams("mode=pie&scale=decade"));
   assert.deepEqual([plain.mode, plain.scale], ["roadmap", ""]);
   assert.equal(address(plain), "#/roadmap");
+});
+
+test("labels are suggested as one types: beginnings first, the most used first, none chosen twice", () => {
+  const labels = [{ label: "atlas", count: 9 }, { label: "roadmap", count: 7 }, { label: "lifecycle-active", count: 5 }, { label: "macos", count: 3 }, { label: "ios", count: 2 }, "atlas"];
+  assert.equal(normalLabel("  Road Map "), "road-map");
+  assert.equal(normalLabel(""), "");
+  assert.deepEqual(suggest(labels, "os"), ["macos", "ios"]);
+  assert.deepEqual(suggest(labels, "a"), ["atlas", "roadmap", "lifecycle-active", "macos"]);
+  assert.deepEqual(suggest(labels, "A", ["atlas"]), ["roadmap", "lifecycle-active", "macos"]);
+  assert.deepEqual(suggest(labels, "", ["roadmap"], 2), ["atlas", "lifecycle-active"]);
+  assert.deepEqual(suggest(labels, "zz"), []);
 });
