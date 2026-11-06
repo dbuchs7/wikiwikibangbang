@@ -178,3 +178,4 @@ ADR-0004 to ADR-0017 were adopted from the reference project [pblumer/atlas](htt
 | [0163](0163-at-critical-storage-nothing-new-is-created.md) | At critical storage nothing new is created | Accepted | Landed |
 | [0164](0164-a-roadmap-by-label-and-a-gantt-chart.md) | A roadmap by label and a Gantt chart | Proposed | Partial |
 | [0165](0165-a-starmap-of-the-labels.md) | A starmap of the labels | Proposed | Partial |
+| [0166](0166-a-calendar-of-the-items-dates-and-a-field-kind-for-a-point-in-time.md) | A calendar of the items' dates, and a field kind for a point in time | Proposed | Not started |
